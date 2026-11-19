@@ -116,7 +116,8 @@ describe('vehicle geometry and state', () => {
         expect(o.receiveShadow).toBe(true)
       })
       expect(triangles(vehicle)).toBeLessThan(budget)
-      expect(vehicle.lamps).toHaveLength(16)
+      expect(vehicle.lamps).toHaveLength(8)
+      expect(vehicle.lamps.filter((lamp) => !lamp.beam && lamp.object.position.z > 0)).toHaveLength(2)
       expect(vehicle.lamps.filter((lamp) => lamp.beam)).toHaveLength(4)
       expect(vehicle.heatSources).toHaveLength(2)
       for (const lamp of vehicle.lamps) {
@@ -153,6 +154,39 @@ describe('vehicle geometry and state', () => {
     expect(instantaneous(car, stateAt(config.film.durationSeconds))).toEqual(first)
     const firstForced = instantaneous(car, { ...stateAt(0), vibration: 1 })
     expect(instantaneous(car, { ...stateAt(config.film.durationSeconds), vibration: 1 })).toEqual(firstForced)
+  })
+
+  it('keeps the machined spoke tips inside the bead-seat radius', () => {
+    for (const vehicle of [full, blockout]) {
+      for (const [name, radius] of [['front wheel', .254], ['rear wheel', .2667]] as const) {
+        const wheel = vehicle.root.getObjectByName(name)!
+        const face = wheel.getObjectByName('diamond cut spoke faces') as T.Mesh
+        const positions = face.geometry.getAttribute('position')
+        let outer = 0
+        for (let i = 0; i < positions.count; i++) outer = Math.max(outer, Math.hypot(positions.getY(i), positions.getZ(i)))
+        expect(outer).toBeLessThan(radius - .004)
+        expect(outer).toBeGreaterThan(radius - .010)
+      }
+    }
+  })
+
+  it('holds both outlet centers and their rear-facing heat origins across LODs', () => {
+    for (const vehicle of [full, blockout]) {
+      const ports = vehicle.root.getObjectsByProperty('name', 'formed hexagonal outlet')
+      expect(ports).toHaveLength(2)
+      const origins = vehicle.heatSources.map(({ object }) => object).sort((a, b) => a.position.x - b.position.x)
+      for (const [i, origin] of origins.entries()) {
+        const outlet = origin.parent as T.Mesh
+        expect(ports).toContain(outlet)
+        expect(origin.position.x).toBeCloseTo(i === 0 ? -.18 : .18, 6)
+        expect(origin.position.y).toBeCloseTo(.80, 6)
+        expect(new T.Vector3(0, 0, 1).applyQuaternion(origin.quaternion).z).toBeLessThan(-.999)
+        outlet.geometry.computeBoundingBox()
+        const size = outlet.geometry.boundingBox!.getSize(new T.Vector3())
+        expect(size.x / size.y).toBeGreaterThan(2.53)
+        expect(size.x / size.y).toBeLessThan(2.63)
+      }
+    }
   })
 
   it('keeps surface radiance and emitted light intensity on the stage scale', () => {

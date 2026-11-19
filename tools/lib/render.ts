@@ -3,6 +3,10 @@ import { join } from 'node:path'
 import type { Browser, Page } from 'playwright'
 import { formatById, isTier, paintById, defaultPaint, frameCount, type FormatSpec, type TierId } from '../../src/config.ts'
 import { diagnosticViews } from '../../src/diagnostics/views.ts'
+import type { StageDetail } from '../../src/core/detail.ts'
+import { detailFrom } from './detail.ts'
+
+export { detailFrom }
 import { config, distDir, ensureBuild, ensureDir, readJson, renderLock, workDir, writeJson } from './env.ts'
 import { startHarness, type Harness } from './server.ts'
 import { grabCanvas, launchBrowser, openPage, pageProblems } from './browser.ts'
@@ -14,6 +18,13 @@ export interface StillSpec {
   format: FormatSpec
   diag: string
   paint: string
+  /** Unset means the detail asked for by SHOWCASE_DETAIL or the build default. */
+  detail?: StageDetail
+}
+
+
+export function detailOf(spec: Pick<StillSpec, 'detail'>): StageDetail {
+  return spec.detail ?? detailFrom()
 }
 
 export interface StillRecord {
@@ -22,6 +33,7 @@ export interface StillRecord {
   tier: string
   paint: string
   diagnostic: string
+  detail: StageDetail
   frame: number
   samples: number
   width: number
@@ -49,11 +61,12 @@ export function specFromArgs(a: Record<string, string>, defaults: Partial<StillS
     format: a.format ? formatById(a.format) : defaults.format ?? config.formats.master,
     diag,
     paint: paintById(a.paint ?? defaults.paint ?? defaultPaint).id,
+    detail: detailFrom(a.detail ?? defaults.detail),
   }
 }
 
 export function stillName(spec: StillSpec): string {
-  return `f${String(spec.frame).padStart(5, '0')}-${spec.format.id}-${spec.tier}-${spec.diag}-${spec.paint}`
+  return `f${String(spec.frame).padStart(5, '0')}-${spec.format.id}-${spec.tier}-${spec.diag}-${spec.paint}-${detailOf(spec)}`
 }
 
 export function recordMatches(record: StillRecord | null, spec: StillSpec, buildHash: string): record is StillRecord {
@@ -64,6 +77,7 @@ export function recordMatches(record: StillRecord | null, spec: StillSpec, build
     record.tier === spec.tier &&
     record.paint === spec.paint &&
     record.diagnostic === spec.diag &&
+    record.detail === detailOf(spec) &&
     record.frame === spec.frame
   )
 }
@@ -112,10 +126,10 @@ export class RenderSession {
     return this.deadline - Date.now()
   }
 
-  async freshPage(format: FormatSpec, diag: string, paint: string): Promise<Page> {
+  async freshPage(format: FormatSpec, diag: string, paint: string, detail: StageDetail = detailFrom()): Promise<Page> {
     if (this.page) await this.page.context().close()
-    this.page = await openPage(this.browser, this.harness, { mode: 'capture', format, diag, paint })
-    this.pageKey = `${format.id}|${diag}|${paint}`
+    this.page = await openPage(this.browser, this.harness, { mode: 'capture', format, diag, paint, detail })
+    this.pageKey = `${format.id}|${diag}|${paint}|${detail}`
     const info = await this.page.evaluate(() => window.showcase!.info())
     if (this.buildHash && info.buildHash !== this.buildHash) {
       throw new Error(`the page reports build ${info.buildHash}, the harness expected ${this.buildHash}`)
@@ -124,9 +138,9 @@ export class RenderSession {
   }
 
   async pageFor(spec: StillSpec): Promise<Page> {
-    const key = `${spec.format.id}|${spec.diag}|${spec.paint}`
+    const key = `${spec.format.id}|${spec.diag}|${spec.paint}|${detailOf(spec)}`
     if (this.page && this.pageKey === key) return this.page
-    return this.freshPage(spec.format, spec.diag, spec.paint)
+    return this.freshPage(spec.format, spec.diag, spec.paint, detailOf(spec))
   }
 
   async renderTo(spec: StillSpec, file: string, options: { force?: boolean; fresh?: boolean; sumEvery?: number } = {}): Promise<{ record: StillRecord; reused: boolean }> {
@@ -136,7 +150,7 @@ export class RenderSession {
     const sumPath = join(ensureDir(join(workDir, 'sums')), `${stillName(spec)}.sum`)
     const sumRecordPath = sumPath + '.json'
     const total = config.tiers[spec.tier].samplesPerFrame
-    const page = options.fresh ? await this.freshPage(spec.format, spec.diag, spec.paint) : await this.pageFor(spec)
+    const page = options.fresh ? await this.freshPage(spec.format, spec.diag, spec.paint, detailOf(spec)) : await this.pageFor(spec)
     const t0 = Date.now()
     this.harness.sumPath = sumPath
     await page.evaluate(([f, t]) => window.showcase!.beginFrame(f as number, t as string), [spec.frame, spec.tier] as const)
@@ -176,6 +190,7 @@ export class RenderSession {
       tier: spec.tier,
       paint: spec.paint,
       diagnostic: spec.diag,
+      detail: detailOf(spec),
       frame: spec.frame,
       samples: total,
       width: raw.width,

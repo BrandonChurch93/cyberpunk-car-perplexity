@@ -1,6 +1,6 @@
 import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
-import { fascia, sAt, zAt } from './body'
+import { fascia, frontHoodEdge, sAt, tailLipY, zAt } from './body'
 import { add, blend, contour, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point } from './geometry'
 import type { Palette } from './materials'
 import type { Anchor, VehicleModule } from './contract'
@@ -27,8 +27,8 @@ function mapped(face: Face, points: readonly XY[], out: Point, depth: number, th
   return polygon(roundedPath(corners, 4, radius), out, thickness)
 }
 
-function joinRim(loop: readonly XY[], scale1: number, scale2: number, face: Face, recessStart: number, recessEnd: number, out: Point): T.BufferGeometry {
-  const curve = roundedPath(loop.map(([x, y]) => [x, y, 0]), 6, .18)
+function joinRim(loop: readonly XY[], scale1: number, scale2: number, face: Face, recessStart: number, recessEnd: number, out: Point, bevel = .18, thickness = .003): T.BufferGeometry {
+  const curve = roundedPath(loop.map(([x, y]) => [x, y, 0]), 6, bevel)
   const x0 = loop.reduce((a, p) => a + p[0], 0) / loop.length
   const y0 = loop.reduce((a, p) => a + p[1], 0) / loop.length
   return patch((u, v) => {
@@ -36,19 +36,33 @@ function joinRim(loop: readonly XY[], scale1: number, scale2: number, face: Face
     const p = blend(curve[Math.floor(f) % curve.length], curve[(Math.floor(f) + 1) % curve.length], f % 1)
     const q = mix(scale1, scale2, v)
     return face(x0 + (p[0] - x0) * q, y0 + (p[1] - y0) * q, mix(recessStart, recessEnd, v))
-  }, curve.length, 5, out, .003)
+  }, curve.length, 5, out, thickness)
 }
 
-function squareProjector(face: Face, x: number, y: number, r: number, depth: number, direction: T.Vector3): T.BufferGeometry {
+function projectorLens(face: Face, x: number, y: number, r: number, depth: number, direction: T.Vector3): T.BufferGeometry {
   const fn = (rr: number, n: number) => new T.SphereGeometry(rr, 32, 10).scale(1.06, .83, n)
   const start = face(x, y, depth)
   return fn(r, .25).applyQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), direction)).translate(...start)
 }
 
+function lightGuide(face: Face, hub: XY, tips: readonly XY[], width: number, depth: number, out: Point): T.BufferGeometry {
+  const origin = new T.Vector2(...hub)
+  const rays = tips.map((p) => new T.Vector2(...p).sub(origin))
+  const tangents = rays.map((ray) => ray.clone().normalize())
+  const offsets = tangents.map(({ x, y }) => new T.Vector2(-y, x).multiplyScalar(width / 2))
+  const outline = rays.flatMap((ray, i) => {
+    const next = (i + 1) % rays.length
+    const a = tangents[i], b = tangents[next], left = offsets[i], right = offsets[next].clone().negate()
+    const corner = left.clone().addScaledVector(a, right.clone().sub(left).cross(b) / a.cross(b))
+    return [ray.clone().sub(left), ray.clone().add(left), corner]
+  })
+  return polygon(outline.map((v) => face(v.x + hub[0], v.y + hub[1], depth)), out, .0025)
+}
+
 export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const frontPaint: T.BufferGeometry[] = [], rearPaint: T.BufferGeometry[] = []
   const carbon: T.BufferGeometry[] = [], black: T.BufferGeometry[] = [], dark: T.BufferGeometry[] = []
-  const rings: T.BufferGeometry[] = [], optical: T.BufferGeometry[] = [], rearOptical: T.BufferGeometry[] = []
+  const optical: T.BufferGeometry[] = [], rearOptical: T.BufferGeometry[] = []
   const lamps: VehicleModule['lamps'] = []
   const heatSources: VehicleModule['heatSources'] = []
   const lumens: Array<{ mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>; lamp: VehicleModule['lamps'][number]; rear: boolean }> = []
@@ -75,26 +89,25 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   }
   const outFront: Point = [0, 0, 1], outRear: Point = [0, 0, -1]
   const lipY = curve([[0, .168], [.27, .151], [.71, .146], [.91, .155], [.967, .174]])
-  const noseTop = curve([[0, .405], [.12, .414], [.33, .433], [.48, .468], [.60, .509], [.72, .552], [.84, .620], [.928, .695], [.974, .754]])
+  const fasciaTop = curve([[0, .417], [.29, .419], [.36, .430], [.48, .468], [.60, .509], [.72, .552], [.84, .620], [.928, .695], [.974, .754]])
+  const noseTop = (x: number) => mix(frontHoodEdge(x)[1], fasciaTop(x), smooth(x, .70, .85))
   const chin = (x: number) => lipY(x) + .025
   const eyeTop = curve([[.48, .474], [.58, .512], [.68, .552], [.79, .600], [.889, .649], [.918, .658]])
   const eyeLow = curve([[.48, .459], [.58, .462], [.69, .474], [.797, .497], [.865, .564], [.918, .635]])
-  const metalFace = (side: number, x: number, y: number, d = 0): Point => {
-    const phase = smooth(x, .05, .32)
-    return [side * x, y, zAt(.997 - .006 * phase) + d + .012 * smooth(y, .73, .85)]
-  }
-  const exhaustMid = metalFace(1, .18, .785)[2]
+  const outletZ = zAt(.995) + .070
+  const outletCenter = .18, outletHeight = .8, halfOutletHeight = .0525
+  const outletRound = .055, outletPoint = .57
+  const halfOutletWidth = 2.6 * halfOutletHeight / (1 - (1 - outletPoint) * outletRound / 2)
+  const metalFace = (side: number, x: number, y: number, d = 0): Point => [side * x, y, outletZ + d]
   const rearBridge = (u: number, v: number): Point => {
-    const y = mix(.711, .859, v)
-    const x = mix(-.058, .058, u) * (.80 + .18 * Math.abs(2 * v - 1))
-    return [x, y, exhaustMid + .064 * ((v - .5) ** 2) + .019 * x * x]
+    const y = mix(.719, .861, v)
+    const x = mix(-.059, .059, u)
+    return [x, y, outletZ + .022]
   }
   let lens = anchor([0, 0, 0], outFront, .19)
   for (const side of [1, -1]) {
     const f: Face = (x, y, d = 0) => fascia(true, side, x, y, d)
     const r: Face = (x, y, d = 0) => fascia(false, side, x, y, d)
-    const shieldBottom = curve([[0, .309], [.20, .309], [.305, .329], [.393, .359], [.454, .404], [.481, .455], [.490, .466]])
-    const shieldTop = curve([[0, .405], [.135, .410], [.315, .431], [.445, .456], [.490, .466]])
     const points: XY[] = [[.448, .398], [.519, .427], [.674, .436], [.804, .460], [.844, .421], [.869, .299], [.820, .190], [.541, .195]]
     const outline: XY[] = [[.474, .455], [.568, .501], [.685, .554], [.797, .609], [.884, .667], [.923, .675], [.931, .599], [.883, .471], [.912, .354], [.930, .283], [.858, .198], [.819, .179], [.520, .180], [.429, .245], [.405, .360]]
     const frontEdge = curve([[0, .981], [.40, .972], [.67, .939], [1, .953]])
@@ -105,21 +118,31 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return f(x, mix(outerY(v), mix(chin(x), noseTop(x), v), u), .003)
     }
     frontPaint.push(patch(fPanel, 22, 28, outFront, .008))
+    black.push(patch((u, v) => {
+      const x = .487 * u
+      const y = mix(lipY(x) + .020, noseTop(x) - .004, v)
+      return f(x, y, .126 - .045 * smooth(v, .76, 1))
+    }, 36, 16, outFront, .011))
+    black.push(patch((u, v) => {
+      const x = .48 * u
+      return f(x, noseTop(x) - .007 - .029 * v, mix(.005, .129, v))
+    }, 34, 6, [0, -1, 0], .004))
     frontPaint.push(patch((u, v) => {
-      const x = mix(0, .489, u)
-      const y = mix(shieldBottom(x), shieldTop(x), v)
-      const hoodBreak = .009 * (Math.exp(-((u - .87) ** 2) / .026) + .3 * Math.sin(u * Math.PI))
-      return f(x, y, -.005 - hoodBreak * (1 - (2 * v - 1) ** 2))
-    }, full ? 68 : 32, full ? 22 : 10, outFront, .008))
-    frontPaint.push(patch((u, v) => {
-      const x = mix(0, .978, u)
-      return f(x, mix(noseTop(x) - .012, noseTop(x) + .012 * smooth(u, .45, 1), v), .005)
-    }, 42, 6, outFront, .004))
+      const x = mix(0, .86, u)
+      const edge = frontHoodEdge(x)
+      return [side * x, edge[1] - .014 * v, edge[2] - .003 * v]
+    }, 84, 4, outFront, .004))
     black.push(mapped(f, outline, outFront, .025, .055))
     dark.push(mapped(f, points, outFront, .123, .036))
     black.push(joinRim(points, 1.035, .88, f, -.002, .085, outFront))
-    carbon.push(ribbon(f, [[.410, .367], [.496, .274], [.564, .194], [.740, .167], [.839, .184], [.895, .272]], .041, -.004, 50))
-    carbon.push(ribbon(f, [[.462, .395], [.578, .411], [.729, .426], [.801, .436]], .028, .024))
+    const blade = [[.295, .313, .372, .380], [.524, .160, .558, .222],
+      [.839, .178, .807, .220], [.907, .252, .872, .284]]
+    for (let i = 0; i < blade.length - 1; i++) frontPaint.push(patch((u, v) => {
+      const [a, b, c, d] = blade[i]
+      const [e, g, h, j] = blade[i + 1]
+      return f(mix(mix(a, c, v), mix(e, h, v), u), mix(mix(b, d, v), mix(g, j, v), u), -.006 + .026 * v)
+    }, 18, 4, outFront, .005))
+    dark.push(ribbon(f, [[.462, .395], [.578, .411], [.729, .426], [.801, .436]], .028, .024))
     const dh = full ? .019 : .032
     if (full) {
       carbon.push(hexMesh((u, v) => {
@@ -133,39 +156,33 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       }
     }
     black.push(patch((u, v) => {
-      const x = mix(0, .51 - .09 * v, u)
-      return f(x, mix(.155, .340 + .022 * smooth(u, .3, 1), v), .095)
-    }, 20, 10, outFront, .018))
-    frontPaint.push(patch((u, v) => {
-      const x = mix(.0, .93, u)
-      return f(x, lipY(x) + mix(.010, .028, v), -.0035)
-    }, 36, 6, outFront, .015))
-    carbon.push(patch((u, v) => {
+      const x = .546 * u
+      return f(x, lipY(x) + .009 + .027 * v, mix(.003, .128, v))
+    }, 36, 6, [0, 1, 0], .009))
+    dark.push(patch((u, v) => {
       const x = mix(0, .977, u)
-      const y = lipY(x) - .005 + .008 * Math.sin(Math.PI * v)
-      const p = f(x, y, mix(-.013, .119, v))
+      const y = lipY(x) - .006 + .004 * v
+      const p = f(x, y, mix(-.017, .135, v))
       return [p[0], p[1], p[2]]
-    }, 42, 10, [0, 1, 0], .018))
-    const yPaths: XY[][] = [
-      [[.467, .425], [.531, .425], [.647, .439], [.753, .453], [.819, .459]],
-      [[.819, .459], [.829, .493], [.856, .576], [.896, .655]],
-      [[.819, .459], [.830, .416], [.859, .307], [.876, .272]],
-    ]
-    const bezel = yPaths.map((path) => ribbon(f, path, .035, -.004))
-    black.push(...bezel)
-    for (const arm of yPaths) emit('front running guide', ribbon(f, arm, .013, -.0105), false, false)
-    if (full) {
-      for (const path of yPaths) {
-        optical.push(ribbon(f, path, .0195, -.014, 48))
-        const spline = new T.CatmullRomCurve3(path.map(([x, y]) => new T.Vector3(x, y, 0)))
-        for (let i = 2; i < 31; i++) {
-          const p = spline.getPoint(i / 33)
-          const n = spline.getTangent(i / 33)
-          const d = .0066
-          rings.push(ribbon(f, [[p.x - n.y * d, p.y + n.x * d], [p.x + n.y * d, p.y - n.x * d]], .00058, -.011, 2))
-        }
-      }
-    }
+    }, 48, 3, [0, 1, 0], .024))
+    dark.push(patch((u, v) => {
+      const x = .969 * u
+      return f(x, lipY(x) - .012 + .095 * v, mix(.019, .154, v))
+    }, 38, 7, [0, 1, 0], .005))
+    dark.push(patch((u, v) => {
+      const x = mix(.012, .925, u)
+      const outer = frontHoodEdge(x)
+      const height = Math.min(outer[1] - .008, .484)
+      return [side * x * .48, mix(lipY(x) + .009, height, v), outer[2] - .002]
+    }, 44, 9, [side, 0, 1], .008))
+    dark.push(patch((u, v) => {
+      const y = mix(.171, .446, u)
+      return f(mix(.873, .727, v), y, mix(.012, .170, v))
+    }, 18, 9, [side, 0, 1], .009))
+    const hub: XY = [.834, .429]
+    const tips: XY[] = [[.877, .285], [.879, .644], [.470, .421]]
+    black.push(lightGuide(f, hub, tips, .040, .002, outFront))
+    emit('front running guide', lightGuide(f, hub, tips, .015, -.007, outFront), false, false, f(...hub, -.008), 3.99)
     const eyeStart = .495, eyeEnd = .919
     const window = (u: number, v: number, d: number): Point => {
       const x = mix(eyeStart + .022 * (v - .5) ** 2, eyeEnd - .009 * v, u)
@@ -180,19 +197,14 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     for (const [x, y, radius, intensity] of [[.743, .526, .029, 170], [.827, .560, .023, 80]]) {
       const normal = new T.Vector3(side * .51, .12, .851).normalize()
       const transform = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), normal)
-      const p = f(x, y, .038)
-      const torus = new T.TorusGeometry(radius, .0039, 10, 38).applyQuaternion(transform).translate(...p)
-      rings.push(torus)
-      black.push(new T.CylinderGeometry(radius + .005, radius * .97, .04, 32).rotateX(Math.PI / 2)
-        .applyQuaternion(transform).translate(...f(x, y, .059)))
-      optical.push(squareProjector(f, x, y, radius * .87, .035, normal))
-      emit('main beam projector', squareProjector(f, x, y, radius * .49, .020, normal), false, true, f(x, y, -.025), intensity)
-      if (full) {
-        for (let j = 0; j < 5; j++) {
-          const x0 = x - radius + .0017 * j
-          rings.push(ribbon(f, [[x0, y - radius * .52], [x0 + .001, y + radius * .51]], .0011, .045, 3))
-        }
-      }
+      const p = f(x, y, .026)
+      black.push(patch((u, v) => {
+        const a = u * tau, rr = radius * mix(1.14, .80, v)
+        return new T.Vector3(rr * Math.cos(a), rr * .85 * Math.sin(a), -.020 * v)
+          .applyQuaternion(transform).add(vec(p)).toArray()
+      }, full ? 40 : 22, 3, outFront, .003))
+      optical.push(projectorLens(f, x, y, radius * .79, .043, normal))
+      emit('main beam projector', projectorLens(f, x, y, radius * .54, .037, normal), false, true, f(x, y, -.025), intensity)
     }
     if (side === 1) {
       const u = .61, v = .52
@@ -203,87 +215,91 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       lens = anchor(p, normal.toArray(), .20)
     }
 
-    const tailUpper = curve([[0, .873], [.18, .922], [.33, .909], [.47, .847], [.69, .849], [.86, .895], [.915, .875], [.967, .845]])
-    const tailLower = curve([[0, .619], [.275, .624], [.424, .571], [.66, .560], [.84, .549], [.974, .452]])
-    const tailSlot: XY[] = [[.345, .790], [.449, .811], [.698, .818], [.842, .858], [.874, .872], [.897, .834], [.894, .756], [.868, .708], [.760, .699], [.626, .704], [.438, .701], [.350, .716]]
-    const tailTopOfSlot = curve([[0, .85], [.19, .903], [.33, .868], [.46, .813], [.70, .818], [.85, .86], [.906, .871], [.95, .822], [.974, .698]])
-    const tailUnderSlot = curve([[0, .707], [.31, .714], [.43, .704], [.66, .698], [.83, .691], [.905, .710], [.976, .689]])
+    const tailLower = curve([[0, .594], [.275, .595], [.424, .548], [.78, .535], [.914, .513], [.974, .468]])
+    const tailSlot: XY[] = [[.345, .802], [.449, .817], [.698, .820], [.857, .865], [.889, .854], [.897, .809], [.895, .755], [.867, .718], [.743, .758], [.450, .763], [.353, .778]]
+    const tailTopOfSlot = curve([[0, .843], [.18, .856], [.32, .850], [.46, .820], [.70, .821], [.86, .864], [.90, .851], [.935, .814]])
+    const tailUnderSlot = curve([[0, .741], [.30, .739], [.43, .758], [.70, .752], [.87, .713], [.90, .735], [.979, .697]])
     rearPaint.push(patch((u, v) => {
-      const x = mix(0, .972, u)
-      return r(x, mix(tailTopOfSlot(x), tailUpper(x), v) - .006 * smooth(v, .80, 1), -.007 * Math.sin(Math.PI * v))
-    }, 58, 12, outRear, .006))
+      const x = .935 * u
+      return r(x, mix(tailTopOfSlot(x), tailLipY(x), v), .020 * (1 - v) * (1 - smooth(x, .3, .44)) + .020 * v * (1 - smooth(x, .038, .131)))
+    }, 48, 5, outRear, .006))
     rearPaint.push(patch((u, v) => {
       const x = mix(0, .979 - .021 * v, u)
-      const fold = Math.exp(-((x - .72) ** 2) / .013) * Math.sin(Math.PI * v)
-      return r(x, mix(tailLower(x), tailUnderSlot(x), v), mix(.035, -.005, v) - .028 * fold)
-    }, 56, 18, outRear, .008))
-    rearPaint.push(mapped(r, [[.884, .882], [.926, .904], [.977, .855], [1.007, .793], [.980, .453], [.914, .519], [.833, .691], [.898, .724]], outRear, -.003, .008))
-    black.push(mapped(r, tailSlot, outRear, .028, .031))
-    black.push(joinRim(tailSlot, 1.032, .92, r, -.003, .026, outRear))
-    const tailPaths: XY[][] = [
-      [[.386, .767], [.478, .771], [.604, .773], [.712, .775], [.756, .780]],
-      [[.756, .780], [.793, .795], [.839, .818], [.873, .829]],
-      [[.756, .780], [.791, .768], [.841, .743], [.869, .735]],
-    ]
-    for (const path of tailPaths) {
-      black.push(ribbon(r, path, .027, .0058, 40))
-      rearOptical.push(ribbon(r, path, .020, -.0026, 40))
-      emit('tail running guide', ribbon(r, path, .0144, .002, 45), true, false)
-    }
-    rearOptical.push(ribbon(r, [[.872, .737], [.883, .783], [.874, .828]], .0125, -.001, 16))
-    black.push(ribbon(r, [[.454, .684], [.518, .700], [.704, .694], [.858, .681]], .019, .002, 28))
-    const hex: XY[] = [[.042, .783], [.093, .839], [.250, .839], [.331, .790], [.333, .769], [.263, .721], [.096, .718]]
+      return r(x, mix(tailLower(x), tailUnderSlot(x), v), mix(-.021, -.006, v))
+    }, 50, 6, outRear, .008))
+    rearPaint.push(mapped(r, [[.891, .854], [.935, .872], [.972, .843], [1.006, .788], [.980, .468], [.914, .523], [.897, .735]], outRear, -.002, .008, .025))
+    black.push(mapped(r, tailSlot, outRear, .014, .028, .05))
+    black.push(joinRim(tailSlot, 1.025, .92, r, -.009, .026, outRear))
+    const tailHub: XY = [.741, .794]
+    const tailTips: XY[] = [[.864, .745], [.869, .842], [.392, .787]]
+    rearOptical.push(lightGuide(r, tailHub, tailTips, .023, -.016, outRear))
+    emit('tail running guide', lightGuide(r, tailHub, tailTips, .011, -.013, outRear), true, false, r(...tailHub, -.014), 1.41)
+    const hex: XY[] = ([[1, 0], [outletPoint, 1], [-outletPoint, 1], [-1, 0], [-outletPoint, -1], [outletPoint, -1]] as const)
+      .map(([x, y]) => [outletCenter + halfOutletWidth * x, outletHeight + halfOutletHeight * y])
     const outlet: Face = (x, y, d = 0) => metalFace(side, x, y, d)
-    black.push(joinRim(hex, 1.18, .99, outlet, .034, -.001, outRear))
-    const hotRim = joinRim(hex, 1, .87, outlet, 0, .022, outRear)
-    const hotReturn = joinRim(hex, .87, .75, outlet, .022, .116, outRear)
-    const exhaust = add(parent, 'formed hexagonal outlet', joined([hotRim, hotReturn]), m.hot)
+    black.push(joinRim(hex, 1.18, .99, outlet, .034, -.001, outRear, outletRound))
+    const hotRim = joinRim(hex, 1, .87, outlet, 0, .022, outRear, outletRound, 0)
+    dark.push(joinRim(hex, .87, .75, outlet, .022, .116, outRear, outletRound))
+    const exhaust = add(parent, 'formed hexagonal outlet', hotRim, m.hot)
     const source = new T.Object3D()
     source.name = 'exhaust rim heat origin'
-    source.position.set(...outlet(.18, .785, .006))
+    source.position.set(...outlet(outletCenter, outletHeight, .006))
     source.rotation.y = Math.PI
     exhaust.add(source)
     heatSources.push({ object: source, strength: 1 })
-    dark.push(mapped(outlet, hex, outRear, .126, .011))
-    for (const x of [.118, .232]) rings.push(patch((u, v) => {
-      const a = tau * u
-      const taper = mix(1, .88, v)
-      return outlet(x + .043 * Math.cos(a) * taper, .779 + .041 * Math.sin(a) * taper, mix(.082, .141, v))
-    }, full ? 96 : 52, 4, outRear, .003))
+    dark.push(mapped(outlet, hex, outRear, .126, .011, outletRound))
     const diffuser = (u: number, v: number): Point => {
       const x = mix(0, .969 - .054 * v, u)
-      const edge = r(x, .27, .009)
+      const edge = r(x, .27, -.012)
       const s = mix(.842, sAt(edge[2]) + .015 * (1 - u), v)
-      const low = .139 + .020 * smooth(u, .69, 1)
-      return [side * x, low + (.34 + .051 * Math.sin(u * Math.PI)) * v ** 1.51, zAt(Math.min(1, s))]
+      const low = .181 + .021 * smooth(u, .69, 1)
+      return [side * x, low + .258 * v, zAt(Math.min(1, s))]
     }
-    carbon.push(patch(diffuser, 50, 28, [0, -1, 0], .016))
-    carbon.push(patch((u, v) => {
+    dark.push(patch(diffuser, 50, 18, [0, -1, 0], .016))
+    dark.push(patch((u, v) => {
+      const x = .885 * u
+      const s = mix(.844, .943 - .039 * u, v)
+      return [side * x, .153 + .067 * v, zAt(s)]
+    }, 25, 9, [0, -1, 0], .016))
+    dark.push(patch((u, v) => {
       const x = mix(0, .969, u)
       const diff = diffuser(u, 1)
-      return r(x, mix(diff[1] - .011, tailLower(x), v), mix(.027, .036, v))
+      return r(x, mix(diff[1] - .011, tailLower(x), v), mix(-.006, .022, v))
     }, 48, 18, outRear, .010))
-    for (const fin of [.402, .646, .884]) {
-      carbon.push(patch((u, v) => {
-        const depth = .242 * smooth(u, .02, .82) * (fin > .8 ? .74 : 1)
+    dark.push(patch((u, v) => {
+      const x = mix(.39, .62, u)
+      const y = mix(.421, .718, v)
+      return r(x, y, -.002 + .023 * smooth(y, .54, .63))
+    }, 16, 12, outRear, .008))
+    dark.push(patch((u, v) => {
+      const s = mix(.987, .999, u)
+      return [side * mix(.37, .23, u), mix(.436, .481, v), zAt(s)]
+    }, 5, 2, [side, 0, 0], .004))
+    for (const fin of [.344, .692]) {
+      dark.push(patch((u, v) => {
+        const depth = .123 * smooth(u, .02, .82)
         const x = fin - .029 * smooth(u, .76, 1) * v * (fin > .5 ? 1 : 0)
-        const s = mix(.843, sAt(r(x, .39, 0)[2]) + .009, u)
-        const y = .19 + .288 * u ** .68 - v * depth
+        const s = mix(.843, sAt(r(x, .39, -.019)[2]) + .009, u)
+        const y = mix(.225, tailLower(x) + .031, u) - v * depth
         return [side * x, y, zAt(Math.min(1, s))]
       }, 37, 11, [side, 0, 0], .012))
     }
-    const vent = (u: number, v: number): Point => r(mix(.05, .37, u), mix(.344, .495, v) + .017 * Math.sin(u * Math.PI), .057)
-    black.push(patch(vent, 18, 8, outRear, .018))
-    carbon.push(hexMesh(vent, .32, .15, full ? .010 : .024, full ? .00083 : .00165))
+    const vent = (u: number, v: number): Point => r(mix(.019, .395, u), mix(.420, .533, v) - .027 * u ** 4, -.023)
+    dark.push(patch((u, v) => { const p = vent(u, v); return [p[0], p[1], p[2] + .009] }, 18, 8, outRear, .018))
+    black.push(hexMesh(vent, .36, .12, full ? .010 : .024, full ? .00083 : .00165))
     rearOptical.push(ribbon(r, [[.545, .434], [.654, .430]], .022, .012, 18))
   }
+  black.push(patch((u, v) => {
+    const x = mix(-.912, .912, u)
+    const y = mix(.713, tailLipY(Math.abs(x)) - .004, v)
+    return [x, y, fascia(false, 1, Math.abs(x), y, .121)[2]]
+  }, 49, 9, outRear, .013))
   black.push(patch(rearBridge, 16, 18, outRear, .009))
   add(parent, 'nose blades, shield and lower lip', joined(frontPaint), m.paint)
   add(parent, 'rear bumper paint surfaces', joined(rearPaint), m.paint)
-  add(parent, 'splitter, radiator and diffuser', joined(carbon), m.carbon)
+  if (carbon.length) add(parent, 'radiator mesh', joined(carbon), m.carbon)
   add(parent, 'lamp bezels and air ducts', joined(black), m.matte)
   add(parent, 'recessed backing', joined(dark), m.dark)
-  add(parent, 'projector rings and inner pipe wall', joined(rings), m.brushed)
   add(parent, 'front optical lens shells', joined(optical), m.optics)
   add(parent, 'rear optical lens shells', joined(rearOptical), m.rearOptics)
   const update = (stage: number, rise: number): void => {

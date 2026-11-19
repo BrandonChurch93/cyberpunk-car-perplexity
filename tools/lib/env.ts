@@ -25,6 +25,10 @@ export function args(argv = process.argv.slice(2)): Record<string, string> {
       i++
     }
   }
+  if (out.detail !== undefined) {
+    if (out.detail !== 'full' && out.detail !== 'blockout') throw new Error(`unknown detail ${out.detail}, use full or blockout`)
+    process.env.SHOWCASE_DETAIL = out.detail
+  }
   return out
 }
 

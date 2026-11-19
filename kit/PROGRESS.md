@@ -174,6 +174,13 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | The rig holds 16 lights: 8 from the world, 4 beams, and the other lamps merged into one point light per corner of the vehicle | Per-fragment cost grows with every light in software rendering. A lamp may still be built from many lit parts | `src/core/film-stage.ts` |
 | 2026-11-19 | A lit stand-in world (`src/world/standin.ts`) serves `detail=full` until the real world lands. `?detail=full` or `SHOWCASE_DETAIL=full` selects it | The pipeline, post and weather agents need lights, a deck and distant sources to work against | `src/world/standin.ts` |
 | 2026-11-19 | Animation is closed form wherever possible. The running sum is saved as raw Float32 through the harness endpoint | Determinism and resumable chunks | `src/core/`, `tools/lib/` |
+| 2026-11-19 | Three development agents on two model families now build the vehicle module (A, B, C). B is on main as the interim car. The one kept is chosen by silhouette overlap with the grant drawings in four views and by stills at 195, 360, 520, 690, 800 and 950 | The first plan named two. A third lowers the risk on the largest unknown | `src/vehicle/`, Phase 3 |
+| 2026-11-19 | Every shot was framed again on the gray-box car with `tools/look.ts`. The paint macro sits over the front hood looking rearward and outboard toward the left wing crest (100 mm, 0.56 to 0.81 m). The establishing shot is 26 degrees off the nose, 7.2 to 5.2 m. The wheel shot shows the whole wheel from 4.4 m at 85 mm. The rear shot is 4.6 to 4.1 m | The first positions were written before a car existed. Several put the lens inside the body or lost the horizon | `src/director/shots.ts`, `cut/SHOTS.md` |
+| 2026-11-19 | The opening push reaches full speed in 1.2 s | On the gray box the frames inside `film.hookSeconds` were nearly identical. The hook needs motion that shows at phone size | `push()` in `src/director/shots.ts` |
+| 2026-11-19 | Control photographs that show a maker's badge stay in the pool | Controls are not chosen for how they read. Removing them would make the blind test easier for the render, not harder | `reference/controls.json` |
+| 2026-11-19 | The lowest frame PSNR that G9 accepts for the proof export against the harness frames is 30 dB, a constant in `tools/lib/gates.ts` | The kit names the check but not the number. 30 dB at 20 Mbps separates a correct encode from a wrong frame | `tools/lib/gates.ts` |
+| 2026-11-19 | The film camera also sees a camera-only layer (`layers.cameraOnly`). Reflection and shadow cameras do not | Near rain, lens drops and haze cards must not appear in captures | `src/core/contract.ts`, `src/core/film-stage.ts` |
+| 2026-11-19 | `stageDetail` stays `blockout` through the Phase 2 gate. `?detail=full` or `SHOWCASE_DETAIL=full` shows the lit film. Every render record carries the detail level | The blockout critics judge the gray box while Phase 3 systems are merged behind the switch | `src/core/detail.ts` |
 
 ## Config changes
 
@@ -206,10 +213,22 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | 97ddecb | pushed to main. Phase 0 scaffold, workspace record, pinned versions |
 | 2026-11-19 | 569ad5b | pushed to main. Phase 0 gate |
 | 2026-11-19 | the commit titled "Phase 1 gate" | pushed to main. Board, control pool, key frames, shot plan, asset ledger |
+| 2026-11-19 | 7490a1e, c561aa9, 34f9dd5 | pushed to main. Phase 2 and Phase 3 seams, fixes |
+| 2026-11-19 | 154b0ee | pushed to main. Camera-only layer, look tool |
+| 2026-11-19 | 5dae634 | pushed to main. Shots tuned on the gray-box car |
+| 2026-11-19 | 94c116b | pushed to main. Merges of modes, world, vehicle B, light, air. Wheel shot |
+| 2026-11-19 | bdcc79d | pushed to main. Merge of the harness tools, judged frame list, page anchors |
 
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-19, session 5
+
+- Done: merged the modes, the full city (about 302,000 triangles, 17 signs), vehicle B stage B (394,056 triangles in the blockout, 1,125,884 at full detail. Silhouette overlap with the grant drawings: top 0.9822, side 0.9524, front 0.9747, rear 0.9741), the light, air and harness tool branches. 102 unit tests pass. Every shot framed again on the real gray-box car with `tools/look.ts`, lens clearance checked (0.19 m at the closest). Judged frame list written. `window.showcase.anchors()` added for the crop and pack tools.
+- Measured at 16x9 per sample on the lit film: the stand-in world 2.8 to 2.9 s, light part plus 3.3 s, air plus 0.95 s, reflections plus 2.4 s and 7.3 s per frame for the capture, the city alone 0.6 to 1.1 s. A draft preview film of the gray box takes about 250 s.
+- Seen with `detail=full`: the body is a black silhouette, the macro beats are nearly black, the billboard clips to flat white, windows are flat. Phase 3 starts from the lighting design, not from materials.
+- Next: Phase 2 pack, C5 blockout and C8 blockout rounds, Phase 2 gate (film, proof, memory, keep). Then merge reflections, post and surface water and begin the look lock.
 
 ### 2026-11-19, session 4
 

@@ -7,6 +7,7 @@ import { args, buildHash, config, ensureDir, readJson, workDir, writeJson } from
 import { checkFrame, decode } from './lib/image.ts'
 import type { StressPair } from './lib/pack-build.ts'
 import { beatFrames } from './lib/pack.ts'
+import { detailFrom } from './lib/detail.ts'
 import { probe } from './lib/probe.ts'
 import { RenderSession, runTool, type StillSpec } from './lib/render.ts'
 import { cameraForFrame, sceneAnchors } from './lib/scene.ts'
@@ -41,21 +42,22 @@ void runTool(async () => {
   const root = ensureDir(join(workDir, 'stress'))
   const manifestPath = join(root, 'manifest.json')
   const hash = buildHash()
-  const previous = readJson<{ buildHash: string; paint: string; tier: string; pairs: StressPair[] }>(manifestPath)
-  if (previous && previous.buildHash === hash && previous.paint === paint && previous.tier === tier && a.force !== 'true' && previous.pairs.every((p) => existsSync(p.before) && existsSync(p.after))) {
-    console.log(`reused ${manifestPath}: ${previous.pairs.length} pairs at the ${tier} tier`)
+  const detail = detailFrom(a.detail)
+  const previous = readJson<{ buildHash: string; paint: string; tier: string; detail: string; pairs: StressPair[] }>(manifestPath)
+  if (previous && previous.buildHash === hash && previous.paint === paint && previous.tier === tier && previous.detail === detail && a.force !== 'true' && previous.pairs.every((p) => existsSync(p.before) && existsSync(p.after))) {
+    console.log(`reused ${manifestPath}: ${previous.pairs.length} pairs at the ${tier} tier, ${detail} detail`)
     return 0
   }
-  const { anchors } = await sceneAnchors(undefined, paint)
   const session = await RenderSession.open({ budgetMinutes: a.budget !== undefined ? Number(a.budget) : undefined })
+  const { anchors, source } = await sceneAnchors(await session.pageFor({ frame: 0, tier, format, diag: 'beauty', paint, detail }), paint)
   const pairs: StressPair[] = []
   const films: Record<string, unknown> = {}
   try {
     for (const beat of config.quality.stress.beats) {
       const frames = stressFrames(beat)
-      const dir = ensureDir(join(root, `${tier}-${paint}`, beat))
+      const dir = ensureDir(join(root, `${tier}-${paint}-${detail}`, beat))
       for (const [i, frame] of frames.entries()) {
-        const spec: StillSpec = { frame, tier, format, diag: 'beauty', paint }
+        const spec: StillSpec = { frame, tier, format, diag: 'beauty', paint, detail }
         await session.renderTo(spec, join(dir, `f${String(i).padStart(5, '0')}.png`))
       }
       const input = ['-framerate', String(config.film.fps), '-start_number', '0', '-i', join(dir, 'f%05d.png'), '-frames:v', String(frames.length)]
@@ -85,7 +87,7 @@ void runTool(async () => {
   } finally {
     await session.close()
   }
-  writeJson(manifestPath, { buildHash: hash, paint, tier, format: format.id, pairs, films })
+  writeJson(manifestPath, { buildHash: hash, paint, tier, detail, format: format.id, anchorSource: source, pairs, films })
   console.log(`wrote ${manifestPath}`)
   return 0
 })

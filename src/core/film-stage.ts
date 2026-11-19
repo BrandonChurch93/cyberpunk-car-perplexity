@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { config, paintById, type FormatSpec } from '../config'
 import { cameraAt } from '../director/shots'
 import { stateAt } from '../director/timeline'
+import { createBokeh } from './bokeh'
 import { createVehicle, type VehicleModule } from '../vehicle'
 import { createWeather } from '../weather'
 import { createWorld, type WorldModule } from '../world'
@@ -17,6 +18,7 @@ import { createReflections } from './reflect'
 import { createShade } from './shade'
 
 const shadowMapSize = 2048
+const lensSqueeze = config.lens.anamorphic ? 1.5 : 1
 
 const normalsMaterial = new THREE.ShaderMaterial({
   vertexShader: 'varying vec3 vN; void main() { vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -135,6 +137,7 @@ export class FilmStage implements Stage {
   private diagnostic = 'beauty'
   private readonly parts: StagePart[] = []
   private readonly passes: SamplePass[] = []
+  private readonly bokeh = createBokeh(lensSqueeze)
   private readonly sceneTarget = floatTarget(config.formats.master, true)
   private readonly swap = [floatTarget(config.formats.master, false), floatTarget(config.formats.master, false)]
   private readonly copy = new FullscreenPass(passMaterial(copyFragment, { source: { value: null } }, { blending: THREE.NoBlending }))
@@ -293,12 +296,13 @@ export class FilmStage implements Stage {
     const timeSeconds = sample.timeSeconds
     this.setVehicle(timeSeconds)
     const state = this.cameraState(timeSeconds)
-    applyLens(this.camera, state, this.format.width, this.format.height, sample, config.lens.anamorphic ? 1.5 : 1)
+    const aperture = this.detail === 'full' && this.diagnostic !== 'normals' ? this.bokeh.aperture(sample, state) : null
+    applyLens(this.camera, state, this.format.width, this.format.height, aperture ? { ...sample, aperture } : sample, lensSqueeze)
     const context: SampleContext = { sample, timeSeconds, camera: this.camera, state }
     for (const system of this.systems()) system.beginSample(context)
     this.rig.update(timeSeconds, sample.light)
     for (const part of this.parts) part.beforeSample?.(context)
-    const passes = this.diagnostic === 'normals' ? [] : this.passes
+    const passes = this.diagnostic === 'normals' ? [] : aperture ? [...this.passes, this.bokeh] : this.passes
     const first = passes.length > 0 ? this.sceneTarget : target
     this.renderer.setRenderTarget(first)
     this.renderer.setClearColor(0x000000, 1)
