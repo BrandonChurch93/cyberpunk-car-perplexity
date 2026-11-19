@@ -13,20 +13,21 @@ How a frame is made and where each folder plugs in. `kit/04-LOOK.md` says what t
 
 ## One frame
 
-`FrameEngine` (`src/core/engine.ts`) drives the stage (`src/core/film-stage.ts`).
+`FrameEngine` (`src/core/engine.ts`) drives the stage (`src/core/film-stage.ts`). The stage holds the scene systems (world, vehicle, weather) and three stage parts (`StagePart` in `src/core/parts.ts`): shade, reflections, haze.
 
 Once per frame, in `beginFrame`:
 
 1. Every `SceneSystem.beginFrame` runs with the frame's center time. Systems that are left out of the time jitter set themselves here. Rain is the main one.
-2. The environment capture: a cube render from the vehicle's position with the vehicle hidden, filtered for roughness, set as `scene.environment`. Reflections on the vehicle and props are corrected to `world.reflectionBox`.
+2. The light rig is set to the center time.
+3. Every part's `beginFrame` runs. The reflections part makes the environment capture here: a cube render from the vehicle's position with the vehicle hidden, filtered for roughness, set as `scene.environment`, and corrected in the materials to `world.reflectionBox`.
 
 For every sample, in `renderSample`:
 
 1. Time is the sample's time inside the shutter. The vehicle state, the camera with its lens jitter, and every `SceneSystem.beginSample` are set to it.
 2. The light rig moves each light to one point of its emitter, chosen by the sample's light jitter, and sets its level. Shadow maps are drawn from there. Averaged over the samples this gives area lights with soft shadows.
-3. The planar reflection of the deck is drawn with the mirrored sample camera.
-4. The scene is drawn into the sample target (linear float color and depth).
-5. Sample passes run in order: the haze and beam pass, then any pass a system supplies (heat shimmer).
+3. Every part's `beforeSample` runs, in the order shade, reflections, haze. Shade draws what it needs for ambient occlusion and contact shadows. Reflections draws the planar reflection of the deck with the mirrored sample camera.
+4. The scene is drawn into the stage's sample target (linear float color and a depth texture).
+5. Sample passes run in order: the haze and beam pass, then any pass a scene system supplies (heat shimmer). Each reads the color so far and the scene depth and writes a new color.
 6. The result is added to the running sum.
 
 Once per frame, in `finishFrame`: the post stage (`src/post/`) reads the average and writes the display picture: lens effects, tone map, grade, grain, dither.
@@ -35,14 +36,17 @@ Once per frame, in `finishFrame`: the post stage (`src/post/`) reads the average
 
 | Folder | Holds | Plugs in through |
 | --- | --- | --- |
-| `src/core/` | Engine, accumulator, sampler, lens, stage, light rig, shadow setup, planar deck reflection, environment capture and its parallax correction, haze and beams | `Stage`, `SceneSystem`, `FilmLight`, `SamplePass` |
+| `src/core/` | Engine, accumulator, sampler, lens, stage, contracts | `Stage`, `SceneSystem`, `FilmLight`, `SamplePass`, `StagePart` |
+| `src/core/lights.ts`, `src/core/shade/` | The light rig and its shadow maps, ambient occlusion, contact shadows | `LightRig`, `createShade(deps)`: a `StagePart` |
+| `src/core/reflect/` | Planar deck reflection, environment capture and its parallax correction, the `zebra` view | `createReflections(deps)`: a `StagePart` |
+| `src/core/haze/` | Ray-marched haze, beams, glow around sources | `createHaze(deps)`: a `StagePart` with a `SamplePass` |
 | `src/post/` | Everything after accumulation | `Resolver` in `src/core/engine.ts` |
 | `src/world/` | Deck, parapet, structures, services, city, signage, sky, the lights they carry | `WorldModule`: a `SceneSystem` plus `deck`, `reflectionBox`, `surfaces`, `signs` |
 | `src/vehicle/` | The vehicle | `VehicleModule`. The stage turns `lamps` into film lights |
 | `src/weather/air/` | Rain in the air, splashes, mist above the deck, steam, heat shimmer | `createAir(deps)`: a `SceneSystem` |
 | `src/weather/surface/` | Water on surfaces: beads, rivulets, sheets, drips, porous wetting, puddles, ripples | `createSurface(deps)`: a `SceneSystem` that patches the materials in `world.surfaces` and `vehicle.surfaces` |
 | `src/materials/` | The patch helper and any material shared by two folders | `patchMaterial` |
-| `src/diagnostics/` | The diagnostic views | `setDiagnostic` on the stage, the systems and the resolver |
+| `src/diagnostics/` | The list of diagnostic views. `clay` and `normals` are set by the stage, `zebra` by reflections, `wetness` by surface water, `caps` by the resolver | `setDiagnostic` on the stage, the systems, the parts and the resolver |
 
 ## Rules for a system
 
@@ -63,4 +67,4 @@ Once per frame, in `finishFrame`: the post stage (`src/post/`) reads the average
 
 - Signs, the billboard, the doorway and the pole heads are `area` or `spot` lights with a real emitter size. Their emissive geometry is what the camera and the reflections see. The light is what the surfaces around them receive. The two must agree in color and brightness.
 - The rig holds 16 lights. The world may carry 8, at most 4 of them with shadows. Distant signage lights nothing directly: it reaches the scene through the environment capture, the deck reflection and the haze.
-- The vehicle's `lamps` become lights in the stage. A `beam` lamp is a shadowed spot that the haze pass marches, at most 4. All other lamps are merged into one point light per corner of the vehicle, so a lamp may be made of as many lit parts as it needs.
+- The vehicle's `lamps` become lights in the stage. A `beam` lamp is a shadowed spot that the haze pass marches, at most 4. All other lamps are merged into one light per corner of the vehicle, set just outside the body and aimed out and down so it lights the deck and never the parts around the lamp. A lamp may be made of as many lit parts as it needs.

@@ -18,6 +18,8 @@ export interface WorldModule extends SceneSystem {
   /** The box the vehicle's reflections are corrected to: the deck below, the parapet and nearest walls around, open sky above. */
   reflectionBox: THREE.Box3
   surfaces: WetSurface[]
+  /** Places where steam or vapor leaves the world: roof plant vents, drains. The object's local +Y is the direction it rises. `strength` is 0 to 1. */
+  steamSources?: Array<{ object: THREE.Object3D; strength?: number; kind?: 'vent' | 'drain' }>
 }
 
 export type WorldDetail = 'blockout' | 'full'

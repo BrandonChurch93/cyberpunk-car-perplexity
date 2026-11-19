@@ -58,7 +58,7 @@ export function createStandInWorld(): WorldModule {
   const palette = [new THREE.Color(0.25, 0.75, 1), new THREE.Color(0.55, 0.9, 1), new THREE.Color(0.35, 0.5, 1), new THREE.Color(0.8, 0.95, 1)]
   const billboardColor = (t: number, out: THREE.Color): void => {
     const phase = (t / duration) * palette.length
-    const i = Math.floor(phase) % palette.length
+    const i = ((Math.floor(phase) % palette.length) + palette.length) % palette.length
     const u = phase - Math.floor(phase)
     const s = u * u * (3 - 2 * u)
     out.copy(palette[i]).lerp(palette[(i + 1) % palette.length], s)
@@ -84,6 +84,12 @@ export function createStandInWorld(): WorldModule {
       level: id === 'pole-a' ? (t) => 1 - 0.06 * Math.max(0, Math.sin((tau * 37 * t) / duration)) * Math.max(0, Math.sin((tau * 211 * t) / duration)) : () => 1,
     })
   }
+
+  const vent = add(new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 1.2), steel), deck)
+  vent.position.set(-22, 0.45, -15)
+  const ventTop = new THREE.Object3D()
+  ventTop.position.set(-22, 0.92, -15)
+  deck.add(ventTop)
 
   const rng = stream('standin-city')
   const towerMaterial = new THREE.MeshStandardMaterial({ color: 0x0b0c0f, roughness: 0.7 })
@@ -158,6 +164,7 @@ export function createStandInWorld(): WorldModule {
     deck: { meshes: [slab], material: deckMaterial, bounds: new THREE.Box2(new THREE.Vector2(-40, -40), new THREE.Vector2(40, 40)), heightMap: null },
     reflectionBox: new THREE.Box3(new THREE.Vector3(-31, 0, -21), new THREE.Vector3(31, 80, 21)),
     surfaces: [{ material: deckMaterial, wetness: 'porous' }, { material: concrete, wetness: 'porous' }, { material: steel, wetness: 'sheet' }],
+    steamSources: [{ object: ventTop, strength: 1, kind: 'vent' }],
     beginFrame: () => undefined,
     beginSample: (sample) => setEmitters(sample.timeSeconds),
   }
