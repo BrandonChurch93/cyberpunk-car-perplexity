@@ -92,8 +92,8 @@ function mountedText(city: THREE.Group, labels: Label, signs: string[]): void {
   const red = city.getObjectByName('red sign')!
   red.getObjectByName('lettering BAR')?.removeFromParent()
   labelFace(red,'BAR',[0,0,.193],[2.11,.86],labels,new THREE.Color(.48,.014,.024))
-  const shoulder = gray(13.4, .31, .53)
-  const core = gray(17, 4.6, 4.45)
+  const shoulder = gray(9.4, 1.18, 1.36)
+  const core = gray(17, 7.1, 7.45)
   const glyphs = [
     [[[-.23,-.3],[-.23,.3],[.11,.3],[.23,.22],[.23,.12],[.12,.03],[-.23,.03]], [[.12,.03],[.26,-.07],[.26,-.2],[.12,-.3],[-.23,-.3]]],
     [[[-.26,-.30],[.0,.31],[.26,-.30]], [[-.17,-.08],[.17,-.08]]],

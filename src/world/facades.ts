@@ -5,6 +5,20 @@ import { mesh } from './fixtures'
 import type { Tuple } from './forms'
 
 const shell = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false })
+const roomWall = shell.clone()
+patchMaterial(roomWall, {
+  id: 'recessed room bounce',
+  apply(shader) {
+    shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec2 vRoomUv;')
+    shader.vertexShader = insertAfter(shader.vertexShader, '#include <project_vertex>', 'vRoomUv = uv;')
+    shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'varying vec2 vRoomUv;')
+    shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <color_fragment>', /* glsl */ `
+      float ceilingBounce = pow(clamp(vRoomUv.y,0.0,1.0),1.77);
+      float wallBounce = 1.0-.34*pow(abs(vRoomUv.x-.5)*2.0,2.0);
+      diffuseColor.rgb *= wallBounce*(.36+.64*ceilingBounce);
+    `)
+  },
+})
 const glazing = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(.055, .11, .17), roughness: .19, metalness: .25, transparent: true, opacity: .115, depthWrite: false })
 const cube = new THREE.BoxGeometry()
 const quad = new THREE.PlaneGeometry()
@@ -25,7 +39,7 @@ function flush(parent: THREE.Object3D, name: string, items: Piece[], plane = fal
     if (roll) m.multiply(tilt.makeRotationZ(roll))
     m.multiply(sized.makeScale(...size)).setPosition(...at)
     instances.setMatrixAt(i, m)
-    if (material === shell) instances.setColorAt(i, color)
+    if (material === shell || material === roomWall) instances.setColorAt(i, color)
   })
   instances.instanceMatrix.needsUpdate = true
   if (instances.instanceColor) instances.instanceColor.needsUpdate = true
@@ -68,21 +82,26 @@ function wideFacade(tone: number, level: DetailLevel): THREE.Material {
         float groupVal = buildingHash(vec2(floor((cell.x+facadeId*3.0)/mix(2.0,5.0,style)),floor(cell.y*.68)) + vTowerOrigin.xz*1.67);
         float value = buildingHash(cell + vTowerOrigin.xz*2.38);
         float blockOut = buildingHash(vec2(floor(cell.x*.29), floor(cell.y*.25)) + vTowerOrigin.zx);
-        float on = step(.39+.17*district, groupVal*.55+value*.45) * step(.24, blockOut);
-        vec2 edge = abs(field-.5);
-        vec2 width = mix(vec2(.31,.24), vec2(.42,.35), style);
+        float on = step(.28+.39*facadeId+.06*district, groupVal*.66+value*.34) * step(.13+style*.23, blockOut);
+        float fit = buildingHash(cell.yx + vTowerOrigin.zx*1.33 + 17.0);
+        float groupOffset = buildingHash(vec2(cell.y,floor(cell.x*.33)) + vTowerOrigin.zx*.71);
+        vec2 offset = (vec2(fit, groupOffset)-.5)*vec2(.19,.115);
+        vec2 edge = abs(field-.5-offset);
+        vec2 width = mix(vec2(.22,.18), vec2(.40,.33), vec2(fit*.53+style*.47,value*.48+style*.52));
         vec2 footprint = fwidth(coord);
         vec2 softness = max(footprint*.54,vec2(.015));
         vec2 mask = 1.0-smoothstep(width-softness,width+softness,edge);
         float readable = 1.0-smoothstep(.23,.59,max(footprint.x,footprint.y));
-        float glazingSplit = 1.0-.52*(1.0-smoothstep(.024,.054,edge.x))*step(.56, facadeId);
+        float glazingSplit = 1.0-.75*(1.0-smoothstep(.018,.048,abs(field.x-.5+offset.x*.8)))*step(.43, fit);
         float windows = mask.x*mask.y*glazingSplit;
-        float blindBand = step(.65,field.y)*step(.63,value)*step(.27, style);
+        float blindBand = smoothstep(.57,.72,field.y+fit*.16)*step(.50,fit)*step(.26,style);
         float softStripes = mix(.76,1.26,style)*mix(.80,1.1,smoothstep(.0,.20,edge.x));
         vec3 cool = mix(vec3(.28,.52,.78),vec3(.64,.82,1.0),blockOut);
         vec3 amber = mix(vec3(.72,.48,.29),vec3(1.0,.84,.61),groupVal);
-        vec3 glass = mix(cool, amber, smoothstep(.48,.72,groupVal));
-        float bright = (0.07+1.32*pow(value,3.2))*mix(.71,1.11,blockOut)*(1.0-blindBand*.63);
+        vec3 glass = mix(cool, amber, smoothstep(.36,.77,groupVal));
+        float roomBounce = mix(.37,.96,smoothstep(-.01,.32, field.y-.5))*mix(.54,1.0,1.0-edge.x);
+        float fixture = exp(-((field.x-.37-fit*.24)*(field.x-.37-fit*.24)*45.0 + (field.y-.66-offset.y)*(field.y-.66-offset.y)*760.0)) * step(.64,groupOffset);
+        float bright = exp2(mix(-3.70, 1.48, value))*mix(.65,1.12,blockOut)*(roomBounce+fixture*1.4)*(1.0-blindBand*.71);
         #ifdef CITY_NEAR
           bright *= 1.0 - smoothstep(-10.0, 1.0, vTowerOrigin.y + vTowerGrid.y);
         #endif
@@ -111,7 +130,7 @@ function retone(city: THREE.Group): void {
 }
 
 function roomedTower(building: THREE.Object3D, signBounds: THREE.Box3[]): void {
-  const pieces: Piece[] = [], interiors: Piece[] = [], panes: Piece[] = []
+  const pieces: Piece[] = [], backs: Piece[] = [], interiors: Piece[] = [], panes: Piece[] = []
   const masses = building.children.filter(o => o.name === 'building mass' && o.scale.y > 8.1 && Math.min(o.scale.x, o.scale.z) > 7)
   if (!masses.length) return
   const base = stream(`world/city/tower/${building.name}`)
@@ -121,6 +140,7 @@ function roomedTower(building: THREE.Object3D, signBounds: THREE.Box3[]): void {
   const module = residential ? base.range(1.56, 1.89) : base.range(1.55, 2.05)
   const wall = c(.008, .016, .029).multiplyScalar(base.range(.76, 1.27))
   const metal = c(.019, .029, .044).multiplyScalar(base.range(.7, 1.4))
+  const buildingUse = base.range(.23, .82)
   const isHero = Math.abs(masses[0].position.z) > 40
   const candidates = [0, Math.PI / 2, Math.PI, -Math.PI / 2].map((turn, k) => ({ turn, k, view: -masses[0].position.x*Math.sin(turn)-masses[0].position.z*Math.cos(turn) })).sort((a,b) => b.view-a.view)
   for (const [m, volume] of masses.entries()) {
@@ -135,7 +155,7 @@ function roomedTower(building: THREE.Object3D, signBounds: THREE.Box3[]): void {
       const levels = Math.floor((top - bottom - .32) / height)
       const count = Math.floor((sizeX-1.15) / module)
       const style = rng.range(.83, 1.11)
-      const depth = residential ? rng.range(.83, 1.11) : rng.range(.54, .9)
+      const depth = residential ? rng.range(.98, 1.27) : rng.range(.74, 1.08)
       const x0 = -count * module / 2
       if (levels <= 0 || count <= 0) continue
       const ox = volume.position.x, oz = volume.position.z
@@ -154,6 +174,7 @@ function roomedTower(building: THREE.Object3D, signBounds: THREE.Box3[]): void {
         const stripColor = metal.clone().multiplyScalar(floor.range(.62, 1.23))
         const band = height * (residential ? .38 : .3) * style
         const windowH = height-band-.15
+        const use = THREE.MathUtils.clamp(buildingUse + floor.range(-.32,.29), .08, .93)
         put(pieces, 0, yy+band*.43, depth/2, -2*x0, band, depth, stripColor)
         let sequence = 0, fill = 0
         for (let i=0; i<count; i++) {
@@ -162,31 +183,37 @@ function roomedTower(building: THREE.Object3D, signBounds: THREE.Box3[]): void {
           const position = new THREE.Vector3(...pp)
           if (signBounds.some(b => b.containsPoint(position))) continue
           const bay = stream(`world/city/tower/${building.name}/${m}/${k}/floor/${j}/bay/${i}`)
-          if (sequence-- <= 0) { sequence = floor.int(4)+1; fill = floor.next() }
-          const occupied = (fill > .46 || bay.next() > .84) && (bay.next() > party)
+          if (sequence-- <= 0) { sequence = floor.int(5)+1; fill = floor.next() }
+          const occupied = fill*.59+bay.next()*.41 > 1-use && bay.next() > party*.53
           const opening = yy+band*.93+windowH*.5
           const tint = palette[fill < .32 ? 2 : fill < .66 ? 0 : (cool < .53 ? 1 : 3)].clone()
-          const luminous = occupied ? bay.range(.10, .74) * (bay.next() < .15 ? 1.9 : 1) : bay.range(.005, .020)
-          const inner = tint.clone().multiplyScalar(luminous*.59)
-          const reveal = tint.clone().multiplyScalar(luminous*.17+.012)
-          put(interiors, xx, opening, .023, module*.98, windowH, 1, inner)
-          const post = bay.range(.13, .29)
+          const luminous = occupied ? 2 ** bay.range(-3.2,.76) : bay.range(.005, .022)
+          const inner = tint.clone().multiplyScalar(luminous*.58)
+          const reveal = tint.clone().multiplyScalar(luminous*.15+.012)
+          put(backs, xx, opening, .038, module*.98, windowH, 1, inner)
+          const post = bay.range(.11, .34)
           put(pieces, xx-module*.5+.055, opening, depth/2, post, windowH, depth, reveal)
           if (i === count-1) put(pieces, xx+module*.5-.055, opening, depth/2, post, windowH, depth, reveal)
-          if (bay.next() < .37) put(pieces, xx, opening+windowH*.44, depth*.76, module-.11, .13, depth*.45, metal)
-          if (bay.next() < .37) put(pieces, xx+module*.08, opening, depth+.014, .041, windowH, .05, metal)
+          put(pieces, xx, opening+windowH*.46, depth*.54, module-.11, .13, depth*.81, reveal)
+          if (bay.next() < .72) put(pieces, xx+module*bay.range(-.21,.21), opening, depth+.014, bay.range(.035,.08), windowH, .07, metal)
+          if (bay.next() < .37) put(pieces, xx, opening+windowH*bay.range(-.31,.20), depth*.99, module-.14, .046, .09, metal)
           if (occupied && bay.next() < .8) {
             const furniture = tint.clone().multiplyScalar(luminous*.19+.016)
             put(pieces, xx+bay.range(-.34,.36), opening-windowH*.32, bay.range(.25,.62)*depth, bay.range(.3,.66), bay.range(.22,.55), .24, furniture)
-            if (bay.next() < .64) put(pieces, xx+bay.range(-.35,.35), opening+windowH*.41, depth*.36, bay.range(.46,.87), .057, .16, tint.clone().multiplyScalar(luminous * 1.73))
+            const lampX = xx+bay.range(-.35,.35), lampZ = depth*bay.range(.22,.62), lampWidth = bay.range(.26,.72)
+            const lampY = opening+windowH*bay.range(.30,.405)
+            put(pieces, lampX, lampY+.09, lampZ, lampWidth+.05, .10, .18, metal)
+            put(pieces, lampX, lampY+.038, lampZ, lampWidth, .033, .157, tint.clone().multiplyScalar(luminous*1.87+.17))
           }
           if (bay.next() > .65) {
             const blindHeight = windowH * bay.range(.12, .55)
             const blind = inner.clone().multiplyScalar(bay.range(.31,.82)).add(c(.012, .016, .022))
-            put(interiors, xx, opening+windowH*.5-blindHeight*.5, depth*.74, module*.9, blindHeight, 1, blind)
+            const closedWidth = bay.next() > .60 ? module*bay.range(.40,.73) : module*.89
+            const blindX = xx + (module*.89-closedWidth)*.5*(bay.next()>.5?-1:1)
+            put(interiors, blindX, opening+windowH*.5-blindHeight*.5, depth*.74, closedWidth, blindHeight, 1, blind)
             if (windowH > 1.9 && bay.next() < .41) {
               const sill = blind.clone().multiplyScalar(.33)
-              for (let l=1;l<=4;l++) put(interiors, xx, opening+windowH*.5-blindHeight*l/5, depth*.76, module*.9, .019, 1, sill)
+              for (let l=1;l<=4;l++) put(interiors, blindX, opening+windowH*.5-blindHeight*l/5, depth*.76, closedWidth, .019, 1, sill)
             }
           }
           if (bay.next() < .14) put(panes, xx, opening, depth+.024, module*.92, windowH, 1, metal)
@@ -218,7 +245,8 @@ function roomedTower(building: THREE.Object3D, signBounds: THREE.Box3[]): void {
     }
   }
   flush(building, 'solid mullions, slotted balconies, room contents and escape rails', pieces)
-  flush(building, 'recessed room walls, blinds and panel joints', interiors, true)
+  flush(building, 'recessed room walls with ceiling bounce', backs, true, roomWall)
+  flush(building, 'occluding roller shades, blinds and panel joints', interiors, true)
   flush(building, 'selected recessed glazing', panes, true, glazing)
 }
 
