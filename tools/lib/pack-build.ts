@@ -6,9 +6,9 @@ import { stream } from '../../src/core/random.ts'
 import { buildCrops, type CropManifest } from './crops.ts'
 import { config, ensureDir, readJson, repoRoot, workDir, writeJson } from './env.ts'
 import { judgedFrames, type JudgedFrame } from './judged.ts'
-import { beatMoments, configValues, eventRuns, extractSection, heroFrame, hookFrames, juryText, macroFrame, neutralName, neutralProblems, returnFormat, roundName, shuffle } from './pack.ts'
+import { beatMoments, configValues, splitMessages, eventRuns, extractSection, heroFrame, hookFrames, juryText, macroFrame, neutralName, neutralProblems, returnFormat, roundName, shuffle } from './pack.ts'
 import { detailFrom, recordMatches, RenderSession, stillName, type StillRecord, type StillSpec } from './render.ts'
-import { beatOfFrame } from './scene.ts'
+import { beatJoins, beatOfFrame, sceneAnchors, type BeatJoin } from './scene.ts'
 import { buildFrameSheet, buildSheet, sheetFrames } from './sheet.ts'
 
 export type Fit = 'long' | 'phone' | 'native'
@@ -44,7 +44,19 @@ export class PackContext {
     readonly buildHash: string,
     readonly budgetMinutes: number | undefined,
     readonly tierOverride?: TierId,
+    readonly split = 10,
   ) {}
+
+  /** Phase 2 judges framing on the gray box, so its sheet cells are rendered in the small preview format. */
+  get sheetFormat(): FormatSpec {
+    return this.phase === 2 ? config.formats.preview : config.formats.master
+  }
+
+  async joins(format: FormatSpec): Promise<BeatJoin[]> {
+    const session = await this.session()
+    const page = await session.pageFor(this.spec(0, 'draft', format))
+    return beatJoins(format, (await sceneAnchors(page, this.paint)).anchors)
+  }
 
   session(): Promise<RenderSession> {
     this.sessionPromise ??= RenderSession.open({ budgetMinutes: this.budgetMinutes })
@@ -96,17 +108,32 @@ const seconds = (frame: number): string => `${(frame / config.film.fps).toFixed(
 const beatLabel = (beat: string): string => `beat ${beatIndex(beat) + 1} of ${config.beats.length} (${beat})`
 const shape = (f: FormatSpec): string => (f.width >= f.height ? 'wide frame' : 'tall frame')
 
-function sheetCaption(beat: string): string {
+function sheetCaption(beat: string, joins: BeatJoin[]): string {
   const frames = sheetFrames(beat)
-  if (beat === 'seam') return `${frames.length} frames across the loop point, ${seconds(frames[0])} to the end, then from 0 s to ${seconds(frames[frames.length - 1])}`
-  return `${frames.length} frames from ${seconds(frames[0])} to ${seconds(frames[frames.length - 1])}, ${beatLabel(beat)}`
+  if (beat === 'seam') {
+    const loop = joins[0]
+    return `${frames.length} frames across the loop point, ${seconds(frames[0])} to the end, then from 0 s to ${seconds(frames[frames.length - 1])}. ${loop.cut ? 'The film cuts at the loop point.' : 'The film loops here without a cut.'}`
+  }
+  const i = beatIndex(beat)
+  const join = joins[i]
+  const how = join.cut
+    ? `The film cuts to this shot at ${join.start.toFixed(2)} s.`
+    : i === 0
+      ? `The film loops into it from the end of beat ${beatIndex(join.continues) + 1} without a cut.`
+      : `It continues the move of beat ${beatIndex(join.continues) + 1} without a cut.`
+  return `${frames.length} frames from ${seconds(frames[0])} to ${seconds(frames[frames.length - 1])}, ${beatLabel(beat)}. ${how}`
 }
+
+export { sheetCaption }
 
 async function sheetsFor(ctx: PackContext, set: string): Promise<PackItem[]> {
   const out: PackItem[] = []
+  const format = ctx.sheetFormat
+  const joins = await ctx.joins(format)
   for (const beat of [...config.beats.map((b) => b.id), 'seam']) {
-    const source = await ctx.sheet(beat, 'review', config.formats.master)
-    out.push({ set, source, fit: 'long', shows: `contact sheet, ${sheetCaption(beat)}`, what: `contact sheet ${beat}, review tier, ${config.formats.master.id}`, meta: { beat, frames: sheetFrames(beat) } })
+    const tier = ctx.tierOverride ?? 'review'
+    const source = await ctx.sheet(beat, tier, format)
+    out.push({ set, source, fit: 'long', shows: `contact sheet, ${sheetCaption(beat, joins)}`, what: `contact sheet ${beat}, ${tier} tier, cells rendered in ${format.id} at ${format.width} x ${format.height}`, meta: { beat, frames: sheetFrames(beat), cellFormat: format.id } })
   }
   return out
 }
@@ -436,5 +463,6 @@ export async function writePack(ctx: PackContext, pack: CriticPack): Promise<{ d
     manifest.jurorsPerImage = config.quality.blind.jurors
   }
   writeJson(join(dir, 'manifest.json'), manifest)
+  for (const m of splitMessages(pack.critic, files, ctx.split, pack.oneAtATime)) writeFileSync(join(dir, m.name), m.text)
   return { dir, files: files.map((f) => f.file), key }
 }
