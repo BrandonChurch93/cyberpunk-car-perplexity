@@ -1,114 +1,223 @@
-import * as T from 'three'
-import { bayEdge, zAt } from './body'
-import { anchor } from './ends'
-import { add, contour, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, type Point } from './geometry'
-import type { Palette } from './materials'
+import * as THREE from 'three'
+import type { VehicleDetail } from './contract'
+import { engineBayHalfWidth } from './body'
+import { evalSideMaxTop, sFromZ } from './dimensions'
+import type { VehicleMaterials } from './materials'
+import {
+  buildProfileTube,
+  buildRolledPatch,
+  lerp,
+  makeMesh,
+  mergeGeometries,
+  mirrorGeometryX,
+} from './surface'
 
-export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
-  const carbon: T.BufferGeometry[] = [], internals: T.BufferGeometry[] = [], pins: T.BufferGeometry[] = [], black: T.BufferGeometry[] = []
-  const sections = full ? 42 : 24
-  const bridge: Point = [0, 1.002, zAt(.702)]
-  const bayFloor = (u: number, v: number): Point => [mix(-.407, .407, v), mix(.881, .729, u), zAt(mix(.648, .906, u))]
-  black.push(patch(bayFloor, 16, 12, [0, 1, 0], .023))
-  for (const side of [1, -1]) {
-    const scoop = (u: number, v: number): Point => {
-      const s = mix(.647, .907, u)
-      const [x, y, z] = bayEdge(s, side)
-      const slope = .025 + .042 * Math.sin(Math.PI * u)
-      return [x - side * (.003 + .126 * v), y - v ** 1.4 * slope - .009 * Math.sin(v * Math.PI), z]
+function buildHexMeshPanel(
+  xHalf: number,
+  zFront: number,
+  zRear: number,
+  yFront: number,
+  yRear: number,
+  cols: number,
+  rows: number,
+): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = []
+  const dz = (zFront - zRear) / rows
+  const dx = (xHalf * 2) / cols
+  const cellR = Math.min(dx, dz) * 0.44
+  const wallT = cellR * 0.24
+  const depth = 0.0045
+
+  for (let r = 0; r < rows; r++) {
+    const fz = (r + 0.5) / rows
+    const cz = lerp(zRear, zFront, fz)
+    const cy = lerp(yRear, yFront, fz)
+    const maxW = lerp(xHalf * 0.88, xHalf, fz)
+    for (let c = 0; c < cols; c++) {
+      const cx = -xHalf + (c + 0.5 + (r % 2) * 0.5) * dx
+      if (Math.abs(cx) > maxW - cellR * 0.6) continue
+      const ring = new THREE.CylinderGeometry(cellR, cellR, depth, 6, 1, true)
+      ring.translate(cx, cy, cz)
+      parts.push(ring)
+      const capTop = new THREE.RingGeometry(cellR - wallT, cellR, 6)
+      capTop.rotateX(-Math.PI / 2)
+      capTop.translate(cx, cy + depth * 0.5, cz)
+      parts.push(capTop)
     }
-    carbon.push(patch(scoop, sections, 14, [0, 1, 0], .008))
-    const lining = (u: number, v: number): Point => {
-      const p = scoop(u, 1)
-      return [p[0] - side * .062 * v, p[1] - v * (.13 - .044 * u), p[2]]
-    }
-    if (full) {
-      const border = (u0: number, u1: number, v0: number, v1: number) =>
-        patch((u, v) => lining(mix(u0, u1, u), mix(v0, v1, v)), sections, 7, [0, 1, 0], .006)
-      carbon.push(border(0, .072, 0, 1), border(.721, 1, 0, 1), border(.072, .721, 0, .18), border(.072, .721, .91, 1))
-      black.push(patch((u, v) => {
-        const p = lining(mix(.052, .742, u), mix(.14, .94, v))
-        return [p[0] + side * .029, p[1] - .041, p[2]]
-      }, sections, 13, [0, 1, 0], .009))
-    } else carbon.push(patch(lining, sections, 8, [0, 1, 0], .007))
-    const cover = (u: number, v: number): Point => {
-      const s = mix(.685, .832, u)
-      const end = .73 + .27 * smooth(u, .025, .15) - .22 * smooth(u, .80, .98)
-      const x = .15 + mix(-.072, .075, v) * end
-      const shoulder = Math.sin(Math.PI * v) ** .67
-      return [side * x, mix(.910, .867, u) + .027 * shoulder + .015 * Math.sin(Math.PI * u), zAt(s)]
-    }
-    internals.push(patch(cover, sections, 16, [0, 1, 0], .034))
-    for (const offset of [-.041, -.031, .018, .028, .038]) {
-      const ribs = (u: number, v: number): Point => {
-        const p = cover(mix(.15, .83, u), .49 + (offset + .004 * (v - .5)) / .147)
-        return [p[0], p[1] + .004 * Math.sin(u * Math.PI) + .0012, p[2]]
-      }
-      pins.push(patch(ribs, 26, 3, [0, 1, 0], .003))
-    }
-    for (let i = 0; i < 6; i++) {
-      const s = .693 + .022 * i
-      const p = cover((s - .685) / .147, .92)
-      pins.push(new T.CylinderGeometry(.006, .006, .004, 7).translate(p[0], p[1] + .002, p[2]))
-      internals.push(new T.CylinderGeometry(.023, .022, .042, 12).rotateZ(Math.PI / 2).translate(side * .225, p[1] - .045, p[2]))
-    }
-    const brace = (u: number, v: number): Point => {
-      const s = mix(.662, .772, u)
-      const x = mix(.282, .006, u) + v * (.047 - .023 * u)
-      const z0 = zAt(s)
-      const z = z0 + .020 * (v - .5)
-      const y = mix(1.048, .963, u) + .012 * Math.sin(Math.PI * u) + .003 * Math.sin(Math.PI * v)
-      return [side * x, y, z]
-    }
-    const crossV = (u: number, v: number): Point => {
-      const s = mix(.735, .837, u)
-      const x = mix(.009, .270, u) + (v - .5) * (.044 + .023 * u)
-      const z = zAt(s) + .021 * (v - .5)
-      return [side * x, mix(.985, .915, u) + .024 * Math.sin(Math.PI * u) + .004 * Math.sin(Math.PI * v), z]
-    }
-    carbon.push(patch(brace, sections, 10, [0, 1, 0], .014), patch(crossV, sections, 10, [0, 1, 0], .015))
-    for (const p of [brace(.09, .55), crossV(.87, .57)]) {
-      pins.push(new T.CylinderGeometry(.012, .012, .004, 14).translate(p[0], p[1] + .002, p[2]))
-      black.push(new T.CylinderGeometry(.005, .005, .0065, 6).translate(p[0], p[1] + .0035, p[2]))
-    }
-    const meshMap = (u: number, v: number): Point => {
-      const p = lining(mix(.07, .72, u), mix(.18, .91, v))
-      return [p[0] - side * .005, p[1] + .004, p[2]]
-    }
-    carbon.push(hexMesh(meshMap, .82, .12, full ? .0115 : .019, full ? .00092 : .00155))
-    for (let i = 0; i < 5; i++) {
-      const s = .659 + i * .032
-      const cut = (u: number, v: number): Point => {
-        const sd = s + (v - .5) * .021 + .012 * u
-        const p = bayEdge(sd, side)
-        return [p[0] - side * mix(.015, .109, u), p[1] - .003 - .038 * u - .010 * Math.sin(Math.PI * v), p[2]]
-      }
-      black.push(patch(cut, 16, 8, [0, 1, 0], .009))
-      carbon.push(contour(Array.from({ length: 10 }, (_, j) => cut(j / 9, 1)), .0041))
-    }
-    const cable: Point[] = [
-      [side * .234, .902, zAt(.691)], [side * .241, .929, zAt(.721)], [side * .257, .927, zAt(.752)],
-      [side * .253, .906, zAt(.800)], [side * .224, .875, zAt(.830)],
-    ]
-    black.push(contour(cable, .0103))
   }
-  const bridgeSurface = (u: number, v: number): Point => {
-    const x = mix(-.30, .30, u), s = .697 + .010 * v + .013 * (Math.abs(x) / .30) ** 1.5
-    return [x, bridge[1] + .008 * Math.abs(x) / .3 + .004 * Math.sin(Math.PI * v), zAt(s)]
+  return mergeGeometries(parts)
+}
+
+export function createEngineBay(materials: VehicleMaterials, detail: VehicleDetail): THREE.Group {
+  const group = new THREE.Group()
+  group.name = 'engine-bay'
+
+  const carbonParts: THREE.BufferGeometry[] = []
+  const coverParts: THREE.BufferGeometry[] = []
+  const metalParts: THREE.BufferGeometry[] = []
+  const darkParts: THREE.BufferGeometry[] = []
+
+  const bayTub = buildRolledPatch(
+    18,
+    24,
+    (u, v, out) => {
+      const z = lerp(-1.98, -0.66, v)
+      const w = engineBayHalfWidth(z)
+      const q = u * 2 - 1
+      const x = q * w
+      const dish = Math.abs(q) < 0.72 ? -0.14 : -0.14 * ((1 - Math.abs(q)) / 0.28)
+      const s = sFromZ(z)
+      const yRim = evalSideMaxTop(s) - 0.022
+      out.set(x, yRim + dish, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: true },
+  )
+  darkParts.push(bayTub)
+
+  const surroundLeft = buildRolledPatch(
+    10,
+    28,
+    (u, v, out) => {
+      const z = lerp(-1.96, -0.66, v)
+      const s = sFromZ(z)
+      const wOut = engineBayHalfWidth(z)
+      const wIn = wOut - lerp(0.11, 0.16, v)
+      const x = lerp(wIn, wOut, u)
+      const yOut = evalSideMaxTop(s) - 0.016 - 0.016 * (1 - v)
+      const yIn = yOut - 0.032
+      out.set(x, lerp(yIn, yOut, u), z)
+    },
+    { uMin: true, uMax: true, vMin: true, vMax: true, flipWinding: true },
+  )
+  carbonParts.push(surroundLeft, mirrorGeometryX(surroundLeft))
+
+  for (let i = 0; i < 5; i++) {
+    const f = i / 4
+    const zSlot = lerp(-0.78, -1.62, f)
+    const s = sFromZ(zSlot)
+    const yBase = evalSideMaxTop(s) - 0.032 - 0.012 * f
+    const wOut = engineBayHalfWidth(zSlot) - 0.012
+    const wIn = wOut - 0.125
+    const louver = buildProfileTube(
+      [
+        [wIn, yBase - 0.012, zSlot - 0.024],
+        [(wIn + wOut) * 0.5, yBase + 0.004, zSlot],
+        [wOut, yBase + 0.012, zSlot + 0.022],
+      ],
+      [[-0.038, -0.004], [0.038, -0.004], [0.03, 0.005], [-0.03, 0.005]],
+      [0, 1, 0],
+    )
+    carbonParts.push(louver, mirrorGeometryX(louver))
   }
-  carbon.push(patch(bridgeSurface, sections, 8, [0, 1, 0], .017))
-  const heatShield = (u: number, v: number): Point => [mix(-.19, .19, v), .842 + .092 * smooth(u, .13, .98) + .012 * Math.sin(v * Math.PI), zAt(mix(.832, .906, u))]
-  carbon.push(patch(heatShield, 28, 12, [0, 1, 0], .014))
-  for (let i = 0; i < 4; i++) {
-    const s = .842 + .014 * i
-    const layer = (u: number, v: number): Point => [mix(-.16 + .012 * i, .16 - .012 * i, u), .882 + .0155 * i + .014 * Math.sin(u * Math.PI) + .010 * v, zAt(s + .008 * v)]
-    carbon.push(patch(layer, 18, 6, [0, 1, 0], .007))
+
+  const centralPlenum = buildRolledPatch(
+    14,
+    22,
+    (u, v, out) => {
+      const z = lerp(-1.52, -0.74, v)
+      const ang = (u - 0.5) * Math.PI
+      const rx = lerp(0.068, 0.082, Math.sin(v * Math.PI))
+      const ry = 0.044
+      const x = Math.sin(ang) * rx
+      const y = 0.915 + Math.cos(ang) * ry + 0.018 * v
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: false, vMin: true, vMax: true, flipWinding: true },
+  )
+  coverParts.push(centralPlenum)
+
+  const bankCoverLeft = buildRolledPatch(
+    12,
+    22,
+    (u, v, out) => {
+      const z = lerp(-1.5, -0.76, v)
+      const x = lerp(0.088, 0.235, u)
+      const arch = Math.sin(u * Math.PI)
+      const y = 0.892 + 0.034 * arch + 0.016 * v
+      out.set(x, y, z)
+    },
+    { uMin: true, uMax: true, vMin: true, vMax: true, flipWinding: true },
+  )
+  coverParts.push(bankCoverLeft, mirrorGeometryX(bankCoverLeft))
+
+  for (let cyl = 0; cyl < 6; cyl++) {
+    const f = cyl / 5
+    const zRunner = lerp(-0.81, -1.44, f)
+    const yRunner = lerp(0.942, 0.928, f)
+    const runnerLeft = buildProfileTube(
+      [
+        [0.055, yRunner + 0.016, zRunner],
+        [0.135, yRunner + 0.012, zRunner - 0.008],
+        [0.215, yRunner - 0.014, zRunner - 0.014],
+      ],
+      [[-0.016, -0.011], [0.016, -0.011], [0.013, 0.012], [-0.013, 0.012]],
+      [0, 1, 0],
+    )
+    metalParts.push(runnerLeft, mirrorGeometryX(runnerLeft))
   }
-  const emblemFreeCap: Point[] = [[-.043, .932, zAt(.777)], [.043, .932, zAt(.777)], [.061, .916, zAt(.795)], [-.061, .916, zAt(.795)]]
-  internals.push(polygon(roundedPath(emblemFreeCap), [0, 1, 0], .017))
-  add(parent, 'open bay resin cross bracing and hex grilles', joined(carbon), m.carbon)
-  add(parent, 'engine cover banks and hardware', joined(internals), m.engine)
-  add(parent, 'engine covers fasteners and machined ribs', joined(pins), m.brushed)
-  add(parent, 'engine bay ground and hoses', joined(black), m.dark)
-  return anchor(bridgeSurface(.5, .5), [0, 1, 0], .42)
+
+  const braceLeftA = buildProfileTube(
+    [
+      [0.315, 0.992, -0.75],
+      [0.145, 0.978, -1.11],
+      [0.026, 0.968, -1.42],
+    ],
+    [[-0.022, -0.008], [0.022, -0.008], [0.018, 0.009], [-0.018, 0.009]],
+    [0, 1, 0],
+  )
+  const braceLeftB = buildProfileTube(
+    [
+      [0.026, 0.968, -1.42],
+      [0.155, 0.958, -1.66],
+      [0.265, 0.952, -1.88],
+    ],
+    [[-0.02, -0.007], [0.02, -0.007], [0.016, 0.008], [-0.016, 0.008]],
+    [0, 1, 0],
+  )
+  const centerBridge = buildRolledPatch(
+    10,
+    12,
+    (u, v, out) => {
+      const z = lerp(-1.54, -1.32, v)
+      const x = (u * 2 - 1) * lerp(0.085, 0.055, Math.abs(v - 0.5) * 2)
+      const y = 0.972 - 0.004 * Math.abs(u * 2 - 1)
+      out.set(x, y, z)
+    },
+    { uMin: true, uMax: true, vMin: true, vMax: true, flipWinding: true },
+  )
+  carbonParts.push(braceLeftA, mirrorGeometryX(braceLeftA), braceLeftB, mirrorGeometryX(braceLeftB), centerBridge)
+
+  for (const [bx, by, bz] of [
+    [0.315, 0.992, -0.75],
+    [-0.315, 0.992, -0.75],
+    [0.265, 0.952, -1.88],
+    [-0.265, 0.952, -1.88],
+  ]) {
+    const bracket = new THREE.BoxGeometry(0.054, 0.02, 0.058)
+    bracket.translate(bx, by - 0.004, bz)
+    metalParts.push(bracket)
+  }
+
+  const hexCols = detail === 'full' ? 22 : 12
+  const hexRows = detail === 'full' ? 18 : 10
+  const hexMesh = buildHexMeshPanel(0.245, -1.5, -1.94, 0.952, 0.922, hexCols, hexRows)
+  metalParts.push(hexMesh)
+
+  for (let r = 0; r < 4; r++) {
+    const zr = lerp(-1.56, -1.88, r / 3)
+    const yr = lerp(0.956, 0.928, r / 3)
+    const rib = buildProfileTube(
+      [[-0.23, yr, zr], [0, yr + 0.005, zr - 0.012], [0.23, yr, zr]],
+      [[-0.014, -0.004], [0.014, -0.004], [0.011, 0.005], [-0.011, 0.005]],
+      [0, 1, 0],
+    )
+    carbonParts.push(rib)
+  }
+
+  group.add(makeMesh(mergeGeometries(carbonParts), materials.carbon, 'engine-carbon-bracing'))
+  group.add(makeMesh(mergeGeometries(coverParts), materials.engineCover, 'engine-covers'))
+  group.add(makeMesh(mergeGeometries(metalParts), materials.engineMetal, 'engine-metal-and-mesh'))
+  group.add(makeMesh(mergeGeometries(darkParts), materials.liner, 'engine-bay-tub'))
+
+  return group
 }

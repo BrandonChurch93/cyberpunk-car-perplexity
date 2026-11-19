@@ -1,392 +1,947 @@
-import * as T from 'three'
-import { add, blend, contour, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
-import type { Palette } from './materials'
+import * as THREE from 'three'
+import type { VehicleDetail } from './contract'
+import {
+  evalBodyLower,
+  evalHeightWidthFactor,
+  evalPlanHalfWidth,
+  evalSideCenterTop,
+  evalSideMaxTop,
+  FRONT_HUB_Z,
+  HEIGHT,
+  REAR_HUB_Z,
+  sFromZ,
+} from './dimensions'
+import type { VehicleMaterials } from './materials'
+import {
+  buildProfileTube,
+  buildRolledPatch,
+  clamp,
+  filletAbs,
+  lerp,
+  makeMesh,
+  mergeGeometries,
+  mirrorGeometryX,
+  smootherstep,
+  smoothstep,
+} from './surface'
 
-export const dimensions = {
-  length: 4.947, bodyWidth: 2.033, mirrorWidth: 2.266, height: 1.16, wheelbase: 2.779,
-  frontX: 0.86, rearX: 0.8505, frontOverhang: 2.168 * 661 / 1206,
-}
-export const zAt = (s: number) => dimensions.length * (0.5 - s)
-export const sAt = (z: number) => 0.5 - z / dimensions.length
-export const frontHub = zAt(dimensions.frontOverhang / dimensions.length)
-export const rearHub = frontHub - dimensions.wheelbase
-export const frontWheel = { x: dimensions.frontX, z: frontHub, radius: .34675, loaded: .3405, width: .265, rim: .254, rimWidth: .2413, disc: .205, discDepth: .038, arch: .385 }
-export const rearWheel = { x: dimensions.rearX, z: rearHub, radius: .3702, loaded: .3625, width: .345, rim: .2667, rimWidth: .3048, disc: .195, discDepth: .032, arch: .410 }
-export type WheelSize = typeof frontWheel
-export const floorY = .132
-
-const plan = curve([
-  [0, .008], [.005, .130], [.012, .295], [.02, .416], [.04, .607], [.06, .739], [.08, .836], [.10, .875], [.12, .914],
-  [.14, .941], [.16, .973], [.18, .980], [.26, .981], [.285, .98], [.31, .961], [.34, .969], [.4, .980], [.48, .988],
-  [.55, .992], [.62, .994], [.70, .998], [.747, 1.009], [.766, dimensions.bodyWidth / 2], [.825, dimensions.bodyWidth / 2],
-  [.857, 1.009], [.88, .973], [.90, .933], [.92, .896], [.94, .824], [.96, .691], [.98, .535], [.995, .39], [1, .23],
-])
-const frontWidth = curve([
-  [0, .0008], [.14, .0058], [.30, .0125], [.416, .0205], [.607, .04], [.739, .06], [.836, .08], [.875, .10], [.914, .12], [.941, .14], [.973, .16], [.982, .18],
-])
-const tailWidth = curve([
-  [0, .9875], [.39, .985], [.535, .979], [.69, .959], [.824, .939], [.896, .919], [.945, .895], [.975, .877], [1.012, .855],
-])
-const shoulder = curve([
-  [0, .407], [.016, .451], [.044, .545], [.08, .624], [.12, .699], [.16, .762], [.20, .807], [.232, .815],
-  [.267, .789], [.32, .737], [.40, .725], [.51, .759], [.59, .821], [.67, .881], [.736, .936],
-  [.793, .943], [.85, .918], [.89, .888], [.92, .865], [.96, .848], [1, .833],
-])
-const hoodLine = curve([[0, .404], [.04, .488], [.08, .564], [.128, .664], [.18, .748], [.25, .783], [.33, .770], [.6, .83]])
-const spine = curve([
-  [.575, 1.149], [.6, 1.146], [.62, 1.135], [.64, 1.124], [.66, 1.099], [.68, 1.085], [.70, 1.078], [.72, 1.068],
-  [.742, 1.056], [.769, 1.040], [.80, 1.02], [.82, 1.011], [.85, .983], [.88, .963], [.90, .957], [.92, .941], [.94, .926], [.96, .908], [.984, .898],
-])
-const upperCrown = curve([[0, .0], [.29, .017], [.47, .017], [.68, .013], [.81, .005], [1, 0]])
-const hoodCrease = curve([[0, .16], [.06, .31], [.12, .54], [.17, .62], [.24, .71], [.32, .87]])
-const sideDent = curve([[0, 0], [.10, .006], [.34, .025], [.43, .11], [.51, .17], [.56, .215], [.62, .238], [.67, .105], [.73, .012], [1, 0]])
-const rockerY = curve([[0, .155], [.04, .136], [.25, .136], [.69, .136], [.86, .137], [.90, .153], [.95, .187], [1, .40]])
-
-function sidePoint(s: number, y: number, side: number): Point {
-  const q = T.MathUtils.clamp((y - rockerY(s)) / (shoulder(s) - rockerY(s)), 0, 1)
-  const sill = (.058 + .017 * smooth(s, .20, .32)) * (1 - smooth(q, 0, .21))
-  const door = sideDent(s) * Math.pow(Math.sin(Math.PI * q), .8) * (1 - .35 * q)
-  const crease = .018 * smooth(s, .32, .50) * (1 - smooth(s, .62, .74)) * Math.exp(-((q - .82) ** 2) / .012)
-  return [side * (plan(s) - sill - door + crease * (1 - smooth(q, .83, .99))), y, zAt(s)]
+export function bonnetSeamX(z: number): number {
+  const t = clamp((z - 1.24) / (2.14 - 1.24), 0, 1)
+  return lerp(0.76, 0.29, Math.pow(t, 0.88))
 }
 
-function bonnet(s: number, v: number): Point {
-  const crease = hoodCrease(s)
-  const rise = (.014 + .017 * smooth(s, .018, .09)) * smooth(s, 0, .04)
-  const shape = upperCrown(v) * smooth(s, 0, .07) + rise * (smooth(v, crease, crease + .18) - .62 * smooth(v, crease + .18, 1))
-  return [plan(s) * v, mix(hoodLine(s), shoulder(s), v ** 1.8) + shape * (1 - smooth(v, .83, 1)), zAt(s)]
+export function engineBayHalfWidth(z: number): number {
+  const t = clamp((-0.66 - z) / (1.96 - 0.66), 0, 1)
+  return lerp(0.47, 0.335, smootherstep(0, 1, t))
 }
 
-const cabFront = (v: number) => .166 + .095 * v ** 2.35
-const cowl = (v: number): Point => bonnet(cabFront(v), v * .818)
-const roofWidth = curve([[.417, .617], [.46, .625], [.51, .632], [.56, .60], [.595, .542], [.625, .49]])
-const roofHeight = curve([[.417, 1.122], [.445, 1.14], [.472, 1.157], [.5, 1.16], [.545, 1.16], [.578, 1.153], [.595, 1.15]])
-const roofCross = curve([[0, -.019], [.25, -.019], [.37, -.016], [.48, 0], [.66, -.006], [.84, -.018], [1, -.042]])
-const roof = (s: number, v: number): Point => [roofWidth(s) * v, roofHeight(s) + roofCross(Math.abs(v)), zAt(s)]
-const glassLowerX = curve([[.261, .803], [.32, .839], [.39, .827], [.46, .807], [.53, .779], [.58, .749], [.625, .664], [.65, .576]])
-const glassLowerY = curve([[.261, cowl(1)[1]], [.32, .77], [.37, .763], [.49, .808], [.56, .862], [.60, .932], [.65, .959]])
-const glassUpperY = curve([[.261, cowl(1)[1]], [.30, .94], [.35, 1.01], [.40, 1.064], [.417, roof(.417, 1)[1]], [.46, roof(.46, 1)[1]], [.51, roof(.51, 1)[1]], [.565, roof(.565, 1)[1]], [.595, roof(.595, 1)[1]], [.625, 1.048], [.65, .959]])
-const glassUpperX = curve([[.261, .803], [.30, .756], [.35, .697], [.40, .625], [.417, .617], [.46, .625], [.51, .632], [.565, .595], [.595, .542], [.625, .542], [.65, .576]])
-const forwardWind = (u: number, q: number): Point => {
-  const p = cowl(Math.abs(q))
-  const low: Point = [Math.sign(q) * p[0], p[1] + .0013, p[2]]
-  const high = roof(.4175, q)
-  const p1 = blend(low, high, u)
-  return [p1[0], p1[1] + .022 * Math.sin(Math.PI * u) * (1 - .36 * Math.abs(q)), p1[2]]
-}
-const edgeGlass = (s: number, v: number): Point => {
-  const q = T.MathUtils.clamp((s - cabFront(1)) / (.4175 - cabFront(1)), 0, 1)
-  const upper = s < .4175 ? forwardWind(q, 1) : s < .5965 ? roof(s, 1) : [glassUpperX(s), glassUpperY(s), zAt(s)]
-  return [
-    mix(glassLowerX(s), upper[0], v) + .009 * Math.sin(Math.PI * v) * smooth(s, .27, .38) * (1 - smooth(s, .58, .65)),
-    mix(glassLowerY(s), upper[1], v),
-    zAt(s),
-  ]
-}
-
-const bayWidth = curve([[.60, .36], [.641, .431], [.68, .477], [.75, .452], [.82, .389], [.873, .326], [.901, .218], [.918, .04]])
-export const bayEdge = (s: number, side: number): Point => [side * bayWidth(s), spine(s) - .009, zAt(s)]
-
-export function fascia(front: boolean, side: number, x: number, y: number, recess = 0): Point {
-  if (front) {
-    const s = frontWidth(x) + .002 * smooth(y, .2, .48) - .0008
-    return [x * side, y, Math.min(zAt(0), zAt(s) - recess)]
+export function frontDoorSeamZ(y: number): number {
+  if (y >= 0.58) {
+    const t = clamp((y - 0.58) / (0.8 - 0.58), 0, 1)
+    return lerp(0.955, 0.865, t)
   }
-  const s = tailWidth(x) + (.010 * smooth(y, .58, .81)) - .009 * smooth(y, .84, .94)
-  return [x * side, y, Math.max(zAt(1), zAt(s) + recess)]
+  const t = clamp((y - 0.14) / (0.58 - 0.14), 0, 1)
+  return lerp(0.655, 0.955, Math.pow(t, 0.86))
 }
 
-export function createBody(parent: T.Group, m: Palette, full: boolean): { paintPoint: Point; paintNormal: Point } {
-  const n = full ? 64 : 31, k = full ? 26 : 13
-  const paint: T.BufferGeometry[] = [], black: T.BufferGeometry[] = [], carbon: T.BufferGeometry[] = []
-  const steel: T.BufferGeometry[] = [], cabin: T.BufferGeometry[] = []
-  const mirrorShells: T.BufferGeometry[] = [], mirrorMounts: T.BufferGeometry[] = []
-  const part = (to: T.BufferGeometry[], surface: Surface, out: Point, length = n, width = k, thickness = .002) => {
-    to.push(patch(surface, length, width, out, thickness))
+export function rearDoorSeamZ(y: number): number {
+  if (y >= 0.69) {
+    const t = clamp((y - 0.69) / (0.86 - 0.69), 0, 1)
+    return lerp(-0.46, -0.33, t)
   }
-  const gap = .00055
-  const frontEnd = (v: number) => v <= .818 ? cabFront(v / .818) : mix(cabFront(1), .295, (v - .818) / .182)
-  for (const side of [1, -1]) {
-    const mirror = (p: Point): Point => [p[0] * side, p[1], p[2]]
-    const sided = (f: Surface): Surface => (u, v) => mirror(f(u, v))
-    const uSide: Point = [side, 0, 0]
-    part(paint, sided((u, v) => {
-      const s = mix(0, frontEnd(v) - gap, u)
-      return bonnet(s, v)
-    }), [0, 1, 0])
-    part(paint, sided((u, v) => {
-      const s = mix(frontEnd(mix(.817, 1, v)) + gap, .599, u)
-      const q = mix(.817, 1, v)
-      const front = bonnet(s, q)
-      const inside = edgeGlass(s, 0)
-      const cabin: Point = [mix(inside[0], plan(s), v), mix(inside[1], shoulder(s), v) + .013 * Math.sin(Math.PI * v), zAt(s)]
-      return blend(front, cabin, smooth(s, .272, .335))
-    }), [0, 1, 0])
+  if (y >= 0.31) {
+    const t = clamp((y - 0.31) / (0.69 - 0.31), 0, 1)
+    return lerp(-0.79, -0.46, t)
+  }
+  const t = clamp((y - 0.13) / (0.31 - 0.13), 0, 1)
+  return lerp(-0.67, -0.79, t)
+}
 
-    part(paint, sided((u, v) => {
-      const s = mix(.5995, .942 - .019 * v, u)
-      const inside = bayEdge(s, 1)
-      const outside: Point = [plan(s), shoulder(s), zAt(s)]
-      const forward = edgeGlass(s, 0)
-      const t = smooth(s, .6, .68)
-      const inX = mix(forward[0], inside[0], t)
-      const inY = mix(forward[1], inside[1], t)
-      return [mix(inX, outside[0], v), mix(inY, outside[1], v ** .84) + .036 * Math.sin(Math.PI * v) * smooth(s, .60, .73), zAt(s)]
-    }), [0, 1, 0])
-    part(paint, sided((u, v) => {
-      const s = mix(.594, .676, u)
-      const q = edgeGlass(s, 0)
-      const t = smooth(s, .6, .68)
-      const inner = bayEdge(s, 1)
-      const outside: Point = [mix(q[0], inner[0], t), mix(q[1], inner[1], t), zAt(s)]
-      const roofEnd: Point = [mix(.490, inner[0], t), spine(s), zAt(s)]
-      return blend(roofEnd, outside, smooth(v, 0, 1))
-    }), [0, 1, 0])
-    part(paint, sided((u, v) => {
-      const x = v * .935
-      const s0 = .90 + .025 * smooth(v, .45, .9)
-      const end = fascia(false, 1, x, .89)
-      const s1 = sAt(end[2]) - .003
-      const s = mix(Math.min(s0, s1 - .004), s1, u)
-      const top = mix(spine(s), shoulder(s), smooth(v, .13, 1))
-      return [x, top - .020 * Math.exp(-((x - .015) ** 2) / .011) * smooth(u, .1, .94), zAt(s)]
-    }), [0, 1, 0])
+export function shoulderHeightAtZ(z: number): number {
+  if (z >= 1.286) {
+    const t = clamp((z - 1.286) / (2.36 - 1.286), 0, 1)
+    return lerp(0.812, 0.485, Math.pow(t, 1.18))
+  }
+  if (z >= 0.2) {
+    const t = (z - 0.2) / (1.286 - 0.2)
+    return lerp(0.768, 0.812, smoothstep(0, 1, t))
+  }
+  if (z >= -1.493) {
+    const t = (z - -1.493) / (0.2 - -1.493)
+    return lerp(0.922, 0.768, smoothstep(0, 1, t))
+  }
+  const t = clamp((z - -2.36) / (-1.493 - -2.36), 0, 1)
+  return lerp(0.865, 0.922, smoothstep(0, 1, t))
+}
 
-    const archEnds = (w: WheelSize) => {
-      const a = Math.asin((w.loaded - floorY) / w.arch)
-      return { theta0: -a, theta1: Math.PI + a, before: sAt(w.z + Math.cos(a) * w.arch), after: sAt(w.z - Math.cos(a) * w.arch) }
-    }
-    const arch = (w: WheelSize) => {
-      const { theta0, theta1, before, after } = archEnds(w)
-      const lower = (u: number): Point => {
-        const theta = mix(theta0, theta1, u)
-        const faceted = w.arch * (1 + .012 * Math.cos(6 * theta))
-        const s = sAt(w.z + Math.cos(theta) * faceted)
-        return sidePoint(s, w.loaded + Math.sin(theta) * faceted, side)
+export function beltlineHeightAtZ(z: number): number {
+  if (z >= 0.78) {
+    const t = clamp((z - 0.78) / (1.35 - 0.78), 0, 1)
+    return lerp(0.775, 0.822, t)
+  }
+  const t = clamp((0.78 - z) / (0.78 - -0.52), 0, 1)
+  return lerp(0.775, 0.962, Math.pow(t, 1.08))
+}
+
+export function archCutoutY(z: number): number {
+  const df = Math.abs(z - FRONT_HUB_Z)
+  if (df < 0.398) {
+    const u = (z - FRONT_HUB_Z) / 0.392
+    const hexFlat = 1 - 0.055 * Math.pow(1 - u * u, 3)
+    const h = 0.343 + 0.388 * hexFlat * Math.sqrt(Math.max(0, 1 - u * u))
+    return h
+  }
+  const dr = Math.abs(z - REAR_HUB_Z)
+  if (dr < 0.424) {
+    const u = (z - REAR_HUB_Z) / 0.418
+    const hexFlat = 1 - 0.055 * Math.pow(1 - u * u, 3)
+    const h = 0.366 + 0.414 * hexFlat * Math.sqrt(Math.max(0, 1 - u * u))
+    return h
+  }
+  return evalBodyLower(sFromZ(z))
+}
+
+export function evalFrontDeckHeight(xAbs: number, z: number): number {
+  const s = sFromZ(z)
+  const halfW = Math.max(0.08, evalPlanHalfWidth(s))
+  const yCenter = evalSideCenterTop(s)
+  const yMax = evalSideMaxTop(s)
+  const yShoulder = shoulderHeightAtZ(z)
+  const vCreaseX = lerp(0.54, 0.22, clamp((z - 1.24) / (2.25 - 1.24), 0, 1))
+  const crestX = halfW * 0.73
+
+  if (xAbs <= vCreaseX) {
+    const q = xAbs / Math.max(0.05, vCreaseX)
+    const spine = 0.0065 * (1 - filletAbs(q, 0.08))
+    const dish = -0.011 * smoothstep(0.25, 0.95, q) * smoothstep(2.3, 1.4, z)
+    return yCenter + spine + dish
+  }
+  if (xAbs <= crestX) {
+    const q = (xAbs - vCreaseX) / Math.max(0.04, crestX - vCreaseX)
+    const rise = smootherstep(0, 1, q)
+    return lerp(yCenter - 0.008, yMax, rise)
+  }
+  const q = clamp((xAbs - crestX) / Math.max(0.03, halfW - crestX), 0, 1)
+  return lerp(yMax, yShoulder, Math.pow(q, 1.45))
+}
+
+export function evalFlankX(y: number, z: number): number {
+  const s = sFromZ(z)
+  const halfPlan = evalPlanHalfWidth(s)
+  const ySh = shoulderHeightAtZ(z)
+  const hFactor = evalHeightWidthFactor(clamp(y / HEIGHT, 0, 1))
+
+  let xOut = halfPlan * Math.min(1, hFactor / 0.992)
+  if (y < ySh) {
+    const lowFrac = clamp((ySh - y) / Math.max(0.18, ySh - 0.13), 0, 1)
+    const rockerTuck = 0.026 * Math.pow(lowFrac, 1.7) * smoothstep(0.2, 0.5, 1 - Math.abs(z - FRONT_HUB_Z) / 0.5)
+    xOut -= rockerTuck
+
+    const doorZone = smoothstep(0.92, 0.62, z) * smoothstep(-1.05, -0.45, z)
+    const vertScoop = Math.sin(clamp((y - 0.2) / 0.52, 0, 1) * Math.PI)
+    const scoopDepth = 0.078 * doorZone * vertScoop * smoothstep(0.88, -0.52, z)
+    xOut -= scoopDepth
+  } else {
+    const upFrac = clamp((y - ySh) / Math.max(0.12, HEIGHT - ySh), 0, 1)
+    const tumbleX = halfPlan * evalHeightWidthFactor(clamp(y / HEIGHT, 0, 1))
+    xOut = lerp(xOut, tumbleX, smootherstep(0, 0.35, upFrac))
+  }
+
+  const df = Math.abs(z - FRONT_HUB_Z)
+  if (df < 0.44 && y < ySh) {
+    const flare = 0.011 * Math.cos((df / 0.44) * Math.PI * 0.5) * smoothstep(0.25, 0.72, y)
+    xOut = Math.min(1.012, xOut + flare)
+  }
+  const dr = Math.abs(z - REAR_HUB_Z)
+  if (dr < 0.48 && y < ySh) {
+    const flare = 0.012 * Math.cos((dr / 0.48) * Math.PI * 0.5) * smoothstep(0.28, 0.78, y)
+    xOut = Math.min(1.0165, xOut + flare)
+  }
+
+  return Math.max(0.02, xOut)
+}
+
+function buildBonnet(detail: VehicleDetail): THREE.BufferGeometry {
+  const nu = detail === 'full' ? 44 : 26
+  const nv = detail === 'full' ? 52 : 30
+  const gap = 0.0018
+
+  const halfGeom = buildRolledPatch(
+    nu,
+    nv,
+    (u, v, out) => {
+      const zCowl = 1.445 - 0.21 * u * u
+      const zFront = 2.135 - 0.035 * u * u
+      const z = lerp(zCowl + gap, zFront - gap, v)
+      const xMax = Math.max(0.04, bonnetSeamX(z) - gap)
+      const x = u * xMax
+      const y = evalFrontDeckHeight(x, z)
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: true, vMin: true, vMax: true, flipWinding: true },
+  )
+  return mergeGeometries([halfGeom, mirrorGeometryX(halfGeom)])
+}
+
+function buildNoseShield(detail: VehicleDetail): THREE.BufferGeometry {
+  const nu = detail === 'full' ? 36 : 22
+  const nv = detail === 'full' ? 28 : 16
+  const gap = 0.0018
+
+  const halfGeom = buildRolledPatch(
+    nu,
+    nv,
+    (u, v, out) => {
+      const zBack = 2.135 - 0.035 * u * u + gap
+      const zTip = lerp(2.444, 2.26, Math.pow(u, 1.35))
+      const z = lerp(zBack, zTip, v)
+      const s = sFromZ(z)
+      const xMax = Math.min(evalPlanHalfWidth(s) * 0.94, lerp(bonnetSeamX(2.135) + 0.19, 0.035, Math.pow(v, 1.4)))
+      const x = u * Math.max(0.002, xMax * (1 - 0.72 * Math.pow(v, 2.2)))
+      let y = evalFrontDeckHeight(x, z)
+      if (v > 0.78) {
+        const drop = smoothstep(0.78, 1.0, v)
+        y -= 0.022 * drop * (1 - 0.5 * u)
       }
-      const archPanel = (u: number, v: number): Point => {
-        const a = lower(u)
-        const s = mix(sAt(a[2]), mix(before, after, u), v)
-        return sidePoint(s, mix(a[1], shoulder(s), v), side)
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: true, vMin: true, vMax: true, flipWinding: true },
+  )
+  return mergeGeometries([halfGeom, mirrorGeometryX(halfGeom)])
+}
+
+function buildFrontWingLeft(detail: VehicleDetail): THREE.BufferGeometry {
+  const nu = detail === 'full' ? 32 : 18
+  const nv = detail === 'full' ? 56 : 32
+  const gap = 0.0018
+
+  const topStrip = buildRolledPatch(
+    nu,
+    nv,
+    (u, v, out) => {
+      const zRear = lerp(1.19, 0.88, u)
+      const zFront = lerp(2.12, 1.72, u)
+      const z = lerp(zRear + gap, zFront - gap, v)
+      const s = sFromZ(z)
+      const xIn = bonnetSeamX(z) + gap
+      const xOut = Math.max(xIn + 0.03, evalPlanHalfWidth(s) * 0.985)
+      const x = lerp(xIn, xOut, u)
+      let y = evalFrontDeckHeight(x, z)
+      if (z > 1.72 && u > 0.35) {
+        const brow = smoothstep(1.72, 2.08, z) * smoothstep(0.35, 1.0, u)
+        y = Math.max(y, lerp(0.665, 0.555, clamp((z - 1.72) / 0.38, 0, 1)) + 0.01 * (1 - brow))
       }
-      part(paint, (u, v) => archPanel(u, mix(.028, 1, v)), uSide, n * 2, k)
-      part(paint, (u, v) => {
-        const p = archPanel(u, mix(0, .028, v))
-        return [p[0] + side * .0025 * Math.sin(Math.PI * v), p[1], p[2]]
-      }, uSide, n * 2, 6, .006)
-      part(black, (u, v) => {
-        const p = lower(u)
-        return [p[0] - side * mix(.004, .159, v), p[1] - .005 * v, p[2]]
-      }, [0, -1, 0], n * 2, 8, .005)
-    }
-    arch(frontWheel)
-    arch(rearWheel)
+      out.set(x, y, z)
+    },
+    { uMin: true, uMax: false, vMin: true, vMax: true, flipWinding: true },
+  )
 
-    const first = archEnds(frontWheel)
-    const last = archEnds(rearWheel)
-    const sillPoint = (s: number, y: number) => sidePoint(s, y, side)
-    const cutLeading = curve([[0, .374], [.17, .377], [.37, .352], [.56, .323], [.71, .307], [.86, .321], [1, .349]])
-    const cutTrailing = curve([[0, .545], [.23, .573], [.40, .603], [.52, .610], [.66, .575], [.86, .541], [1, .59]])
-    const intakeLeft = curve([[0, .603], [.21, .604], [.55, .574], [1, .539]])
-    const intakeRight = curve([[0, .623], [.25, .649], [.55, .621], [1, .590]])
-    const intakeBottom = .331, intakeTop = .69
-    const cap = (s: number, v: number): Point => sillPoint(s, mix(rockerY(s), shoulder(s), v))
-    part(paint, (u, v) => cap(mix(.141, first.before, u), v), uSide, n, k)
-    part(paint, (u, v) => {
-      const s = mix(first.after, cutLeading(v) - gap, u)
-      return cap(s, v)
-    }, uSide, n, k)
-    part(paint, (u, v) => {
-      const s = mix(cutLeading(v) + gap, .573, u)
-      const y = mix(rockerY(s), intakeBottom, v)
-      return sillPoint(mix(cutLeading((y - rockerY(s)) / (shoulder(s) - rockerY(s))) + gap, intakeLeft(0), u), y)
-    }, uSide, n, k)
-    part(paint, (u, v) => {
-      const y = mix(intakeBottom, intakeTop, v)
-      const yQ = (y - .136) / (.757 - .136)
-      const s = mix(cutLeading(yQ) + gap, intakeLeft(v) - gap, u)
-      return sillPoint(s, y)
-    }, uSide, n, k)
-    part(paint, (u, v) => {
-      const s = mix(cutLeading(mix(.89, 1, v)) + gap, mix(intakeLeft(1), cutTrailing(1), v) - gap, u)
-      return sillPoint(s, mix(intakeTop, Math.max(intakeTop + .019, shoulder(s)), v))
-    }, uSide, n, 10)
-    part(paint, (u, v) => {
-      const s = mix(intakeLeft(0), last.before, u)
-      return sillPoint(s, mix(rockerY(s), intakeBottom, v))
-    }, uSide, n, k)
-    part(paint, (u, v) => {
-      const s = mix(intakeRight(v) + gap, last.before, u)
-      return sillPoint(s, mix(intakeBottom, intakeTop, v))
-    }, uSide, n, k)
-    part(paint, (u, v) => {
-      const s = mix(mix(intakeRight(1), cutTrailing(1), v) + gap, last.before, u)
-      return sillPoint(s, mix(intakeTop, shoulder(s), v))
-    }, uSide, n, 12)
-    part(paint, (u, v) => cap(mix(last.after, .926, u), v), uSide, n, k)
-    const intake = (u: number, v: number, inset: number): Point => {
-      const s = mix(intakeLeft(v), intakeRight(v), u)
-      const p = sillPoint(s, mix(intakeBottom, intakeTop, v))
-      return [p[0] - side * inset, p[1], p[2]]
-    }
-    part(black, (u, v) => intake(u, v, full ? .134 + .045 * u : .079 + .035 * u), uSide, 18, 20)
-    for (const wall of [
-      (u: number, v: number) => intake(0, u, .11 * v),
-      (u: number, v: number) => intake(1, u, .114 * v),
-      (u: number, v: number) => intake(u, 0, .114 * v),
-      (u: number, v: number) => intake(u, 1, .114 * v),
-    ]) part(carbon, wall, uSide, 20, 6)
-    if (full) {
-      const grille = (u: number, v: number): Point => intake(.04 + .93 * u, .04 + .90 * v, .116 + .040 * u)
-      carbon.push(hexMesh(grille, .21, .34, .013, .00135))
-      for (let i = 0; i < 3; i++) {
-        const h = .18 + .29 * i
-        part(carbon, (u, v) => intake(mix(.016, .983, u), h + .022 * v, .075 + .042 * v), uSide, 20, 4, .003)
+  const flankRear = buildRolledPatch(
+    detail === 'full' ? 28 : 16,
+    detail === 'full' ? 36 : 20,
+    (u, v, out) => {
+      const y = lerp(0.145, 0.805, v)
+      const zSeam = frontDoorSeamZ(y) + gap
+      const uArch = clamp((y - 0.343) / 0.388, -0.98, 0.98)
+      const zArchRear = y < 0.725 ? FRONT_HUB_Z - 0.392 * Math.sqrt(Math.max(0.02, 1 - uArch * uArch)) : 1.24
+      const z = lerp(zSeam, Math.max(zSeam + 0.025, zArchRear), u)
+      const x = evalFlankX(y, z)
+      out.set(x, y, z)
+    },
+    { uMin: true, uMax: true, vMin: true, vMax: false, flipWinding: true },
+  )
+
+  const flankArchBridge = buildRolledPatch(
+    detail === 'full' ? 40 : 24,
+    detail === 'full' ? 18 : 10,
+    (u, v, out) => {
+      const z = lerp(FRONT_HUB_Z - 0.385, FRONT_HUB_Z + 0.42, u)
+      const yLow = Math.max(0.42, archCutoutY(z) + 0.003)
+      const yHigh = Math.max(yLow + 0.025, shoulderHeightAtZ(z))
+      const y = lerp(yLow, yHigh, v)
+      const x = evalFlankX(y, z)
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: true, vMin: true, vMax: false, flipWinding: true },
+  )
+
+  const flankFrontLower = buildRolledPatch(
+    detail === 'full' ? 22 : 14,
+    detail === 'full' ? 22 : 14,
+    (u, v, out) => {
+      const yMax = lerp(0.655, 0.495, u)
+      const y = lerp(0.138, yMax, v)
+      const uArch = clamp((y - 0.343) / 0.388, -0.98, 0.98)
+      const zArchFront = y < 0.71 ? FRONT_HUB_Z + 0.392 * Math.sqrt(Math.max(0.02, 1 - uArch * uArch)) : FRONT_HUB_Z + 0.36
+      const zNoseEdge = lerp(2.22, 1.84, v)
+      const z = lerp(zArchFront, Math.max(zArchFront + 0.03, zNoseEdge), u)
+      const x = evalFlankX(y, z)
+      out.set(x, y, z)
+    },
+    { uMin: true, uMax: true, vMin: true, vMax: true, flipWinding: true },
+  )
+
+  return mergeGeometries([topStrip, flankRear, flankArchBridge, flankFrontLower])
+}
+
+function buildScissorDoorLeft(detail: VehicleDetail): THREE.BufferGeometry {
+  const nu = detail === 'full' ? 56 : 32
+  const nv = detail === 'full' ? 44 : 26
+  const gap = 0.0018
+
+  return buildRolledPatch(
+    nu,
+    nv,
+    (u, v, out) => {
+      const yLow = 0.215
+      const zEst = lerp(-0.62, 0.9, u)
+      const yTop = beltlineHeightAtZ(zEst) - gap
+      const y = lerp(yLow, yTop, v)
+      const zBack = rearDoorSeamZ(y) + gap
+      const zFront = frontDoorSeamZ(y) - gap
+      const z = lerp(zBack, zFront, u)
+      let x = evalFlankX(y, z)
+
+      if (z < -0.18 && z > -0.44 && Math.abs(y - 0.68) < 0.022) {
+        const hz = Math.sin(clamp((z - -0.44) / 0.26, 0, 1) * Math.PI)
+        const hy = 1 - Math.abs(y - 0.68) / 0.022
+        x -= 0.016 * hz * hy
       }
-    }
+      out.set(x, y, z)
+    },
+    { uMin: true, uMax: true, vMin: true, vMax: true, flipWinding: true },
+  )
+}
 
-    part(black, (u, v) => {
-      const s = mix(first.after, last.before, u)
-      return [side * (plan(s) - .009 - .059 * (1 - v)), rockerY(s) - .017 * (1 - v) + .037 * v, zAt(s)]
-    }, uSide, n, 8, .013)
-    part(black, (u, v) => {
-      const s = mix(first.after, last.before, u)
-      return [side * (plan(s) - .011 - .16 * v), floorY - .006, zAt(s)]
-    }, [0, -1, 0], n, 8, .009)
+function buildRearHaunchLeft(detail: VehicleDetail): THREE.BufferGeometry {
+  const gap = 0.0018
 
-    const window: Surface = (u, v) => {
-      const s = mix(.263 + .002 * v, .649 - .004 * v, u)
-      return mirror(edgeGlass(s, v))
-    }
-    if (full) {
-      const ledge = (u: number, v: number) => window(u, v)
-      part(paint, (u, v) => ledge(u, mix(0, .103, v)), uSide, n, 7, .0075)
-      part(paint, (u, v) => ledge(u, mix(.914, 1, v)), uSide, n, 7, .0075)
-      part(paint, (u, v) => ledge(mix(0, .059, u), mix(.096, .922, v)), uSide, 9, k, .006)
-      part(paint, (u, v) => ledge(mix(.955, 1, u), mix(.096, .922, v)), uSide, 9, k, .006)
-      part(black, (u, v) => {
-        const p = ledge(u, mix(0, .16, v))
-        return [p[0] - side * .018, p[1] - .008, p[2]]
-      }, uSide, n, 9, .025)
-    } else part(paint, window, uSide, n, k, .002)
-    const windowGlass: Surface = (u, v) => {
-      const s = mix(.278 + .008 * v, .637 - .005 * v, u)
-      const p = mirror(edgeGlass(s, mix(.09, .92, v)))
-      return [p[0] + side * .0038, p[1], p[2]]
-    }
-    add(parent, 'door and quarter glass', patch(windowGlass, n, k, uSide, .0032), m.glass)
-    black.push(contour(Array.from({ length: 17 }, (_, i) => windowGlass(.760 + .015 * i / 16, i / 16)), .0075))
-    const outline: Point[] = [[0, 0], [.25, 0], [.50, 0], [.75, 0], [1, 0], [1, .5], [1, 1], [.75, 1], [.5, 1], [.25, 1], [0, 1], [0, .5]].map(([u, v]) => windowGlass(u, v))
-    black.push(contour(outline, .0035, true))
+  const upperButtress = buildRolledPatch(
+    detail === 'full' ? 32 : 18,
+    detail === 'full' ? 56 : 32,
+    (u, v, out) => {
+      const z = lerp(-2.04, -0.56, v)
+      const s = sFromZ(z)
+      const xIn = z > -1.96 ? engineBayHalfWidth(z) + gap : lerp(0.34, 0.82, clamp((-z - 1.96) / 0.1, 0, 1))
+      const xSh = evalFlankX(shoulderHeightAtZ(z), z)
+      const x = lerp(xIn, Math.max(xIn + 0.03, xSh), u)
+      const yIn = evalSideMaxTop(s) - 0.014 - 0.018 * smoothstep(-0.7, -1.9, z)
+      const yOut = shoulderHeightAtZ(z)
+      const crown = 0.026 * Math.sin(u * Math.PI) * smoothstep(-2.05, -1.2, z)
+      const y = lerp(yIn, yOut, Math.pow(u, 1.35)) + crown
+      out.set(x, y, z)
+    },
+    { uMin: true, uMax: false, vMin: true, vMax: true, flipWinding: true },
+  )
 
-    const mirrorSection = (u: number, v: number): Point => {
-      const x = mix(.886, dimensions.mirrorWidth / 2, u)
-      const theta = v * Math.PI * 2
-      const radial = Math.sin(Math.PI * (u * .94 + .03)) ** .57
-      const sharpen = (a: number) => Math.sign(a) * Math.pow(Math.abs(a), full ? .55 : 1)
-      return [side * x, mix(.861, .849, u) + radial * (.058 * sharpen(Math.cos(theta)) + .009 * Math.sin(theta)), zAt(mix(.326, .381, u)) + radial * .137 * sharpen(Math.sin(theta))]
-    }
-    part(mirrorShells, mirrorSection, uSide, k, n, .002)
-    const foot: Point[] = [[.827, .785, zAt(.333)], [.877, .760, zAt(.351)], [.966, .833, zAt(.355)], [.931, .864, zAt(.342)]].map((p) => mirror(p as unknown as Point))
-    mirrorMounts.push(polygon(roundedPath(foot), uSide, .032))
-    const mirrorBack = (u: number, v: number): Point => {
-      const p = mirrorSection(mix(.13, .975, u), mix(.56, .90, v))
-      return [p[0], p[1], p[2] - .003]
-    }
-    part(steel, mirrorBack, [0, 0, -1], 16, 12, .002)
+  const flankMid = buildRolledPatch(
+    detail === 'full' ? 36 : 22,
+    detail === 'full' ? 34 : 20,
+    (u, v, out) => {
+      const y = lerp(0.145, 0.905, v)
+      const zFront = y < 0.72 ? rearDoorSeamZ(y) - 0.08 : rearDoorSeamZ(y) - gap
+      const uArch = clamp((y - 0.366) / 0.414, -0.98, 0.98)
+      const zArchLead = y < 0.775 ? REAR_HUB_Z + 0.418 * Math.sqrt(Math.max(0.02, 1 - uArch * uArch)) : -1.493
+      const z = lerp(Math.min(zFront - 0.02, zArchLead), zFront, u)
+      let x = evalFlankX(y, z)
+      if (z > -0.78 && y > 0.28 && y < 0.72) {
+        const lip = smoothstep(-0.78, -0.52, z) * Math.sin(clamp((y - 0.28) / 0.44, 0, 1) * Math.PI)
+        x -= 0.022 * lip
+      }
+      out.set(x, y, z)
+    },
+    { uMin: true, uMax: true, vMin: true, vMax: false, flipWinding: true },
+  )
 
-    const doorHandle = (u: number, v: number): Point => {
-      const s = mix(.601, .626, u)
-      const p = sidePoint(s, .835 + .022 * v + .021 * u, side)
-      return [p[0] + side * .022, p[1], p[2]]
-    }
-    part(black, doorHandle, uSide, 8, 4)
+  const flankOverArch = buildRolledPatch(
+    detail === 'full' ? 40 : 24,
+    detail === 'full' ? 18 : 10,
+    (u, v, out) => {
+      const z = lerp(REAR_HUB_Z - 0.415, REAR_HUB_Z + 0.415, u)
+      const yLow = Math.max(0.44, archCutoutY(z) + 0.003)
+      const yHigh = Math.max(yLow + 0.025, shoulderHeightAtZ(z))
+      const y = lerp(yLow, yHigh, v)
+      const x = evalFlankX(y, z)
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: false, vMin: true, vMax: false, flipWinding: true },
+  )
+
+  const flankRearCorner = buildRolledPatch(
+    detail === 'full' ? 28 : 16,
+    detail === 'full' ? 28 : 16,
+    (u, v, out) => {
+      const y = lerp(0.46, 0.885, v)
+      const uArch = clamp((y - 0.366) / 0.414, -0.98, 0.98)
+      const zArchTrail = y < 0.775 ? REAR_HUB_Z - 0.418 * Math.sqrt(Math.max(0.02, 1 - uArch * uArch)) : -1.68
+      const zBack = lerp(-2.22, -2.04, v)
+      const z = lerp(zBack, zArchTrail, u)
+      const x = evalFlankX(y, z)
+      out.set(x, y, z)
+    },
+    { uMin: true, uMax: true, vMin: true, vMax: true, flipWinding: true },
+  )
+
+  return mergeGeometries([upperButtress, flankMid, flankOverArch, flankRearCorner])
+}
+
+function buildRoofAndPillars(detail: VehicleDetail): THREE.BufferGeometry {
+  const nu = detail === 'full' ? 40 : 24
+  const nv = detail === 'full' ? 44 : 26
+
+  const halfRoof = buildRolledPatch(
+    nu,
+    nv,
+    (u, v, out) => {
+      const z = lerp(-0.655, 0.475, v)
+      const s = sFromZ(z)
+      const xCantrail = lerp(0.51, 0.615, v)
+      const x = u * xCantrail
+      const yRailPeak = evalSideMaxTop(s)
+
+      let y = yRailPeak
+      if (x < 0.285) {
+        y = yRailPeak - 0.024 + 0.002 * (1 - (x / 0.285) * (x / 0.285))
+      } else if (x < 0.355) {
+        const t = smoothstep(0.285, 0.355, x)
+        y = lerp(yRailPeak - 0.024, yRailPeak, t)
+      } else if (x > 0.415) {
+        const t = clamp((x - 0.415) / Math.max(0.04, xCantrail - 0.415), 0, 1)
+        y = lerp(yRailPeak, yRailPeak - 0.068, Math.pow(t, 1.55))
+      }
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: true, vMin: true, vMax: true, flipWinding: true },
+  )
+
+  const aPillarLeft = buildRolledPatch(
+    detail === 'full' ? 12 : 8,
+    detail === 'full' ? 32 : 18,
+    (u, v, out) => {
+      const z = lerp(0.46, 1.21, v)
+      const s = sFromZ(z)
+      const yTop = evalSideMaxTop(s) - lerp(0.064, 0.015, v)
+      const xIn = lerp(0.565, 0.745, Math.pow(v, 0.92))
+      const xOut = xIn + lerp(0.052, 0.072, v)
+      const x = lerp(xIn, xOut, u)
+      const y = yTop - 0.018 * u
+      out.set(x, y, z)
+    },
+    { uMin: true, uMax: true, vMin: false, vMax: true, flipWinding: true },
+  )
+
+  return mergeGeometries([halfRoof, mirrorGeometryX(halfRoof), aPillarLeft, mirrorGeometryX(aPillarLeft)])
+}
+
+function buildGlazing(detail: VehicleDetail): { glass: THREE.BufferGeometry; fritAndWipers: THREE.BufferGeometry } {
+  const nu = detail === 'full' ? 34 : 20
+  const nv = detail === 'full' ? 34 : 20
+
+  const halfWindscreen = buildRolledPatch(
+    nu,
+    nv,
+    (u, v, out) => {
+      const zHeader = 0.475 - 0.045 * u * u
+      const zBase = 1.445 - 0.235 * u * u
+      const z = lerp(zHeader, zBase, v)
+      const xMax = lerp(0.562, 0.742, Math.pow(v, 0.92))
+      const x = u * xMax
+      const s = sFromZ(z)
+      const yCenter = lerp(evalSideMaxTop(s) - 0.026, evalFrontDeckHeight(0, zBase) + 0.004, Math.pow(v, 1.04))
+      const crownDrop = lerp(0.038, 0.012, v) * u * u
+      out.set(x, yCenter - crownDrop, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, bevelRadius: 0.001, flangeDepth: 0.002, flipWinding: true },
+  )
+
+  const sideGlassLeft = buildRolledPatch(
+    detail === 'full' ? 32 : 18,
+    detail === 'full' ? 20 : 12,
+    (u, v, out) => {
+      const z = lerp(-0.52, 0.98, u)
+      const s = sFromZ(z)
+      const yLow = beltlineHeightAtZ(z) + 0.002
+      const yHigh = z > 0.46
+        ? evalSideMaxTop(s) - lerp(0.068, 0.025, clamp((z - 0.46) / 0.52, 0, 1))
+        : lerp(0.968, evalSideMaxTop(s) - 0.072, smoothstep(-0.52, 0.25, z))
+      const y = lerp(yLow, Math.max(yLow + 0.015, yHigh), v)
+      const xLow = evalFlankX(yLow, z) - 0.008
+      const xHigh = z > 0.46
+        ? lerp(0.61, 0.78, clamp((z - 0.46) / 0.52, 0, 1))
+        : lerp(0.52, 0.61, smoothstep(-0.52, 0.46, z))
+      const x = lerp(xLow, xHigh, Math.pow(v, 0.92))
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: true },
+  )
+
+  const rearCabinGlass = buildRolledPatch(
+    14,
+    10,
+    (u, v, out) => {
+      const x = (u * 2 - 1) * lerp(0.41, 0.35, v)
+      const y = lerp(0.93, 1.075, v)
+      const z = lerp(-0.71, -0.655, v)
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: true },
+  )
+
+  const bPillarLeft = buildProfileTube(
+    [
+      [0.835, 0.885, -0.26],
+      [0.71, 0.985, -0.22],
+      [0.575, 1.072, -0.19],
+    ],
+    [[-0.018, -0.005], [0.018, -0.005], [0.015, 0.005], [-0.015, 0.005]],
+    [1, 0, 0],
+  )
+
+  const cowlTray = buildRolledPatch(
+    24,
+    6,
+    (u, v, out) => {
+      const x = (u * 2 - 1) * 0.74
+      const uAbs = Math.abs(u * 2 - 1)
+      const zBase = 1.445 - 0.235 * uAbs * uAbs
+      const z = lerp(zBase - 0.035, zBase + 0.015, v)
+      const y = evalFrontDeckHeight(Math.abs(x), zBase) - 0.014 + 0.008 * v
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: true },
+  )
+
+  const wiper1 = buildProfileTube(
+    [[-0.48, 0.778, 1.31], [-0.06, 0.785, 1.415], [0.28, 0.786, 1.395]],
+    [[-0.008, -0.004], [0.008, -0.004], [0.005, 0.005], [-0.005, 0.005]],
+    [0, 1, 0],
+  )
+  const wiper2 = buildProfileTube(
+    [[0.08, 0.784, 1.41], [0.38, 0.788, 1.365], [0.66, 0.798, 1.245]],
+    [[-0.008, -0.004], [0.008, -0.004], [0.005, 0.005], [-0.005, 0.005]],
+    [0, 1, 0],
+  )
+
+  return {
+    glass: mergeGeometries([halfWindscreen, mirrorGeometryX(halfWindscreen), sideGlassLeft, mirrorGeometryX(sideGlassLeft), rearCabinGlass]),
+    fritAndWipers: mergeGeometries([bPillarLeft, mirrorGeometryX(bPillarLeft), cowlTray, wiper1, wiper2]),
+  }
+}
+
+function buildMirrorAssembly(side: 1 | -1): { painted: THREE.BufferGeometry; trim: THREE.BufferGeometry; glass: THREE.BufferGeometry } {
+  const stalk = buildProfileTube(
+    [
+      [0.905, 0.732, 0.768],
+      [0.942, 0.768, 0.735],
+      [0.978, 0.808, 0.695],
+    ],
+    [[-0.026, -0.006], [0.026, -0.006], [0.018, 0.007], [-0.018, 0.007]],
+    [0, 0, 1],
+  )
+
+  const capShell = buildRolledPatch(
+    18,
+    14,
+    (u, v, out) => {
+      const x = lerp(0.924, 1.133, u)
+      const arch = Math.sin(u * Math.PI)
+      const yMid = lerp(0.848, 0.862, u)
+      const halfH = lerp(0.044, 0.052, arch) * (1 - 0.26 * Math.pow(u, 2.4))
+      const ang = (v - 0.5) * Math.PI * 1.06
+      const y = yMid + Math.sin(ang) * halfH
+      const zRear = 0.562 + 0.022 * Math.abs(v - 0.5)
+      const zNose = lerp(0.806, 0.688, Math.pow(u, 1.25)) - 0.032 * Math.pow(Math.abs(v - 0.5) * 2, 1.6)
+      const z = lerp(zRear, zNose, Math.cos(ang * 0.82))
+      out.set(x, y, z)
+    },
+    { uMin: true, uMax: true, vMin: true, vMax: true, bevelRadius: 0.0015, flangeDepth: 0.004, flipWinding: false },
+  )
+
+  const bezel = buildRolledPatch(
+    14,
+    10,
+    (u, v, out) => {
+      const x = lerp(0.93, 1.126, u)
+      const yMid = lerp(0.848, 0.862, u)
+      const halfH = 0.042 * (1 - 0.24 * u * u)
+      const y = yMid + (v * 2 - 1) * halfH
+      const z = 0.564 + 0.006 * u
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: true },
+  )
+
+  const mirrorPane = buildRolledPatch(
+    12,
+    8,
+    (u, v, out) => {
+      const x = lerp(0.938, 1.118, u)
+      const yMid = lerp(0.848, 0.862, u)
+      const halfH = 0.036 * (1 - 0.24 * u * u)
+      const y = yMid + (v * 2 - 1) * halfH
+      const z = 0.561 + 0.006 * u
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: true },
+  )
+
+  const paintedLeft = capShell
+  const trimLeft = mergeGeometries([stalk, bezel])
+  const glassLeft = mirrorPane
+
+  if (side > 0) return { painted: paintedLeft, trim: trimLeft, glass: glassLeft }
+  return {
+    painted: mirrorGeometryX(paintedLeft),
+    trim: mirrorGeometryX(trimLeft),
+    glass: mirrorGeometryX(glassLeft),
+  }
+}
+
+function buildSplitterAndFrontIntakes(detail: VehicleDetail): {
+  carbon: THREE.BufferGeometry
+  paintedBlades: THREE.BufferGeometry
+  darkRecess: THREE.BufferGeometry
+} {
+  const carbonParts: THREE.BufferGeometry[] = []
+  const bladeParts: THREE.BufferGeometry[] = []
+  const darkParts: THREE.BufferGeometry[] = []
+
+  const halfSplitter = buildRolledPatch(
+    detail === 'full' ? 34 : 20,
+    detail === 'full' ? 14 : 8,
+    (u, v, out) => {
+      const zFront = lerp(2.4735, 2.22, Math.pow(u, 1.38))
+      const zBack = lerp(1.95, 1.69, u)
+      const z = lerp(zBack, zFront, v)
+      const s = sFromZ(z)
+      const xMax = Math.min(evalPlanHalfWidth(s) * 0.985, lerp(0.96, 0.045, Math.pow(v, 3.2) * (1 - u)))
+      const x = u * evalPlanHalfWidth(s) * 0.985
+      const yBase = evalBodyLower(s)
+      const y = yBase + 0.028 * (1 - v * 0.65) + (u > 0.86 ? 0.025 * ((u - 0.86) / 0.14) : 0)
+      void xMax
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: true, vMin: false, vMax: true, bevelRadius: 0.002, flangeDepth: 0.012, flipWinding: true },
+  )
+  carbonParts.push(halfSplitter, mirrorGeometryX(halfSplitter))
+
+  const centerStrut = new THREE.BoxGeometry(0.036, 0.17, 0.14)
+  centerStrut.translate(0, 0.255, 2.35)
+  carbonParts.push(centerStrut)
+
+  const diagBladeLeft = buildProfileTube(
+    [
+      [0.255, 0.375, 2.385],
+      [0.395, 0.275, 2.365],
+      [0.545, 0.155, 2.325],
+    ],
+    [[-0.026, -0.055], [0.026, -0.045], [0.018, 0.055], [-0.018, 0.045]],
+    [0, 0, 1],
+  )
+  bladeParts.push(diagBladeLeft, mirrorGeometryX(diagBladeLeft))
+
+  const intakeFrameLeft = buildProfileTube(
+    [
+      [0.535, 0.165, 2.315],
+      [0.795, 0.175, 2.225],
+      [0.835, 0.265, 2.175],
+      [0.775, 0.405, 2.155],
+      [0.445, 0.415, 2.285],
+      [0.375, 0.275, 2.335],
+    ],
+    [[-0.016, -0.028], [0.016, -0.028], [0.014, 0.028], [-0.014, 0.028]],
+    [0, 0, 1],
+    true,
+    false,
+  )
+  carbonParts.push(intakeFrameLeft, mirrorGeometryX(intakeFrameLeft))
+
+  const intakeVaneLeft = buildProfileTube(
+    [[0.46, 0.29, 2.24], [0.64, 0.285, 2.2], [0.8, 0.28, 2.15]],
+    [[-0.008, -0.032], [0.008, -0.032], [0.006, 0.032], [-0.006, 0.032]],
+    [0, 1, 0],
+  )
+  carbonParts.push(intakeVaneLeft, mirrorGeometryX(intakeVaneLeft))
+
+  const frontCavityBack = buildRolledPatch(
+    28,
+    12,
+    (u, v, out) => {
+      const x = (u * 2 - 1) * 0.88
+      const y = lerp(0.145, 0.445, v)
+      const z = 2.14 - 0.12 * Math.abs(u * 2 - 1)
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: false },
+  )
+  darkParts.push(frontCavityBack)
+
+  const sensorBox = new THREE.BoxGeometry(0.072, 0.054, 0.04)
+  sensorBox.translate(0, 0.375, 2.365)
+  darkParts.push(sensorBox)
+
+  return {
+    carbon: mergeGeometries(carbonParts),
+    paintedBlades: mergeGeometries(bladeParts),
+    darkRecess: mergeGeometries(darkParts),
+  }
+}
+
+function buildSillsUnderbodyAndLiners(detail: VehicleDetail): {
+  sillsCarbon: THREE.BufferGeometry
+  linersAndBacking: THREE.BufferGeometry
+} {
+  const sillParts: THREE.BufferGeometry[] = []
+  const linerParts: THREE.BufferGeometry[] = []
+
+  const sillLeft = buildRolledPatch(
+    detail === 'full' ? 36 : 20,
+    8,
+    (u, v, out) => {
+      const z = lerp(-1.07, 0.89, u)
+      const s = sFromZ(z)
+      const xBody = evalPlanHalfWidth(s)
+      const y = lerp(0.127, 0.222, v)
+      const finOut = v < 0.38 ? 0.012 * (1 - v / 0.38) : -0.014 * ((v - 0.38) / 0.62)
+      const x = xBody * 0.982 + finOut
+      out.set(x, y, z)
+    },
+    { uMin: true, uMax: true, vMin: true, vMax: true, bevelRadius: 0.002, flangeDepth: 0.015, flipWinding: true },
+  )
+  sillParts.push(sillLeft, mirrorGeometryX(sillLeft))
+
+  const frontArchFinLeft = buildProfileTube(
+    [
+      [0.972, 0.15, 0.875],
+      [0.978, 0.34, 0.895],
+      [0.968, 0.54, 0.925],
+    ],
+    [[-0.012, -0.032], [0.012, -0.032], [0.008, 0.032], [-0.008, 0.032]],
+    [1, 0, 0],
+  )
+  sillParts.push(frontArchFinLeft, mirrorGeometryX(frontArchFinLeft))
+
+  const sideScoopSplitterLeft = buildProfileTube(
+    [
+      [0.82, 0.355, -0.58],
+      [0.91, 0.362, -0.68],
+      [0.975, 0.37, -0.82],
+    ],
+    [[-0.007, -0.045], [0.007, -0.045], [0.005, 0.045], [-0.005, 0.045]],
+    [0, 1, 0],
+  )
+  sillParts.push(sideScoopSplitterLeft, mirrorGeometryX(sideScoopSplitterLeft))
+
+  const undertray = buildRolledPatch(
+    20,
+    36,
+    (u, v, out) => {
+      const s = lerp(0.02, 0.94, v)
+      const z = 4.947 * (0.5 - s)
+      let halfW = evalPlanHalfWidth(s) * 0.94
+      if (Math.abs(z - FRONT_HUB_Z) < 0.43) halfW = Math.min(halfW, 0.64)
+      if (Math.abs(z - REAR_HUB_Z) < 0.46) halfW = Math.min(halfW, 0.61)
+      const x = (u * 2 - 1) * halfW
+      const y = evalBodyLower(s) + 0.003
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: true },
+  )
+  linerParts.push(undertray)
+
+  for (const [hubZ, rOuter, wIn, wOut] of [
+    [FRONT_HUB_Z, 0.398, 0.62, 0.992],
+    [REAR_HUB_Z, 0.424, 0.59, 1.002],
+  ] as Array<[number, number, number, number]>) {
+    const archHood = buildRolledPatch(
+      28,
+      8,
+      (u, v, out) => {
+        const ang = lerp(-0.22, Math.PI + 0.22, u)
+        const z = hubZ + Math.cos(ang) * rOuter
+        const y = Math.max(0.132, 0.355 + Math.sin(ang) * rOuter)
+        const x = lerp(wIn, wOut, v)
+        out.set(x, y, z)
+      },
+      { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: false },
+    )
+    const archBackWall = buildRolledPatch(
+      14,
+      14,
+      (u, v, out) => {
+        const z = hubZ + (u * 2 - 1) * rOuter
+        const y = lerp(0.132, 0.74, v)
+        out.set(wIn, y, z)
+      },
+      { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: true },
+    )
+    linerParts.push(archHood, mirrorGeometryX(archHood), archBackWall, mirrorGeometryX(archBackWall))
   }
 
-  const windshield: Surface = (u, v) => forwardWind(u, 2 * v - 1)
-  add(parent, 'windscreen', patch(windshield, n, k * 2, [0, 1, 1], .0048), m.glass)
-  part(paint, (u, v) => roof(mix(.4165, .5965, u), 2 * v - 1), [0, 1, 0], n, k * 2, .004)
-  for (const v of [0, 1]) {
-    const p = (u: number) => windshield(u, v)
-    if (full) {
-      part(paint, (u, w) => {
-        const a = p(u)
-        return blend(windshield(u, mix(v, .5, .017)), [a[0] + (2 * v - 1) * .010, a[1] - .0035, a[2]], w)
-      }, [0, 1, 1], n, 7, .009)
-    } else paint.push(contour(Array.from({ length: 17 }, (_, i) => p(i / 16)), .014))
-    black.push(contour(Array.from({ length: 17 }, (_, i) => windshield(i / 16, mix(v, .5, .029))), .004))
-  }
-  black.push(contour(Array.from({ length: 21 }, (_, i) => windshield(.008, i / 20)), .0061))
-  const hatch: Surface = (u, v) => blend(roof(.597, mix(-.89, .89, v)), [mix(-.41, .41, v), .951, zAt(.665)], u)
-  add(parent, 'recessed rear window', patch(hatch, n, k, [0, 1, -1], .0041), m.glass)
-  black.push(contour(Array.from({ length: 15 }, (_, i) => hatch(.97, i / 14)), .009))
+  const sideIntakeThroatLeft = buildRolledPatch(
+    18,
+    18,
+    (u, v, out) => {
+      const z = lerp(-1.12, -0.44, u)
+      const y = lerp(0.16, 0.88, v)
+      const pocketDepth = 0.165 * smoothstep(-0.44, -0.68, z) * smoothstep(-1.12, -0.82, z)
+      const x = evalFlankX(y, z) - 0.012 - pocketDepth
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: true },
+  )
+  linerParts.push(sideIntakeThroatLeft, mirrorGeometryX(sideIntakeThroatLeft))
 
-  part(black, (u, v) => [mix(-.71, .71, v), .159, zAt(mix(.057, .947, u))], [0, -1, 0], 12, 9, .011)
-  part(black, (u, v) => [mix(-.64, .64, v) * (1 - .2 * u), mix(.61, .819, u) + .017 * Math.sin(Math.PI * v), zAt(mix(.198, .304, u))], [0, 1, 0], 16, 12, .025)
-  for (const side of [1, -1]) {
-    const seatProfile = curve([[0, .36], [.29, .414], [.55, .404], [.68, .32], [.80, .209], [.95, .178], [1, .127]])
-    const seat = (u: number, v: number): Point => {
-      const wing = Math.cos(tau * v) * .032 + .018 * Math.sin(Math.PI * v)
-      const x = side * .338 + (v - .5) * seatProfile(u)
-      return [x, mix(.48, 1.018, u) - .032 * Math.abs(v - .5) ** 2.6, zAt(mix(.442, .567, u)) + wing]
-    }
-    part(full ? cabin : black, seat, [0, 0, 1], full ? 56 : 20, full ? 24 : 14, .055)
-    if (full) {
-      const cushion = (u: number, v: number): Point => {
-        const x = side * .338 + (v - .5) * (.382 + .042 * Math.sin(Math.PI * u))
-        return [x, .47 + .022 * (2 * v - 1) ** 4 + .025 * Math.sin(Math.PI * u), zAt(mix(.360, .467, u))]
-      }
-      part(cabin, cushion, [0, 1, 0], 32, 22, .035)
-      for (const p of [.13, .87]) {
-        const seam = Array.from({ length: 25 }, (_, i) => {
-          const q = seat(i / 24, p)
-          return [q[0], q[1], q[2] + .0016] as Point
-        })
-        black.push(contour(seam, .0016))
-      }
-    }
+  const upperButtressScoopLeft = buildProfileTube(
+    [
+      [0.755, 0.835, -0.48],
+      [0.725, 0.865, -0.64],
+      [0.695, 0.875, -0.78],
+    ],
+    [[-0.042, -0.024], [0.042, -0.024], [0.036, 0.024], [-0.036, 0.024]],
+    [1, 0.6, 0],
+  )
+  linerParts.push(upperButtressScoopLeft, mirrorGeometryX(upperButtressScoopLeft))
+
+  const shutBackingLeft = buildRolledPatch(
+    44,
+    18,
+    (u, v, out) => {
+      const z = lerp(-2.12, 2.28, u)
+      const s = sFromZ(z)
+      const yTop = evalSideMaxTop(s) - 0.018
+      const yLow = Math.max(0.145, archCutoutY(z) + 0.01)
+      const y = lerp(yLow, Math.max(yLow + 0.05, yTop), v)
+      const x = Math.min(evalFlankX(y, z) - 0.012, evalPlanHalfWidth(s) * 0.96)
+      out.set(Math.max(0.02, x), y, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: true },
+  )
+  linerParts.push(shutBackingLeft, mirrorGeometryX(shutBackingLeft))
+
+  const frontDeckBacking = buildRolledPatch(
+    24,
+    24,
+    (u, v, out) => {
+      const z = lerp(1.22, 2.38, v)
+      const s = sFromZ(z)
+      const x = (u * 2 - 1) * evalPlanHalfWidth(s) * 0.88
+      const y = evalFrontDeckHeight(Math.abs(x), z) - 0.011
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: true },
+  )
+  linerParts.push(frontDeckBacking)
+
+  return {
+    sillsCarbon: mergeGeometries(sillParts),
+    linersAndBacking: mergeGeometries(linerParts),
   }
-  if (full) {
-    const dash = (u: number, v: number): Point => {
-      const x = (v - .5) * (1.40 - .16 * u)
-      return [x, mix(.775, .729, u) - .085 * Math.abs(v - .5) ** 1.45 + .011 * Math.sin(u * Math.PI), zAt(mix(.281, .342, u)) + .020 * Math.cos(v * tau)]
-    }
-    part(cabin, dash, [0, 1, 0], n, k, .025)
-    const console = (u: number, v: number): Point => [mix(-.116, .116, v), mix(.629, .510, u) + .024 * Math.sin(v * Math.PI), zAt(mix(.343, .542, u))]
-    part(cabin, console, [0, 1, 0], n, 14, .028)
-    const instrument = (u: number, v: number): Point => [mix(.200, .469, u), .781 + .052 * Math.sin(u * Math.PI) - .024 * v, zAt(mix(.314, .348, v))]
-    part(cabin, instrument, [0, 1, 0], n, 12, .018)
-    const steeringWheel = (u: number, v: number): Point => {
-      const t = u * tau, phi = v * tau
-      const rad = .124 + .016 * Math.cos(phi)
-      const y = (Math.min(.102, Math.max(-.095, rad * Math.cos(t)))) * .86
-      return [.342 + rad * Math.sin(t), .753 + y - .007 * Math.sin(phi), zAt(.365) + .44 * y + .014 * Math.sin(phi)]
-    }
-    part(cabin, steeringWheel, [0, 0, -1], 100, 16, 0)
-    const plate = (u: number, v: number): Point => [.342 + mix(-.043, .043, u), mix(.727, .775, v), zAt(.372) + .013 * Math.sin(Math.PI * u)]
-    part(cabin, plate, [0, 0, -1], 16, 12, .022)
-    for (const end of [-1, 1]) {
-      const spoke = (u: number, v: number): Point => [.342 + end * mix(.037, .116, u), .740 + .021 * u + (v - .5) * .024, zAt(.369) + .014 * u]
-      part(cabin, spoke, [0, 0, -1], 11, 5, .009)
-    }
+}
+
+function buildCabinInterior(): THREE.BufferGeometry {
+  const parts: THREE.BufferGeometry[] = []
+
+  const tub = new THREE.BoxGeometry(1.32, 0.42, 1.55)
+  tub.translate(0, 0.48, 0.22)
+  parts.push(tub)
+
+  const dash = buildRolledPatch(
+    18,
+    10,
+    (u, v, out) => {
+      const x = (u * 2 - 1) * 0.68
+      const z = lerp(0.68, 1.18, v)
+      const binnacle = x > 0.14 && x < 0.52 ? 0.038 * Math.sin(((x - 0.14) / 0.38) * Math.PI) * (1 - v * 0.5) : 0
+      const y = lerp(0.76, 0.79, v) + binnacle
+      out.set(x, y, z)
+    },
+    { uMin: false, uMax: false, vMin: false, vMax: false, flipWinding: true },
+  )
+  parts.push(dash)
+
+  const consoleSpine = buildProfileTube(
+    [[0, 0.56, -0.35], [0, 0.64, 0.28], [0, 0.74, 0.78]],
+    [[-0.085, -0.04], [0.085, -0.04], [0.068, 0.045], [-0.068, 0.045]],
+    [0, 1, 0],
+  )
+  parts.push(consoleSpine)
+
+  for (const sx of [-1, 1]) {
+    const seatBack = buildProfileTube(
+      [
+        [sx * 0.33, 0.44, -0.18],
+        [sx * 0.33, 0.74, -0.34],
+        [sx * 0.32, 0.99, -0.44],
+      ],
+      [[-0.19, -0.045], [0.19, -0.045], [0.15, 0.048], [-0.15, 0.048]],
+      [0, 0, 1],
+    )
+    const seatBase = new THREE.BoxGeometry(0.4, 0.09, 0.46)
+    seatBase.translate(sx * 0.33, 0.43, 0.06)
+    parts.push(seatBack, seatBase)
   }
-  const skin = add(parent, 'closed body panels and returns', joined(paint), m.paint)
-  add(parent, 'stowage, seals and wheelhouse liners', joined(black), m.matte)
-  add(parent, 'intake returns', joined(carbon), m.carbon)
-  const mirrors = new T.Group()
-  mirrors.name = 'door mirrors'
-  add(mirrors, 'painted mirror shells', joined(mirrorShells), m.paint)
-  add(mirrors, 'mirror mounting blades', joined(mirrorMounts), m.matte)
-  add(mirrors, 'mirror glass', joined(steel), m.mirror)
-  parent.add(mirrors)
-  if (cabin.length) add(parent, 'covered cockpit upholstery', joined(cabin), m.cabin)
-  const s = .236, v = .883
-  const paintPoint = bonnet(s, v)
-  const paintNormal = new T.Vector3(...bonnet(s, v + .001)).sub(new T.Vector3(...bonnet(s, v - .001)))
-    .cross(new T.Vector3(...bonnet(s + .001, v)).sub(new T.Vector3(...bonnet(s - .001, v)))).normalize().toArray()
-  const normal = vec(paintNormal)
-  const hit = new T.Raycaster(vec(paintPoint).addScaledVector(normal, .03), normal.clone().negate(), 0, .060)
-    .intersectObject(skin, false)[0]
-  if (hit) return { paintPoint: hit.point.toArray(), paintNormal: hit.normal?.normalize().toArray() ?? paintNormal }
-  return { paintPoint, paintNormal }
+
+  const wheelRing = new THREE.TorusGeometry(0.155, 0.017, 10, 28)
+  wheelRing.rotateX(-0.36)
+  wheelRing.translate(0.33, 0.77, 0.56)
+  const wheelCol = new THREE.CylinderGeometry(0.032, 0.038, 0.24, 12)
+  wheelCol.rotateX(Math.PI / 2 - 0.36)
+  wheelCol.translate(0.33, 0.79, 0.67)
+  parts.push(wheelRing, wheelCol)
+
+  const bulkhead = new THREE.BoxGeometry(1.18, 0.66, 0.08)
+  bulkhead.translate(0, 0.74, -0.62)
+  parts.push(bulkhead)
+
+  return mergeGeometries(parts)
+}
+
+export function createBodyPanels(materials: VehicleMaterials, detail: VehicleDetail): THREE.Group {
+  const group = new THREE.Group()
+  group.name = 'body-panels'
+
+  group.add(makeMesh(buildBonnet(detail), materials.paint, 'bonnet'))
+  group.add(makeMesh(buildNoseShield(detail), materials.paint, 'nose-shield'))
+
+  const frontWingL = buildFrontWingLeft(detail)
+  group.add(makeMesh(frontWingL, materials.paint, 'front-wing-left'))
+  group.add(makeMesh(mirrorGeometryX(frontWingL), materials.paint, 'front-wing-right'))
+
+  const doorL = buildScissorDoorLeft(detail)
+  group.add(makeMesh(doorL, materials.paint, 'door-left'))
+  group.add(makeMesh(mirrorGeometryX(doorL), materials.paint, 'door-right'))
+
+  const haunchL = buildRearHaunchLeft(detail)
+  group.add(makeMesh(haunchL, materials.paint, 'rear-haunch-left'))
+  group.add(makeMesh(mirrorGeometryX(haunchL), materials.paint, 'rear-haunch-right'))
+
+  group.add(makeMesh(buildRoofAndPillars(detail), materials.paint, 'roof'))
+
+  const glazing = buildGlazing(detail)
+  group.add(makeMesh(glazing.glass, materials.glass, 'cabin-glass'))
+  group.add(makeMesh(glazing.fritAndWipers, materials.glossBlack, 'cabin-trim'))
+
+  for (const [side, label] of [[1, 'mirror-left'], [-1, 'mirror-right']] as Array<[1 | -1, string]>) {
+    const mGroup = new THREE.Group()
+    mGroup.name = label
+    const mGeoms = buildMirrorAssembly(side)
+    mGroup.add(makeMesh(mGeoms.painted, materials.paint, `${label}-cap`))
+    mGroup.add(makeMesh(mGeoms.trim, materials.carbon, `${label}-stalk`))
+    mGroup.add(makeMesh(mGeoms.glass, materials.mirrorGlass, `${label}-glass`, false))
+    group.add(mGroup)
+  }
+
+  const frontAero = buildSplitterAndFrontIntakes(detail)
+  group.add(makeMesh(frontAero.carbon, materials.carbon, 'front-splitter'))
+  group.add(makeMesh(frontAero.paintedBlades, materials.paint, 'front-intake-blades'))
+  group.add(makeMesh(frontAero.darkRecess, materials.liner, 'front-intake-recess'))
+
+  const lower = buildSillsUnderbodyAndLiners(detail)
+  group.add(makeMesh(lower.sillsCarbon, materials.carbon, 'rocker-sills'))
+  group.add(makeMesh(lower.linersAndBacking, materials.liner, 'underbody-and-liners'))
+
+  group.add(makeMesh(buildCabinInterior(), materials.interior, 'cabin-interior'))
+
+  return group
 }

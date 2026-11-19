@@ -1,202 +1,583 @@
-import * as T from 'three'
+import * as THREE from 'three'
 import type { PaintSpec } from '../config'
-import { stream } from '../core/random'
-import { patchMaterial } from '../materials/patch'
-import type { VehicleModule } from './contract'
-import type { Material } from './geometry'
+import { insertAfter, patchMaterial } from '../materials/patch'
+import type { VehicleDetail, WetnessKind } from './contract'
 
-const carbonPaths = {
-  map: '/assets/third-party/textures/carbon-weave/Fabric004_2K-PNG_Color.png',
-  normalMap: '/assets/third-party/textures/carbon-weave/Fabric004_2K-PNG_NormalGL.png',
-  roughnessMap: '/assets/third-party/textures/carbon-weave/Fabric004_2K-PNG_Roughness.png',
+export interface VehicleMaterials {
+  paint: THREE.MeshPhysicalMaterial
+  carbon: THREE.MeshPhysicalMaterial
+  glossBlack: THREE.MeshPhysicalMaterial
+  matteBlack: THREE.MeshPhysicalMaterial
+  liner: THREE.MeshPhysicalMaterial
+  glass: THREE.MeshPhysicalMaterial
+  lampLens: THREE.MeshPhysicalMaterial
+  tailLens: THREE.MeshPhysicalMaterial
+  mirrorGlass: THREE.MeshPhysicalMaterial
+  rimAlloy: THREE.MeshPhysicalMaterial
+  rimMachined: THREE.MeshPhysicalMaterial
+  caliper: THREE.MeshPhysicalMaterial
+  brakeDisc: THREE.MeshPhysicalMaterial
+  brakeHat: THREE.MeshPhysicalMaterial
+  tireTread: THREE.MeshPhysicalMaterial
+  tireSidewall: THREE.MeshPhysicalMaterial
+  engineMetal: THREE.MeshPhysicalMaterial
+  engineCover: THREE.MeshPhysicalMaterial
+  exhaustBezel: THREE.MeshPhysicalMaterial
+  exhaustPipe: THREE.MeshPhysicalMaterial
+  interior: THREE.MeshPhysicalMaterial
+  drl: THREE.MeshPhysicalMaterial
+  projector: THREE.MeshPhysicalMaterial
+  tailLight: THREE.MeshPhysicalMaterial
+  thirdBrake: THREE.MeshPhysicalMaterial
+  surfaces: Array<{ material: THREE.Material; wetness: WetnessKind }>
+  setPaint(spec: PaintSpec): void
 }
 
-export function palette(spec: PaintSpec, full: boolean) {
-  const flake = { value: new T.Color(spec.flake) }
-  const tint = { value: new T.Color(spec.base) }
-  const paint = new T.MeshPhysicalMaterial({
-    color: full ? spec.base : 0x93989f, metalness: full ? .39 : .13,
-    roughness: full ? .265 : .36, clearcoat: full ? 1 : .48, clearcoatRoughness: full ? .11 : .22,
-    ior: 1.53, specularIntensity: .7, envMapIntensity: 1.15,
-  })
-  if (full) {
-    const random = stream('vehicle paint flakes')
-    const data = new Uint8Array(64 * 64 * 4)
-    for (let i = 0; i < data.length; i += 4) {
-      data[i] = random.int(256)
-      data[i + 1] = random.int(256)
-      data[i + 2] = random.int(256)
-      data[i + 3] = 255
-    }
-    const microtexture = new T.DataTexture(data, 64, 64, T.RGBAFormat)
-    microtexture.wrapS = microtexture.wrapT = T.RepeatWrapping
-    microtexture.magFilter = T.LinearFilter
-    microtexture.minFilter = T.LinearMipmapLinearFilter
-    microtexture.generateMipmaps = true
-    microtexture.needsUpdate = true
-    patchMaterial(paint, {
-      id: 'vehicle paint stack',
-      uniforms: { carFlakeTint: flake, carBaseTint: tint, carMicrostructure: { value: microtexture } },
-      apply(shader) {
-        shader.vertexShader = 'varying vec3 carLocal;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ncarLocal = position;')
-        shader.fragmentShader = `varying vec3 carLocal;
-        uniform vec3 carFlakeTint;
-        uniform vec3 carBaseTint;
-        uniform sampler2D carMicrostructure;
-        vec3 carGrain(vec3 frequency, vec3 weights) {
-          return weights.x * texture2D(carMicrostructure, carLocal.yz * frequency.x).rgb
-            + weights.y * texture2D(carMicrostructure, carLocal.xz * frequency.y).rgb
-            + weights.z * texture2D(carMicrostructure, carLocal.xy * frequency.z).rgb;
-        }
-        float carFlake(vec2 surface, float scale) {
-          vec2 cells = surface * scale;
-          ivec2 tileSize = textureSize(carMicrostructure, 0);
-          vec3 grain = texelFetch(carMicrostructure, ivec2(mod(floor(cells), vec2(tileSize))), 0).rgb;
-          vec2 delta = fract(cells) - (0.32 + grain.gb * 0.36);
-          float theta = 6.2831853 * grain.g;
-          float c = cos(theta), s = sin(theta);
-          delta = mat2(c, -s, s, c) * delta;
-          float edge = length(delta * vec2(1.0, 1.6 + grain.b * 0.6));
-          float footprint = min(0.24, 0.42 * length(fwidth(cells)));
-          float radius = 0.13 + 0.15 * grain.b;
-          return smoothstep(0.64, 0.98, grain.r) * (1.0 - smoothstep(radius - footprint, radius + footprint, edge));
-        }
-      ` + shader.fragmentShader
-        .replace('#include <color_fragment>', `#include <color_fragment>
-          vec3 basis = normalize(abs(cross(dFdx(carLocal), dFdy(carLocal))) + vec3(0.000000001));
-          vec3 weights = pow(basis, vec3(8.0));
-          weights /= max(0.00001, weights.x + weights.y + weights.z);
-          float flakeGrain = dot(weights, vec3(carFlake(carLocal.yz, 1460.0), carFlake(carLocal.xz, 1420.0), carFlake(carLocal.xy, 1530.0)));
-          vec3 orangePeel = carGrain(vec3(3.35), weights);
-          float footprint = length(fwidth(carLocal)) * 1550.0;
-          float nearWeight = 1.0 - smoothstep(0.7, 2.6, footprint);
-          float kick = flakeGrain * nearWeight;
-          diffuseColor.rgb *= 0.985 + 0.038 * orangePeel.r;
-          diffuseColor.rgb = mix(diffuseColor.rgb, mix(carBaseTint, carFlakeTint, 0.36), kick * 0.14);
-        `)
-        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-          roughnessFactor += (orangePeel.b - 0.5) * 0.015 - kick * 0.19;
-        `)
-        .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
-          material.specularColor = mix(material.specularColor, max(material.specularColor, carFlakeTint), kick * 0.36);
-          #ifdef USE_CLEARCOAT
-            material.clearcoatRoughness += (orangePeel.g - 0.5) * 0.025;
-          #endif
-        `)
-      },
-    })
-  }
-  const glass = new T.MeshPhysicalMaterial({
-    color: full ? 0xb6c2c7 : 0x30383f, metalness: full ? 0 : .1, roughness: full ? .084 : .17,
-    ior: 1.51, clearcoat: .8, clearcoatRoughness: .07, transmission: full ? .92 : 0,
-    thickness: full ? .006 : 0, attenuationColor: new T.Color(0x7a9a9c), attenuationDistance: .009,
-    opacity: full ? 1 : .87, transparent: !full, depthWrite: full, side: T.FrontSide,
-  })
-  const optics = new T.MeshPhysicalMaterial({
-    color: full ? 0xedf0f3 : 0x858e99, metalness: full ? 0 : .1, roughness: full ? .071 : .105,
-    opacity: full ? 1 : .36, transparent: !full, depthWrite: full, ior: 1.59, clearcoat: .95, clearcoatRoughness: .09,
-    transmission: full ? .93 : 0, thickness: full ? .0038 : 0, attenuationColor: new T.Color(0xaabcc7), attenuationDistance: .016,
-  })
-  const rearOptics = optics.clone()
-  rearOptics.color.setHex(full ? 0xe6a4a4 : 0x51373a)
-  rearOptics.opacity = full ? 1 : .30
-  rearOptics.attenuationColor.setHex(0xad2828)
-  rearOptics.attenuationDistance = .013
-  const brushed = new T.MeshPhysicalMaterial({
-    color: full ? 0x899496 : 0x7f858c, metalness: full ? .79 : .45, roughness: .32, anisotropy: full ? .69 : .2,
-  })
-  const forged = new T.MeshPhysicalMaterial({
-    color: full ? 0x484b51 : 0x777c83, metalness: full ? .69 : .46, roughness: .25,
-    clearcoat: .67, clearcoatRoughness: .18, anisotropy: full ? .32 : 0,
-  })
-  const brake = new T.MeshStandardMaterial({ color: full ? 0x6e7070 : 0x68696c, roughness: .74, metalness: .29 })
-  const caliper = new T.MeshPhysicalMaterial({
-    color: full ? 0x9a2520 : 0x64676c, metalness: .30, roughness: .34, clearcoat: .65, clearcoatRoughness: .22,
-  })
-  const matte = new T.MeshPhysicalMaterial({ color: full ? 0x22252a : 0x32363b, roughness: .72, metalness: .09 })
-  const dark = new T.MeshStandardMaterial({ color: full ? 0x131518 : 0x26292d, roughness: .83 })
-  const tire = new T.MeshPhysicalMaterial({ color: full ? 0x252629 : 0x2d3032, roughness: .81, specularIntensity: .68 })
-  const carbon = new T.MeshPhysicalMaterial({
-    color: full ? 0xb5bec4 : 0x41454b, metalness: .33, roughness: .36, clearcoat: .82, clearcoatRoughness: .137, anisotropy: full ? .32 : 0,
-  })
-  const mirror = new T.MeshPhysicalMaterial({ color: 0x89969e, metalness: .94, roughness: .145, clearcoat: .78 })
-  const hot = new T.MeshPhysicalMaterial({ color: full ? 0x494241 : 0x626367, metalness: .72, roughness: .4, anisotropy: full ? .38 : 0 })
-  const engine = new T.MeshStandardMaterial({ color: full ? 0x2b2d31 : 0x55595f, metalness: .38, roughness: .59 })
-  const cabin = new T.MeshStandardMaterial({ color: 0x2e2b2a, metalness: 0, roughness: .84 })
-  if (full) {
-    const seeded = (name: string) => ({ value: stream(name).range(.1, 21) })
-    const grain = (m: Material, name: string, color: string, roughness = '') => patchMaterial(m, {
-      id: name,
-      uniforms: { carFinishSeed: seeded(name) },
-      apply(shader) {
-        shader.vertexShader = 'varying vec3 carFinishPoint;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ncarFinishPoint = position;')
-        shader.fragmentShader = `varying vec3 carFinishPoint;
-          uniform float carFinishSeed;
-          float finishCell(vec3 p) {
-            p = fract(p * vec3(0.1031, 0.0973, 0.1099));
-            p += dot(p, p.yzx + carFinishSeed + 19.19);
-            return fract((p.x + p.y) * p.z);
-          }
-        ` + shader.fragmentShader
-          .replace('#include <color_fragment>', '#include <color_fragment>\n' + color)
-          .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n' + roughness)
-      },
-    })
-    grain(brake, 'carbon ceramic porosity', `
-      vec3 cell = floor(carFinishPoint * vec3(160.0, 710.0, 710.0));
-      float grain = finishCell(cell);
-      float r = length(carFinishPoint.yz);
-      float band = sin(r * 1716.0 + 0.5 * sin(r * 527.0));
-      float carGrainWeight = 1.0 - smoothstep(0.00045, 0.0028, length(fwidth(carFinishPoint.yz)));
-      diffuseColor.rgb *= 1.0 + (grain - 0.5) * 0.28 * carGrainWeight + 0.045 * band * carGrainWeight;
-    `, 'roughnessFactor += (grain - 0.5) * 0.19 * carGrainWeight;')
-    grain(tire, 'mold rubber grain', `
-      vec3 cell = floor(carFinishPoint * 1450.0);
-      float grain = finishCell(cell);
-      float carGrainWeight = 1.0 - smoothstep(0.00035, 0.0022, length(fwidth(carFinishPoint)));
-      diffuseColor.rgb *= 1.0 + (grain - 0.5) * 0.13 * carGrainWeight;
-    `, 'roughnessFactor += (grain - 0.5) * 0.10 * carGrainWeight;')
-    grain(hot, 'heat tint and drawn alloy', `
-      float shape = carFinishPoint.z + 2.40 + 0.006 * sin(carFinishPoint.x * 22.0);
-      float oxide = smoothstep(0.011, 0.035, shape) - smoothstep(0.051, 0.08, shape);
-      float temper = smoothstep(-0.025, 0.015, shape) - smoothstep(0.015, 0.048, shape);
-      float rough = finishCell(floor(carFinishPoint * vec3(480.0, 660.0, 580.0)));
-      diffuseColor.rgb *= 1.0 + (rough - 0.5) * 0.07;
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.17, 0.082, 0.027), oxide * 0.42);
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.060, 0.071, 0.14), temper * 0.36);
-    `, 'roughnessFactor += 0.12 * oxide;')
-  }
-  const surfaces: VehicleModule['surfaces'] = []
-  const tag = (material: Material, wetness: VehicleModule['surfaces'][number]['wetness']) => {
-    surfaces.push({ material, wetness })
-    return material
-  }
-  for (const m of [paint, glass, optics, rearOptics, carbon, mirror]) tag(m, 'beads')
-  for (const m of [matte, tire]) tag(m, 'sheet')
-  for (const m of [brushed, forged, brake, caliper, dark, hot, engine]) tag(m, 'none')
-  if (full) tag(cabin, 'none')
-  const setPaint = (next: PaintSpec): void => {
-    if (full) {
-      paint.color.set(next.base)
-      tint.value.set(next.base)
-      flake.value.set(next.flake)
+function makeFallbackCarbonTextures(): { color: THREE.DataTexture; normal: THREE.DataTexture; rough: THREE.DataTexture } {
+  const size = 64
+  const colorData = new Uint8Array(size * size * 4)
+  const normalData = new Uint8Array(size * size * 4)
+  const roughData = new Uint8Array(size * size * 4)
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const cellX = Math.floor(x / 8)
+      const cellY = Math.floor(y / 8)
+      const warp = ((cellX + cellY) % 4) < 2
+      const fx = (x % 8) / 8 - 0.5
+      const fy = (y % 8) / 8 - 0.5
+      const tow = warp ? Math.cos(fx * Math.PI) : Math.cos(fy * Math.PI)
+      const lum = Math.round((0.055 + 0.045 * tow) * 255)
+      const nx = warp ? Math.round((0.5 - 0.18 * Math.sin(fx * Math.PI)) * 255) : 128
+      const ny = !warp ? Math.round((0.5 - 0.18 * Math.sin(fy * Math.PI)) * 255) : 128
+      const rg = Math.round((0.36 - 0.12 * tow) * 255)
+      const k = (y * size + x) * 4
+      colorData[k] = lum; colorData[k + 1] = lum + 2; colorData[k + 2] = lum + 4; colorData[k + 3] = 255
+      normalData[k] = nx; normalData[k + 1] = ny; normalData[k + 2] = 248; normalData[k + 3] = 255
+      roughData[k] = rg; roughData[k + 1] = rg; roughData[k + 2] = rg; roughData[k + 3] = 255
     }
   }
-  const load = async (): Promise<void> => {
-    if (!full || typeof document === 'undefined') return
-    const loader = new T.TextureLoader()
-    await Promise.all(Object.entries(carbonPaths).map(async ([key, path]) => {
-      const tex = await loader.loadAsync(import.meta.env.BASE_URL + path.slice(1))
-      tex.wrapS = tex.wrapT = T.RepeatWrapping
-      tex.repeat.set(31, 31)
-      tex.anisotropy = 4
-      tex.colorSpace = key === 'map' ? T.SRGBColorSpace : T.NoColorSpace
-      carbon[key as keyof typeof carbonPaths] = tex
-    }))
-    carbon.normalScale.setScalar(.2)
-    carbon.needsUpdate = true
+  const wrap = (tex: THREE.DataTexture, colorSpace: THREE.ColorSpace): THREE.DataTexture => {
+    tex.wrapS = THREE.RepeatWrapping
+    tex.wrapT = THREE.RepeatWrapping
+    tex.repeat.set(16, 16)
+    tex.colorSpace = colorSpace
+    tex.needsUpdate = true
+    return tex
   }
-  return { paint, glass, optics, rearOptics, brushed, forged, brake, caliper, matte, dark, tire, carbon, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
+  return {
+    color: wrap(new THREE.DataTexture(colorData, size, size, THREE.RGBAFormat), THREE.SRGBColorSpace),
+    normal: wrap(new THREE.DataTexture(normalData, size, size, THREE.RGBAFormat), THREE.NoColorSpace),
+    rough: wrap(new THREE.DataTexture(roughData, size, size, THREE.RGBAFormat), THREE.NoColorSpace),
+  }
 }
 
-export type Palette = ReturnType<typeof palette>
+async function loadCarbonTextures(): Promise<{ color: THREE.Texture; normal: THREE.Texture; rough: THREE.Texture }> {
+  const fallback = makeFallbackCarbonTextures()
+  if (typeof window === 'undefined' || typeof document === 'undefined') return fallback
+  const loader = new THREE.TextureLoader()
+  const base = '/assets/third-party/textures/carbon-weave'
+  try {
+    const [color, normal, rough] = await Promise.all([
+      loader.loadAsync(`${base}/Fabric004_2K-PNG_Color.png`),
+      loader.loadAsync(`${base}/Fabric004_2K-PNG_NormalGL.png`),
+      loader.loadAsync(`${base}/Fabric004_2K-PNG_Roughness.png`),
+    ])
+    for (const [tex, cs] of [
+      [color, THREE.SRGBColorSpace],
+      [normal, THREE.NoColorSpace],
+      [rough, THREE.NoColorSpace],
+    ] as Array<[THREE.Texture, THREE.ColorSpace]>) {
+      tex.wrapS = THREE.RepeatWrapping
+      tex.wrapT = THREE.RepeatWrapping
+      tex.repeat.set(14, 14)
+      tex.anisotropy = 8
+      tex.colorSpace = cs
+    }
+    return { color, normal, rough }
+  } catch {
+    return fallback
+  }
+}
+
+function patchMetallicPaint(
+  material: THREE.MeshPhysicalMaterial,
+  flakeUniform: { value: THREE.Color },
+  flakeStrengthUniform: { value: number },
+): void {
+  patchMaterial(material, {
+    id: 'vehicle-paint-flake',
+    uniforms: {
+      uPaintFlakeColor: flakeUniform,
+      uPaintFlakeStrength: flakeStrengthUniform,
+    },
+    apply(shader) {
+      shader.vertexShader = insertAfter(
+        shader.vertexShader,
+        '#include <common>',
+        'varying vec3 vPaintObjPos;',
+      )
+      shader.vertexShader = insertAfter(
+        shader.vertexShader,
+        '#include <begin_vertex>',
+        'vPaintObjPos = position;',
+      )
+      shader.fragmentShader = insertAfter(
+        shader.fragmentShader,
+        '#include <common>',
+        /* glsl */ `
+        uniform vec3 uPaintFlakeColor;
+        uniform float uPaintFlakeStrength;
+        varying vec3 vPaintObjPos;
+
+        vec3 paintHash3(vec3 p) {
+          p = vec3(
+            dot(p, vec3(127.1, 311.7, 74.7)),
+            dot(p, vec3(269.5, 183.3, 246.1)),
+            dot(p, vec3(113.5, 271.9, 124.6))
+          );
+          return fract(sin(p) * 43758.5453123);
+        }
+        `,
+      )
+      shader.fragmentShader = insertAfter(
+        shader.fragmentShader,
+        '#include <color_fragment>',
+        /* glsl */ `
+        if (uPaintFlakeStrength > 0.001) {
+          vec3 fCell = floor(vPaintObjPos * 1150.0);
+          vec3 rnd = paintHash3(fCell);
+          float sparkle = smoothstep(0.62, 0.99, rnd.x);
+          diffuseColor.rgb = mix(diffuseColor.rgb, uPaintFlakeColor, sparkle * 0.42 * uPaintFlakeStrength);
+        }
+        `,
+      )
+      shader.fragmentShader = insertAfter(
+        shader.fragmentShader,
+        '#include <normal_fragment_maps>',
+        /* glsl */ `
+        if (uPaintFlakeStrength > 0.001) {
+          vec3 fCellN = floor(vPaintObjPos * 1150.0);
+          vec3 rndN = paintHash3(fCellN) * 2.0 - 1.0;
+          normal = normalize(normal + rndN * 0.055 * uPaintFlakeStrength);
+        }
+        `,
+      )
+      shader.fragmentShader = insertAfter(
+        shader.fragmentShader,
+        '#include <clearcoat_normal_fragment_maps>',
+        /* glsl */ `
+        {
+          vec3 peelP = vPaintObjPos * 95.0;
+          vec3 peel = vec3(
+            sin(peelP.x * 1.7 + cos(peelP.z * 1.3)),
+            cos(peelP.z * 1.6 + sin(peelP.y * 1.5)),
+            sin(peelP.y * 1.4 + cos(peelP.x * 1.8))
+          );
+          clearcoatNormal = normalize(clearcoatNormal + peel * 0.0042);
+        }
+        `,
+      )
+    },
+  })
+}
+
+function patchCarbonCeramicRotor(material: THREE.MeshPhysicalMaterial): void {
+  patchMaterial(material, {
+    id: 'vehicle-ccb-rotor',
+    apply(shader) {
+      shader.vertexShader = insertAfter(
+        shader.vertexShader,
+        '#include <common>',
+        'varying vec3 vRotorLocal;',
+      )
+      shader.vertexShader = insertAfter(
+        shader.vertexShader,
+        '#include <begin_vertex>',
+        'vRotorLocal = position;',
+      )
+      shader.fragmentShader = insertAfter(
+        shader.fragmentShader,
+        '#include <common>',
+        /* glsl */ `
+        varying vec3 vRotorLocal;
+        float rotorHash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        `,
+      )
+      shader.fragmentShader = insertAfter(
+        shader.fragmentShader,
+        '#include <color_fragment>',
+        /* glsl */ `
+        {
+          float rad = length(vRotorLocal.yz);
+          float ang = atan(vRotorLocal.z, vRotorLocal.y);
+          float mottle = rotorHash(floor(vRotorLocal.yz * 280.0)) * 0.5 + rotorHash(floor(vRotorLocal.yz * 95.0)) * 0.5;
+          float groove = 0.5 + 0.5 * sin(rad * 920.0 + ang * 2.0);
+          diffuseColor.rgb *= mix(0.72, 1.24, mottle * 0.65 + groove * 0.35);
+        }
+        `,
+      )
+      shader.fragmentShader = insertAfter(
+        shader.fragmentShader,
+        '#include <roughnessmap_fragment>',
+        /* glsl */ `
+        {
+          float mottleR = rotorHash(floor(vRotorLocal.yz * 220.0));
+          roughnessFactor = clamp(roughnessFactor + (mottleR - 0.5) * 0.24, 0.22, 0.72);
+        }
+        `,
+      )
+    },
+  })
+}
+
+function patchHeatTintedMetal(material: THREE.MeshPhysicalMaterial): void {
+  patchMaterial(material, {
+    id: 'vehicle-exhaust-tint',
+    apply(shader) {
+      shader.vertexShader = insertAfter(
+        shader.vertexShader,
+        '#include <common>',
+        'varying vec3 vExLocal;',
+      )
+      shader.vertexShader = insertAfter(
+        shader.vertexShader,
+        '#include <begin_vertex>',
+        'vExLocal = position;',
+      )
+      shader.fragmentShader = insertAfter(
+        shader.fragmentShader,
+        '#include <common>',
+        'varying vec3 vExLocal;',
+      )
+      shader.fragmentShader = insertAfter(
+        shader.fragmentShader,
+        '#include <color_fragment>',
+        /* glsl */ `
+        {
+          float heatBand = clamp((-vExLocal.z - 2.34) * 9.0, 0.0, 1.0);
+          vec3 straw = vec3(0.46, 0.36, 0.24);
+          vec3 violet = vec3(0.32, 0.27, 0.42);
+          vec3 tint = mix(straw, violet, smoothstep(0.35, 0.85, heatBand));
+          diffuseColor.rgb = mix(diffuseColor.rgb, tint, 0.45 * smoothstep(0.05, 0.65, heatBand));
+        }
+        `,
+      )
+    },
+  })
+}
+
+export async function createVehicleMaterials(detail: VehicleDetail, initialPaint: PaintSpec): Promise<VehicleMaterials> {
+  const drlColor = new THREE.Color(0.92, 0.96, 1.0)
+  const beamColor = new THREE.Color(0.94, 0.97, 1.0)
+  const tailColor = new THREE.Color(1.0, 0.075, 0.022)
+
+  if (detail === 'blockout') {
+    const paint = new THREE.MeshPhysicalMaterial({ color: 0x8d929a, roughness: 0.52, metalness: 0.0, clearcoat: 0.14, clearcoatRoughness: 0.35 })
+    const carbon = new THREE.MeshPhysicalMaterial({ color: 0x383b42, roughness: 0.55, metalness: 0.0, clearcoat: 0.1 })
+    const glossBlack = new THREE.MeshPhysicalMaterial({ color: 0x2c2f35, roughness: 0.45, metalness: 0.0, clearcoat: 0.15 })
+    const matteBlack = new THREE.MeshPhysicalMaterial({ color: 0x222429, roughness: 0.82, metalness: 0.0 })
+    const liner = new THREE.MeshPhysicalMaterial({ color: 0x191b1f, roughness: 0.9, metalness: 0.0 })
+    const glass = new THREE.MeshPhysicalMaterial({ color: 0x3b4048, roughness: 0.25, metalness: 0.0, clearcoat: 0.35, clearcoatRoughness: 0.15 })
+    const lampLens = new THREE.MeshPhysicalMaterial({ color: 0x323740, roughness: 0.2, metalness: 0.0, transparent: true, opacity: 0.38, clearcoat: 0.4 })
+    const tailLens = new THREE.MeshPhysicalMaterial({ color: 0x3a2426, roughness: 0.24, metalness: 0.0, transparent: true, opacity: 0.42, clearcoat: 0.35 })
+    const mirrorGlass = new THREE.MeshPhysicalMaterial({ color: 0x9aa0aa, roughness: 0.08, metalness: 0.85 })
+    const rimAlloy = new THREE.MeshPhysicalMaterial({ color: 0x5c6068, roughness: 0.46, metalness: 0.35 })
+    const rimMachined = new THREE.MeshPhysicalMaterial({ color: 0x7c818a, roughness: 0.38, metalness: 0.45 })
+    const caliper = new THREE.MeshPhysicalMaterial({ color: 0x4b4f57, roughness: 0.48, metalness: 0.25 })
+    const brakeDisc = new THREE.MeshPhysicalMaterial({ color: 0x62666e, roughness: 0.56, metalness: 0.22 })
+    const brakeHat = new THREE.MeshPhysicalMaterial({ color: 0x34373e, roughness: 0.52, metalness: 0.35 })
+    const tireTread = new THREE.MeshPhysicalMaterial({ color: 0x24262b, roughness: 0.88, metalness: 0.0 })
+    const tireSidewall = new THREE.MeshPhysicalMaterial({ color: 0x26292e, roughness: 0.78, metalness: 0.0 })
+    const engineMetal = new THREE.MeshPhysicalMaterial({ color: 0x676c75, roughness: 0.44, metalness: 0.4 })
+    const engineCover = new THREE.MeshPhysicalMaterial({ color: 0x31343b, roughness: 0.62, metalness: 0.15 })
+    const exhaustBezel = new THREE.MeshPhysicalMaterial({ color: 0x4c5058, roughness: 0.48, metalness: 0.42 })
+    const exhaustPipe = new THREE.MeshPhysicalMaterial({ color: 0x35383f, roughness: 0.52, metalness: 0.45, side: THREE.DoubleSide })
+    const interior = new THREE.MeshPhysicalMaterial({ color: 0x1e2025, roughness: 0.86, metalness: 0.0 })
+
+    const drl = new THREE.MeshPhysicalMaterial({ color: 0x22252b, emissive: drlColor, emissiveIntensity: 0, roughness: 0.22 })
+    const projector = new THREE.MeshPhysicalMaterial({ color: 0x282c34, emissive: beamColor, emissiveIntensity: 0, roughness: 0.14 })
+    const tailLight = new THREE.MeshPhysicalMaterial({ color: 0x281516, emissive: tailColor, emissiveIntensity: 0, roughness: 0.24 })
+    const thirdBrake = new THREE.MeshPhysicalMaterial({ color: 0x241415, emissive: tailColor, emissiveIntensity: 0, roughness: 0.25 })
+
+    const surfaces: Array<{ material: THREE.Material; wetness: WetnessKind }> = [
+      { material: paint, wetness: 'beads' },
+      { material: carbon, wetness: 'beads' },
+      { material: glossBlack, wetness: 'beads' },
+      { material: matteBlack, wetness: 'porous' },
+      { material: glass, wetness: 'sheet' },
+      { material: lampLens, wetness: 'sheet' },
+      { material: tailLens, wetness: 'sheet' },
+      { material: rimAlloy, wetness: 'beads' },
+      { material: rimMachined, wetness: 'beads' },
+      { material: tireTread, wetness: 'porous' },
+      { material: tireSidewall, wetness: 'porous' },
+      { material: engineCover, wetness: 'porous' },
+      { material: exhaustBezel, wetness: 'none' },
+      { material: brakeDisc, wetness: 'none' },
+    ]
+
+    return {
+      paint, carbon, glossBlack, matteBlack, liner, glass, lampLens, tailLens, mirrorGlass,
+      rimAlloy, rimMachined, caliper, brakeDisc, brakeHat, tireTread, tireSidewall,
+      engineMetal, engineCover, exhaustBezel, exhaustPipe, interior,
+      drl, projector, tailLight, thirdBrake, surfaces,
+      setPaint: () => undefined,
+    }
+  }
+
+  const weave = await loadCarbonTextures()
+  const flakeUniform = { value: new THREE.Color(initialPaint.flake) }
+  const flakeStrengthUniform = { value: 1.0 }
+
+  const paint = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(initialPaint.base),
+    roughness: 0.24,
+    metalness: 0.68,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.035,
+    ior: 1.52,
+    reflectivity: 0.9,
+  })
+  patchMetallicPaint(paint, flakeUniform, flakeStrengthUniform)
+
+  const setPaint = (spec: PaintSpec): void => {
+    paint.color.set(spec.base)
+    flakeUniform.value.set(spec.flake)
+    const delta =
+      Math.abs(flakeUniform.value.r - paint.color.r) +
+      Math.abs(flakeUniform.value.g - paint.color.g) +
+      Math.abs(flakeUniform.value.b - paint.color.b)
+    flakeStrengthUniform.value = delta < 0.04 ? 0.35 : 1.0
+    paint.roughness = spec.id === 'liquid-silver' ? 0.18 : 0.24
+    paint.metalness = spec.id === 'liquid-silver' ? 0.85 : 0.68
+  }
+  setPaint(initialPaint)
+
+  const carbon = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.55, 0.57, 0.6),
+    map: weave.color,
+    normalMap: weave.normal,
+    normalScale: new THREE.Vector2(0.55, 0.55),
+    roughnessMap: weave.rough,
+    roughness: 0.38,
+    metalness: 0.14,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.045,
+    ior: 1.52,
+  })
+
+  const glossBlack = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.012, 0.013, 0.016),
+    roughness: 0.14,
+    metalness: 0.08,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.035,
+    ior: 1.5,
+  })
+
+  const matteBlack = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.024, 0.026, 0.03),
+    roughness: 0.78,
+    metalness: 0.04,
+  })
+
+  const liner = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.014, 0.015, 0.018),
+    roughness: 0.92,
+    metalness: 0.0,
+  })
+
+  const glass = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.045, 0.058, 0.068),
+    roughness: 0.035,
+    metalness: 0.0,
+    transmission: 0.58,
+    transparent: true,
+    opacity: 0.88,
+    ior: 1.52,
+    thickness: 0.008,
+    attenuationColor: new THREE.Color(0.16, 0.22, 0.26),
+    attenuationDistance: 0.06,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.02,
+  })
+
+  const lampLens = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.08, 0.095, 0.115),
+    roughness: 0.04,
+    metalness: 0.0,
+    transmission: 0.76,
+    transparent: true,
+    opacity: 0.42,
+    ior: 1.58,
+    thickness: 0.004,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.025,
+  })
+
+  const tailLens = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.18, 0.02, 0.02),
+    roughness: 0.06,
+    metalness: 0.0,
+    transmission: 0.65,
+    transparent: true,
+    opacity: 0.48,
+    ior: 1.56,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.03,
+  })
+
+  const mirrorGlass = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.88, 0.91, 0.95),
+    roughness: 0.015,
+    metalness: 0.98,
+  })
+
+  const rimAlloy = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.065, 0.07, 0.08),
+    roughness: 0.28,
+    metalness: 0.88,
+    clearcoat: 0.65,
+    clearcoatRoughness: 0.12,
+  })
+
+  const rimMachined = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.56, 0.59, 0.64),
+    roughness: 0.18,
+    metalness: 0.94,
+    anisotropy: 0.55,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.06,
+  })
+
+  const caliper = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.035, 0.038, 0.044),
+    roughness: 0.26,
+    metalness: 0.55,
+    clearcoat: 0.85,
+    clearcoatRoughness: 0.08,
+  })
+
+  const brakeDisc = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.19, 0.185, 0.18),
+    roughness: 0.44,
+    metalness: 0.36,
+    clearcoat: 0.18,
+    clearcoatRoughness: 0.35,
+  })
+  patchCarbonCeramicRotor(brakeDisc)
+
+  const brakeHat = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.045, 0.048, 0.055),
+    roughness: 0.38,
+    metalness: 0.78,
+  })
+
+  const tireTread = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.019, 0.02, 0.023),
+    roughness: 0.86,
+    metalness: 0.0,
+  })
+
+  const tireSidewall = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.022, 0.024, 0.028),
+    roughness: 0.64,
+    metalness: 0.0,
+    clearcoat: 0.12,
+    clearcoatRoughness: 0.48,
+  })
+
+  const engineMetal = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.34, 0.36, 0.4),
+    roughness: 0.32,
+    metalness: 0.86,
+  })
+
+  const engineCover = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.038, 0.04, 0.046),
+    roughness: 0.58,
+    metalness: 0.22,
+  })
+
+  const exhaustBezel = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.16, 0.155, 0.15),
+    roughness: 0.34,
+    metalness: 0.82,
+  })
+  patchHeatTintedMetal(exhaustBezel)
+
+  const exhaustPipe = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.12, 0.115, 0.11),
+    roughness: 0.38,
+    metalness: 0.85,
+    side: THREE.DoubleSide,
+  })
+  patchHeatTintedMetal(exhaustPipe)
+
+  const interior = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.018, 0.019, 0.023),
+    roughness: 0.84,
+    metalness: 0.02,
+  })
+
+  const drl = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.12, 0.14, 0.16),
+    emissive: drlColor,
+    emissiveIntensity: 0,
+    roughness: 0.14,
+    clearcoat: 0.8,
+  })
+
+  const projector = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.16, 0.18, 0.22),
+    emissive: beamColor,
+    emissiveIntensity: 0,
+    roughness: 0.08,
+    ior: 1.6,
+  })
+
+  const tailLight = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.14, 0.02, 0.02),
+    emissive: tailColor,
+    emissiveIntensity: 0,
+    roughness: 0.16,
+    clearcoat: 0.8,
+  })
+
+  const thirdBrake = new THREE.MeshPhysicalMaterial({
+    color: new THREE.Color(0.12, 0.015, 0.015),
+    emissive: tailColor,
+    emissiveIntensity: 0,
+    roughness: 0.2,
+  })
+
+  const surfaces: Array<{ material: THREE.Material; wetness: WetnessKind }> = [
+    { material: paint, wetness: 'beads' },
+    { material: carbon, wetness: 'beads' },
+    { material: glossBlack, wetness: 'beads' },
+    { material: matteBlack, wetness: 'porous' },
+    { material: glass, wetness: 'sheet' },
+    { material: lampLens, wetness: 'sheet' },
+    { material: tailLens, wetness: 'sheet' },
+    { material: rimAlloy, wetness: 'beads' },
+    { material: rimMachined, wetness: 'beads' },
+    { material: caliper, wetness: 'beads' },
+    { material: tireTread, wetness: 'porous' },
+    { material: tireSidewall, wetness: 'porous' },
+    { material: engineCover, wetness: 'porous' },
+    { material: engineMetal, wetness: 'sheet' },
+    { material: exhaustBezel, wetness: 'none' },
+    { material: exhaustPipe, wetness: 'none' },
+    { material: brakeDisc, wetness: 'none' },
+  ]
+
+  return {
+    paint, carbon, glossBlack, matteBlack, liner, glass, lampLens, tailLens, mirrorGlass,
+    rimAlloy, rimMachined, caliper, brakeDisc, brakeHat, tireTread, tireSidewall,
+    engineMetal, engineCover, exhaustBezel, exhaustPipe, interior,
+    drl, projector, tailLight, thirdBrake, surfaces,
+    setPaint,
+  }
+}

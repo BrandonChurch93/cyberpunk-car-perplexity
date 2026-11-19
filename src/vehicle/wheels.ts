@@ -1,214 +1,532 @@
-import * as T from 'three'
-import { frontWheel, rearWheel, type WheelSize } from './body'
-import { add, blend, contour, curve, joined, mix, patch, polygon, roundedPath, smooth, tau, type Point } from './geometry'
-import type { Palette } from './materials'
+import * as THREE from 'three'
+import type { VehicleDetail } from './contract'
+import {
+  FRONT_BRAKE,
+  FRONT_TIRE,
+  REAR_BRAKE,
+  REAR_TIRE,
+  type BrakeSpec,
+  type TireSpec,
+} from './dimensions'
+import type { VehicleMaterials } from './materials'
+import { clamp, makeMesh, mergeGeometries, smoothstep } from './surface'
 
-type Profile = ReadonlyArray<readonly [number, number]>
-const axisRoll = (axis: number, radius: number, theta: number): Point => [axis, Math.cos(theta) * radius, Math.sin(theta) * radius]
-
-function lathe(profile: Profile, segments: number): T.BufferGeometry {
-  return new T.LatheGeometry(profile.map(([a, r]) => new T.Vector2(r, a)), segments).rotateZ(-Math.PI / 2)
+interface WheelPlacement {
+  name: string
+  side: 1 | -1
+  hubZ: number
+  tire: TireSpec
+  brake: BrakeSpec
+  isFront: boolean
 }
 
-function disk(radius: number, depth: number, x: number, segments = 40): T.BufferGeometry {
-  return new T.CylinderGeometry(radius, radius, depth, segments).rotateZ(-Math.PI / 2).translate(x, 0, 0)
-}
+function buildTireGeometry(tire: TireSpec, side: 1 | -1, hubY: number, detail: VehicleDetail): { tread: THREE.BufferGeometry; sidewall: THREE.BufferGeometry } {
+  const radialSegs = detail === 'full' ? 128 : 80
+  const profileTreadSegs = detail === 'full' ? 28 : 14
+  const halfW = tire.width * 0.5
+  const shoulderW = halfW * 0.86
+  const bulgeW = halfW * 1.018
+  const rimR = tire.rimRadius + 0.004
+  const outerR = tire.radius
 
-function tireGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
-  const H = w.width / 2
-  const cross = curve([
-    [0, w.rim - .011], [.08, w.rim + .013], [.18, w.radius - .054], [.23, w.radius - .026],
-    [.27, w.radius - .010], [.33, w.radius - .0012], [.39, w.radius], [.61, w.radius],
-    [.67, w.radius - .0012], [.73, w.radius - .010], [.77, w.radius - .026], [.82, w.radius - .054], [.92, w.rim + .013], [1, w.rim - .011],
-  ])
-  const width = curve([[0, -.86], [.12, -.974], [.179, -1], [.226, -.985], [.27, -.93], [.50, 0], [.73, .93], [.774, .985], [.821, 1], [.88, .974], [1, .86]])
-  const axial = (v: number) => {
-    if (v < .27 || v > .73) return width(v) * H
-    return mix(-.93, .93, (v - .27) / .46) * H
-  }
-  const depth = (u: number, v: number): number => {
-    const grooves = [.362, .448, .552, .638]
-    const groove = grooves.reduce((r, g) => Math.max(r, 1 - smooth(Math.abs(v - g), .004, .01)), 0)
-    if (!full) return .0025 * groove
-    const pitch = u * 70 + (v - .5) * 7 + .24 * Math.sin(u * tau * 7)
-    const stagger = Math.abs(pitch - Math.round(pitch))
-    const crossSipe = (1 - smooth(stagger, .05, .16)) * (smooth(v, .265, .31) - smooth(v, .68, .735))
-    return .0064 * groove + .0045 * crossSipe
-  }
-  const position = (u: number, v: number): Point => {
-    const th = u * tau
-    const p = axisRoll(axial(v), cross(v) - depth(u, v), th)
-    const ground = p[1] + w.loaded
-    const cushion = ground > .010 ? ground : ground < 0 ? 0 : ground ** 2 * (20 - 1000 * ground) * 1000 / 100
-    const bulge = .0015 * Math.exp(-((ground - .027) ** 2) / .00069) * Math.sin(Math.PI * v) * Math.sign(p[0])
-    return [p[0] + bulge, cushion - w.loaded, p[2]]
-  }
-  return patch(position, full ? 560 : 128, full ? 68 : 30, [0, -1, 0])
-}
-
-function rotor(w: WheelSize, full: boolean, axis: number): T.BufferGeometry {
-  const face = new T.Shape()
-  const dia = w.disc
-  if (full) {
-    const segments = 144
-    face.moveTo(dia, 0)
-    for (let i = 1; i < segments; i++) {
-      const theta = tau * i / segments
-      face.lineTo(dia * Math.cos(theta), dia * Math.sin(theta))
+  const applyGroundContact = (ax: number, ry: number, rz: number): [number, number, number] => {
+    const worldY = hubY + ry
+    let ny = ry
+    let nx = ax
+    if (worldY < 0.0004) {
+      ny = -hubY + 0.0002
+    } else if (worldY < 0.018) {
+      const t = worldY / 0.018
+      const blend = t * t * (3 - 2 * t)
+      ny = -hubY + 0.0002 + blend * (worldY - 0.0002)
     }
-    face.closePath()
-  } else face.absarc(0, 0, dia, 0, tau, false)
-  const center = new T.Path()
-  center.absarc(0, 0, .081, 0, tau, true)
-  face.holes.push(center)
-  const count = full ? 24 : 14
-  for (let i = 0; i < count; i++) for (let j = 0; j < 4; j++) {
-    const a = (i / count) * tau + (.05 * j + .011 * j ** 2)
-    const r = dia - .018 - .015 * j
-    const drill = new T.Path()
-    drill.absarc(Math.cos(a) * r, Math.sin(a) * r, full ? .00315 : .0035, 0, tau, true)
-    face.holes.push(drill)
+    if (worldY < 0.072) {
+      const load = Math.sin(clamp(worldY / 0.072, 0, 1) * Math.PI)
+      const zFade = Math.exp(-(rz * rz) / (0.11 * 0.11))
+      nx += Math.sign(ax) * 0.0034 * load * zFade
+    }
+    return [nx * side, ny, rz]
   }
-  return new T.ExtrudeGeometry(face, { depth: w.discDepth, bevelEnabled: false, steps: 1, curveSegments: full ? 8 : 4 })
-    .rotateY(Math.PI / 2).translate(axis - w.discDepth, 0, 0)
+
+  const treadCols = radialSegs + 1
+  const treadRows = profileTreadSegs + 1
+  const treadPos = new Float32Array(treadCols * treadRows * 3)
+  const treadUv = new Float32Array(treadCols * treadRows * 2)
+  const treadIdx: number[] = []
+
+  const grooveCenters = [-0.52, -0.18, 0.18, 0.52]
+
+  for (let j = 0; j < treadRows; j++) {
+    const u = (j / profileTreadSegs) * 2 - 1
+    const axBase = u * shoulderW
+    const crownDrop = 0.013 * Math.pow(Math.abs(u), 2.6)
+    let grooveDepth = 0
+    for (const gc of grooveCenters) {
+      const d = Math.abs(u - gc) / 0.055
+      if (d < 1) grooveDepth = Math.max(grooveDepth, 0.0042 * (1 - d * d))
+    }
+
+    for (let i = 0; i < treadCols; i++) {
+      const theta = (i / radialSegs) * Math.PI * 2
+      let sipeDepth = 0
+      if (detail === 'full' && Math.abs(u) > 0.24) {
+        const phase = (i / radialSegs) * 44 + Math.abs(u) * 2.4
+        const f = phase - Math.floor(phase)
+        if (f < 0.14) sipeDepth = 0.0018 * Math.sin((f / 0.14) * Math.PI)
+      }
+      const r = outerR - crownDrop - grooveDepth - sipeDepth
+      const ry = -Math.cos(theta) * r
+      const rz = Math.sin(theta) * r
+      const [px, py, pz] = applyGroundContact(axBase, ry, rz)
+      const idx = j * treadCols + i
+      treadPos[idx * 3] = px
+      treadPos[idx * 3 + 1] = py
+      treadPos[idx * 3 + 2] = pz
+      treadUv[idx * 2] = (i / radialSegs) * 8
+      treadUv[idx * 2 + 1] = (u + 1) * 0.5
+    }
+  }
+
+  for (let j = 0; j < profileTreadSegs; j++) {
+    for (let i = 0; i < radialSegs; i++) {
+      const a = j * treadCols + i
+      const b = a + 1
+      const c = a + treadCols
+      const d = c + 1
+      if (side > 0) treadIdx.push(a, c, b, b, c, d)
+      else treadIdx.push(a, b, c, b, d, c)
+    }
+  }
+
+  const tread = new THREE.BufferGeometry()
+  tread.setAttribute('position', new THREE.BufferAttribute(treadPos, 3))
+  tread.setAttribute('uv', new THREE.BufferAttribute(treadUv, 2))
+  tread.setIndex(treadIdx)
+  tread.computeVertexNormals()
+
+  const sideSegs = detail === 'full' ? 14 : 8
+  const sideGeoms: THREE.BufferGeometry[] = []
+  const shoulderTopR = outerR - 0.013
+
+  for (const wallSign of [1, -1]) {
+    const rows = sideSegs + 1
+    const pos = new Float32Array(treadCols * rows * 3)
+    const uv = new Float32Array(treadCols * rows * 2)
+    const idx: number[] = []
+    for (let j = 0; j < rows; j++) {
+      const t = j / sideSegs
+      const rBase = shoulderTopR * (1 - t) + rimR * t
+      const bulge = Math.sin(t * Math.PI)
+      let relief = 0
+      if (detail === 'full' && wallSign > 0) {
+        if (Math.abs(t - 0.34) < 0.035 || Math.abs(t - 0.68) < 0.03) relief = 0.0009
+      }
+      const ax = wallSign * (shoulderW * (1 - t) + (halfW * 0.93) * t + (bulgeW - shoulderW) * bulge + relief)
+      for (let i = 0; i < treadCols; i++) {
+        const theta = (i / radialSegs) * Math.PI * 2
+        const ry = -Math.cos(theta) * rBase
+        const rz = Math.sin(theta) * rBase
+        const [px, py, pz] = applyGroundContact(ax, ry, rz)
+        const k = j * treadCols + i
+        pos[k * 3] = px
+        pos[k * 3 + 1] = py
+        pos[k * 3 + 2] = pz
+        uv[k * 2] = 0.5 + 0.5 * Math.cos(theta)
+        uv[k * 2 + 1] = 0.5 + 0.5 * Math.sin(theta)
+      }
+    }
+    for (let j = 0; j < sideSegs; j++) {
+      for (let i = 0; i < radialSegs; i++) {
+        const a = j * treadCols + i
+        const b = a + 1
+        const c = a + treadCols
+        const d = c + 1
+        const flip = side * wallSign > 0
+        if (flip) idx.push(a, c, b, b, c, d)
+        else idx.push(a, b, c, b, d, c)
+      }
+    }
+    const g = new THREE.BufferGeometry()
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
+    g.setIndex(idx)
+    g.computeVertexNormals()
+    sideGeoms.push(g)
+  }
+
+  return { tread, sidewall: mergeGeometries(sideGeoms) }
 }
 
-function spoke(w: WheelSize, theta: number, axial: number, full: boolean): T.BufferGeometry {
-  const rr = w.rim
-  const local: readonly [number, number][] = [[.041, -.020], [.094, -.025], [.148, -.026], [rr * .84, -.075],
-    [rr * .93, -.078], [rr * .968, -.060], [rr * .90, -.044], [.179, -.019], [.168, -.006], [.169, .009],
-    [.188, .028], [rr * .938, .058], [rr * .977, .071], [rr * .965, .089], [rr * .90, .087], [.156, .034], [.103, .028], [.045, .019]]
-  const point = (r: number, t: number, depth: number): Point => {
-    const a = theta + .15 * (r / rr - .48)
-    return [axial - .032 * (1 - (r / rr) ** .7) - depth, Math.cos(a) * r - Math.sin(a) * t, Math.sin(a) * r + Math.cos(a) * t]
+function buildQuadPrism(ptsFront: Array<[number, number, number]>, ptsBack: Array<[number, number, number]>, flip: boolean): THREE.BufferGeometry {
+  const pos: number[] = []
+  const idx: number[] = []
+  const n = ptsFront.length
+  for (let i = 0; i < n; i++) pos.push(...ptsFront[i])
+  for (let i = 0; i < n; i++) pos.push(...ptsBack[i])
+
+  for (let i = 1; i < n - 1; i++) {
+    if (flip) idx.push(0, i + 1, i, n, n + i, n + i + 1)
+    else idx.push(0, i, i + 1, n, n + i + 1, n + i)
   }
-  const outline = roundedPath(local.map(([r, t]) => point(r, t, 0)), full ? 5 : 3, .19)
-  if (!full) return polygon(outline, [1, 0, 0], .021)
-  const side = Math.sign(outline.reduce((sum, p, i) => {
-    const [, y, z] = outline[(i + 1) % outline.length]
-    return sum + p[1] * z - p[2] * y
-  }, 0))
-  const normalYZ = (a: Point, b: Point) => new T.Vector2(b[2] - a[2], a[1] - b[1]).normalize().multiplyScalar(side)
-  const inner = outline.map((p, i): Point => {
-    const a = normalYZ(outline[(i - 1 + outline.length) % outline.length], p)
-    const b = normalYZ(p, outline[(i + 1) % outline.length])
-    const m = a.clone().add(b).normalize()
-    const bevel = Math.min(.0035, .0018 / Math.max(.5, m.dot(b)))
-    return [p[0], p[1] - m.x * bevel, p[2] - m.y * bevel]
-  })
-  const skin = polygon(inner, [1, 0, 0])
-  const pos = skin.getAttribute('position'), normal = skin.getAttribute('normal')
-  const n = new T.Vector3()
-  for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i), z = pos.getZ(i), r = Math.hypot(y, z)
-    const slope = .0224 * (r / rr) ** -.30 / rr
-    n.set(1, -slope * y / r, -slope * z / r).normalize()
-    normal.setXYZ(i, n.x, n.y, n.z)
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n
+    const a = i
+    const b = j
+    const c = n + i
+    const d = n + j
+    if (flip) idx.push(a, b, c, b, d, c)
+    else idx.push(a, c, b, b, c, d)
   }
-  const part = (arr: Point[], u: number) => {
-    const phase = u * arr.length
-    return blend(arr[Math.floor(phase) % arr.length], arr[(Math.floor(phase) + 1) % arr.length], phase % 1)
-  }
-  const bevel = patch((u, v) => {
-    const outer = part(outline, u)
-    const q = blend(part(inner, u), outer, Math.sin(Math.PI * .5 * Math.min(1, v * 3)))
-    const depth = (1 - Math.cos(Math.PI * .5 * Math.min(1, v * 3))) * .0025 + .017 * Math.max(0, (v - 1 / 3) * 1.5)
-    return [q[0] - depth, q[1], q[2]]
-  }, inner.length, 7, [1, 0, 0])
-  const interior = polygon(outline.map(([x, y, z]) => [x - .0195, y, z]), [-1, 0, 0])
-  return joined([skin, bevel, interior])
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setIndex(idx)
+  g.computeVertexNormals()
+  return g
 }
 
-function caliper(w: WheelSize, full: boolean, axis: number): T.BufferGeometry {
-  const rear = w === rearWheel
-  const angle = rear ? 1.28 : -1.15
-  const seat = axis - (full ? .029 : 0)
-  const point = (x: number, r: number, a: number): Point => axisRoll(x, r, angle + a)
-  const geom = patch((u, v) => {
-    const angle0 = (u - .5) * (rear ? .71 : 1.01)
-    const shoulder = Math.sin(Math.PI * u) ** .46
-    const thickness = .041 + .020 * shoulder
-    const radial = w.disc - .012 + (v - .5) * thickness
-    return point(seat + .019 + .013 * Math.sin(v * Math.PI) * shoulder, radial, angle0)
-  }, full ? 42 : 22, 16, [1, 0, 0], .062)
-  const attachments = [
-    disk(.017, .014, seat + .021, 18).translate(0, ...point(0, w.disc - .043, rear ? .27 : .41).slice(1) as [number, number]),
-    disk(.017, .014, seat + .021, 18).translate(0, ...point(0, w.disc - .043, rear ? -.27 : -.41).slice(1) as [number, number]),
+function buildRimGeometries(tire: TireSpec, side: 1 | -1, detail: VehicleDetail): { alloy: THREE.BufferGeometry; machined: THREE.BufferGeometry } {
+  const segs = detail === 'full' ? 96 : 64
+  const rimR = tire.rimRadius
+  const halfW = tire.width * 0.47
+  const faceX = side * (halfW - 0.006)
+  const hubFaceX = side * (halfW - 0.036)
+
+  const alloyParts: THREE.BufferGeometry[] = []
+  const machinedParts: THREE.BufferGeometry[] = []
+
+  const barrelPts = [
+    new THREE.Vector2(rimR - 0.016, -halfW),
+    new THREE.Vector2(rimR + 0.005, -halfW),
+    new THREE.Vector2(rimR + 0.005, -halfW + 0.014),
+    new THREE.Vector2(rimR - 0.018, -halfW + 0.028),
+    new THREE.Vector2(rimR - 0.026, 0),
+    new THREE.Vector2(rimR - 0.014, halfW - 0.026),
+    new THREE.Vector2(rimR + 0.005, halfW - 0.01),
+    new THREE.Vector2(rimR + 0.005, halfW),
+    new THREE.Vector2(rimR - 0.009, halfW),
+    new THREE.Vector2(rimR - 0.016, halfW - 0.012),
+    new THREE.Vector2(rimR - 0.032, 0),
+    new THREE.Vector2(rimR - 0.022, -halfW + 0.02),
   ]
-  if (full) {
-    attachments.push(contour([
-      point(seat - .001, w.disc - .039, -.35), point(seat + .020, w.disc - .036, -.26),
-      point(seat + .027, w.disc - .035, .01), point(seat + .014, w.disc - .041, .27), point(seat - .001, w.disc - .039, .35),
-    ], .0037))
+  const barrel = new THREE.LatheGeometry(barrelPts, segs)
+  barrel.rotateZ(side > 0 ? -Math.PI / 2 : Math.PI / 2)
+  alloyParts.push(barrel)
+
+  const lipRing = new THREE.RingGeometry(rimR - 0.009, rimR + 0.005, segs)
+  lipRing.rotateY(side > 0 ? Math.PI / 2 : -Math.PI / 2)
+  lipRing.translate(side * (halfW + 0.0005), 0, 0)
+  machinedParts.push(lipRing)
+
+  const hubCyl = new THREE.CylinderGeometry(0.068, 0.076, 0.044, 40)
+  hubCyl.rotateZ(Math.PI / 2)
+  hubCyl.translate(hubFaceX - side * 0.016, 0, 0)
+  alloyParts.push(hubCyl)
+
+  const cap = new THREE.CylinderGeometry(0.031, 0.034, 0.012, 32)
+  cap.rotateZ(Math.PI / 2)
+  cap.translate(hubFaceX + side * 0.004, 0, 0)
+  alloyParts.push(cap)
+
+  const hexCollar = new THREE.CylinderGeometry(0.022, 0.025, 0.015, 6)
+  hexCollar.rotateZ(Math.PI / 2)
+  hexCollar.translate(hubFaceX + side * 0.006, 0, 0)
+  machinedParts.push(hexCollar)
+
+  const rRoot = 0.062
+  const rFork = rimR * 0.47
+  const rTip = rimR - 0.008
+
+  for (let k = 0; k < 5; k++) {
+    const baseAng = (k / 5) * Math.PI * 2 + 0.14
+    const boltAng = baseAng + Math.PI / 5
+
+    const lug = new THREE.CylinderGeometry(0.0085, 0.0085, 0.018, 6)
+    lug.rotateZ(Math.PI / 2)
+    lug.translate(hubFaceX + side * 0.001, Math.cos(boltAng) * 0.052, Math.sin(boltAng) * 0.052)
+    machinedParts.push(lug)
+
+    const lugWell = new THREE.CylinderGeometry(0.013, 0.011, 0.012, 16, 1, true)
+    lugWell.rotateZ(Math.PI / 2)
+    lugWell.translate(hubFaceX - side * 0.002, Math.cos(boltAng) * 0.052, Math.sin(boltAng) * 0.052)
+    alloyParts.push(lugWell)
+
+    const stemPts = 5
+    for (let s = 0; s < stemPts; s++) {
+      const t0 = s / stemPts
+      const t1 = (s + 1) / stemPts
+      const r0 = rRoot + (rFork - rRoot) * t0
+      const r1 = rRoot + (rFork - rRoot) * t1
+      const w0 = 0.017 - 0.003 * t0
+      const w1 = 0.017 - 0.003 * t1
+      const xF0 = hubFaceX + (faceX - hubFaceX) * (t0 * 0.42)
+      const xF1 = hubFaceX + (faceX - hubFaceX) * (t1 * 0.42)
+      const d = 0.024
+
+      const mkPt = (r: number, off: number, xVal: number): [number, number, number] => {
+        const ca = Math.cos(baseAng)
+        const sa = Math.sin(baseAng)
+        return [xVal, ca * r - sa * off, sa * r + ca * off]
+      }
+      const frontQuad: Array<[number, number, number]> = [
+        mkPt(r0, -w0, xF0),
+        mkPt(r0, w0, xF0),
+        mkPt(r1, w1, xF1),
+        mkPt(r1, -w1, xF1),
+      ]
+      const backQuad: Array<[number, number, number]> = [
+        mkPt(r0, -w0 * 1.28, xF0 - side * d),
+        mkPt(r0, w0 * 1.28, xF0 - side * d),
+        mkPt(r1, w1 * 1.28, xF1 - side * d),
+        mkPt(r1, -w1 * 1.28, xF1 - side * d),
+      ]
+      alloyParts.push(buildQuadPrism(frontQuad, backQuad, side > 0))
+
+      const faceStrip: Array<[number, number, number]> = [
+        mkPt(r0, -w0 * 0.58, xF0 + side * 0.0012),
+        mkPt(r0, w0 * 0.58, xF0 + side * 0.0012),
+        mkPt(r1, w1 * 0.58, xF1 + side * 0.0012),
+        mkPt(r1, -w1 * 0.58, xF1 + side * 0.0012),
+      ]
+      const faceBack: Array<[number, number, number]> = faceStrip.map(([px, py, pz]) => [px - side * 0.002, py, pz])
+      machinedParts.push(buildQuadPrism(faceStrip, faceBack, side > 0))
+    }
+
+    for (const branchSign of [-1, 1]) {
+      const segCount = 7
+      const tipAng = baseAng + branchSign * (Math.PI / 9.6)
+      for (let s = 0; s < segCount; s++) {
+        const t0 = s / segCount
+        const t1 = (s + 1) / segCount
+        const curve0 = smoothstep(0, 1, t0)
+        const curve1 = smoothstep(0, 1, t1)
+        const a0 = baseAng + (tipAng - baseAng) * curve0
+        const a1 = baseAng + (tipAng - baseAng) * curve1
+        const r0 = rFork - 0.006 + (rTip - (rFork - 0.006)) * t0
+        const r1 = rFork - 0.006 + (rTip - (rFork - 0.006)) * t1
+        const w0 = 0.0115 - 0.003 * t0 + (t0 > 0.85 ? 0.004 * (t0 - 0.85) / 0.15 : 0)
+        const w1 = 0.0115 - 0.003 * t1 + (t1 > 0.85 ? 0.004 * (t1 - 0.85) / 0.15 : 0)
+        const xF0 = hubFaceX + (faceX - hubFaceX) * (0.42 + 0.58 * Math.pow(t0, 0.75))
+        const xF1 = hubFaceX + (faceX - hubFaceX) * (0.42 + 0.58 * Math.pow(t1, 0.75))
+        const d0 = 0.023 * (1 - 0.3 * t0)
+        const d1 = 0.023 * (1 - 0.3 * t1)
+
+        const dirY = Math.cos(a1) * r1 - Math.cos(a0) * r0
+        const dirZ = Math.sin(a1) * r1 - Math.sin(a0) * r0
+        const dLen = Math.hypot(dirY, dirZ) || 1
+        const pY = -dirZ / dLen
+        const pZ = dirY / dLen
+
+        const p0Y = Math.cos(a0) * r0
+        const p0Z = Math.sin(a0) * r0
+        const p1Y = Math.cos(a1) * r1
+        const p1Z = Math.sin(a1) * r1
+
+        const frontQuad: Array<[number, number, number]> = [
+          [xF0, p0Y - pY * w0, p0Z - pZ * w0],
+          [xF0, p0Y + pY * w0, p0Z + pZ * w0],
+          [xF1, p1Y + pY * w1, p1Z + pZ * w1],
+          [xF1, p1Y - pY * w1, p1Z - pZ * w1],
+        ]
+        const backQuad: Array<[number, number, number]> = [
+          [xF0 - side * d0, p0Y - pY * w0 * 1.35, p0Z - pZ * w0 * 1.35],
+          [xF0 - side * d0, p0Y + pY * w0 * 1.35, p0Z + pZ * w0 * 1.35],
+          [xF1 - side * d1, p1Y + pY * w1 * 1.35, p1Z + pZ * w1 * 1.35],
+          [xF1 - side * d1, p1Y - pY * w1 * 1.35, p1Z - pZ * w1 * 1.35],
+        ]
+        alloyParts.push(buildQuadPrism(frontQuad, backQuad, side > 0))
+
+        const f0 = w0 * 0.56
+        const f1 = w1 * 0.56
+        const mFront: Array<[number, number, number]> = [
+          [xF0 + side * 0.0012, p0Y - pY * f0, p0Z - pZ * f0],
+          [xF0 + side * 0.0012, p0Y + pY * f0, p0Z + pZ * f0],
+          [xF1 + side * 0.0012, p1Y + pY * f1, p1Z + pZ * f1],
+          [xF1 + side * 0.0012, p1Y - pY * f1, p1Z - pZ * f1],
+        ]
+        const mBack: Array<[number, number, number]> = mFront.map(([px, py, pz]) => [px - side * 0.002, py, pz])
+        machinedParts.push(buildQuadPrism(mFront, mBack, side > 0))
+      }
+    }
   }
-  return joined([geom, ...attachments])
+
+  const valve = new THREE.CylinderGeometry(0.0032, 0.004, 0.018, 10)
+  valve.translate(faceX - side * 0.012, -(rimR - 0.018), 0.015)
+  machinedParts.push(valve)
+
+  return {
+    alloy: mergeGeometries(alloyParts),
+    machined: mergeGeometries(machinedParts),
+  }
 }
 
-export function createWheels(parent: T.Group, m: Palette, full: boolean): Point {
-  let anchor: Point = [0, 0, 0]
-  for (const w of [frontWheel, rearWheel]) {
-    const H = w.width / 2, R = w.rim
-    const axis = H - .040, face = H - .008, hubFace = H - .011
-    const count = full ? 144 : 96
-    const tire = tireGeometry(w, full)
-    const barrel = lathe([
-      [-w.rimWidth / 2, R + .004], [-w.rimWidth / 2 + .006, R + .006], [-w.rimWidth / 2 + .014, R - .012],
-      [-.049, R - .017], [-.026, R - .026], [.020, R - .022], [face - .016, R - .013], [face - .004, R - .007],
-      [face - .002, R - .0035], [face, R + .001], [face - .001, R + .007], [face - .013, R + .009],
-    ], count)
-    const forging: T.BufferGeometry[] = [barrel, disk(.065, .055, hubFace - .045, count)]
-    for (let i = 0; i < 5; i++) forging.push(spoke(w, (i / 5) * tau + .10, face, full))
-    const faceBits: T.BufferGeometry[] = [
-      lathe([[face - .0002, R - .0033], [face + .002, R + .0022], [face - .0007, R + .0043]], count),
-      disk(.028, .008, hubFace - .004, 40), disk(.084, .028, axis - .006, 45),
-    ]
-    for (let i = 0; i < 5; i++) {
-      const [, y, z] = axisRoll(0, .051, tau * i / 5 + .33)
-      faceBits.push(disk(.0106, .013, hubFace - .012, 6).translate(0, y, z))
-    }
-    for (let i = 0; i < 10; i++) {
-      const [, y, z] = axisRoll(0, .091, tau * i / 10)
-      faceBits.push(disk(.0074, .007, axis + .003, 8).translate(0, y, z))
-    }
-    const relief: T.BufferGeometry[] = []
-    if (full) {
-      const outerSidewall = curve([
-        [R - .011, .86], [R + .013, .975], [w.radius - .054, 1], [w.radius - .026, .986],
-        [w.radius - .010, .93], [w.radius, .67],
-      ])
-      const sideX = (r: number) => outerSidewall(r) * H
-      for (const r of [R + .019, w.radius - .043, w.radius - .036]) {
-        relief.push(lathe([[sideX(r - .002) - .0005, r - .002], [sideX(r) + .00065, r], [sideX(r + .002) - .0005, r + .002]], count))
-      }
-      for (let i = 0; i < 48; i++) {
-        const a = tau * i / 48
-        const r = w.radius - .036, q = w.radius - .027
-        const points: Point[] = [
-          axisRoll(sideX(r) + .0012, r, a - .011),
-          axisRoll(sideX(r) + .0012, r + .0005, a + .010),
-          axisRoll(sideX(q) + .0012, q, a + .019),
-          axisRoll(sideX(q) + .0012, q - .001, a - .008),
-        ]
-        relief.push(polygon(roundedPath(points, 3, .14), [1, 0, 0], .0031))
-      }
-    }
-    const forged = joined(forging), hardware = joined(faceBits), brake = rotor(w, full, axis), cal = caliper(w, full, axis)
-    const sidewall = relief.length > 0 ? joined(relief) : null
-    for (const side of [1, -1]) {
-      const group = new T.Group()
-      group.name = w === frontWheel ? 'front wheel' : 'rear wheel'
-      group.position.set(w.x * side, w.loaded, w.z)
-      group.scale.x = side
-      add(group, 'loaded rubber and tread', tire, m.tire)
-      add(group, 'forged divided spokes and barrel', forged, m.forged)
-      add(group, 'machined flange and unmarked hub', hardware, m.brushed)
-      add(group, 'drilled ceramic rotor', brake, m.brake)
-      add(group, 'recessed brake shield', disk(R - .013, .010, -.052, 64), m.dark)
-      add(group, 'fixed brake caliper', cal, m.caliper)
-      if (sidewall) add(group, 'molded sidewall relief', sidewall, m.tire)
-      parent.add(group)
-    }
-    if (w === frontWheel) anchor = [w.x + hubFace, w.loaded, w.z]
+function buildBrakeGeometries(
+  brake: BrakeSpec,
+  tire: TireSpec,
+  side: 1 | -1,
+  detail: VehicleDetail,
+): { disc: THREE.BufferGeometry; hat: THREE.BufferGeometry; caliper: THREE.BufferGeometry } {
+  const halfW = tire.width * 0.47
+  const discCenterX = side * (halfW - 0.068)
+  const segs = detail === 'full' ? 72 : 48
+
+  const discParts: THREE.BufferGeometry[] = []
+  const hatParts: THREE.BufferGeometry[] = []
+  const caliperParts: THREE.BufferGeometry[] = []
+
+  const rIn = brake.hatRadius + 0.004
+  const rOut = brake.discRadius
+  const halfT = brake.discThickness * 0.5
+
+  for (const plateSign of [-1, 1]) {
+    const ring = new THREE.RingGeometry(rIn, rOut, segs, 4)
+    ring.rotateY(plateSign * side > 0 ? Math.PI / 2 : -Math.PI / 2)
+    ring.translate(discCenterX + side * plateSign * halfT, 0, 0)
+    discParts.push(ring)
   }
-  return anchor
+
+  const outerBand = new THREE.CylinderGeometry(rOut, rOut, brake.discThickness * 0.36, segs, 1, true)
+  outerBand.rotateZ(Math.PI / 2)
+  outerBand.translate(discCenterX + side * halfT * 0.62, 0, 0)
+  discParts.push(outerBand)
+
+  const innerBand = new THREE.CylinderGeometry(rOut, rOut, brake.discThickness * 0.36, segs, 1, true)
+  innerBand.rotateZ(Math.PI / 2)
+  innerBand.translate(discCenterX - side * halfT * 0.62, 0, 0)
+  discParts.push(innerBand)
+
+  const vaneCount = detail === 'full' ? 36 : 18
+  for (let v = 0; v < vaneCount; v++) {
+    const ang = (v / vaneCount) * Math.PI * 2
+    const vane = new THREE.BoxGeometry(brake.discThickness * 0.32, 0.012, 0.003)
+    vane.rotateX(ang)
+    vane.translate(discCenterX, Math.cos(ang) * (rOut - 0.007), Math.sin(ang) * (rOut - 0.007))
+    hatParts.push(vane)
+  }
+
+  const spiralCount = detail === 'full' ? 24 : 16
+  const holesPerSpiral = detail === 'full' ? 5 : 4
+  for (let s = 0; s < spiralCount; s++) {
+    const baseA = (s / spiralCount) * Math.PI * 2
+    for (let h = 0; h < holesPerSpiral; h++) {
+      const f = (h + 0.6) / holesPerSpiral
+      const hr = rIn + 0.012 + (rOut - rIn - 0.022) * f
+      const ha = baseA + f * 0.24
+      const hole = new THREE.CylinderGeometry(0.0029, 0.0029, brake.discThickness + 0.0016, 8)
+      hole.rotateZ(Math.PI / 2)
+      hole.translate(discCenterX, Math.cos(ha) * hr, Math.sin(ha) * hr)
+      hatParts.push(hole)
+    }
+  }
+
+  const hatPts = [
+    new THREE.Vector2(0.042, 0.022),
+    new THREE.Vector2(brake.hatRadius * 0.72, 0.022),
+    new THREE.Vector2(brake.hatRadius, 0.004),
+    new THREE.Vector2(brake.hatRadius, -0.005),
+    new THREE.Vector2(brake.hatRadius * 0.68, 0.014),
+    new THREE.Vector2(0.042, 0.014),
+  ]
+  const hatBell = new THREE.LatheGeometry(hatPts, 40)
+  hatBell.rotateZ(side > 0 ? -Math.PI / 2 : Math.PI / 2)
+  hatBell.translate(discCenterX, 0, 0)
+  hatParts.push(hatBell)
+
+  for (let b = 0; b < 10; b++) {
+    const ba = (b / 10) * Math.PI * 2
+    const bobbin = new THREE.CylinderGeometry(0.0055, 0.0055, brake.discThickness + 0.005, 10)
+    bobbin.rotateZ(Math.PI / 2)
+    bobbin.translate(discCenterX, Math.cos(ba) * brake.hatRadius, Math.sin(ba) * brake.hatRadius)
+    discParts.push(bobbin)
+  }
+
+  const arcSpan = brake.pistons >= 8 ? 1.44 : 0.96
+  const arcSegs = detail === 'full' ? 18 : 10
+  const calRIn = rIn + 0.006
+  const calROut = rOut + 0.024
+  const calHalfX = halfT + 0.028
+  const centerAng = brake.caliperAngleRad
+
+  for (let s = 0; s < arcSegs; s++) {
+    const t0 = s / arcSegs - 0.5
+    const t1 = (s + 1) / arcSegs - 0.5
+    const a0 = centerAng + t0 * arcSpan
+    const a1 = centerAng + t1 * arcSpan
+    const taper0 = 1 - 0.22 * Math.pow(Math.abs(t0) * 2, 2.2)
+    const taper1 = 1 - 0.22 * Math.pow(Math.abs(t1) * 2, 2.2)
+    const ro0 = calRIn + (calROut - calRIn) * taper0
+    const ro1 = calRIn + (calROut - calRIn) * taper1
+    const hx0 = calHalfX * (0.86 + 0.14 * taper0)
+    const hx1 = calHalfX * (0.86 + 0.14 * taper1)
+
+    const mkFace = (xOff: number): Array<[number, number, number]> => [
+      [discCenterX + side * xOff, Math.sin(a0) * calRIn, Math.cos(a0) * calRIn],
+      [discCenterX + side * xOff, Math.sin(a0) * ro0, Math.cos(a0) * ro0],
+      [discCenterX + side * xOff, Math.sin(a1) * ro1, Math.cos(a1) * ro1],
+      [discCenterX + side * xOff, Math.sin(a1) * calRIn, Math.cos(a1) * calRIn],
+    ]
+    caliperParts.push(buildQuadPrism(mkFace(hx0), mkFace(-hx1), side > 0))
+  }
+
+  const bossCount = Math.floor(brake.pistons / 2)
+  for (let p = 0; p < bossCount; p++) {
+    const f = bossCount === 1 ? 0 : (p / (bossCount - 1) - 0.5) * 0.78
+    const pa = centerAng + f * arcSpan
+    const pr = (calRIn + calROut) * 0.49
+    const boss = new THREE.CylinderGeometry(0.0155, 0.0175, calHalfX * 2.08, 16)
+    boss.rotateZ(Math.PI / 2)
+    boss.translate(discCenterX, Math.sin(pa) * pr, Math.cos(pa) * pr)
+    caliperParts.push(boss)
+  }
+
+  for (const bridgeOff of [-0.26, 0, 0.26]) {
+    const ba = centerAng + bridgeOff * arcSpan
+    const bolt = new THREE.CylinderGeometry(0.0045, 0.0045, calHalfX * 2.12, 8)
+    bolt.rotateZ(Math.PI / 2)
+    bolt.translate(discCenterX, Math.sin(ba) * (calROut - 0.008), Math.cos(ba) * (calROut - 0.008))
+    hatParts.push(bolt)
+  }
+
+  return {
+    disc: mergeGeometries(discParts),
+    hat: mergeGeometries(hatParts),
+    caliper: mergeGeometries(caliperParts),
+  }
+}
+
+export function createWheelAssemblies(materials: VehicleMaterials, detail: VehicleDetail): THREE.Group {
+  const wheelsGroup = new THREE.Group()
+  wheelsGroup.name = 'wheels'
+
+  const placements: WheelPlacement[] = [
+    { name: 'wheel-front-left', side: 1, hubZ: 1.286, tire: FRONT_TIRE, brake: FRONT_BRAKE, isFront: true },
+    { name: 'wheel-front-right', side: -1, hubZ: 1.286, tire: FRONT_TIRE, brake: FRONT_BRAKE, isFront: true },
+    { name: 'wheel-rear-left', side: 1, hubZ: -1.493, tire: REAR_TIRE, brake: REAR_BRAKE, isFront: false },
+    { name: 'wheel-rear-right', side: -1, hubZ: -1.493, tire: REAR_TIRE, brake: REAR_BRAKE, isFront: false },
+  ]
+
+  for (const spec of placements) {
+    const hubY = spec.tire.radius - 0.0042
+    const centerX = spec.side * (spec.tire.outboardX - spec.tire.width * 0.5)
+    const unit = new THREE.Group()
+    unit.name = spec.name
+    unit.position.set(centerX, hubY, spec.hubZ)
+
+    const tireGeoms = buildTireGeometry(spec.tire, spec.side, hubY, detail)
+    unit.add(makeMesh(tireGeoms.tread, materials.tireTread, `${spec.name}-tread`))
+    unit.add(makeMesh(tireGeoms.sidewall, materials.tireSidewall, `${spec.name}-sidewall`))
+
+    const rimGeoms = buildRimGeometries(spec.tire, spec.side, detail)
+    unit.add(makeMesh(rimGeoms.alloy, materials.rimAlloy, `${spec.name}-rim-alloy`))
+    unit.add(makeMesh(rimGeoms.machined, materials.rimMachined, `${spec.name}-rim-face`))
+
+    const brakeGeoms = buildBrakeGeometries(spec.brake, spec.tire, spec.side, detail)
+    unit.add(makeMesh(brakeGeoms.disc, materials.brakeDisc, `${spec.name}-disc`))
+    unit.add(makeMesh(brakeGeoms.hat, materials.brakeHat, `${spec.name}-hat`))
+    unit.add(makeMesh(brakeGeoms.caliper, materials.caliper, `${spec.name}-caliper`))
+
+    void spec.isFront
+    wheelsGroup.add(unit)
+  }
+
+  return wheelsGroup
 }
