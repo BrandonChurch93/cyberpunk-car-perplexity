@@ -6,6 +6,8 @@ import { cameraAt } from '../../src/director/shots.ts'
 import { beatAt } from '../../src/director/timeline.ts'
 import { createVehicle, type Anchor, type AnchorId } from '../../src/vehicle/index.ts'
 import { createWorld } from '../../src/world/index.ts'
+import type { StageDetail } from '../../src/core/detail.ts'
+import { detailFrom } from './detail.ts'
 
 export const anchorIds: AnchorId[] = ['paint', 'wheel', 'lamp', 'detail', 'exhaust']
 export type Anchors = Record<AnchorId, Anchor>
@@ -32,8 +34,9 @@ export async function sceneAnchors(page?: Page, paint = defaultPaint): Promise<{
       return { anchors: out, source: 'page' }
     }
   }
-  const vehicle = await createVehicle({ paint: paintById(paint), detail: 'blockout' })
-  return { anchors: vehicle.anchors, source: 'blockout module in node' }
+  const detail = detailFrom()
+  const vehicle = await createVehicle({ paint: paintById(paint), detail })
+  return { anchors: vehicle.anchors, source: `${detail} vehicle module in node` }
 }
 
 export function frameSeconds(frame: number): number {
@@ -85,22 +88,28 @@ export function rayThrough(state: CameraState, format: FormatSpec, x: number, y:
   return { origin: state.position.clone(), direction }
 }
 
-let cachedScene: Promise<THREE.Object3D | null> | null = null
+const cachedScenes = new Map<StageDetail, Promise<THREE.Object3D | null>>()
 
-/** The blockout scene built in Node, used only to name what each region of a frame shows. */
-export function nodeScene(paint = defaultPaint): Promise<THREE.Object3D | null> {
-  cachedScene ??= (async () => {
-    try {
-      const [world, vehicle] = await Promise.all([createWorld({ detail: 'blockout' }), createVehicle({ paint: paintById(paint), detail: 'blockout' })])
-      const root = new THREE.Group()
-      root.add(world.root, vehicle.root)
-      root.updateMatrixWorld(true)
-      return root
-    } catch {
-      return null
-    }
-  })()
-  return cachedScene
+async function buildNodeScene(paint: string, detail: StageDetail): Promise<THREE.Object3D | null> {
+  try {
+    const [world, vehicle] = await Promise.all([createWorld({ detail }), createVehicle({ paint: paintById(paint), detail })])
+    const root = new THREE.Group()
+    root.add(world.root, vehicle.root)
+    root.updateMatrixWorld(true)
+    return root
+  } catch {
+    return detail === 'full' ? buildNodeScene(paint, 'blockout') : null
+  }
+}
+
+/** The scene built in Node at the asked detail, used only to name what each region of a frame shows. Falls back to the blockout. */
+export function nodeScene(paint = defaultPaint, detail: StageDetail = detailFrom()): Promise<THREE.Object3D | null> {
+  let scene = cachedScenes.get(detail)
+  if (!scene) {
+    scene = buildNodeScene(paint, detail)
+    cachedScenes.set(detail, scene)
+  }
+  return scene
 }
 
 function labelOf(object: THREE.Object3D, point: THREE.Vector3, distance: number): string {

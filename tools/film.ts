@@ -4,7 +4,7 @@ import { diagnosticViews } from '../src/diagnostics/views.ts'
 import { args, buildHash, config, ensureDir, readJson, writeJson } from './lib/env.ts'
 import { emptyFrames, encodeFilm, filmMatches, filmPath, frameChecks, frameFileName, frameSpec, framesDir, missingFrames, rangeFromArgs, recordPathFor, verifyFilm, type FilmRecord, type FilmSpec } from './lib/film.ts'
 import { megabytes } from './lib/probe.ts'
-import { OutOfBudget, RenderSession, runTool, type StillRecord } from './lib/render.ts'
+import { detailFrom, OutOfBudget, RenderSession, runTool, type StillRecord } from './lib/render.ts'
 
 const freshPageEvery = 300
 
@@ -14,7 +14,7 @@ void runTool(async () => {
   if (!isTier(tier)) throw new Error(`unknown tier ${tier}`)
   const diag = a.diag ?? 'beauty'
   if (!diagnosticViews.includes(diag)) throw new Error(`unknown diagnostic view ${diag}`)
-  const spec: FilmSpec = { tier, format: a.format ? formatById(a.format) : config.formats.preview, paint: paintById(a.paint ?? defaultPaint).id, diag }
+  const spec: FilmSpec = { tier, format: a.format ? formatById(a.format) : config.formats.preview, paint: paintById(a.paint ?? defaultPaint).id, diag, detail: detailFrom(a.detail) }
   const { first, last, slice } = rangeFromArgs(a)
   const assemble = a.assemble === 'true'
   const out = filmPath(spec, first, last)
@@ -29,7 +29,7 @@ void runTool(async () => {
 
   if (!assemble) {
     const todo = missingFrames(spec, slice[0], slice[1], hash)
-    console.log(`${spec.format.id} ${spec.tier} ${spec.paint} ${spec.diag}: frames ${slice[0]} to ${slice[1]}, ${todo.length} to render into ${dir}`)
+    console.log(`${spec.format.id} ${spec.tier} ${spec.detail} ${spec.paint} ${spec.diag}: frames ${slice[0]} to ${slice[1]}, ${todo.length} to render into ${dir}`)
     if (todo.length > 0) {
       const session = await RenderSession.open({ budgetMinutes: a.budget !== undefined ? Number(a.budget) : undefined })
       hash = session.buildHash
@@ -82,6 +82,7 @@ void runTool(async () => {
     tier: spec.tier,
     paint: spec.paint,
     diagnostic: spec.diag,
+    detail: spec.detail,
     first,
     last,
     frameCount: count,

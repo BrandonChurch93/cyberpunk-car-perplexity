@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { frameCount, formatById } from '../src/config.ts'
 import { requiredExtensions, requiredLimits } from '../src/core/requirements.ts'
 import { args, buildHash, config, readJson, repoRoot, workDir } from './lib/env.ts'
-import { RenderSession, type StillRecord } from './lib/render.ts'
+import { detailFrom, RenderSession, type StillRecord } from './lib/render.ts'
 import { g5, g6, g7, g8, g9, g11 } from './lib/gates.ts'
 
 interface Result {
@@ -194,7 +194,7 @@ async function main(): Promise<void> {
   const skip = a.skip ? a.skip.split(',') : []
   const ids = (phases[phase] ?? []).filter((id) => (!only || only.includes(id)) && !skip.includes(id))
   if (ids.length === 0) throw new Error(`no checks for phase ${phase}`)
-  console.log(`gate for phase ${phase}, build ${buildHash()}`)
+  console.log(`gate for phase ${phase}, build ${buildHash()}, ${detailFrom()} detail`)
   let failed = 0
   for (const id of ids) {
     const check = checks[id]

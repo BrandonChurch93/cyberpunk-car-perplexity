@@ -8,7 +8,7 @@ void runTool(async () => {
   try {
     const { file, record, reused } = await session.still(spec, { force: a.force === 'true' })
     console.log(`${reused ? 'reused' : 'rendered'} ${file}`)
-    console.log(`${record.width} x ${record.height}, ${record.samples} samples, ${record.seconds} s, build ${record.buildHash}`)
+    console.log(`${record.width} x ${record.height}, ${record.samples} samples, ${record.detail} detail, ${record.seconds} s, build ${record.buildHash}`)
     if (!record.check.ok) {
       console.log(`CHECK FAILED: blank ${record.check.blank}, flat ${record.check.flat}, invalid pixels ${record.check.invalidPixels}`)
       return 2
