@@ -155,6 +155,23 @@ describe('vehicle geometry and state', () => {
     expect(instantaneous(car, { ...stateAt(config.film.durationSeconds), vibration: 1 })).toEqual(firstForced)
   })
 
+  it('keeps surface radiance and emitted light intensity on the stage scale', () => {
+    const lampsOn = stateAt(events.lampStageThree)
+    const material = (name: string) =>
+      (full.root.getObjectByName(name) as T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>).material
+    full.update(stateAt(0))
+    expect(material('front running guide').emissiveIntensity).toBe(0)
+    full.update(lampsOn)
+    const front = material('front running guide'), rear = material('tail running guide')
+    expect(front.emissiveIntensity * front.emissive.g).toBeGreaterThan(80)
+    expect(front.emissiveIntensity * front.emissive.g).toBeLessThan(200)
+    expect(rear.emissiveIntensity * rear.emissive.r).toBeGreaterThan(20)
+    expect(rear.emissiveIntensity * rear.emissive.r).toBeLessThan(60)
+    const sum = full.lamps.filter((lamp) => lamp.beam && lamp.object.position.x > 0)
+      .reduce((total, lamp) => total + (lamp.intensity ?? 0) * (lamp.level ?? 0), 0)
+    expect(sum).toBeCloseTo(250)
+  })
+
   it('switches the full base paint and leaves the phase blockout gray', () => {
     const next = config.paint.candidates.find((candidate) => candidate.id !== defaultPaint)!
     for (const [vehicle, shouldChange] of [[full, true], [blockout, false]] as const) {

@@ -293,7 +293,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     for (const part of lumens) {
       const level = part.lamp.beam ? beam * (.045 + .955 * fullBeam) : part.rear ? running * (.53 + .47 * rise) : running
       part.lamp.level = level
-      part.mesh.material.emissiveIntensity = level * (part.lamp.beam ? 8.9 : part.rear ? .92 : 1.84)
+      part.mesh.material.emissiveIntensity = level * (part.lamp.beam ? 260 : part.rear ? 60 : 144)
     }
   }
   return { lamps, heatSources, lamp: lens, exhaust: anchor(rearBridge(.5, .5), outRear, .34), update }
