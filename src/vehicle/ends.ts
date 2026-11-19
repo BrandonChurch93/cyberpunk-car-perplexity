@@ -62,6 +62,7 @@ function lightGuide(face: Face, hub: XY, tips: readonly XY[], width: number, dep
 export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const frontPaint: T.BufferGeometry[] = [], rearPaint: T.BufferGeometry[] = []
   const carbon: T.BufferGeometry[] = [], black: T.BufferGeometry[] = [], dark: T.BufferGeometry[] = []
+  const outletCavities: T.BufferGeometry[] = [], diffuserShell: T.BufferGeometry[] = []
   const optical: T.BufferGeometry[] = [], rearOptical: T.BufferGeometry[] = []
   const lamps: VehicleModule['lamps'] = []
   const heatSources: VehicleModule['heatSources'] = []
@@ -94,11 +95,12 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const chin = (x: number) => lipY(x) + .025
   const eyeTop = curve([[.48, .474], [.58, .512], [.68, .552], [.79, .600], [.889, .649], [.918, .658]])
   const eyeLow = curve([[.48, .459], [.58, .462], [.69, .474], [.797, .497], [.865, .564], [.918, .635]])
-  const outletZ = zAt(.995) + .070
+  const outletZ = zAt(.995) + .006
   const outletCenter = .18, outletHeight = .8, halfOutletHeight = .0525
   const outletRound = .055, outletPoint = .57
   const halfOutletWidth = 2.6 * halfOutletHeight / (1 - (1 - outletPoint) * outletRound / 2)
-  const metalFace = (side: number, x: number, y: number, d = 0): Point => [side * x, y, outletZ + d]
+  const metalFace = (side: number, x: number, y: number, d = 0): Point =>
+    [side * x, y, limitTailZ(x, outletZ + d + .017 * smooth(x, .12, .35))]
   const rearBridge = (u: number, v: number): Point => {
     const y = mix(.719, .861, v)
     const x = mix(-.059, .059, u)
@@ -225,16 +227,18 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
 
     const tailLower = curve([[0, .594], [.275, .595], [.424, .548], [.78, .535], [.914, .513], [.974, .468]])
     const tailSlot: XY[] = [[.345, .802], [.449, .817], [.698, .820], [.857, .865], [.889, .854], [.897, .809], [.895, .755], [.867, .718], [.743, .758], [.450, .763], [.353, .778]]
-    const tailTopOfSlot = curve([[0, .843], [.18, .856], [.32, .850], [.46, .820], [.70, .821], [.86, .864], [.90, .851], [.935, .814]])
-    const tailUnderSlot = curve([[0, .741], [.30, .739], [.43, .758], [.70, .752], [.87, .713], [.90, .735], [.979, .697]])
+    const tailTopOfSlot = curve([[0, .844], [.12, .873], [.23, .873], [.32, .855], [.46, .820], [.70, .821], [.86, .864], [.90, .851], [.935, .814]])
+    const tailUnderSlot = curve([[0, .714], [.27, .712], [.34, .722], [.43, .758], [.70, .752], [.87, .713], [.90, .735], [.979, .697]])
     rearPaint.push(patch((u, v) => {
       const x = .935 * u
       return r(x, mix(tailTopOfSlot(x), tailLipY(x), v), .020 * (1 - v) * (1 - smooth(x, .3, .44)) + .020 * v * (1 - smooth(x, .038, .131)))
     }, 48, 5, outRear, .006))
     rearPaint.push(patch((u, v) => {
       const x = mix(0, .979 - .021 * v, u)
-      return r(x, mix(tailLower(x), tailUnderSlot(x), v), mix(-.021, -.006, v))
-    }, 50, 6, outRear, .008))
+      const scallop = .038 * Math.sin(v * Math.PI) * smooth(x, .10, .37) * (1 - smooth(x, .58, .91))
+      const depth = mix(.017, -.008, v) + scallop + .027 * (1 - smooth(x, .27, .40))
+      return r(x, mix(tailLower(x), tailUnderSlot(x), v), depth)
+    }, 50, 12, outRear, .008))
     rearPaint.push(mapped(r, [[.891, .854], [.935, .872], [.972, .843], [1.006, .788], [.980, .468], [.914, .523], [.897, .735]], outRear, -.002, .008, .025))
     black.push(mapped(r, tailSlot, outRear, .014, .028, .05))
     black.push(joinRim(tailSlot, 1.025, .92, r, -.009, .026, outRear))
@@ -245,9 +249,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const hex: XY[] = ([[1, 0], [outletPoint, 1], [-outletPoint, 1], [-1, 0], [-outletPoint, -1], [outletPoint, -1]] as const)
       .map(([x, y]) => [outletCenter + halfOutletWidth * x, outletHeight + halfOutletHeight * y])
     const outlet: Face = (x, y, d = 0) => metalFace(side, x, y, d)
-    black.push(joinRim(hex, 1.18, .99, outlet, .034, -.001, outRear, outletRound))
-    const hotRim = joinRim(hex, 1, .87, outlet, 0, .022, outRear, outletRound, 0)
-    dark.push(joinRim(hex, .87, .75, outlet, .022, .116, outRear, outletRound))
+    black.push(joinRim(hex, 1.20, .999, outlet, .025, .001, outRear, outletRound))
+    const hotRim = joinRim(hex, 1, .855, outlet, 0, .021, outRear, outletRound, 0)
+    outletCavities.push(joinRim(hex, .855, .82, outlet, .021, .117, outRear, outletRound))
     const exhaust = add(parent, 'formed hexagonal outlet', hotRim, m.hot)
     const source = new T.Object3D()
     source.name = 'exhaust rim heat origin'
@@ -255,42 +259,45 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     source.rotation.y = Math.PI
     exhaust.add(source)
     heatSources.push({ object: source, strength: 1 })
-    dark.push(mapped(outlet, hex, outRear, .126, .011, outletRound))
+    outletCavities.push(mapped(outlet, hex, outRear, .123, .011, outletRound))
     const diffuser = (u: number, v: number): Point => {
       const x = mix(0, .969 - .054 * v, u)
       const edge = r(x, .27, .009)
-      const s = mix(.842, sAt(edge[2]) + .015 * (1 - u), v)
+      const s = mix(.842, sAt(edge[2]) + .029 * (1 - u), v)
       const low = .181 + .021 * smooth(u, .69, 1)
-      return [side * x, low + .258 * v, limitTailZ(x, zAt(s))]
+      const crown = (.023 * (1 - smooth(u, .32, .48)) + .035 * smooth(u, .63, .78)) * smooth(v, .24, 1)
+      return [side * x, low + .258 * v + crown, limitTailZ(x, zAt(s))]
     }
-    dark.push(patch(diffuser, 50, 18, [0, -1, 0], .016))
+    diffuserShell.push(patch(diffuser, 64, 20, [0, -1, 0], .016))
     dark.push(patch((u, v) => {
       const x = .885 * u
       const s = mix(.844, .943 - .039 * u, v)
       return [side * x, .153 + .067 * v, zAt(s)]
     }, 25, 9, [0, -1, 0], .016))
-    dark.push(patch((u, v) => {
+    diffuserShell.push(patch((u, v) => {
       const x = mix(0, .969, u)
       const diff = diffuser(u, 1)
-      return r(x, mix(diff[1] - .011, tailLower(x), v), mix(.027, .036, v))
-    }, 48, 18, outRear, .010))
+      const low = diff[1] - .011 - .027 * smooth(u, .36, .48) * (1 - smooth(u, .62, .75))
+      const p = r(x, mix(low, tailLower(x), v), mix(.030, .040, v))
+      return [p[0], p[1], limitTailZ(x, mix(diff[2], p[2], smooth(v, 0, .96)))]
+    }, 60, 19, outRear, .010))
     dark.push(patch((u, v) => {
       const x = mix(.39, .62, u)
-      const y = mix(.421, .718, v)
-      return r(x, y, -.002 + .023 * smooth(y, .54, .63))
+      const y = mix(.421, .638 + .040 * Math.sin(Math.PI * u), v)
+      return r(x, y, .079 + .021 * smooth(y, .54, .63))
     }, 16, 12, outRear, .008))
     dark.push(patch((u, v) => {
       const s = mix(.987, .999, u)
       return [side * mix(.37, .23, u), mix(.436, .481, v), zAt(s)]
     }, 5, 2, [side, 0, 0], .004))
-    for (const fin of [.344, .692]) {
-      dark.push(patch((u, v) => {
-        const depth = .123 * smooth(u, .02, .82)
-        const x = fin - .029 * smooth(u, .76, 1) * v * (fin > .5 ? 1 : 0)
+    for (const fin of [.416, .645]) {
+      diffuserShell.push(patch((u, v) => {
+        const depth = .153 * smooth(u, .02, .82)
+        const x = fin - .034 * smooth(u, .76, 1) * v * (fin > .5 ? 1 : 0)
         const s = mix(.843, sAt(r(x, .39, -.019)[2]) + .009, u)
-        const y = mix(.225, tailLower(x) + .031, u) - v * depth
+        const y = mix(.225, tailLower(x) + .058, u) - v * depth
         return [side * x, y, limitTailZ(x, zAt(s))]
-      }, 37, 11, [side, 0, 0], .012))
+      }, 37, 11, [side, 0, 0], .018))
     }
     const vent = (u: number, v: number): Point => r(mix(.019, .395, u), mix(.420, .533, v) - .027 * u ** 4, -.023)
     dark.push(patch((u, v) => { const p = vent(u, v); return [p[0], p[1], p[2] + .009] }, 18, 8, outRear, .018))
@@ -308,6 +315,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   if (carbon.length) add(parent, 'radiator mesh', joined(carbon), m.carbon)
   add(parent, 'lamp bezels and air ducts', joined(black), m.matte)
   add(parent, 'recessed backing', joined(dark), m.dark)
+  add(parent, 'hexagonal outlet cavities', joined(outletCavities), m.dark)
+  add(parent, 'channeled graphite rear diffuser', joined(diffuserShell), m.diffuser)
   add(parent, 'front optical lens shells', joined(optical), m.optics)
   add(parent, 'rear optical lens shells', joined(rearOptical), m.rearOptics)
   const update = (stage: number, rise: number): void => {

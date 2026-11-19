@@ -119,6 +119,7 @@ export function palette(spec: PaintSpec, full: boolean) {
   })
   const matte = new T.MeshPhysicalMaterial({ color: full ? 0x22252a : 0x32363b, roughness: .72, metalness: .09 })
   const dark = new T.MeshStandardMaterial({ color: full ? 0x131518 : 0x26292d, roughness: .83 })
+  const diffuser = new T.MeshPhysicalMaterial({ color: full ? 0x303236 : 0x414346, roughness: .55, metalness: .17, clearcoat: .3, clearcoatRoughness: .36 })
   const tire = new T.MeshPhysicalMaterial({ color: full ? 0x252629 : 0x2d3032, roughness: .81, specularIntensity: .68 })
   const carbon = new T.MeshPhysicalMaterial({
     color: full ? 0x34383b : 0x363a3f, metalness: .17, roughness: .43, clearcoat: .45, clearcoatRoughness: .19, anisotropy: full ? .32 : 0,
@@ -176,7 +177,7 @@ export function palette(spec: PaintSpec, full: boolean) {
     return material
   }
   for (const m of [paint, glass, optics, rearOptics, carbon, mirror]) tag(m, 'beads')
-  for (const m of [matte, tire]) tag(m, 'sheet')
+  for (const m of [matte, tire, diffuser]) tag(m, 'sheet')
   for (const m of [brushed, forged, spoke, brake, caliper, dark, hot, engine]) tag(m, 'none')
   if (full) tag(cabin, 'none')
   const setPaint = (next: PaintSpec): void => {
@@ -200,7 +201,7 @@ export function palette(spec: PaintSpec, full: boolean) {
     carbon.normalScale.setScalar(.2)
     carbon.needsUpdate = true
   }
-  return { paint, glass, optics, rearOptics, brushed, forged, spoke, brake, caliper, matte, dark, tire, carbon, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
+  return { paint, glass, optics, rearOptics, brushed, forged, spoke, brake, caliper, matte, dark, diffuser, tire, carbon, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
 }
 
 export type Palette = ReturnType<typeof palette>

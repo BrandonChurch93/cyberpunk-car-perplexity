@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import * as T from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { config, defaultPaint, paintById } from '../src/config'
+import { cameraAt } from '../src/director/shots'
 import { events, lampThresholds, stateAt } from '../src/director/timeline'
 import { createVehicle, type VehicleModule, type VehicleState } from '../src/vehicle'
 import { zAt } from '../src/vehicle/body'
@@ -202,6 +203,21 @@ describe('vehicle geometry and state', () => {
         const size = outlet.geometry.boundingBox!.getSize(new T.Vector3())
         expect(size.x / size.y).toBeGreaterThan(2.53)
         expect(size.x / size.y).toBeLessThan(2.63)
+      }
+    }
+  })
+
+  it('keeps both hexagonal cavities open to the ignition camera', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const { position } = cameraAt(950 / config.film.fps, config.formats.preview, vehicle.anchors)
+      for (const { object } of vehicle.heatSources) {
+        const center = object.getWorldPosition(new T.Vector3())
+        for (const [x, y] of [[0, 0], [.064, .022], [-.064, -.022]]) {
+          const target = center.clone().add(new T.Vector3(x, y, 0))
+          const ray = new T.Raycaster(position, target.sub(position).normalize())
+          expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('hexagonal outlet cavities')
+        }
       }
     }
   })
