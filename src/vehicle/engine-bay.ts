@@ -1,114 +1,114 @@
 import * as T from 'three'
 import { bayEdge, zAt } from './body'
 import { anchor } from './ends'
-import { add, contour, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, type Point } from './geometry'
+import { add, contour, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, type Point } from './geometry'
 import type { Palette } from './materials'
 
+const coverStart = .684, coverEnd = .834
+const crown = (u: number) => mix(.974, .920, u) + .005 * Math.sin(u * Math.PI)
+const fore = .664, aft = .897
+
 export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
-  const carbon: T.BufferGeometry[] = [], internals: T.BufferGeometry[] = [], pins: T.BufferGeometry[] = [], black: T.BufferGeometry[] = []
-  const sections = full ? 42 : 24
-  const bridge: Point = [0, 1.002, zAt(.702)]
-  const bayFloor = (u: number, v: number): Point => [mix(-.407, .407, v), mix(.881, .729, u), zAt(mix(.648, .906, u))]
-  black.push(patch(bayFloor, 16, 12, [0, 1, 0], .023))
+  const surround: T.BufferGeometry[] = [], covers: T.BufferGeometry[] = [], steps: T.BufferGeometry[] = []
+  const mesh: T.BufferGeometry[] = [], ribs: T.BufferGeometry[] = [], internals: T.BufferGeometry[] = [], black: T.BufferGeometry[] = []
+  const n = full ? 40 : 18
+  black.push(patch((u, v) => {
+    const s = mix(.649, .913, u), [edge] = bayEdge(s, 1)
+    return [(v * 2 - 1) * (edge + .033), mix(.876, .746, u), zAt(s)]
+  }, n, 10, [0, 1, 0], .022))
+  const coverSide = curve([[0, -.029], [.09, -.013], [.19, 0], [.76, 0], [.91, -.013], [1, -.037]])
+  const cover = (side: number, u: number, v: number): Point => {
+    const half = .072 + coverSide(u)
+    const inset = (1 - smooth(u, 0, .066)) + smooth(u, .934, 1)
+    const shoulder = 1 - smooth(Math.abs(2 * v - 1), .64, 1)
+    const x = .121 + .011 * Math.sin(u * Math.PI) - .007 * u + (2 * v - 1) * half
+    return [side * x, crown(u) - .018 * (1 - shoulder) - .012 * inset, zAt(mix(coverStart, coverEnd, u))]
+  }
   for (const side of [1, -1]) {
-    const scoop = (u: number, v: number): Point => {
-      const s = mix(.647, .907, u)
+    const frame = (u: number, v: number): Point => {
+      const [x, y, z] = bayEdge(mix(fore, aft, u), side)
+      const span = .071 + .034 * Math.sin(Math.PI * u)
+      return [x + side * (.0008 - span * v), y + .0015 - .037 * v - .010 * v ** 3, z]
+    }
+    surround.push(patch(frame, n, 7, [0, 1, 0], .0027))
+    const wall = (u: number, v: number): Point => {
+      const p = frame(u, 1)
+      return [p[0] + side * (.025 - .126 * v), p[1] - (.184 - .036 * u) * v, p[2]]
+    }
+    black.push(patch(wall, n, 7, [0, 1, 0], .014))
+    for (let i = 0; i < 4; i++) {
+      const start = .350 + .155 * i
+      const step = (u: number, v: number): Point => {
+        const sweep = .050 * Math.abs(2 * v - 1)
+        const s = start + .122 * u - sweep
+        const p = frame(s, 1)
+        const inner = .107 - .036 * i / 3
+        const height = .015 + .058 * v ** 1.28 + .014 * i / 3
+        return [p[0] - side * inner * v, p[1] - height - .010 * u + .005 * smooth(u, .77, 1), p[2]]
+      }
+      steps.push(patch(step, full ? 18 : 9, full ? 12 : 8, [0, 1, 0], .004))
+    }
+    const airFace = (u: number, v: number): Point => {
+      const s = mix(.673, .731, u)
       const [x, y, z] = bayEdge(s, side)
-      const slope = .025 + .042 * Math.sin(Math.PI * u)
-      return [x - side * (.003 + .126 * v), y - v ** 1.4 * slope - .009 * Math.sin(v * Math.PI), z]
+      return [x - side * (.114 + .080 * v), y - .042 - .099 * v + .013 * u, z - .016 * v]
     }
-    carbon.push(patch(scoop, sections, 14, [0, 1, 0], .008))
-    const lining = (u: number, v: number): Point => {
-      const p = scoop(u, 1)
-      return [p[0] - side * .062 * v, p[1] - v * (.13 - .044 * u), p[2]]
-    }
-    if (full) {
-      const border = (u0: number, u1: number, v0: number, v1: number) =>
-        patch((u, v) => lining(mix(u0, u1, u), mix(v0, v1, v)), sections, 7, [0, 1, 0], .006)
-      carbon.push(border(0, .072, 0, 1), border(.721, 1, 0, 1), border(.072, .721, 0, .18), border(.072, .721, .91, 1))
-      black.push(patch((u, v) => {
-        const p = lining(mix(.052, .742, u), mix(.14, .94, v))
-        return [p[0] + side * .029, p[1] - .041, p[2]]
-      }, sections, 13, [0, 1, 0], .009))
-    } else carbon.push(patch(lining, sections, 8, [0, 1, 0], .007))
-    const cover = (u: number, v: number): Point => {
-      const s = mix(.685, .832, u)
-      const end = .73 + .27 * smooth(u, .025, .15) - .22 * smooth(u, .80, .98)
-      const x = .15 + mix(-.072, .075, v) * end
-      const shoulder = Math.sin(Math.PI * v) ** .67
-      return [side * x, mix(.910, .867, u) + .027 * shoulder + .015 * Math.sin(Math.PI * u), zAt(s)]
-    }
-    internals.push(patch(cover, sections, 16, [0, 1, 0], .034))
-    for (const offset of [-.041, -.031, .018, .028, .038]) {
-      const ribs = (u: number, v: number): Point => {
-        const p = cover(mix(.15, .83, u), .49 + (offset + .004 * (v - .5)) / .147)
-        return [p[0], p[1] + .004 * Math.sin(u * Math.PI) + .0012, p[2]]
+    black.push(patch((u, v) => {
+      const p = airFace(u, v)
+      return [p[0] + side * .012, p[1] - .022, p[2]]
+    }, 10, 6, [0, 1, 0], .014))
+    mesh.push(hexMesh((u, v) => airFace(mix(.035, .972, u), mix(.044, .985, v)), .270, .118,
+      full ? .0078 : .018, full ? .0008 : .0013))
+    const airBorder: Point[] = [airFace(0, 0), airFace(1, 0), airFace(1, 1), airFace(0, 1)]
+    surround.push(contour([...airBorder, airBorder[0]], .0038, false, 5))
+
+    covers.push(patch((u, v) => cover(side, u, v), n, full ? 18 : 12, [0, 1, 0], .038))
+    for (let tile = 0; tile < 5; tile++) {
+      const at = .263 + tile * .116
+      for (const lane of [0, 1]) {
+        const centerU = at + .029 * lane, centerV = lane ? .638 : .340
+        const hex: Point[] = [[-.045, 0], [-.028, -.127], [.028, -.127], [.045, 0], [.028, .127], [-.028, .127]]
+          .map(([du, dv]) => {
+            const p = cover(side, centerU + du, centerV + dv)
+            return [p[0], p[1] + .0033, p[2]]
+          })
+        covers.push(polygon(roundedPath(hex, 2, .15), [0, 1, 0], .004))
       }
-      black.push(patch(ribs, 26, 3, [0, 1, 0], .003))
     }
-    for (let i = 0; i < 6; i++) {
-      const s = .693 + .022 * i
-      const p = cover((s - .685) / .147, .92)
-      pins.push(new T.CylinderGeometry(.006, .006, .004, 7).translate(p[0], p[1] + .002, p[2]))
-      internals.push(new T.CylinderGeometry(.023, .022, .042, 12).rotateZ(Math.PI / 2).translate(side * .225, p[1] - .045, p[2]))
+    for (const end of [0, 1]) for (let i = 0; i < 3; i++) {
+      ribs.push(patch((u, v) => {
+        const f = end === 0 ? mix(.058 + .017 * i, .233 - .013 * i, u) : mix(.972 - .010 * i, .789 + .012 * i, u)
+        const p = cover(side, f, .323 + .157 * i + (v - .5) * .045)
+        const bump = .005 * Math.sin(Math.PI * v) * smooth(u, 0, .14) * (1 - smooth(u, .86, 1))
+        return [p[0], p[1] + .0014 + bump, p[2]]
+      }, full ? 16 : 8, 4, [0, 1, 0], .003))
     }
-    const brace = (u: number, v: number): Point => {
-      const s = mix(.662, .772, u)
-      const x = mix(.282, .006, u) + v * (.047 - .023 * u)
-      const z0 = zAt(s)
-      const z = z0 + .020 * (v - .5)
-      const y = mix(1.048, .963, u) + .012 * Math.sin(Math.PI * u) + .003 * Math.sin(Math.PI * v)
-      return [side * x, y, z]
-    }
-    const crossV = (u: number, v: number): Point => {
-      const s = mix(.735, .837, u)
-      const x = mix(.009, .270, u) + (v - .5) * (.044 + .023 * u)
-      const z = zAt(s) + .021 * (v - .5)
-      return [side * x, mix(.985, .915, u) + .024 * Math.sin(Math.PI * u) + .004 * Math.sin(Math.PI * v), z]
-    }
-    carbon.push(patch(brace, sections, 10, [0, 1, 0], .014), patch(crossV, sections, 10, [0, 1, 0], .015))
-    for (const p of [brace(.09, .55), crossV(.87, .57)]) {
-      pins.push(new T.CylinderGeometry(.012, .012, .004, 14).translate(p[0], p[1] + .002, p[2]))
-      black.push(new T.CylinderGeometry(.005, .005, .0065, 6).translate(p[0], p[1] + .0035, p[2]))
-    }
-    const meshMap = (u: number, v: number): Point => {
-      const p = lining(mix(.07, .72, u), mix(.18, .91, v))
-      return [p[0] - side * .005, p[1] + .004, p[2]]
-    }
-    carbon.push(hexMesh(meshMap, .82, .12, full ? .0115 : .019, full ? .00092 : .00155))
     for (let i = 0; i < 5; i++) {
-      const s = .659 + i * .032
-      const cut = (u: number, v: number): Point => {
-        const sd = s + (v - .5) * .021 + .012 * u
-        const p = bayEdge(sd, side)
-        return [p[0] - side * mix(.015, .109, u), p[1] - .003 - .038 * u - .010 * Math.sin(Math.PI * v), p[2]]
-      }
-      black.push(patch(cut, 16, 8, [0, 1, 0], .009))
-      black.push(contour(Array.from({ length: 10 }, (_, j) => cut(j / 9, 1)), .0041))
+      const u = .18 + .146 * i
+      const p = cover(side, u, .92)
+      internals.push(new T.CylinderGeometry(.021, .019, .043, full ? 10 : 7).rotateZ(Math.PI / 2)
+        .translate(side * (Math.abs(p[0]) + .007), p[1] - .068, p[2]))
     }
-    const cable: Point[] = [
-      [side * .234, .902, zAt(.691)], [side * .241, .929, zAt(.721)], [side * .257, .927, zAt(.752)],
-      [side * .253, .906, zAt(.800)], [side * .224, .875, zAt(.830)],
-    ]
-    black.push(contour(cable, .0103))
+    internals.push(contour([[.204, .872, zAt(.693)], [.221, .888, zAt(.735)], [.219, .864, zAt(.782)], [.204, .843, zAt(.828)]]
+      .map(([x, y, z]): Point => [side * x, y, z]), .009, false, 5))
   }
-  const bridgeSurface = (u: number, v: number): Point => {
-    const x = mix(-.30, .30, u), s = .697 + .010 * v + .013 * (Math.abs(x) / .30) ** 1.5
-    return [x, bridge[1] + .008 * Math.abs(x) / .3 + .004 * Math.sin(Math.PI * v), zAt(s)]
+  const plenum = (u: number, v: number): Point => {
+    const width = mix(.026, .042, smooth(u, .69, 1))
+    return [(2 * v - 1) * width, crown(u) - .026 * Math.abs(2 * v - 1) ** 1.6, zAt(mix(coverStart, coverEnd, u))]
   }
-  carbon.push(patch(bridgeSurface, sections, 8, [0, 1, 0], .017))
-  const heatShield = (u: number, v: number): Point => [mix(-.19, .19, v), .842 + .092 * smooth(u, .13, .98) + .012 * Math.sin(v * Math.PI), zAt(mix(.832, .906, u))]
-  carbon.push(patch(heatShield, 28, 12, [0, 1, 0], .014))
-  for (let i = 0; i < 4; i++) {
-    const s = .842 + .014 * i
-    const layer = (u: number, v: number): Point => [mix(-.16 + .012 * i, .16 - .012 * i, u), .882 + .0155 * i + .014 * Math.sin(u * Math.PI) + .010 * v, zAt(s + .008 * v)]
-    carbon.push(patch(layer, 18, 6, [0, 1, 0], .007))
-  }
-  const emblemFreeCap: Point[] = [[-.043, .932, zAt(.777)], [.043, .932, zAt(.777)], [.061, .916, zAt(.795)], [-.061, .916, zAt(.795)]]
-  internals.push(polygon(roundedPath(emblemFreeCap), [0, 1, 0], .017))
-  add(parent, 'open bay resin cross bracing and hex grilles', joined(carbon), m.carbon)
-  add(parent, 'engine cover banks and hardware', joined(internals), m.engine)
-  add(parent, 'engine cover fasteners', joined(pins), m.brushed)
-  add(parent, 'engine bay ground and hoses', joined(black), m.dark)
-  return anchor(bridgeSurface(.5, .5), [0, 1, 0], .42)
+  internals.push(patch(plenum, n, full ? 14 : 8, [0, 1, 0], .028))
+  const plate: Point[] = [[-.041, .925, zAt(.827)], [.041, .925, zAt(.827)], [.029, .918, zAt(.843)], [0, .914, zAt(.849)], [-.029, .918, zAt(.843)]]
+  black.push(polygon(roundedPath(plate, 3, .17), [0, 1, 0], .006))
+  steps.push(patch((u, v) => {
+    const x = (2 * u - 1) * mix(.232, .151, v)
+    return [x, mix(.947, .866, v) + .010 * (2 * u - 1) ** 2, zAt(mix(.898, .851, v) - .011 * (2 * u - 1) ** 2)]
+  }, full ? 24 : 14, 8, [0, 1, 0], .012))
+  add(parent, 'thin carbon engine bay surround', joined(surround), m.carbon)
+  add(parent, 'carbon cam covers with hex relief', joined(covers), m.bayCover)
+  add(parent, 'stepped carbon bay vents', joined(steps), m.carbon)
+  add(parent, 'front airbox hex grilles', joined(mesh), m.carbon)
+  add(parent, 'paired cam cover rib groups', joined(ribs), m.diffuser)
+  add(parent, 'dark intake plenum and engine hardware', joined(internals), m.engine)
+  add(parent, 'recessed bay chamber and blank plate', joined(black), m.dark)
+  return anchor(plenum(2 / 3, .5), [0, 1, 0], .42)
 }

@@ -102,6 +102,12 @@ export function palette(spec: PaintSpec, full: boolean) {
   rearOptics.opacity = full ? 1 : .30
   rearOptics.attenuationColor.setHex(0xad2828)
   rearOptics.attenuationDistance = .013
+  const projector = new T.MeshPhysicalMaterial({
+    color: 0xe6edf3, roughness: .034, ior: 1.53, clearcoat: .7,
+    transmission: full ? .95 : 0, thickness: full ? .0055 : 0,
+    attenuationColor: new T.Color(0xbfd2e0), attenuationDistance: .023,
+    opacity: full ? 1 : .42, transparent: !full, depthWrite: full,
+  })
   const brushed = new T.MeshPhysicalMaterial({
     color: full ? 0x899496 : 0x7f858c, metalness: full ? .79 : .45, roughness: .32, anisotropy: full ? .69 : .2,
   })
@@ -119,10 +125,15 @@ export function palette(spec: PaintSpec, full: boolean) {
   })
   const matte = new T.MeshPhysicalMaterial({ color: full ? 0x22252a : 0x32363b, roughness: .72, metalness: .09 })
   const dark = new T.MeshStandardMaterial({ color: full ? 0x131518 : 0x26292d, roughness: .83 })
+  const diffuser = new T.MeshPhysicalMaterial({ color: full ? 0x303236 : 0x414346, roughness: .55, metalness: .17, clearcoat: .3, clearcoatRoughness: .36 })
   const tire = new T.MeshPhysicalMaterial({ color: full ? 0x252629 : 0x2d3032, roughness: .81, specularIntensity: .68 })
   const carbon = new T.MeshPhysicalMaterial({
     color: full ? 0x34383b : 0x363a3f, metalness: .17, roughness: .43, clearcoat: .45, clearcoatRoughness: .19, anisotropy: full ? .32 : 0,
   })
+  const bayCover = carbon.clone()
+  bayCover.color.setHex(full ? 0x565a60 : 0x55595f)
+  bayCover.roughness = .51
+  bayCover.clearcoat = .28
   const mirror = new T.MeshPhysicalMaterial({ color: 0x89969e, metalness: .94, roughness: .145, clearcoat: .78 })
   const hot = new T.MeshPhysicalMaterial({ color: full ? 0x494241 : 0x626367, metalness: .72, roughness: .4, anisotropy: full ? .38 : 0 })
   const engine = new T.MeshStandardMaterial({ color: full ? 0x2b2d31 : 0x55595f, metalness: .38, roughness: .59 })
@@ -176,8 +187,9 @@ export function palette(spec: PaintSpec, full: boolean) {
     return material
   }
   for (const m of [paint, glass, optics, rearOptics, carbon, mirror]) tag(m, 'beads')
-  for (const m of [matte, tire]) tag(m, 'sheet')
-  for (const m of [brushed, forged, spoke, brake, caliper, dark, hot, engine]) tag(m, 'none')
+  tag(bayCover, 'none')
+  for (const m of [matte, tire, diffuser]) tag(m, 'sheet')
+  for (const m of [projector, brushed, forged, spoke, brake, caliper, dark, hot, engine]) tag(m, 'none')
   if (full) tag(cabin, 'none')
   const setPaint = (next: PaintSpec): void => {
     if (full) {
@@ -196,11 +208,14 @@ export function palette(spec: PaintSpec, full: boolean) {
       tex.anisotropy = 4
       tex.colorSpace = key === 'map' ? T.SRGBColorSpace : T.NoColorSpace
       carbon[key as keyof typeof carbonPaths] = tex
+      bayCover[key as keyof typeof carbonPaths] = tex
     }))
     carbon.normalScale.setScalar(.2)
     carbon.needsUpdate = true
+    bayCover.normalScale.setScalar(.16)
+    bayCover.needsUpdate = true
   }
-  return { paint, glass, optics, rearOptics, brushed, forged, spoke, brake, caliper, matte, dark, tire, carbon, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
+  return { paint, glass, optics, rearOptics, projector, brushed, forged, spoke, brake, caliper, matte, dark, diffuser, tire, carbon, bayCover, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
 }
 
 export type Palette = ReturnType<typeof palette>
