@@ -51,6 +51,7 @@ type Lamp = VehicleModule['lamps'][number]
 
 const maxWorldLights = 8
 const maxBeams = 4
+const glowStandOff = 0.35
 
 function beamLight(lamp: Lamp, i: number): FilmLight {
   return {
@@ -69,7 +70,7 @@ function beamLight(lamp: Lamp, i: number): FilmLight {
   }
 }
 
-/** Lamps that are not beams light the ground near them. They are merged into one point light per corner of the vehicle. */
+/** Lamps that are not beams light the ground near them. They are merged into one light per corner, set just outside the body and aimed out and down, so it never lights the parts around the lamp itself. */
 function glowLights(vehicle: VehicleModule, lamps: Lamp[]): FilmLight[] {
   vehicle.root.updateWorldMatrix(true, true)
   const toVehicle = vehicle.root.matrixWorld.clone().invert()
@@ -95,14 +96,19 @@ function glowLights(vehicle: VehicleModule, lamps: Lamp[]): FilmLight[] {
       color.g += c.g * w
       color.b += c.b * w
     })
+    const outward = Math.sign(anchor.position.z) || 1
+    anchor.position.z += outward * glowStandOff
+    anchor.lookAt(anchor.position.x, anchor.position.y - 0.7, anchor.position.z + outward)
     vehicle.root.add(anchor)
     return {
       id: `vehicle-glow-${key}`,
-      kind: 'point',
+      kind: 'spot',
       object: anchor,
       color,
       intensity: total,
       size: [0.3, 0.1],
+      angle: THREE.MathUtils.degToRad(80),
+      penumbra: 1,
       range: 14,
       shadow: false,
       beam: false,
