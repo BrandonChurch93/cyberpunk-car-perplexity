@@ -32,6 +32,20 @@ void runTool(async () => {
             const env = new THREE.PMREMGenerator(renderer);
             this.scene.environment = env.fromScene(inspectionRoom, 0.035).texture;
             this.scene.environmentIntensity = 0.45;
+            this.scene.userData.neutral = this.scene.environment;
+            const bands = new Uint8Array(512 * 256 * 4);
+            for (let y = 0; y < 256; y++) for (let x = 0; x < 512; x++) {
+              const i = (y * 512 + x) * 4;
+              const v = Math.cos(2.0 * Math.PI * (x * 14 / 512 + y * 4 / 256)) > 0.22 ? 246 : 10;
+              bands.set([v, v, v, 255], i);
+            }
+            const stripes = new THREE.DataTexture(bands, 512, 256);
+            stripes.mapping = THREE.EquirectangularReflectionMapping;
+            stripes.minFilter = THREE.LinearFilter;
+            stripes.magFilter = THREE.LinearFilter;
+            stripes.needsUpdate = true;
+            this.scene.userData.stripes = env.fromEquirectangular(stripes).texture;
+            stripes.dispose();
             inspectionRoom.dispose();
             env.dispose();
             const bounce = new THREE.HemisphereLight(0xe6ecff, 0x66646c, 0.74);
@@ -46,7 +60,9 @@ void runTool(async () => {
             deck.rotation.x = -Math.PI / 2;
             deck.receiveShadow = true;
             this.scene.add(bounce, key, fill, deck);
-          `)
+          `).replace("this.scene.overrideMaterial = view === 'clay'", `
+            this.scene.environment = view === 'zebra' ? this.scene.userData.stripes : this.scene.userData.neutral;
+            this.scene.overrideMaterial = view === 'zebra' ? new THREE.MeshPhysicalMaterial({ color: 0xececec, metalness: 1, roughness: 0.025 }) : view === 'clay'`)
         },
       }],
     })

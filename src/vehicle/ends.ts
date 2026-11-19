@@ -75,7 +75,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   }
   const outFront: Point = [0, 0, 1], outRear: Point = [0, 0, -1]
   const lipY = curve([[0, .168], [.27, .151], [.71, .146], [.91, .155], [.967, .174]])
-  const noseTop = curve([[0, .405], [.12, .414], [.33, .433], [.48, .468], [.60, .509], [.72, .552], [.84, .620], [.928, .695], [.974, .754]])
+  const noseTop = curve([[0, .417], [.29, .419], [.36, .430], [.48, .468], [.60, .509], [.72, .552], [.84, .620], [.928, .695], [.974, .754]])
   const chin = (x: number) => lipY(x) + .025
   const eyeTop = curve([[.48, .474], [.58, .512], [.68, .552], [.79, .600], [.889, .649], [.918, .658]])
   const eyeLow = curve([[.48, .459], [.58, .462], [.69, .474], [.797, .497], [.865, .564], [.918, .635]])
@@ -93,8 +93,6 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   for (const side of [1, -1]) {
     const f: Face = (x, y, d = 0) => fascia(true, side, x, y, d)
     const r: Face = (x, y, d = 0) => fascia(false, side, x, y, d)
-    const shieldBottom = curve([[0, .309], [.20, .309], [.305, .329], [.393, .359], [.454, .404], [.481, .455], [.490, .466]])
-    const shieldTop = curve([[0, .405], [.135, .410], [.315, .431], [.445, .456], [.490, .466]])
     const points: XY[] = [[.448, .398], [.519, .427], [.674, .436], [.804, .460], [.844, .421], [.869, .299], [.820, .190], [.541, .195]]
     const outline: XY[] = [[.474, .455], [.568, .501], [.685, .554], [.797, .609], [.884, .667], [.923, .675], [.931, .599], [.883, .471], [.912, .354], [.930, .283], [.858, .198], [.819, .179], [.520, .180], [.429, .245], [.405, .360]]
     const frontEdge = curve([[0, .981], [.40, .972], [.67, .939], [1, .953]])
@@ -105,20 +103,24 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return f(x, mix(outerY(v), mix(chin(x), noseTop(x), v), u), .003)
     }
     frontPaint.push(patch(fPanel, 22, 28, outFront, .008))
-    frontPaint.push(patch((u, v) => {
-      const x = mix(0, .489, u)
-      const y = mix(shieldBottom(x), shieldTop(x), v)
-      const hoodBreak = .009 * (Math.exp(-((u - .87) ** 2) / .026) + .3 * Math.sin(u * Math.PI))
-      return f(x, y, -.005 - hoodBreak * (1 - (2 * v - 1) ** 2))
-    }, full ? 68 : 32, full ? 22 : 10, outFront, .008))
+    black.push(patch((u, v) => {
+      const x = .487 * u
+      const y = mix(lipY(x) + .020, noseTop(x) - .004, v)
+      return f(x, y, .126 - .045 * smooth(v, .76, 1))
+    }, 36, 16, outFront, .011))
+    black.push(patch((u, v) => {
+      const x = .48 * u
+      return f(x, noseTop(x) - .007 - .029 * v, mix(.005, .129, v))
+    }, 34, 6, [0, -1, 0], .004))
     frontPaint.push(patch((u, v) => {
       const x = mix(0, .978, u)
-      return f(x, mix(noseTop(x) - .012, noseTop(x) + .012 * smooth(u, .45, 1), v), .005)
+      return f(x, mix(noseTop(x) - .004, noseTop(x) + .008 * smooth(u, .43, 1), v), .0015)
     }, 42, 6, outFront, .004))
     black.push(mapped(f, outline, outFront, .025, .055))
     dark.push(mapped(f, points, outFront, .123, .036))
     black.push(joinRim(points, 1.035, .88, f, -.002, .085, outFront))
-    carbon.push(ribbon(f, [[.410, .367], [.496, .274], [.564, .194], [.740, .167], [.839, .184], [.895, .272]], .041, -.004, 50))
+    frontPaint.push(ribbon(f, [[.322, .361], [.400, .294], [.495, .214], [.551, .176], [.657, .170]], .030, .002, 38))
+    carbon.push(ribbon(f, [[.554, .176], [.740, .167], [.839, .184], [.895, .272]], .022, .003, 38))
     carbon.push(ribbon(f, [[.462, .395], [.578, .411], [.729, .426], [.801, .436]], .028, .024))
     const dh = full ? .019 : .032
     if (full) {
@@ -133,13 +135,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       }
     }
     black.push(patch((u, v) => {
-      const x = mix(0, .51 - .09 * v, u)
-      return f(x, mix(.155, .340 + .022 * smooth(u, .3, 1), v), .095)
-    }, 20, 10, outFront, .018))
-    frontPaint.push(patch((u, v) => {
-      const x = mix(.0, .93, u)
-      return f(x, lipY(x) + mix(.010, .028, v), -.0035)
-    }, 36, 6, outFront, .015))
+      const x = .546 * u
+      return f(x, lipY(x) + .009 + .027 * v, mix(.003, .128, v))
+    }, 36, 6, [0, 1, 0], .009))
     carbon.push(patch((u, v) => {
       const x = mix(0, .977, u)
       const y = lipY(x) - .005 + .008 * Math.sin(Math.PI * v)

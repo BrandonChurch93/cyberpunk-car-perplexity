@@ -16,13 +16,13 @@ export type WheelSize = typeof frontWheel
 export const floorY = .132
 
 const plan = curve([
-  [0, .008], [.005, .130], [.012, .295], [.02, .416], [.04, .607], [.06, .739], [.08, .836], [.10, .875], [.12, .914],
+  [0, .008], [.005, .090], [.010, .173], [.017, .337], [.023, .448], [.04, .607], [.06, .739], [.08, .836], [.10, .875], [.12, .914],
   [.14, .941], [.16, .973], [.18, .980], [.26, .981], [.285, .98], [.31, .961], [.34, .969], [.4, .980], [.48, .988],
   [.55, .992], [.62, .994], [.70, .998], [.747, 1.009], [.766, dimensions.bodyWidth / 2], [.825, dimensions.bodyWidth / 2],
   [.857, 1.009], [.88, .973], [.90, .933], [.92, .896], [.94, .824], [.96, .691], [.98, .535], [.995, .39], [1, .23],
 ])
 const frontWidth = curve([
-  [0, .0008], [.14, .0058], [.30, .0125], [.416, .0205], [.607, .04], [.739, .06], [.836, .08], [.875, .10], [.914, .12], [.941, .14], [.973, .16], [.982, .18],
+  [0, .0008], [.090, .0058], [.173, .0108], [.337, .0178], [.448, .0238], [.607, .04], [.739, .06], [.836, .08], [.875, .10], [.914, .12], [.941, .14], [.973, .16], [.982, .18],
 ])
 const tailWidth = curve([
   [0, .9875], [.39, .985], [.535, .979], [.69, .959], [.824, .939], [.896, .919], [.945, .895], [.975, .877], [1.012, .855],
@@ -32,13 +32,12 @@ const shoulder = curve([
   [.267, .789], [.32, .737], [.40, .725], [.51, .759], [.59, .821], [.67, .881], [.736, .936],
   [.793, .943], [.85, .918], [.89, .888], [.92, .865], [.96, .848], [1, .833],
 ])
-const hoodLine = curve([[0, .404], [.04, .488], [.08, .564], [.128, .664], [.18, .748], [.25, .783], [.33, .770], [.6, .83]])
+const hoodLine = curve([[0, .418], [.024, .437], [.06, .520], [.105, .606], [.165, .723], [.25, .783], [.33, .770], [.6, .83]])
 const spine = curve([
   [.575, 1.149], [.6, 1.146], [.62, 1.135], [.64, 1.124], [.66, 1.099], [.68, 1.085], [.70, 1.078], [.72, 1.068],
   [.742, 1.056], [.769, 1.040], [.80, 1.02], [.82, 1.011], [.85, .983], [.88, .963], [.90, .957], [.92, .941], [.94, .926], [.96, .908], [.984, .898],
 ])
-const upperCrown = curve([[0, .0], [.29, .017], [.47, .017], [.68, .013], [.81, .005], [1, 0]])
-const hoodCrease = curve([[0, .16], [.06, .31], [.12, .54], [.17, .62], [.24, .71], [.32, .87]])
+const hoodCreaseX = (s: number) => .475 - .178 * T.MathUtils.clamp((s - .059) / .141, 0, 1)
 const sideDent = curve([[0, 0], [.10, .006], [.34, .025], [.43, .11], [.51, .17], [.56, .215], [.62, .238], [.67, .105], [.73, .012], [1, 0]])
 const rockerY = curve([[0, .155], [.04, .136], [.25, .136], [.69, .136], [.86, .137], [.90, .153], [.95, .187], [1, .40]])
 
@@ -51,10 +50,17 @@ function sidePoint(s: number, y: number, side: number): Point {
 }
 
 function bonnet(s: number, v: number): Point {
-  const crease = hoodCrease(s)
-  const rise = (.014 + .017 * smooth(s, .018, .09)) * smooth(s, 0, .04)
-  const shape = upperCrown(v) * smooth(s, 0, .07) + rise * (smooth(v, crease, crease + .18) - .62 * smooth(v, crease + .18, 1))
-  return [plan(s) * v, mix(hoodLine(s), shoulder(s), v ** 1.8) + shape * (1 - smooth(v, .83, 1)), zAt(s)]
+  const width = plan(s), x = width * v
+  const center = hoodLine(s), outer = shoulder(s)
+  const edge = Math.min(width * .93, hoodCreaseX(s))
+  const crease = smooth(s, .047, .063) * (1 - smooth(s, .232, .295))
+  const ridge = mix(center, outer, .32 * edge / width) + .022 * crease
+  const a = (ridge - center) / edge, b = (outer - ridge) / (width - edge)
+  const e = x - edge, fillet = .0035
+  const corner = Math.abs(e) > fillet ? Math.abs(e) : .5 * (e * e / fillet + fillet)
+  const facets = ridge + .5 * (a + b) * e + .5 * (b - a) * corner
+  const base = mix(center, outer, v * v)
+  return [x, mix(base, facets, crease), zAt(s)]
 }
 
 const cabFront = (v: number) => .166 + .095 * v ** 2.35
