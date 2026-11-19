@@ -11,7 +11,11 @@ void runTool(async () => {
   const frames = (a.frames ?? '195,360,520,690,800,950').split(',').map(Number)
   const diagnostics = (a.diags ?? 'beauty,clay').split(',')
   const studio = a.studio === 'true'
-  const dir = ensureDir(join(workDir, 'vehicle', studio ? 'studio' : detail))
+  const matched = a.match?.split(',').map(Number)
+  if (matched && (!studio || matched.length !== 7 || matched.some((n) => !Number.isFinite(n)) || matched[6] <= 0 || matched[6] >= 180)) {
+    throw new Error('Use --studio true --match with eye X,Y,Z, target X,Y,Z, vertical FOV.')
+  }
+  const dir = ensureDir(join(workDir, 'vehicle', studio ? matched ? 'studio-matched' : 'studio' : detail))
   const root = studio ? join(dir, 'dist') : undefined
   if (studio) {
     await build({
@@ -25,13 +29,40 @@ void runTool(async () => {
           const key = 'this.scene.add(world.root, vehicle.root, rig.group)'
           const effects = "const weather = detail === 'full' ? await createWeather({ world, vehicle, lights: rig.uniforms }) : null"
           if (!code.includes(key) || !code.includes(effects)) throw new Error('The stage setup changed. Update the studio inspection hook.')
-          return "import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';\n" + code.replace(effects, 'const weather = null').replace(key, `
+          const camera = 'return this.cameraOverride ?? cameraAt(timeSeconds, this.format, this.vehicle.anchors, this.frameSeconds)'
+          const pose = matched ? `
+            const state = cameraAt(timeSeconds, this.format, this.vehicle.anchors, this.frameSeconds);
+            const eye = new THREE.Vector3(${matched.slice(0, 3).join(',')});
+            const target = new THREE.Vector3(${matched.slice(3, 6).join(',')});
+            const view = new THREE.PerspectiveCamera();
+            view.position.copy(eye);
+            view.lookAt(target);
+            const aspect = this.format.width / this.format.height;
+            return { ...state, position: eye, quaternion: view.quaternion,
+              focalMm: state.sensorWidthMm / (2 * aspect * Math.tan(THREE.MathUtils.degToRad(${matched[6]}) / 2)),
+              focusDistance: eye.distanceTo(target), fNumber: 16 };
+          ` : camera
+          return "import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';\n" + code.replace(effects, 'const weather = null').replace(camera, pose).replace(key, `
             this.scene.add(vehicle.root);
             this.scene.background = new THREE.Color(0x303745);
             const inspectionRoom = new RoomEnvironment();
             const env = new THREE.PMREMGenerator(renderer);
             this.scene.environment = env.fromScene(inspectionRoom, 0.035).texture;
             this.scene.environmentIntensity = 0.45;
+            this.scene.userData.neutral = this.scene.environment;
+            const bands = new Uint8Array(512 * 256 * 4);
+            for (let y = 0; y < 256; y++) for (let x = 0; x < 512; x++) {
+              const i = (y * 512 + x) * 4;
+              const v = Math.cos(2.0 * Math.PI * (x * 14 / 512 + y * 4 / 256)) > 0.22 ? 246 : 10;
+              bands.set([v, v, v, 255], i);
+            }
+            const stripes = new THREE.DataTexture(bands, 512, 256);
+            stripes.mapping = THREE.EquirectangularReflectionMapping;
+            stripes.minFilter = THREE.LinearFilter;
+            stripes.magFilter = THREE.LinearFilter;
+            stripes.needsUpdate = true;
+            this.scene.userData.stripes = env.fromEquirectangular(stripes).texture;
+            stripes.dispose();
             inspectionRoom.dispose();
             env.dispose();
             const bounce = new THREE.HemisphereLight(0xe6ecff, 0x66646c, 0.74);
@@ -46,7 +77,9 @@ void runTool(async () => {
             deck.rotation.x = -Math.PI / 2;
             deck.receiveShadow = true;
             this.scene.add(bounce, key, fill, deck);
-          `)
+          `).replace("this.scene.overrideMaterial = view === 'clay'", `
+            this.scene.environment = view === 'zebra' ? this.scene.userData.stripes : this.scene.userData.neutral;
+            this.scene.overrideMaterial = view === 'zebra' ? new THREE.MeshPhysicalMaterial({ color: 0xececec, metalness: 1, roughness: 0.025 }) : view === 'clay'`)
         },
       }],
     })

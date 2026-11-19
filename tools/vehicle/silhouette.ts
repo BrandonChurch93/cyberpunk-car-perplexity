@@ -58,12 +58,36 @@ function floodOutline(bits: Uint8Array, w: number, h: number): Uint8Array {
   return morph(seen.map((n) => 1 - n), w, h, 2, true)
 }
 
-async function reference(path: string) {
+async function reference(path: string, width: number) {
   const { data, info: { width: w, height: h } } = await sharp(path).flatten({ background: '#fff' }).greyscale()
-    .resize({ width: 1000, withoutEnlargement: true }).extend({ top: 8, bottom: 8, left: 8, right: 8, background: '#fff' })
+    .resize({ width, withoutEnlargement: true }).extend({ top: 8, bottom: 8, left: 8, right: 8, background: '#fff' })
     .raw().toBuffer({ resolveWithObject: true })
   const lines = Uint8Array.from(data, (n) => n < 198 ? 1 : 0)
   return { lines, w, h, filled: floodOutline(lines, w, h) }
+}
+
+function voids(mask: Uint8Array, w: number, h: number) {
+  const seen = mask.slice(), work = new Uint32Array(mask.length)
+  const [left, top, right, bottom] = bbox(mask, w, h)
+  const empty: Array<{ pixels: number; u: number[]; v: number[] }> = []
+  for (let start = 0; start < seen.length; start++) {
+    if (seen[start]) continue
+    let n = 0, x0 = w, x1 = 0, y0 = h, y1 = 0
+    const visit = (i: number) => { if (!seen[i]) { seen[i] = 1; work[n++] = i } }
+    visit(start)
+    for (let k = 0; k < n; k++) {
+      const i = work[k], x = i % w, y = Math.floor(i / w)
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y)
+      if (x > 0) visit(i - 1)
+      if (x < w - 1) visit(i + 1)
+      if (y > 0) visit(i - w)
+      if (y < h - 1) visit(i + w)
+    }
+    if (n < 6 || x0 === 0 || x1 === w - 1 || y0 === 0 || y1 === h - 1) continue
+    const ratio = (n: number, min: number, max: number) => +((n - min) / (max - min)).toFixed(3)
+    empty.push({ pixels: n, u: [ratio(x0, left, right), ratio(x1, left, right)], v: [ratio(bottom - y1, 0, bottom - top), ratio(bottom - y0, 0, bottom - top)] })
+  }
+  return empty.sort((a, b) => b.pixels - a.pixels)
 }
 
 function projected(root: T.Object3D, camera: Camera, w: number, h: number, dimensions: [number, number, number, number]) {
@@ -138,11 +162,12 @@ async function main() {
   const drawings = resolve(params.drawings ?? join(repoRoot, 'reference/cache/vehicle/views'))
   const out = ensureDir(resolve(params.out ?? join(workDir, 'vehicle/silhouettes')))
   const detail: VehicleOptions['detail'] = params.detail === 'full' ? 'full' : 'blockout'
+  const width = Number(params.width ?? 1000)
   const car = await createVehicle({ paint: paintById(defaultPaint), detail })
   for (const view of views) {
     const path = join(drawings, view.drawing)
     if (!existsSync(path)) throw new Error(`Missing ${path}. Pass the folder with the cropped grant views through --drawings.`)
-    const ref = await reference(path)
+    const ref = await reference(path, width)
     const projectedView = projected(car.root, view.camera, ref.w, ref.h, bbox(ref.filled, ref.w, ref.h))
     const { output, shaded, triangles } = projectedView
     let intersection = 0, union = 0, onlyVehicle = 0, onlyDrawing = 0
@@ -162,8 +187,10 @@ async function main() {
       png(join(out, `${view.name}-overlay.png`), overlay, ref.w, ref.h, 3),
       png(join(out, `${view.name}-model.png`), shaded, ref.w, ref.h, 1),
       png(join(out, `${view.name}-drawing.png`), ref.filled.map((n) => 255 * n), ref.w, ref.h, 1),
+      png(join(out, `${view.name}-mask.png`), output.map((n) => 255 * n), ref.w, ref.h, 1),
     ])
     console.log(`${detail} ${view.name}: ${(intersection / union).toFixed(4)} IoU, ${onlyVehicle} vehicle-only pixels, ${onlyDrawing} drawing-only pixels, ${triangles} triangles`)
+    if (params.voids === 'true') console.log(`${view.name} interior voids ${JSON.stringify(voids(output, ref.w, ref.h))}`)
   }
 }
 

@@ -44,7 +44,7 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
         const p = cover(mix(.15, .83, u), .49 + (offset + .004 * (v - .5)) / .147)
         return [p[0], p[1] + .004 * Math.sin(u * Math.PI) + .0012, p[2]]
       }
-      pins.push(patch(ribs, 26, 3, [0, 1, 0], .003))
+      black.push(patch(ribs, 26, 3, [0, 1, 0], .003))
     }
     for (let i = 0; i < 6; i++) {
       const s = .693 + .022 * i
@@ -84,7 +84,7 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
         return [p[0] - side * mix(.015, .109, u), p[1] - .003 - .038 * u - .010 * Math.sin(Math.PI * v), p[2]]
       }
       black.push(patch(cut, 16, 8, [0, 1, 0], .009))
-      carbon.push(contour(Array.from({ length: 10 }, (_, j) => cut(j / 9, 1)), .0041))
+      black.push(contour(Array.from({ length: 10 }, (_, j) => cut(j / 9, 1)), .0041))
     }
     const cable: Point[] = [
       [side * .234, .902, zAt(.691)], [side * .241, .929, zAt(.721)], [side * .257, .927, zAt(.752)],
@@ -108,7 +108,7 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   internals.push(polygon(roundedPath(emblemFreeCap), [0, 1, 0], .017))
   add(parent, 'open bay resin cross bracing and hex grilles', joined(carbon), m.carbon)
   add(parent, 'engine cover banks and hardware', joined(internals), m.engine)
-  add(parent, 'engine covers fasteners and machined ribs', joined(pins), m.brushed)
+  add(parent, 'engine cover fasteners', joined(pins), m.brushed)
   add(parent, 'engine bay ground and hoses', joined(black), m.dark)
   return anchor(bridgeSurface(.5, .5), [0, 1, 0], .42)
 }
