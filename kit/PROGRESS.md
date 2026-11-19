@@ -115,6 +115,33 @@ Vetted 2026-11-19. The ledger is `reference/controls.json` (URLs, licenses and s
 
 | Frame index | Seconds | Beat | Why this moment | Vertical too |
 | --- | --- | --- | --- | --- |
+| 0 | 0.00 | `arrival` | Poster frame. The dark vehicle, the whole city, the long puddle | yes |
+| 60 | 2.00 | `arrival` | End of the hook. The billboard wash is half way across the deck and the gust has lifted the backlit rain | no |
+| 150 | 5.00 | `wake` | Lamp stage 1. Only the thin running lights are up, so the dark body has to hold on its own | no |
+| 195 | 6.50 | `wake` | Hero frame. Running lights full, main beams half way up, beams in rain and haze | yes |
+| 240 | 8.00 | `wake` | Settled hero framing. Main beams full, the deck lit in front of the nose, lamp reflections in the puddle | no |
+| 300 | 10.00 | `paint` | Beads at rest on the hood, the wing crest as horizon, city bokeh above | no |
+| 360 | 12.00 | `paint` | Macro frame. The rivulet has just broken loose and is running | yes |
+| 420 | 14.00 | `paint` | The rivulet trail and merged beads, sign reflections bent over the crest | no |
+| 486 | 16.20 | `wheel` | First drip leaves the arch lip. Rim, disc, caliper and tread at rest | no |
+| 537 | 17.90 | `wheel` | A drip in the air with focus pulled to the arch lip | yes |
+| 590 | 19.67 | `wheel` | Hub centered, the rim mirrored in the wet deck | no |
+| 615 | 20.50 | `lamp` | Beads and short rivulets on the outer lens in focus, the light behind them | no |
+| 690 | 23.00 | `lamp` | Focus pulled through the lens to the projector modules | yes |
+| 740 | 24.67 | `lamp` | Closest framing. Bezels, ribbed guides and halation fill the frame | no |
+| 765 | 25.50 | `detail` | Edge of the bay: cooling fins, mesh strip, raking light | no |
+| 810 | 27.00 | `detail` | Mesh with drops in its cells beside the carbon bracing, the finest repeating pattern in the film | yes |
+| 860 | 28.67 | `detail` | Center of the bay. Weave on both braces at the closest distance | no |
+| 902 | 30.07 | `ignition` | Engine fires. Tail lamps flare and the body shakes once | no |
+| 930 | 31.00 | `ignition` | Beads shaking loose, shimmer building, first pulse ripples in the puddle | no |
+| 990 | 33.00 | `ignition` | Shimmer and steam fully developed at the outlets | yes |
+| 1060 | 35.33 | `ignition` | End of the arc. Both tail lamps, steam risen into the upper frame | no |
+| 1125 | 37.50 | `return` | Engine just off, pull back starting, steam thinning | no |
+| 1170 | 39.00 | `return` | Main beams half way down, running lights still on | yes |
+| 1215 | 40.50 | `return` | Last faint glow of the running lights, a wisp of steam left | no |
+| 1340 | 44.67 | `return` | Ten frames before the seam. Has to match the poster frame in everything but rain phase | no |
+
+Written 2026-11-19 in Phase 2. 25 frames, 8 of them also in the vertical format. The control pool holds 57, more than one control per judged image including the native-size crops. Frames can be added. None is removed.
 
 ## Look lock
 
