@@ -1,0 +1,40 @@
+{
+  "files": [
+    {
+      "file": "set-A-01.png",
+      "shows": "contact sheet, 12 frames from 0.00 s to 3.97 s, beat 1 of 8 (arrival)"
+    },
+    {
+      "file": "set-A-02.png",
+      "shows": "contact sheet, 12 frames from 4.00 s to 8.97 s, beat 2 of 8 (wake)"
+    },
+    {
+      "file": "set-A-03.png",
+      "shows": "contact sheet, 12 frames from 9.00 s to 14.97 s, beat 3 of 8 (paint)"
+    },
+    {
+      "file": "set-A-04.png",
+      "shows": "contact sheet, 12 frames from 15.00 s to 19.97 s, beat 4 of 8 (wheel)"
+    },
+    {
+      "file": "set-A-05.png",
+      "shows": "contact sheet, 12 frames from 20.00 s to 24.97 s, beat 5 of 8 (lamp)"
+    },
+    {
+      "file": "set-A-06.png",
+      "shows": "contact sheet, 12 frames from 25.00 s to 28.97 s, beat 6 of 8 (detail)"
+    },
+    {
+      "file": "set-A-07.png",
+      "shows": "contact sheet, 12 frames from 29.00 s to 35.97 s, beat 7 of 8 (ignition)"
+    },
+    {
+      "file": "set-A-08.png",
+      "shows": "contact sheet, 12 frames from 36.00 s to 44.97 s, beat 8 of 8 (return)"
+    },
+    {
+      "file": "set-A-09.png",
+      "shows": "contact sheet, 12 frames across the loop point, 43.80 s to the end, then from 0 s to 1.17 s"
+    }
+  ]
+}

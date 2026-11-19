@@ -50,7 +50,7 @@ export const events = {
   engineStopped: finale.start + 1.8,
   lampsOffStart: finale.start + 2,
   lampsOffEnd: finale.start + 4,
-  pullStart: finale.start + 1.5,
+  pullStart: finale.start + 0.5,
   pullEnd: finale.start + 7.5,
 }
 
