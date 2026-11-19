@@ -160,3 +160,28 @@ export async function describeRegion(state: CameraState, format: FormatSpec, rec
     .map(([label, c]) => `${label} ${Math.round((100 * c.n) / total)}%${Number.isFinite(c.near) ? ` at ${c.near.toFixed(1)}${c.far.toFixed(1) !== c.near.toFixed(1) ? ` to ${c.far.toFixed(1)}` : ''} m` : ''}`)
     .join(', ')
 }
+
+export interface BeatJoin {
+  beat: string
+  start: number
+  cut: boolean
+  /** The beat whose move this one continues, when there is no cut. */
+  continues: string
+  jumpMeters: number
+  turnDegrees: number
+}
+
+/** For each beat, whether the director cuts into it. The move of the beat before is run at the boundary time and compared with this beat's own move there. */
+export function beatJoins(format: FormatSpec, anchors: Anchors): BeatJoin[] {
+  const beats = config.beats
+  return beats.map((b, i) => {
+    const before = beats[(i + beats.length - 1) % beats.length]
+    const t = b.start
+    const mine = cameraAt(t, format, anchors, t)
+    const theirs = cameraAt(t, format, anchors, (before.start + before.end) / 2)
+    const jumpMeters = mine.position.distanceTo(theirs.position)
+    const turnDegrees = THREE.MathUtils.radToDeg(mine.quaternion.angleTo(theirs.quaternion))
+    const cut = jumpMeters > 0.001 || turnDegrees > 0.05 || Math.abs(mine.focalMm - theirs.focalMm) > 0.01
+    return { beat: b.id, start: t, cut, continues: cut ? '' : before.id, jumpMeters, turnDegrees }
+  })
+}

@@ -146,3 +146,22 @@ export function shuffle<T>(items: T[], next: () => number): T[] {
   }
   return out
 }
+
+/** The order to send a pack in: message 1 carries brief.txt, every message at most `split` files, and only the last asks for the answer. One image per call packs get one message per file. */
+export function splitMessages(critic: string, files: Array<{ file: string; shows?: string }>, split: number, oneAtATime = false): Array<{ name: string; text: string }> {
+  if (!Number.isInteger(split) || split < 1) throw new Error('--split must be a whole number of at least 1')
+  const size = oneAtATime ? 1 : split
+  const groups: Array<typeof files> = []
+  for (let i = 0; i < files.length; i += size) groups.push(files.slice(i, i + size))
+  return groups.map((group, i) => {
+    const n = groups.length
+    const lines = [`${critic} message ${i + 1} of ${n}`, '']
+    if (oneAtATime) lines.push('Send to a fresh juror with the text of brief.txt, this one file and nothing else. Every image is judged on its own.')
+    else if (i === 0) lines.push(n === 1 ? 'Send brief.txt and these files, then ask for the answer.' : `Send brief.txt and these files. Say that ${n - 1} more ${n === 2 ? 'message follows' : 'messages follow'} and that the answer comes after the last one.`)
+    else if (i < n - 1) lines.push('Send these files in the same conversation. The answer still waits for the last message.')
+    else lines.push(`Send these files in the same conversation, then ask for the answer in the format of brief.txt, covering the files of all ${n} messages.`)
+    lines.push('', 'Files:')
+    for (const f of group) lines.push(f.shows ? `${f.file}: ${f.shows}` : f.file)
+    return { name: `message-${String(i + 1).padStart(2, '0')}.txt`, text: `${lines.join('\n')}\n` }
+  })
+}

@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { frameCount, type FormatSpec, type TierId } from '../../src/config.ts'
+import { formatById, frameCount, type FormatSpec, type TierId } from '../../src/config.ts'
 import { config, readJson, workDir } from './env.ts'
 import { megabytes, probe, type Probe } from './probe.ts'
 import type { StageDetail } from '../../src/core/detail.ts'
@@ -143,4 +143,89 @@ export function emptyFrames(spec: FilmSpec): void {
   const dir = framesDir(spec)
   if (!existsSync(dir)) return
   for (const name of readdirSync(dir)) rmSync(join(dir, name), { force: true, recursive: true })
+}
+
+export interface BundleRecord {
+  buildHash: string
+  format: string
+  tier: string
+  paint: string
+  diagnostic: string
+  detail: StageDetail
+  frames: number[]
+}
+
+/** Group frames so that each bundle of PNG and record files stays under the attachment limit. */
+export function bundleGroups(sizes: Array<{ frame: number; bytes: number }>, limitBytes: number): number[][] {
+  const groups: number[][] = []
+  let current: number[] = []
+  let total = 0
+  for (const { frame, bytes } of sizes) {
+    if (bytes > limitBytes) throw new Error(`frame ${frame} alone is ${megabytes(bytes).toFixed(1)} MB, over the bundle limit`)
+    if (current.length > 0 && total + bytes > limitBytes) {
+      groups.push(current)
+      current = []
+      total = 0
+    }
+    current.push(frame)
+    total += bytes
+  }
+  if (current.length > 0) groups.push(current)
+  return groups
+}
+
+export const bundleLimitBytes = (): number => config.repo.maxFileMb * 0.95 * 1024 * 1024
+
+/** Tar files of the frames first to last, each under the attachment limit, for sending a part from one machine to another. */
+export function bundleFrames(spec: FilmSpec, first: number, last: number, buildHash: string, outDir: string, label: string): string[] {
+  const dir = framesDir(spec)
+  const sizes: Array<{ frame: number; bytes: number }> = []
+  for (let f = first; f <= last; f++) {
+    const png = join(dir, frameFileName(f))
+    sizes.push({ frame: f, bytes: statSync(png).size + statSync(png.replace(/\.png$/, '.json')).size + 1024 })
+  }
+  const groups = bundleGroups(sizes, bundleLimitBytes() - 64 * 1024)
+  mkdirSync(outDir, { recursive: true })
+  const out: string[] = []
+  groups.forEach((frames, i) => {
+    const file = join(outDir, `${label}-${String(i + 1).padStart(2, '0')}-of-${String(groups.length).padStart(2, '0')}.tar`)
+    const record: BundleRecord = { buildHash, format: spec.format.id, tier: spec.tier, paint: spec.paint, diagnostic: spec.diag, detail: spec.detail, frames }
+    writeFileSync(join(dir, 'bundle.json'), JSON.stringify(record, null, 2))
+    const names = ['bundle.json', ...frames.flatMap((f) => [frameFileName(f), frameFileName(f).replace(/\.png$/, '.json')])]
+    execFileSync('tar', ['-cf', file, '-C', dir, ...names])
+    rmSync(join(dir, 'bundle.json'), { force: true })
+    out.push(file)
+  })
+  return out
+}
+
+/** Unpack bundles into the frame folder their own record names. A frame that is already there is compared byte for byte and kept, so one frame rendered on both machines proves they agree. */
+export function unbundleFrames(files: string[]): Array<{ file: string; dir: string; record: BundleRecord; added: number; same: number; differing: number[] }> {
+  return files.map((file) => {
+    const record = JSON.parse(execFileSync('tar', ['-xOf', file, 'bundle.json'], { encoding: 'utf8' })) as BundleRecord
+    if (record.detail !== 'full' && record.detail !== 'blockout') throw new Error(`${file} names no detail`)
+    const dir = framesDir({ format: formatById(record.format), tier: record.tier as TierId, detail: record.detail })
+    mkdirSync(dir, { recursive: true })
+    const temp = join(dir, '.unbundle')
+    rmSync(temp, { recursive: true, force: true })
+    mkdirSync(temp)
+    execFileSync('tar', ['-xf', file, '-C', temp, '--exclude', 'bundle.json'])
+    let added = 0
+    let same = 0
+    const differing: number[] = []
+    for (const f of record.frames) {
+      const png = frameFileName(f)
+      const json = png.replace(/\.png$/, '.json')
+      if (existsSync(join(dir, png))) {
+        if (readFileSync(join(dir, png)).equals(readFileSync(join(temp, png)))) same++
+        else differing.push(f)
+        continue
+      }
+      renameSync(join(temp, png), join(dir, png))
+      renameSync(join(temp, json), join(dir, json))
+      added++
+    }
+    rmSync(temp, { recursive: true, force: true })
+    return { file, dir, record, added, same, differing }
+  })
 }
