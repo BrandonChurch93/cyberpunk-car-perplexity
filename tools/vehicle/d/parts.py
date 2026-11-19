@@ -7,7 +7,7 @@ from mathutils import Vector, Matrix
 import bl
 
 FRONT = dict(x=0.860, z=1.2860, R=0.34675, hub=0.3405, width=0.265, rim=0.254, rim_w=0.2413, disc=0.205, disc_t=0.038)
-REAR = dict(x=0.8505, z=-1.4930, R=0.3702, hub=0.3625, width=0.345, rim=0.2667, rim_w=0.3048, disc=0.195, disc_t=0.032)
+REAR = dict(x=0.8505, z=-1.4930, R=0.3702, hub=0.3625, width=0.325, rim=0.2667, rim_w=0.3048, disc=0.195, disc_t=0.032)
 
 
 def _obj(name, bm, mat, parent=None, smooth=True):
@@ -200,24 +200,101 @@ def floor(name):
     return _obj(name, bm, 'dark', smooth=False)
 
 
-def mirror(side_sign, name):
-    bm = bmesh.new()
+def mirror(side_sign, label):
+    """Door mirror: angular painted housing with its glass on the rear face, on a thin blade stalk."""
+    root = bpy.data.objects.new(label, None)
+    bpy.context.scene.collection.objects.link(root)
     L = 0.288
-    pts = [(0.0, 0.0), (L, 0.02), (L * 0.95, 0.10), (0.05, 0.085)]
-    out = 0.11
-    vs_in = [bm.verts.new(bl.b((side_sign * 1.0, 0.81 + y, 0.85 - z))) for z, y in pts]
-    vs_out = [bm.verts.new(bl.b((side_sign * (1.02 + out), 0.81 + y + 0.005, 0.85 - z + 0.03 * (z / L)))) for z, y in pts]
+    pts = [(0.0, 0.0), (L, 0.02), (L * 0.97, 0.10), (0.05, 0.085)]
+    xi, xo = 1.035, 1.133
+    cin = lambda z, y: (side_sign * xi, 0.83 + y, 0.85 - z)
+    cout = lambda z, y: (side_sign * xo, 0.83 + y + 0.004, 0.85 - z + 0.025 * (z / L))
+    bm = bmesh.new()
+    vs_in = [bm.verts.new(bl.b(cin(z, y))) for z, y in pts]
+    vs_out = [bm.verts.new(bl.b(cout(z, y))) for z, y in pts]
     bm.faces.new(vs_in)
     bm.faces.new(vs_out[::-1])
     for i in range(4):
         j = (i + 1) % 4
         bm.faces.new((vs_in[i], vs_in[j], vs_out[j], vs_out[i]))
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    ob = _obj(name, bm, 'black', smooth=False)
-    md = ob.modifiers.new('round', 'BEVEL')
-    md.width = 0.006
+    shell = _obj(f'{label} shell', bm, 'paint', root, smooth=False)
+    md = shell.modifiers.new('round', 'BEVEL')
+    md.width = 0.004
     md.segments = 2
-    return ob
+    shell['part'] = 'mirror housing'
+    a, b, c, d = cin(*pts[1]), cin(*pts[2]), cout(*pts[2]), cout(*pts[1])
+    ctr = np.mean([a, b, c, d], 0)
+    quad = [ctr + 0.86 * (np.asarray(p) - ctr) + np.array([0, 0, -0.0015]) for p in (a, b, c, d)]
+    bm = bmesh.new()
+    f = bm.faces.new([bm.verts.new(bl.b(p)) for p in quad])
+    if (Vector(bl.b((0, 0, -1))).dot(f.normal)) < 0:
+        f.normal_flip()
+    g = _obj(f'{label} glass', bm, 'mirror', root, smooth=False)
+    g['part'] = 'mirror glass'
+    bm = bmesh.new()
+    sec = [(0.0, -0.035), (0.004, -0.035), (0.004, 0.035), (0.0, 0.035)]
+    ring0 = [bm.verts.new(bl.b((side_sign * (0.965 + dx), 0.795, 0.70 + dz))) for dx, dz in sec]
+    ring1 = [bm.verts.new(bl.b((side_sign * (xi + 0.01 + dx), 0.84, 0.70 + dz * 0.8))) for dx, dz in sec]
+    bm.faces.new(ring0)
+    bm.faces.new(ring1[::-1])
+    for i in range(4):
+        j = (i + 1) % 4
+        bm.faces.new((ring0[i], ring0[j], ring1[j], ring1[i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    st = _obj(f'{label} stalk', bm, 'matte', root, smooth=False)
+    st['part'] = 'mirror stalk'
+    return root
+
+
+def bay(net, full):
+    """Engine bay placeholder: a closed tray under the opening between the haunches, block and covers."""
+    from kernel_np import spline
+    out = []
+    for e in ('roof_rear', 'bay_edge', 'deck_tail'):
+        q = spline([net.resolve(c) for c in net.edges[e]['ctrl']], spacing=0.02)
+        if out and np.linalg.norm(q[0] - out[-1]) > np.linalg.norm(q[-1] - out[-1]):
+            q = q[::-1]
+        out.extend(q if not out else q[1:])
+    half = np.array(out)
+    if half[0][0] > 0.01:
+        half = half[::-1]
+    loop = np.r_[half, (half * [-1, 1, 1])[::-1][1:-1]]
+    loop = loop - np.array([0, 0.003, 0])
+    bm = bmesh.new()
+    top = [bm.verts.new(bl.b(p)) for p in loop]
+    bot = [bm.verts.new(bl.b((p[0] * 0.92, 0.60, p[2] * 0.98 - 0.02))) for p in loop]
+    bm.faces.new(bot)
+    for i in range(len(loop)):
+        j = (i + 1) % len(loop)
+        bm.faces.new((top[i], top[j], bot[j], bot[i]))
+    bmesh.ops.triangulate(bm, faces=bm.faces)
+    aim = Vector(bl.b((0.0, 1.2, float(np.mean(loop[:, 2])))))
+    for f in bm.faces:
+        if f.normal.dot(aim - f.calc_center_median()) < 0:
+            f.normal_flip()
+    obs = [_obj('engine bay tub', bm, 'dark', smooth=False)]
+    obs[-1]['part'] = 'engine bay tub'
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1.0)
+    for v in bm.verts:
+        x, y, z = v.co.x, v.co.y, v.co.z
+        v.co = Vector(bl.b((x * 0.56, 0.74 + y * 0.26, -1.36 + z * 0.92)))
+    obs.append(_obj('engine block', bm, 'engine', smooth=False))
+    obs[-1]['part'] = 'engine block'
+    for k, xc in enumerate((-0.15, 0.15)):
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=1.0)
+        for v in bm.verts:
+            x, y, z = v.co.x, v.co.y, v.co.z
+            v.co = Vector(bl.b((xc + x * 0.22, 0.90 + y * 0.05 - 0.02 * z, -1.36 + z * 0.80)))
+        ob = _obj(f'engine cover {k}', bm, 'carbon', smooth=False)
+        md = ob.modifiers.new('round', 'BEVEL')
+        md.width = 0.01
+        md.segments = 3
+        ob['part'] = 'engine cover banks'
+        obs.append(ob)
+    return obs
 
 
 def all_parts(net):

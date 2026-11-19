@@ -72,8 +72,8 @@ class Network:
     def E(self, name, ctrl, kind='crease', spacing=None):
         self.edges[name] = {'ctrl': ctrl, 'kind': kind, 'spacing': spacing}
 
-    def F(self, name, loop, mat='paint', obj='body', crown=0.0, sp=0.012, hint=None, holes=(), smooth=1):
-        self.facets.append({'name': name, 'loop': loop, 'mat': mat, 'obj': obj, 'crown': crown, 'sp': sp, 'hint': hint, 'holes': holes, 'smooth': smooth})
+    def F(self, name, loop, mat='paint', obj='body', crown=0.0, sp=0.012, hint=None, holes=(), smooth=1, guides=()):
+        self.facets.append({'name': name, 'loop': loop, 'mat': mat, 'obj': obj, 'crown': crown, 'sp': sp, 'hint': hint, 'holes': holes, 'smooth': smooth, 'guides': list(guides)})
 
     def resolve(self, c):
         if isinstance(c, str):
@@ -160,8 +160,10 @@ def full(net):
                     holes.append([e for e in h if e not in center] + [e + '.R' for e in h if e not in center])
                 else:
                     holes += [list(h), m(h)]
-            out.facets.append(dict(f, loop=rest + m(rest), holes=holes, inner=cen, crown=0.0, mirror=False))
+            g = f.get('guides', [])
+            out.facets.append(dict(f, loop=rest + m(rest), holes=holes, inner=cen + g + m(g), crown=0.0, mirror=False))
         else:
-            out.facets.append(dict(f, inner=[], mirror=False))
-            out.facets.append(dict(f, name=f['name'] + '.R', loop=m(f['loop']), holes=[m(h) for h in f['holes']], hint=mh, inner=[]))
+            g = f.get('guides', [])
+            out.facets.append(dict(f, inner=list(g), mirror=False))
+            out.facets.append(dict(f, name=f['name'] + '.R', loop=m(f['loop']), holes=[m(h) for h in f['holes']], hint=mh, inner=m(g)))
     return out
