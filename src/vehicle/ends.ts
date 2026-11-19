@@ -135,13 +135,21 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     black.push(mapped(f, outline, outFront, .025, .055))
     dark.push(mapped(f, points, outFront, .123, .036))
     black.push(joinRim(points, 1.035, .88, f, -.002, .085, outFront))
-    const blade = [[.295, .313, .372, .380], [.524, .160, .558, .222],
-      [.839, .178, .807, .220], [.907, .252, .872, .284]]
-    for (let i = 0; i < blade.length - 1; i++) frontPaint.push(patch((u, v) => {
-      const [a, b, c, d] = blade[i]
-      const [e, g, h, j] = blade[i + 1]
-      return f(mix(mix(a, c, v), mix(e, h, v), u), mix(mix(b, d, v), mix(g, j, v), u), -.006 + .026 * v)
-    }, 18, 4, outFront, .005))
+    const blade = [
+      [.909, .362, .894, .360], [.929, .287, .907, .286], [.861, .182, .842, .218],
+      [.818, .172, .808, .205], [.531, .167, .548, .198], [.456, .238, .467, .252],
+    ]
+    const trace = (i: number) => curve(blade.map((row, j) => [j / (blade.length - 1), row[i]]))
+    const [outerXAt, outerYAt, innerXAt, innerYAt] = [0, 1, 2, 3].map(trace)
+    const bladeSkin = (u: number, v: number) => {
+      const x = mix(outerXAt(u), innerXAt(u), v), y = mix(outerYAt(u), innerYAt(u), v)
+      return f(x, y, mix(-.006, .020, v) - .004 * Math.sin(Math.PI * v))
+    }
+    frontPaint.push(patch(bladeSkin, 65, 8, outFront, .008))
+    black.push(patch((u, v) => {
+      const lip = bladeSkin(u, 1)
+      return f(Math.abs(lip[0]), lip[1] + .009 * v, mix(.020, .085, v))
+    }, 65, 6, [0, 1, 1], .006))
     dark.push(ribbon(f, [[.462, .395], [.578, .411], [.729, .426], [.801, .436]], .028, .024))
     const dh = full ? .019 : .032
     if (full) {
