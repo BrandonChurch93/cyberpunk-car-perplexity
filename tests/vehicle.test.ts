@@ -78,19 +78,25 @@ function instantaneous(car: VehicleModule, state: VehicleState) {
 }
 
 describe('vehicle geometry and state', () => {
-  it('turns the hood normal at each fold while retaining fair panels on either side', () => {
+  it('turns the hood and flank normals at the folds while retaining fair adjoining panels', () => {
     full.root.updateMatrixWorld(true)
-    const normalAt = (x: number, s: number): T.Vector3 => {
-      const ray = new T.Raycaster(new T.Vector3(x, 2, zAt(s)), new T.Vector3(0, -1, 0))
+    const normalAt = (across: number, s: number, side = false): T.Vector3 => {
+      const eye = side ? new T.Vector3(2, across, zAt(s)) : new T.Vector3(across, 2, zAt(s))
+      const ray = new T.Raycaster(eye, side ? new T.Vector3(-1, 0, 0) : new T.Vector3(0, -1, 0))
       const hit = ray.intersectObject(full.root, true)[0]
       return hit.normal!.clone().applyNormalMatrix(new T.Matrix3().getNormalMatrix(hit.object.matrixWorld))
     }
-    for (const [x, s] of [[.410, .104], [.557, .104], [.359, .140], [.627, .140]]) {
+    for (const [x, s] of [[.410, .104], [.557, .104], [.359, .140], [.627, .140], [.7022, .102]]) {
       const a = normalAt(x - .002, s), b = normalAt(x + .002, s)
-      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(8)
-      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(15)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
       expect(T.MathUtils.radToDeg(a.angleTo(normalAt(x - .010, s)))).toBeLessThan(3)
       expect(T.MathUtils.radToDeg(b.angleTo(normalAt(x + .010, s)))).toBeLessThan(3)
+    }
+    for (const [y, s] of [[.338, .530], [.650, .460], [.896, .760], [.924, .812], [.7814, .724]]) {
+      const a = normalAt(y - .002, s, true), b = normalAt(y + .002, s, true)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
     }
   })
 

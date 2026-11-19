@@ -56,8 +56,9 @@ const doorBelt = curve([[.295, .568], [.380, .608], [.460, .650], [.538, .688], 
 const heelFold = curve([[.382, .272], [.530, .338], [.597, .375], [.712, .432]])
 const haunchFold = (s: number) => .899 - 2.80 * (s - .682)
 const foldRadius = .004
-const foldSlope = Math.tan(T.MathUtils.degToRad(12))
-const foldHalf = foldRadius * Math.sin(T.MathUtils.degToRad(6))
+const foldAngle = T.MathUtils.degToRad(20)
+const foldSlope = Math.tan(foldAngle)
+const foldHalf = foldRadius * Math.sin(foldAngle / 2)
 
 function hinge(t: number, width: number): number {
   if (t <= -width) return 0
@@ -80,9 +81,9 @@ function sidePoint(s: number, y: number, side: number): Point {
     const base = mix(hinge(rockerY(s) - line, foldHalf), hinge(shoulder(s) - line, foldHalf), q)
     return direction * first * foldSlope * (hinge(t, foldHalf) - base)
   }
-  const belt = fold(doorBelt(s), smooth(s, .271, .302) * (1 - smooth(s, .895, .928)), -1)
-  const heel = fold(heelFold(s), smooth(s, .352, .383) * (1 - smooth(s, .700, .735)), 1)
-  const haunch = fold(haunchFold(s), smooth(s, .644, .666) * (1 - smooth(s, .756, .786)), 1.2)
+  const belt = fold(doorBelt(s), smooth(s, .271, .302) * (1 - smooth(s, .895, .928)), -.78)
+  const heel = fold(heelFold(s), smooth(s, .352, .383) * (1 - smooth(s, .700, .735)), .84)
+  const haunch = fold(haunchFold(s), smooth(s, .644, .666) * (1 - smooth(s, .756, .786)), -.68)
   const inset = Math.max(0, sill + thickness * q + dent + face + belt + heel + haunch)
   return [side * (plan(s) - inset), y, zAt(s)]
 }
@@ -101,8 +102,8 @@ function bonnet(s: number, v: number): Point {
   const w = wingEdge(s), x = w.x * v
   const section = (position: number) => (hinge(position - hoodInner(s), foldHalf) - hinge(position - hoodOuter(s), foldHalf))
     * smooth(s, hoodTipS - .00025, hoodTipS + .001) * (1 - smooth(s, .290, .326))
-    + .96 * smooth(s, .041, .050) * (1 - smooth(s, .163, .190)) * hinge(position - lampFold(s), foldHalf)
-  const across = -.81 * foldSlope * (section(x) - mix(section(0), section(w.x), v))
+    + .80 * smooth(s, .041, .050) * (1 - smooth(s, .163, .190)) * hinge(position - lampFold(s), foldHalf)
+  const across = -.78 * foldSlope * (section(x) - mix(section(0), section(w.x), v))
   const base = mix(w.center, w.y, v * v * (2 - v) + .05 * v ** 6 * (1 - v))
   const cowlDrop = .021 * smooth(s, .127, .236) * (1 - v ** 3)
     - .015 * smooth(s, .122, .189) * (1 - smooth(s, .260, .317)) * (1 - smooth(v, .819, 1))
@@ -255,7 +256,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const line = haunchFold(s)
       const tBend = y - line
       const flatten = mix(hinge(inY - line, foldHalf), hinge(outside[1] - line, foldHalf), v)
-      return [mix(inX, outside[0], v), y + .46 * smooth(s, .604, .630) * (hinge(tBend, foldHalf) - flatten), zAt(s)]
+      return [mix(inX, outside[0], v), y + .58 * smooth(s, .604, .630) * (hinge(tBend, foldHalf) - flatten), zAt(s)]
     }), [0, 1, 0], [haunchLine])
     part(paint, sided((u, v) => {
       const s = mix(.594, .676, u)
