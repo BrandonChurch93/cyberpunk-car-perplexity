@@ -1,6 +1,6 @@
 import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
-import { fascia, sAt, zAt } from './body'
+import { fascia, frontHoodEdge, sAt, zAt } from './body'
 import { add, blend, contour, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point } from './geometry'
 import type { Palette } from './materials'
 import type { Anchor, VehicleModule } from './contract'
@@ -89,7 +89,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   }
   const outFront: Point = [0, 0, 1], outRear: Point = [0, 0, -1]
   const lipY = curve([[0, .168], [.27, .151], [.71, .146], [.91, .155], [.967, .174]])
-  const noseTop = curve([[0, .417], [.29, .419], [.36, .430], [.48, .468], [.60, .509], [.72, .552], [.84, .620], [.928, .695], [.974, .754]])
+  const fasciaTop = curve([[0, .417], [.29, .419], [.36, .430], [.48, .468], [.60, .509], [.72, .552], [.84, .620], [.928, .695], [.974, .754]])
+  const noseTop = (x: number) => mix(frontHoodEdge(x)[1], fasciaTop(x), smooth(x, .70, .85))
   const chin = (x: number) => lipY(x) + .025
   const eyeTop = curve([[.48, .474], [.58, .512], [.68, .552], [.79, .600], [.889, .649], [.918, .658]])
   const eyeLow = curve([[.48, .459], [.58, .462], [.69, .474], [.797, .497], [.865, .564], [.918, .635]])
@@ -127,9 +128,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return f(x, noseTop(x) - .007 - .029 * v, mix(.005, .129, v))
     }, 34, 6, [0, -1, 0], .004))
     frontPaint.push(patch((u, v) => {
-      const x = mix(0, .978, u)
-      return f(x, mix(noseTop(x) - .004, noseTop(x) + .008 * smooth(u, .43, 1), v), .0015)
-    }, 42, 6, outFront, .004))
+      const x = mix(0, .86, u)
+      const edge = frontHoodEdge(x)
+      return [side * x, edge[1] - .014 * v, edge[2] - .003 * v]
+    }, 84, 4, outFront, .004))
     black.push(mapped(f, outline, outFront, .025, .055))
     dark.push(mapped(f, points, outFront, .123, .036))
     black.push(joinRim(points, 1.035, .88, f, -.002, .085, outFront))

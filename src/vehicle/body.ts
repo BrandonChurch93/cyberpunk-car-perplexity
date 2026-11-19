@@ -28,8 +28,8 @@ const tailWidth = curve([
   [0, .9875], [.39, .985], [.535, .979], [.69, .959], [.824, .939], [.896, .919], [.945, .895], [.975, .877], [1.012, .855],
 ])
 const shoulder = curve([
-  [0, .407], [.016, .451], [.044, .545], [.08, .624], [.12, .699], [.16, .762], [.20, .807], [.232, .815],
-  [.267, .789], [.32, .737], [.40, .725], [.51, .759], [.59, .821], [.67, .881], [.736, .936],
+  [0, .407], [.016, .431], [.024, .450], [.044, .545], [.08, .618], [.10, .649], [.15, .724], [.20, .779], [.25, .772],
+  [.30, .738], [.34, .729], [.40, .725], [.51, .759], [.59, .821], [.67, .881], [.736, .936],
   [.793, .943], [.85, .918], [.89, .888], [.92, .865], [.96, .848], [1, .833],
 ])
 const hoodLine = curve([[0, .418], [.024, .437], [.06, .520], [.105, .606], [.165, .723], [.25, .783], [.33, .770], [.6, .83]])
@@ -38,6 +38,7 @@ const spine = curve([
   [.742, 1.056], [.769, 1.040], [.80, 1.02], [.82, 1.011], [.85, .983], [.88, .963], [.90, .957], [.92, .941], [.94, .926], [.96, .908], [.984, .898],
 ])
 const hoodCreaseX = (s: number) => .475 - .178 * T.MathUtils.clamp((s - .059) / .141, 0, 1)
+const wingRadius = (s: number) => .004 * smooth(s, .071, .099) * (1 - smooth(s, .295, .331))
 const sideDent = curve([[0, 0], [.10, .006], [.34, .025], [.43, .11], [.51, .17], [.56, .215], [.62, .238], [.67, .105], [.73, .012], [1, 0]])
 const rockerY = curve([[0, .155], [.04, .136], [.25, .136], [.69, .136], [.86, .137], [.90, .153], [.95, .187], [1, .40]])
 
@@ -49,18 +50,39 @@ function sidePoint(s: number, y: number, side: number): Point {
   return [side * (plan(s) - sill - door + crease * (1 - smooth(q, .83, .99))), y, zAt(s)]
 }
 
-function bonnet(s: number, v: number): Point {
-  const width = plan(s), x = width * v
+function wingEdge(s: number) {
+  const width = plan(s)
   const center = hoodLine(s), outer = shoulder(s)
   const edge = Math.min(width * .93, hoodCreaseX(s))
-  const crease = smooth(s, .047, .063) * (1 - smooth(s, .232, .295))
+  const crease = smooth(s, .034, .084) * (1 - smooth(s, .244, .319))
   const ridge = mix(center, outer, .32 * edge / width) + .022 * crease
-  const a = (ridge - center) / edge, b = (outer - ridge) / (width - edge)
+  const radius = wingRadius(s)
+  const angle = Math.PI / 2 + Math.atan((outer - ridge) / (width - edge))
+  const x = width - radius + radius * Math.cos(angle)
+  const y = outer + radius * Math.sin(angle)
+  return { width, center, outer, edge, crease, ridge, radius, angle, x, y }
+}
+
+function bonnet(s: number, v: number): Point {
+  const w = wingEdge(s), x = w.x * v
+  const { center, edge, crease, ridge } = w
+  const a = (ridge - center) / edge, b = (w.y - ridge) / (w.x - edge)
   const e = x - edge, fillet = .0035
   const corner = Math.abs(e) > fillet ? Math.abs(e) : .5 * (e * e / fillet + fillet)
   const facets = ridge + .5 * (a + b) * e + .5 * (b - a) * corner
-  const base = mix(center, outer, v * v)
+  const base = mix(center, w.y, v * (.77 + .23 * v))
   return [x, mix(base, facets, crease), zAt(s)]
+}
+
+export function frontHoodEdge(x: number): Point {
+  let low = 0, high = .18
+  for (let i = 0; i < 24; i++) {
+    const middle = (low + high) / 2
+    if (wingEdge(middle).x < x) low = middle
+    else high = middle
+  }
+  const p = bonnet((low + high) / 2, 1)
+  return [x, p[1], p[2]]
 }
 
 const cabFront = (v: number) => .166 + .095 * v ** 2.35
@@ -125,9 +147,18 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const q = mix(.817, 1, v)
       const front = bonnet(s, q)
       const inside = edgeGlass(s, 0)
-      const cabin: Point = [mix(inside[0], plan(s), v), mix(inside[1], shoulder(s), v) + .013 * Math.sin(Math.PI * v), zAt(s)]
+      const w = wingEdge(s)
+      const cabin: Point = [mix(inside[0], w.x, v), mix(inside[1], w.y, v) + .013 * Math.sin(Math.PI * v), zAt(s)]
       return blend(front, cabin, smooth(s, .272, .335))
     }), [0, 1, 0])
+    for (const [a, b] of [[.071, frontEnd(1) - gap], [frontEnd(1) + gap, .331]]) {
+      part(paint, sided((u, v) => {
+        const s = mix(a, b, u)
+        const w = wingEdge(s)
+        const angle = w.angle * (1 - v)
+        return [w.width - w.radius + w.radius * Math.cos(angle), w.outer + w.radius * Math.sin(angle), zAt(s)]
+      }), [side, 1, 0], b - a > .1 ? n : 14, 5, 0)
+    }
 
     part(paint, sided((u, v) => {
       const s = mix(.5995, .942 - .019 * v, u)
