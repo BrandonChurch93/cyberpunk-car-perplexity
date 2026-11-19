@@ -127,6 +127,7 @@ export function createBlockout(_options: VehicleOptions): VehicleModule {
       const lit = THREE.MathUtils.smoothstep(state.lampStage, lamp.stage, lamp.stage + 0.12)
       const material = (lamp.object as THREE.Mesh).material as THREE.MeshStandardMaterial
       material.emissiveIntensity = lit * (lamp.beam ? 6 : 3)
+      lamp.level = lit
     }
     const shake = state.vibration * 0.0012
     bodyGroup.position.y = shake * Math.sin(state.timeSeconds * 2 * Math.PI * 25)

@@ -64,5 +64,14 @@ export function createBlockoutWorld(): WorldModule {
   }
   const billboard = box([14, 8, 0.6], [16, 16, -62], pale, -0.2)
   billboard.name = 'billboard'
-  return { root, signs: [], update: () => undefined }
+  return {
+    root,
+    lights: [],
+    signs: [],
+    deck: { meshes: [slab], material: concrete, bounds: new THREE.Box2(new THREE.Vector2(-40, -40), new THREE.Vector2(40, 40)), heightMap: null },
+    reflectionBox: new THREE.Box3(new THREE.Vector3(-33, 0, -24), new THREE.Vector3(33, 60, 24)),
+    surfaces: [{ material: concrete, wetness: 'porous' }],
+    beginFrame: () => undefined,
+    beginSample: () => undefined,
+  }
 }

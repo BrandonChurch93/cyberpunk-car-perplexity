@@ -15,6 +15,8 @@ export interface Showcase {
   saveSum(): Promise<void>
   loadSum(): Promise<void>
   finishFrame(): Promise<void>
+  /** Every string on every sign in the scene, for the gate. */
+  signs(): string[]
 }
 
 declare global {
@@ -85,6 +87,7 @@ export function createShowcase(engine: FrameEngine, ready: Promise<void>, initia
     async finishFrame() {
       engine.finishFrame()
     },
+    signs: () => engine.stage.signs(),
   }
   return showcase
 }
