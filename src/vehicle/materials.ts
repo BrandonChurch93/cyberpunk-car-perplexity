@@ -1,6 +1,7 @@
 import * as T from 'three'
 import type { PaintSpec } from '../config'
 import { stream } from '../core/random'
+import { patchMaterial } from '../materials/patch'
 import type { VehicleModule } from './contract'
 import type { Material } from './geometry'
 
@@ -33,10 +34,10 @@ export function palette(spec: PaintSpec, full: boolean) {
     microtexture.minFilter = T.LinearMipmapLinearFilter
     microtexture.generateMipmaps = true
     microtexture.needsUpdate = true
-    paint.onBeforeCompile = (shader) => {
-      shader.uniforms.carFlakeTint = flake
-      shader.uniforms.carBaseTint = tint
-      shader.uniforms.carMicrostructure = { value: microtexture }
+    patchMaterial(paint, {
+      id: 'vehicle paint stack',
+      uniforms: { carFlakeTint: flake, carBaseTint: tint, carMicrostructure: { value: microtexture } },
+      apply(shader) {
       shader.vertexShader = 'varying vec3 carLocal;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ncarLocal = position;')
       shader.fragmentShader = `varying vec3 carLocal;
         uniform vec3 carFlakeTint;
@@ -69,8 +70,8 @@ export function palette(spec: PaintSpec, full: boolean) {
             material.clearcoatRoughness += (orangePeel.g - 0.5) * 0.025;
           #endif
         `)
-    }
-    paint.customProgramCacheKey = () => 'vehicle paint stack'
+      },
+    })
   }
   const glass = new T.MeshPhysicalMaterial({
     color: full ? 0x455359 : 0x30383f, metalness: .1, roughness: full ? .096 : .17,

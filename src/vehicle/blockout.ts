@@ -10,7 +10,7 @@ import { createWheels } from './wheels'
 import type { VehicleModule, VehicleOptions, VehicleState } from './contract'
 
 export async function createBlockout(options: VehicleOptions): Promise<VehicleModule> {
-  const full = options.detail === 'full'
+  const full = false
   const m = palette(options.paint, full)
   const root = new T.Group()
   root.name = 'vehicle'
@@ -33,7 +33,7 @@ export async function createBlockout(options: VehicleOptions): Promise<VehicleMo
     const elapsed = seconds - events.engineStart
     const rise = state.engine * Math.exp(-Math.pow((elapsed - .59) / .24, 2))
     ends.update(state.lampStage, rise)
-    const phase = seconds / config.film.durationSeconds * tau
+    const phase = (seconds / config.film.durationSeconds) * tau
     const shake = state.vibration * .002
     sprung.position.y = shake * (.78 * Math.sin(phase * 923) + .22 * Math.sin(phase * 611))
     sprung.rotation.x = shake * .21 * Math.sin(phase * 419)

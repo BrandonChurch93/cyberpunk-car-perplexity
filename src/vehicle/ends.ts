@@ -1,6 +1,6 @@
 import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
-import { dimensions, fascia, sAt, zAt } from './body'
+import { fascia, sAt, zAt } from './body'
 import { add, blend, contour, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point } from './geometry'
 import type { Palette } from './materials'
 import type { Anchor, VehicleModule } from './contract'
@@ -36,7 +36,7 @@ function joinRim(loop: readonly XY[], scale1: number, scale2: number, face: Face
     const p = blend(curve[Math.floor(f) % curve.length], curve[(Math.floor(f) + 1) % curve.length], f % 1)
     const q = mix(scale1, scale2, v)
     return face(x0 + (p[0] - x0) * q, y0 + (p[1] - y0) * q, mix(recessStart, recessEnd, v))
-  }, curve.length * 2, 5, out, .003)
+  }, curve.length, 5, out, .003)
 }
 
 function squareProjector(face: Face, x: number, y: number, r: number, depth: number, direction: T.Vector3): T.BufferGeometry {
@@ -51,8 +51,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const rings: T.BufferGeometry[] = [], optical: T.BufferGeometry[] = [], rearOptical: T.BufferGeometry[] = []
   const lamps: VehicleModule['lamps'] = []
   const heatSources: VehicleModule['heatSources'] = []
-  const lumens: Array<{ mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>; rear: boolean; beam: boolean }> = []
-  const emit = (objectName: string, geometry: T.BufferGeometry, rear: boolean, beam: boolean): void => {
+  const lumens: Array<{ mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>; lamp: VehicleModule['lamps'][number]; rear: boolean }> = []
+  const emit = (objectName: string, geometry: T.BufferGeometry, rear: boolean, beam: boolean, outlet?: Point, candela?: number): void => {
     const material = m.tag(new T.MeshStandardMaterial({
       color: rear ? 0x571416 : 0x939ca1, roughness: .28, metalness: .05,
       emissive: rear ? 0xff1713 : beam ? 0xe4f3ff : 0xe5f3ff, emissiveIntensity: 0,
@@ -63,8 +63,15 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const origin = geometry.boundingBox!.getCenter(new T.Vector3())
     geometry.translate(-origin.x, -origin.y, -origin.z)
     mesh.position.copy(origin)
-    lamps.push({ object: mesh, stage, beam })
-    lumens.push({ mesh, rear, beam })
+    const object = new T.Object3D()
+    object.name = objectName + ' emission origin'
+    object.position.copy(outlet ? vec(outlet) : origin)
+    const direction = rear ? new T.Vector3(Math.sign(origin.x) * .16, -.04, -.99) : new T.Vector3(Math.sign(origin.x) * .055, -.037, .998)
+    object.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), direction.normalize())
+    parent.add(object)
+    const lamp = { object, stage, beam, level: 0, color: material.emissive.clone(), intensity: candela ?? (rear ? .47 : 1.33) }
+    lamps.push(lamp)
+    lumens.push({ mesh, lamp, rear })
   }
   const outFront: Point = [0, 0, 1], outRear: Point = [0, 0, -1]
   const lipY = curve([[0, .168], [.27, .151], [.71, .146], [.91, .155], [.967, .174]])
@@ -80,9 +87,11 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const points: XY[] = [[.448, .398], [.519, .427], [.674, .436], [.804, .460], [.844, .421], [.869, .299], [.820, .190], [.541, .195]]
     const outline: XY[] = [[.474, .455], [.568, .501], [.685, .554], [.797, .609], [.884, .667], [.923, .675], [.931, .599], [.883, .471], [.912, .354], [.930, .283], [.858, .198], [.819, .179], [.520, .180], [.429, .245], [.405, .360]]
     const frontEdge = curve([[0, .981], [.40, .972], [.67, .939], [1, .953]])
+    const outerY = curve([[0, .191], [.42, .37], [.70, .534], [1, .735]])
+    const outerX = curve([[0, .896], [.25, .926], [.51, .880], [.79, .918], [1, .958]])
     const fPanel = (u: number, v: number): Point => {
-      const x = mix(.889, frontEdge(v), u)
-      return f(x, mix(chin(x), noseTop(x), v), .003)
+      const x = mix(outerX(v), frontEdge(v), u)
+      return f(x, mix(outerY(v), mix(chin(x), noseTop(x), v), u), .003)
     }
     frontPaint.push(patch(fPanel, 22, 28, outFront, .008))
     frontPaint.push(mapped(f, bladeOutline, outFront, -.003, .012))
@@ -152,7 +161,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const eyeOutline = [[.498, .464], [.584, .473], [.704, .480], [.801, .501], [.863, .558], [.915, .635], [.908, .656], [.873, .640], [.780, .597], [.680, .552], [.579, .510]]
     const edge = eyeOutline.map(([x, y]) => f(x, y, -.005))
     black.push(contour(edge, .0043, true, 7))
-    for (const [x, y, radius] of [[.743, .526, .029], [.827, .560, .023]]) {
+    for (const [x, y, radius, intensity] of [[.743, .526, .029, 170], [.827, .560, .023, 80]]) {
       const normal = new T.Vector3(side * .51, .12, .851).normalize()
       const transform = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), normal)
       const p = f(x, y, .038)
@@ -161,7 +170,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       black.push(new T.CylinderGeometry(radius + .005, radius * .97, .04, 32).rotateX(Math.PI / 2)
         .applyQuaternion(transform).translate(...f(x, y, .059)))
       optical.push(squareProjector(f, x, y, radius * .87, .035, normal))
-      emit('main beam projector', squareProjector(f, x, y, radius * .49, .031, normal), false, true)
+      emit('main beam projector', squareProjector(f, x, y, radius * .49, .020, normal), false, true, f(x, y, -.025), intensity)
       if (full) {
         for (let j = 0; j < 5; j++) {
           const x0 = x - radius + .0017 * j
@@ -223,10 +232,11 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     exhaust.add(source)
     heatSources.push({ object: source, strength: 1 })
     dark.push(mapped(metalFace, hex, outRear, .126, .011))
-    for (const x of [.118, .232]) {
-      const ring: XY[] = Array.from({ length: 24 }, (_, i) => [x + .043 * Math.cos(i * tau / 24), .779 + .041 * Math.sin(i * tau / 24)])
-      rings.push(joinRim(ring, 1, .88, metalFace, .082, .141, outRear))
-    }
+    for (const x of [.118, .232]) rings.push(patch((u, v) => {
+      const a = tau * u
+      const taper = mix(1, .88, v)
+      return metalFace(x + .043 * Math.cos(a) * taper, .779 + .041 * Math.sin(a) * taper, mix(.082, .141, v))
+    }, full ? 96 : 52, 4, outRear, .003))
     const diffuser = (u: number, v: number): Point => {
       const x = mix(0, .969 - .054 * v, u)
       const edge = r(x, .27, .009)
@@ -275,7 +285,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const beam = smooth(stage, lampThresholds.beamStart, lampThresholds.beamStart + .05)
     const fullBeam = smooth(stage, lampThresholds.beamStart, lampThresholds.beamFull)
     for (const part of lumens) {
-      part.mesh.material.emissiveIntensity = part.beam ? beam * (.35 + 7.15 * fullBeam) : running * (part.rear ? 2.3 + 6.4 * rise : 3.7)
+      const level = part.lamp.beam ? beam * (.045 + .955 * fullBeam) : part.rear ? running * (.53 + .47 * rise) : running
+      part.lamp.level = level
+      part.mesh.material.emissiveIntensity = level * (part.lamp.beam ? 8.9 : part.rear ? .92 : 1.84)
     }
   }
   return { lamps, heatSources, lamp: lens, exhaust: anchor([0, .785, zAt(.997)], outRear, .34), update }

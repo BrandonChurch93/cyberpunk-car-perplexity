@@ -32,7 +32,7 @@ const shoulder = curve([
   [.267, .789], [.32, .737], [.40, .725], [.51, .759], [.59, .821], [.67, .881], [.736, .936],
   [.793, .943], [.85, .918], [.89, .888], [.92, .865], [.96, .848], [1, .833],
 ])
-const hoodLine = curve([[0, .404], [.04, .493], [.08, .605], [.128, .699], [.18, .773], [.25, .806], [.33, .779], [.6, .83]])
+const hoodLine = curve([[0, .404], [.04, .488], [.08, .564], [.128, .664], [.18, .748], [.25, .783], [.33, .770], [.6, .83]])
 const spine = curve([
   [.575, 1.149], [.6, 1.146], [.62, 1.135], [.64, 1.124], [.66, 1.099], [.68, 1.085], [.70, 1.078], [.72, 1.068],
   [.742, 1.056], [.769, 1.040], [.80, 1.02], [.82, 1.011], [.85, .983], [.88, .963], [.90, .957], [.92, .941], [.94, .926], [.96, .908], [.984, .898],
@@ -52,7 +52,7 @@ function sidePoint(s: number, y: number, side: number): Point {
 
 function bonnet(s: number, v: number): Point {
   const crease = hoodCrease(s)
-  const rise = (.018 + .024 * smooth(s, .018, .09)) * smooth(s, 0, .04)
+  const rise = (.014 + .017 * smooth(s, .018, .09)) * smooth(s, 0, .04)
   const shape = upperCrown(v) * smooth(s, 0, .07) + rise * (smooth(v, crease, crease + .18) - .62 * smooth(v, crease + .18, 1))
   return [plan(s) * v, mix(hoodLine(s), shoulder(s), v ** 1.8) + shape * (1 - smooth(v, .83, 1)), zAt(s)]
 }
@@ -86,7 +86,7 @@ export function fascia(front: boolean, side: number, x: number, y: number, reces
 }
 
 export function createBody(parent: T.Group, m: Palette, full: boolean): { paintPoint: Point; paintNormal: Point } {
-  const n = full ? 64 : 36, k = full ? 26 : 16
+  const n = full ? 64 : 31, k = full ? 26 : 13
   const paint: T.BufferGeometry[] = [], black: T.BufferGeometry[] = [], carbon: T.BufferGeometry[] = []
   const steel: T.BufferGeometry[] = []
   const part = (to: T.BufferGeometry[], surface: Surface, out: Point, length = n, width = k, thickness = .002) => {
@@ -116,8 +116,19 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const inside = bayEdge(s, 1)
       const outside: Point = [plan(s), shoulder(s), zAt(s)]
       const forward = edgeGlass(s, 0)
-      const inX = mix(forward[0], inside[0], smooth(s, .60, .663))
-      return [mix(inX, outside[0], v), mix(inside[1], outside[1], v ** .84) + .044 * Math.sin(Math.PI * v) * smooth(s, .60, .73), zAt(s)]
+      const t = smooth(s, .6, .68)
+      const inX = mix(forward[0], inside[0], t)
+      const inY = mix(forward[1], inside[1], t)
+      return [mix(inX, outside[0], v), mix(inY, outside[1], v ** .84) + .036 * Math.sin(Math.PI * v) * smooth(s, .60, .73), zAt(s)]
+    }), [0, 1, 0])
+    part(paint, sided((u, v) => {
+      const s = mix(.594, .676, u)
+      const q = edgeGlass(s, 0)
+      const t = smooth(s, .6, .68)
+      const inner = bayEdge(s, 1)
+      const outside: Point = [mix(q[0], inner[0], t), mix(q[1], inner[1], t), zAt(s)]
+      const roofEnd: Point = [mix(.490, inner[0], t), spine(s), zAt(s)]
+      return blend(roofEnd, outside, smooth(v, 0, 1))
     }), [0, 1, 0])
     part(paint, sided((u, v) => {
       const x = v * .935
@@ -168,7 +179,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const intakeRight = curve([[0, .623], [.25, .649], [.55, .621], [1, .590]])
     const intakeBottom = .331, intakeTop = .69
     const cap = (s: number, v: number): Point => sillPoint(s, mix(rockerY(s), shoulder(s), v))
-    part(paint, (u, v) => cap(mix(.040, first.before, u), v), uSide, n, k)
+    part(paint, (u, v) => cap(mix(.141, first.before, u), v), uSide, n, k)
     part(paint, (u, v) => {
       const s = mix(first.after, cutLeading(v) - gap, u)
       return cap(s, v)
@@ -200,8 +211,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const s = mix(mix(intakeRight(1), cutTrailing(1), v) + gap, last.before, u)
       return sillPoint(s, mix(intakeTop, shoulder(s), v))
     }, uSide, n, 12)
-    part(paint, (u, v) => cap(mix(last.after, .978, u), v), uSide, n, k)
-    part(paint, (u, v) => cap(mix(.002, .040, u), v), uSide, 14, k)
+    part(paint, (u, v) => cap(mix(last.after, .926, u), v), uSide, n, k)
     const intake = (u: number, v: number, inset: number): Point => {
       const s = mix(intakeLeft(v), intakeRight(v), u)
       const p = sillPoint(s, mix(intakeBottom, intakeTop, v))
@@ -268,7 +278,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const low: Point = [Math.sign(q) * p[0], p[1] + .0013, p[2]]
     const high = roof(.4175, q)
     const p1 = blend(low, high, u)
-    return [p1[0], p1[1] + .039 * Math.sin(Math.PI * u) * (1 - .45 * Math.abs(q)), p1[2]]
+    return [p1[0], p1[1] + .022 * Math.sin(Math.PI * u) * (1 - .36 * Math.abs(q)), p1[2]]
   }
   add(parent, 'windscreen', patch(windshield, n, k * 2, [0, 1, 1], .0048), m.glass)
   part(paint, (u, v) => roof(mix(.4165, .5965, u), 2 * v - 1), [0, 1, 0], n, k * 2, .004)
@@ -292,7 +302,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   add(parent, 'stowage, seals and wheelhouse liners', joined(black), m.matte)
   add(parent, 'intake returns', joined(carbon), m.carbon)
   add(parent, 'mirror glass', joined(steel), m.mirror)
-  const s = .262, v = .90
+  const s = .236, v = .883
   const paintPoint = bonnet(s, v)
   const paintNormal = new T.Vector3(...bonnet(s, v + .001)).sub(new T.Vector3(...bonnet(s, v - .001)))
     .cross(new T.Vector3(...bonnet(s + .001, v)).sub(new T.Vector3(...bonnet(s - .001, v)))).normalize().toArray()

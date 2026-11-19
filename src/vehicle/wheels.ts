@@ -43,7 +43,7 @@ function tireGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
     const bulge = .0015 * Math.exp(-((ground - .027) ** 2) / .00069) * Math.sin(Math.PI * v) * Math.sign(p[0])
     return [p[0] + bulge, cushion - w.loaded, p[2]]
   }
-  return patch(position, full ? 840 : 160, full ? 84 : 32, [0, -1, 0])
+  return patch(position, full ? 840 : 128, full ? 84 : 30, [0, -1, 0])
 }
 
 function rotor(w: WheelSize, full: boolean, axis: number): T.BufferGeometry {
@@ -53,7 +53,7 @@ function rotor(w: WheelSize, full: boolean, axis: number): T.BufferGeometry {
   const center = new T.Path()
   center.absarc(0, 0, .081, 0, tau, true)
   face.holes.push(center)
-  const count = full ? 24 : 18
+  const count = full ? 24 : 14
   for (let i = 0; i < count; i++) for (let j = 0; j < 4; j++) {
     const a = (i / count) * tau + (.05 * j + .011 * j ** 2)
     const r = dia - .018 - .015 * j
@@ -61,7 +61,7 @@ function rotor(w: WheelSize, full: boolean, axis: number): T.BufferGeometry {
     drill.absarc(Math.cos(a) * r, Math.sin(a) * r, full ? .00315 : .0035, 0, tau, true)
     face.holes.push(drill)
   }
-  return new T.ExtrudeGeometry(face, { depth: w.discDepth, bevelEnabled: false, steps: 1, curveSegments: full ? 8 : 5 })
+  return new T.ExtrudeGeometry(face, { depth: w.discDepth, bevelEnabled: false, steps: 1, curveSegments: full ? 8 : 4 })
     .rotateY(Math.PI / 2).translate(axis - w.discDepth, 0, 0)
 }
 
@@ -148,6 +148,7 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
       add(group, 'forged divided spokes and barrel', forged, m.forged)
       add(group, 'machined flange and unmarked hub', hardware, m.brushed)
       add(group, 'drilled ceramic rotor', brake, m.brake)
+      add(group, 'recessed brake shield', disk(R - .013, .010, -.052, 64), m.dark)
       add(group, 'fixed brake caliper', cal, m.caliper)
       if (sidewall) add(group, 'molded sidewall relief', sidewall, m.tire)
       parent.add(group)
