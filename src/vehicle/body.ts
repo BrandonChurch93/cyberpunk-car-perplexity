@@ -383,7 +383,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     part(black, (u, v) => {
       const s = mix(.887, .989, u)
       const p = sillPoint(s, mix(.542, shoulder(s) - .006, v))
-      return [side * (Math.abs(p[0]) * .62), p[1], p[2]]
+      return [side * (Math.abs(p[0]) * .62), p[1], Math.max(p[2], zAt(mix(.948, .989, smooth(p[1], .713, .746))))]
     }, uSide, 24, 7, .008)
     part(paint, (u, v) => cap(mix(.141, first.before, u), v), uSide, n, k)
     folded((u, v) => {
@@ -552,7 +552,10 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   add(parent, 'recessed rear window', patch(hatch, n, k, [0, 1, -1], .0041), m.glass)
   black.push(contour(Array.from({ length: 15 }, (_, i) => hatch(.97, i / 14)), .009))
 
-  part(black, (u, v) => [mix(-.71, .71, v), .159, zAt(mix(.057, .947, u))], [0, -1, 0], 12, 9, .011)
+  part(black, (u, v) => {
+    const s = mix(.057, .947, u)
+    return [mix(-.71, .71, v), .159 + .051 * smooth(s, .909, .947), zAt(s)]
+  }, [0, -1, 0], 20, 9, .011)
   part(black, (u, v) => [mix(-.64, .64, v) * (1 - .2 * u), mix(.61, .819, u) + .017 * Math.sin(Math.PI * v), zAt(mix(.198, .304, u))], [0, 1, 0], 16, 12, .025)
   for (const side of [1, -1]) {
     const seatProfile = curve([[0, .36], [.29, .414], [.55, .404], [.68, .32], [.80, .209], [.95, .178], [1, .127]])

@@ -249,6 +249,32 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('keeps the diffuser inside the lower side profile at the tail', () => {
+    for (const vehicle of [full, blockout]) {
+      const diffuser = vehicle.root.getObjectByName('channeled graphite rear diffuser') as T.Mesh
+      const points = diffuser.geometry.getAttribute('position')
+      for (const [station, minY] of [[.98, .309], [.995, .407]]) {
+        let bottom = Number.POSITIVE_INFINITY
+        for (let i = 0; i < points.count; i++) {
+          if (Math.abs(points.getZ(i) - zAt(station)) < .008) bottom = Math.min(bottom, points.getY(i))
+        }
+        expect(bottom).toBeLessThan(.54)
+        expect(bottom).toBeGreaterThan(minY)
+      }
+    }
+  })
+
+  it('keeps the painted rear fascia in front of the internal liner', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const { position } = cameraAt(950 / config.film.fps, config.formats.preview, vehicle.anchors)
+      for (const [x, y, z] of [[.390, .648, -2.310], [.374, .637, -2.307], [.354, .609, -2.314], [.287, .656, -2.294]]) {
+        const ray = new T.Raycaster(position, new T.Vector3(x, y, z).sub(position).normalize())
+        expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('rear bumper paint surfaces')
+      }
+    }
+  })
+
   it('keeps surface radiance and emitted light intensity on the stage scale', () => {
     const lampsOn = stateAt(events.lampStageThree)
     const material = (name: string) =>

@@ -9,6 +9,11 @@ type XY = readonly [number, number]
 type Face = (x: number, y: number, recess?: number) => Point
 export const anchor = (position: Point, normal: Point, radius: number): Anchor => ({ position: vec(position), normal: vec(normal).normalize(), radius })
 
+const diffuserProfile = [[.908, .159], [.929, .191], [.940, .203], [.960, .233], [.970, .265], [.975, .295], [.980, .325], [.990, .399], [.995, .430], [1, .470]] as const
+const diffuserRise = curve(diffuserProfile)
+const diffuserRun = curve(diffuserProfile.map(([s, y]) => [y, s]))
+const diffuserZ = (x: number, y: number, z: number): number => limitTailZ(x, Math.max(z, zAt(diffuserRun(y))))
+
 function ribbon(face: Face, knots: readonly XY[], width: number, depth: number, steps = 36): T.BufferGeometry {
   const path = new T.CatmullRomCurve3(knots.map(([x, y]) => new T.Vector3(x, y, 0)), false, 'centripetal')
   const p0 = face(knots[0][0], knots[0][1]), p1 = face(knots[0][0], knots[0][1], .01)
@@ -268,19 +273,31 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     exhaust.add(source)
     heatSources.push({ object: source, strength: 1 })
     outletCavities.push(mapped(outlet, hex, outRear, .123, .011, outletRound))
+    const rampEdge = (u: number) => {
+      const x = .915 * u
+      return limitTailZ(x, zAt(sAt(r(x, .27, .009)[2]) + .029 * (1 - u)))
+    }
     const diffuser = (u: number, v: number): Point => {
       const x = mix(0, .969 - .054 * v, u)
-      const edge = r(x, .27, .009)
-      const s = mix(.842, sAt(edge[2]) + .029 * (1 - u), v)
+      const z = mix(zAt(.842), rampEdge(u), v)
       const low = .161 + .026 * smooth(u, .66, 1)
       const crown = (.019 * (1 - smooth(u, .32, .48)) + .035 * smooth(u, .63, .78)) * smooth(v, .24, 1)
-      return [side * x, low + mix(.161, .184, u) * v + crown, limitTailZ(x, zAt(s))]
+      const y = low + mix(.161, .184, u) * v + crown
+      return [side * x, y, diffuserZ(x, y, z)]
     }
     diffuserShell.push(patch(diffuser, 64, 20, [0, -1, 0], .016))
+    diffuserShell.push(patch((u, v) => {
+      const x = .915 * u
+      const upper = tailLower(x) - .002
+      const p = r(x, upper, .022)
+      const lip = .521 - .065 * u ** 1.6
+      return [side * x, mix(upper, lip, v) + .004 * Math.sin(Math.PI * v), mix(p[2] + .022, rampEdge(u) + .008, v)]
+    }, 47, 6, [0, -1, 0], .012))
     dark.push(patch((u, v) => {
       const x = .885 * u
       const s = mix(.844, .943 - .039 * u, v)
-      return [side * x, .153 + .067 * v, zAt(s)]
+      const y = .153 + .067 * v
+      return [side * x, y, diffuserZ(x, y, zAt(s))]
     }, 25, 9, [0, -1, 0], .016))
     const rampMouth = (u: number, v: number): Point => {
       const x = mix(0, .969, u)
@@ -289,7 +306,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const center = 1 - smooth(x, .385, .447)
       const y = mix(low, tailLower(x), v)
       const p = r(x, y, .020 + .022 * v + .081 * center * Math.sin(Math.PI * v) ** 1.45)
-      return [p[0], y, limitTailZ(x, mix(diff[2], p[2], smooth(v, 0, .78)))]
+      return [p[0], y, diffuserZ(x, y, mix(diff[2], p[2], smooth(v, 0, .78)))]
     }
     const mouthSplit = .454, lipStart = .84
     diffuserShell.push(patch((u, v) => rampMouth(mix(mouthSplit, 1, u), v), 37, 19, outRear, .010))
@@ -311,12 +328,18 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 5, 2, [side, 0, 0], .004))
     for (const fin of [.416, .645]) {
       diffuserShell.push(patch((u, v) => {
-        const depth = .289 * smooth(u, .10, .92)
-        const x = fin + .036 * smooth(u, .76, 1) * v * (fin > .5 ? 1 : 0)
-        const aft = sAt(r(x, .39, -.028 + .012 * v ** 4)[2]) + .010
-        const s = mix(.847, aft, u)
-        const y = mix(.193, tailLower(x) + .032, u) - v * depth
-        return [side * x, y, limitTailZ(x, zAt(s))]
+        const depth = .007 + .142 * smooth(u, .08, .94)
+        if (fin < .5) {
+          const s = mix(.857, .9994, u)
+          const bottom = Math.max(diffuserRise(s) + .003, .171 + .041 * smooth(u, .22, .62))
+          return [side * fin, bottom + (1 - v) * depth, zAt(s)]
+        }
+        const x = fin + .021 * smooth(u, .62, 1) * v
+        const tip = tailLower(x) + .041
+        const y = mix(.176, tip, u ** 1.45) - v * depth
+        const aft = sAt(r(x, tip, -.023 + .018 * v ** 1.45)[2])
+        const s = mix(.857, aft, u)
+        return [side * x, y, diffuserZ(x, y, zAt(s))]
       }, 37, 10, [side, 0, 0], .010))
     }
     rearOptical.push(ribbon(r, [[.545, .434], [.654, .430]], .022, .012, 18))
