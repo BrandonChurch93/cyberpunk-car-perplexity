@@ -75,9 +75,9 @@ const master: Record<string, ShotMaker> = {
     const w = a.wheel.position
     const drip = ease(t, wheel.start + 2.6, wheel.start + 2.9) - ease(t, wheel.start + 3.2, wheel.start + 4)
     return {
-      position: v(w.x + 3.4, 0.3, w.z + mix(0.45, 0.05, p)),
-      target: v(w.x, 0.36, w.z + mix(0.2, 0, p)),
-      screen: [mix(0.1, 0, p), 0],
+      position: v(w.x + 4.4, 0.3, w.z + mix(0.35, -0.05, p)),
+      target: w,
+      screen: [mix(0.3, 0.05, p), 0.2],
       focalMm: portraitMm,
       focus: v(w.x - 0.05, w.y, w.z),
       focusOffset: -0.12 * drip,
