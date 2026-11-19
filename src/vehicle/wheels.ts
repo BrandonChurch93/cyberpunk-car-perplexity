@@ -122,22 +122,23 @@ function spoke(w: WheelSize, theta: number, axial: number, full: boolean): T.Buf
 function caliper(w: WheelSize, full: boolean, axis: number): T.BufferGeometry {
   const rear = w === rearWheel
   const angle = rear ? 1.28 : -1.15
+  const seat = axis - (full ? .029 : 0)
   const point = (x: number, r: number, a: number): Point => axisRoll(x, r, angle + a)
   const geom = patch((u, v) => {
     const angle0 = (u - .5) * (rear ? .71 : 1.01)
     const shoulder = Math.sin(Math.PI * u) ** .46
     const thickness = .041 + .020 * shoulder
     const radial = w.disc - .012 + (v - .5) * thickness
-    return point(axis + .019 + .013 * Math.sin(v * Math.PI) * shoulder, radial, angle0)
+    return point(seat + .019 + .013 * Math.sin(v * Math.PI) * shoulder, radial, angle0)
   }, full ? 42 : 22, 16, [1, 0, 0], .062)
   const attachments = [
-    disk(.017, .014, axis + .021, 18).translate(0, ...point(0, w.disc - .043, rear ? .27 : .41).slice(1) as [number, number]),
-    disk(.017, .014, axis + .021, 18).translate(0, ...point(0, w.disc - .043, rear ? -.27 : -.41).slice(1) as [number, number]),
+    disk(.017, .014, seat + .021, 18).translate(0, ...point(0, w.disc - .043, rear ? .27 : .41).slice(1) as [number, number]),
+    disk(.017, .014, seat + .021, 18).translate(0, ...point(0, w.disc - .043, rear ? -.27 : -.41).slice(1) as [number, number]),
   ]
   if (full) {
     attachments.push(contour([
-      point(axis + .010, w.disc - .039, -.35), point(axis + .031, w.disc - .036, -.26),
-      point(axis + .038, w.disc - .035, .01), point(axis + .025, w.disc - .041, .27), point(axis + .010, w.disc - .039, .35),
+      point(seat - .001, w.disc - .039, -.35), point(seat + .020, w.disc - .036, -.26),
+      point(seat + .027, w.disc - .035, .01), point(seat + .014, w.disc - .041, .27), point(seat - .001, w.disc - .039, .35),
     ], .0037))
   }
   return joined([geom, ...attachments])
