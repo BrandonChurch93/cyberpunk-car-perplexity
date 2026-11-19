@@ -6,7 +6,7 @@ import { stream } from '../../src/core/random.ts'
 import { buildCrops, type CropManifest } from './crops.ts'
 import { config, ensureDir, readJson, repoRoot, workDir, writeJson } from './env.ts'
 import { judgedFrames, type JudgedFrame } from './judged.ts'
-import { beatMoments, eventRuns, extractSection, heroFrame, hookFrames, juryText, macroFrame, neutralName, neutralProblems, returnFormat, roundName, shuffle } from './pack.ts'
+import { beatMoments, configValues, eventRuns, extractSection, heroFrame, hookFrames, juryText, macroFrame, neutralName, neutralProblems, returnFormat, roundName, shuffle } from './pack.ts'
 import { recordMatches, RenderSession, stillName, type StillRecord, type StillSpec } from './render.ts'
 import { beatOfFrame } from './scene.ts'
 import { buildFrameSheet, buildSheet, sheetFrames } from './sheet.ts'
@@ -84,7 +84,9 @@ export class PackContext {
   }
 
   brief(heading: string): string {
-    return `${extractSection(this.quality, heading)}\n\n${returnFormat(this.quality)}\n`
+    const section = extractSection(this.quality, heading)
+    const values = configValues(section)
+    return `${section}\n\n${values ? `${values}\n\n` : ''}${returnFormat(this.quality)}\n`
   }
 }
 
@@ -242,6 +244,12 @@ const boardElements: Record<string, string[]> = {
 }
 const elementsForBeat = (beat: string): string[] => boardElements[beat] ?? boardElements.wide
 
+const withoutLinks = (line: string): string =>
+  line
+    .replace(/\[([^\]]*)\]\((?:[^()]|\([^()]*\))*\)/g, '$1')
+    .replace(/\s*\(source: [^)]*\)/g, '')
+    .replace(/\s*https?:\/\/\S+/g, '')
+
 /** Each element's sources and sizes from the board, without URLs and without build notes. */
 export function boardObservations(board: string, elements: string[]): string {
   const parts = board.split(/^## /m)
@@ -254,7 +262,7 @@ export function boardObservations(board: string, elements: string[]): string {
     for (const line of part.split('\n').slice(1)) {
       if (line.startsWith('### ')) keep = /^### (Sources|Real-world sizes)/.test(line)
       if (!keep || /^- (URL|Image):/.test(line)) continue
-      kept.push(line)
+      kept.push(withoutLinks(line))
     }
     out.push(kept.join('\n').replace(/\n{3,}/g, '\n\n').trim())
   }

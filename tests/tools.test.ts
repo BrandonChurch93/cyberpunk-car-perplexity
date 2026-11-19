@@ -8,7 +8,7 @@ import { clampRect, gridShape, planCrops } from '../tools/lib/crops'
 import { partRange } from '../tools/lib/film'
 import { signProblems } from '../tools/lib/gates'
 import { parseJudged } from '../tools/lib/judged'
-import { beatMoments, eventRuns, extractSection, heroFrame, hookFrames, isNeutral, juryText, macroFrame, neutralName, neutralProblems, returnFormat, roundName, shuffle } from '../tools/lib/pack'
+import { beatMoments, configValues, eventRuns, extractSection, heroFrame, hookFrames, isNeutral, juryText, macroFrame, neutralName, neutralProblems, returnFormat, roundName, shuffle } from '../tools/lib/pack'
 import { boardObservations, onlyImageChunks } from '../tools/lib/pack-build'
 import sharp from 'sharp'
 import { cameraForFrame, project, rayThrough } from '../tools/lib/scene'
@@ -139,6 +139,12 @@ describe('judged frame table', () => {
 })
 
 describe('briefs from the quality bar', () => {
+  it('states the values of config keys a brief names', () => {
+    const v = configValues('across `film.hookSeconds` at `critics.phonePreviewWidthPx` wide, `review` tier, `film.hookSeconds`', { film: { hookSeconds: 2 }, critics: { phonePreviewWidthPx: 400 } })
+    expect(v).toBe('Values: `film.hookSeconds` is 2, `critics.phonePreviewWidthPx` is 400.')
+    expect(configValues('nothing here', {})).toBe('')
+  })
+
   it('extracts each critic section word for word', () => {
     for (const heading of ['C2 ·', 'C3 ·', 'C4 ·', 'C5 ·', 'C5 blockout ·', 'C6 ·', 'C7 ·', 'C8 ·', 'C8 blockout ·']) {
       const s = extractSection(quality, heading)
@@ -163,11 +169,12 @@ describe('briefs from the quality bar', () => {
   })
 
   it('keeps board sources and sizes but drops links and build notes', () => {
-    const board = '## Puddles\n\nWhat to learn: depth\n\n### Sources\n\n#### S1 · One\n- URL: https://a\n- Image: https://b\n- Shows: a puddle\n- Observations:\n  1. dark\n\n### Real-world sizes\n- 5 mm\n\n### Build notes\n- secret\n\n## Other\n\n### Sources\n'
+    const board = '## Puddles\n\nWhat to learn: depth\n\n### Sources\n\n#### S1 · One\n- URL: https://a\n- Image: https://b\n- Shows: a puddle\n- Observations:\n  1. dark\n\n### Real-world sizes\n- 5 mm (source: https://c)\n- 2 m ([Some Rule §3](https://d/x?(y))).\n\n### Build notes\n- secret\n\n## Other\n\n### Sources\n'
     const out = boardObservations(board, ['Puddles'])
     expect(out).toContain('What to learn: depth')
     expect(out).toContain('- Shows: a puddle')
-    expect(out).toContain('- 5 mm')
+    expect(out).toContain('- 5 mm\n')
+    expect(out).toContain('- 2 m (Some Rule §3).')
     expect(out).not.toContain('https://')
     expect(out).not.toContain('secret')
     expect(out).not.toContain('Other')

@@ -123,6 +123,20 @@ export function juryText(markdown: string): string {
   return quoted.map((l) => l.replace(/^>\s?/, '')).join('\n').trim()
 }
 
+/** The values of the config keys a brief names in backticks, so a critic reads numbers, not key names. */
+export function configValues(text: string, source: unknown = config): string {
+  const seen = new Set<string>()
+  const parts: string[] = []
+  for (const m of text.matchAll(/`([a-zA-Z]+(?:\.[a-zA-Z0-9]+)+)`/g)) {
+    if (seen.has(m[1])) continue
+    seen.add(m[1])
+    let v: unknown = source
+    for (const k of m[1].split('.')) v = v !== null && typeof v === 'object' ? (v as Record<string, unknown>)[k] : undefined
+    if (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') parts.push(`\`${m[1]}\` is ${v}`)
+  }
+  return parts.length ? `Values: ${parts.join(', ')}.` : ''
+}
+
 /** Seeded Fisher-Yates. */
 export function shuffle<T>(items: T[], next: () => number): T[] {
   const out = [...items]
