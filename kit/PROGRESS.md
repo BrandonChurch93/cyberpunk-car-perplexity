@@ -5,7 +5,7 @@ The Builder's memory. Read this first in every task. Update it before every comm
 ## Status
 
 - Current phase: 2 · Blockout in motion
-- Current round: none
+- Current round: 2 (Phase 2 blockout)
 - Blocked: no
 - Last push: see the push log, 2026-11-19
 
@@ -181,6 +181,12 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | The lowest frame PSNR that G9 accepts for the proof export against the harness frames is 30 dB, a constant in `tools/lib/gates.ts` | The kit names the check but not the number. 30 dB at 20 Mbps separates a correct encode from a wrong frame | `tools/lib/gates.ts` |
 | 2026-11-19 | The film camera also sees a camera-only layer (`layers.cameraOnly`). Reflection and shadow cameras do not | Near rain, lens drops and haze cards must not appear in captures | `src/core/contract.ts`, `src/core/film-stage.ts` |
 | 2026-11-19 | `stageDetail` stays `blockout` through the Phase 2 gate. `?detail=full` or `SHOWCASE_DETAIL=full` shows the lit film. Every render record carries the detail level | The blockout critics judge the gray box while Phase 3 systems are merged behind the switch | `src/core/detail.ts` |
+| 2026-11-19 | Vehicle B is the car. Vehicle A was stopped and its builder became a standing independent auditor of the car (matched-angle photographs, drawing overlays, line match in millimeters, a score from 1 to 10 per view). Vehicle C was stopped | B had the right size and silhouette. A and C did not beat it. An auditor who did not build the car scores it harder than its builder | `src/vehicle/`, Phase 3 |
+| 2026-11-19 | A second car (D) is being built by a different method, in a scripted modeling tool with a mesh export, on its own branch under the same contract | The auditor scores B between 3 and 6 per view against a bar of 8. A second method lowers the risk that the code route cannot reach the form | `dev/vehicle-d`, `tools/vehicle/d/`, Phase 3 |
+| 2026-11-19 | The post stage was given to a second agent after the first did not deliver in time. Its branch is the one merged. Tone curve NightNegative chosen over two other candidates | The first branch arrived after the second had been verified and merged | `src/post/` |
+| 2026-11-19 | Critics C5 and C8 receive the beat lines of `kit/01-FILM.md` and the rule on cuts with the brief, and every sheet caption states whether its beat begins with a cut or continues a move, computed from the camera data | The rubric refers to the beats and to cuts. In round 1 the motion critic could not tell a planned cut from a jump | `tools/pack.ts`, `tools/lib/scene.ts` |
+| 2026-11-19 | The `return` beat cuts to a high crane view of the lit car, then comes down and back into the opening frame. The wake push travels 2.6 m. The paint beat looks along the left wing crest toward the door mirror. The wheel beat is a 35 mm low three-quarter arc. The detail beat holds the crossed braces from its first frame. The tall shots are each set up again | Critic round 1: C5 6, C8 5. See `scorecards/round-001/SUMMARY.md` | `src/director/shots.ts`, `cut/SHOTS.md` |
+| 2026-11-19 | Phase 2 contact sheets are rendered in the preview format | The sheets are downsized to `critics.longEdgePx` anyway. The round 1 pack took an hour on two cores | `tools/pack.ts` |
 
 ## Config changes
 
@@ -194,6 +200,7 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 
 | Round | Phase | Gate | C1 render against control | C2 | C3 | C4 | C5 | C6 | C7 | C8 | Top issue | What changed next |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 2 | blockout | n/a | n/a | n/a | n/a | 6 | n/a | n/a | 5 | C8 severe: the paint beat is a bare hood curve with no line and no background | Every shot reframed, crane return, tall shots set up again, cut captions |
 
 ## Plateau log
 
@@ -218,10 +225,21 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | 5dae634 | pushed to main. Shots tuned on the gray-box car |
 | 2026-11-19 | 94c116b | pushed to main. Merges of modes, world, vehicle B, light, air. Wheel shot |
 | 2026-11-19 | bdcc79d | pushed to main. Merge of the harness tools, judged frame list, page anchors |
+| 2026-11-19 | 286ee3d | pushed to main. Progress |
+| 2026-11-19 | 2a71642 | pushed to main. Merges of the tools detail flag, world lighting, reflections, surface water, vehicle B step 8, bokeh |
+| 2026-11-19 | 6ee5cc7 | pushed to main. Merge of the post stage |
+| 2026-11-19 | the commit titled "Round 1 scorecards and the round 2 shot plan" | pushed to main. Round 1 scorecards, new shots, vehicle B pass 2 steps 1 to 3, tools for split packs and film parts |
 
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-19, session 6
+
+- Done: merged world lighting (8 film lights, 3 shadowed), planar and cube reflections, surface water, bokeh, the post stage, vehicle B through pass 2 step 3, and the tools for preview sheets, cut captions, split message lists and film parts across machines. 125 unit tests pass. Critic round 1 run on the gray box: C5 6, C8 5. Every shot was reframed with probes and frames in both formats, lens clearance checked (0.12 m at the closest, the tall wheel shot above the deck). A wrap fault was found and fixed: the samples of frame 0 that fall before time 0 took the settled push position. A test now holds the first and last frame to one pose across all their samples.
+- Measured: full-detail preview frame at review tier 81 to 112 s. 16x9 per sample about 11.2 s plus 3.2 to 8 s for reflections. A review preview film is about 37 hours on one machine, so film parts will be rendered on several machines and assembled with a byte compare.
+- Seen: the auditor scores vehicle B front three-quarter 4, side 5, rear three-quarter 3, wheel 4, lamp 6, bay 4. The car form is the largest open risk for Phase 3.
+- Next: pack round 2, fresh C5 and C8 critics from other families, repeat until both are at 9 with no severe or major issue. Then the Phase 2 gate.
 
 ### 2026-11-19, session 5
 

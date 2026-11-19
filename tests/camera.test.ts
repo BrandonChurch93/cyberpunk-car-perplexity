@@ -32,6 +32,18 @@ describe('camera', () => {
     }
   })
 
+  it('keeps one pose for every sample of the frames at the seam', () => {
+    const step = 1 / config.film.fps
+    for (const format of formats) {
+      const first = cameraAt(0, format, anchors)
+      const early = cameraAt(duration - step / 4, format, anchors, 0)
+      expect(early.position.distanceTo(first.position)).toBeLessThan(0.001)
+      const last = cameraAt(duration - step, format, anchors)
+      const late = cameraAt(duration + step / 4, format, anchors, duration - step)
+      expect(late.position.distanceTo(last.position)).toBeLessThan(0.001)
+    }
+  })
+
   it('uses only the listed focal lengths', () => {
     for (const format of formats) {
       for (let f = 0; f < frameCount; f += 5) expect(config.lens.focalLengthsMm).toContain(cameraAt(f / config.film.fps, format, anchors).focalMm)

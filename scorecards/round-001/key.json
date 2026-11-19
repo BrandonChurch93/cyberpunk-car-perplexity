@@ -1,0 +1,960 @@
+{
+  "round": 1,
+  "phase": 2,
+  "paint": "black-pearl",
+  "buildHash": "0091189f5cc0aa1f",
+  "critics": {
+    "C5": {
+      "folder": "c5",
+      "files": {
+        "set-A-01.png": {
+          "what": "contact sheet arrival, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-arrival-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "arrival",
+            "frames": [
+              0,
+              11,
+              22,
+              32,
+              43,
+              54,
+              65,
+              76,
+              87,
+              97,
+              108,
+              119
+            ]
+          }
+        },
+        "set-A-02.png": {
+          "what": "contact sheet wake, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-wake-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "wake",
+            "frames": [
+              120,
+              134,
+              147,
+              161,
+              174,
+              188,
+              201,
+              215,
+              228,
+              242,
+              255,
+              269
+            ]
+          }
+        },
+        "set-A-03.png": {
+          "what": "contact sheet paint, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-paint-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "paint",
+            "frames": [
+              270,
+              286,
+              303,
+              319,
+              335,
+              351,
+              368,
+              384,
+              400,
+              416,
+              433,
+              449
+            ]
+          }
+        },
+        "set-A-04.png": {
+          "what": "contact sheet wheel, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-wheel-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "wheel",
+            "frames": [
+              450,
+              464,
+              477,
+              491,
+              504,
+              518,
+              531,
+              545,
+              558,
+              572,
+              585,
+              599
+            ]
+          }
+        },
+        "set-A-05.png": {
+          "what": "contact sheet lamp, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-lamp-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "lamp",
+            "frames": [
+              600,
+              614,
+              627,
+              641,
+              654,
+              668,
+              681,
+              695,
+              708,
+              722,
+              735,
+              749
+            ]
+          }
+        },
+        "set-A-06.png": {
+          "what": "contact sheet detail, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-detail-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "detail",
+            "frames": [
+              750,
+              761,
+              772,
+              782,
+              793,
+              804,
+              815,
+              826,
+              837,
+              847,
+              858,
+              869
+            ]
+          }
+        },
+        "set-A-07.png": {
+          "what": "contact sheet ignition, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-ignition-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "ignition",
+            "frames": [
+              870,
+              889,
+              908,
+              927,
+              946,
+              965,
+              984,
+              1003,
+              1022,
+              1041,
+              1060,
+              1079
+            ]
+          }
+        },
+        "set-A-08.png": {
+          "what": "contact sheet return, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-return-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "return",
+            "frames": [
+              1080,
+              1104,
+              1129,
+              1153,
+              1178,
+              1202,
+              1227,
+              1251,
+              1276,
+              1300,
+              1325,
+              1349
+            ]
+          }
+        },
+        "set-A-09.png": {
+          "what": "contact sheet seam, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-seam-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "seam",
+            "frames": [
+              1314,
+              1321,
+              1328,
+              1335,
+              1342,
+              1349,
+              0,
+              7,
+              14,
+              21,
+              28,
+              35
+            ]
+          }
+        }
+      }
+    },
+    "C8": {
+      "folder": "c8",
+      "files": {
+        "set-A-01.png": {
+          "what": "f00000-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00000-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 0,
+            "beat": "arrival",
+            "moment": "start"
+          }
+        },
+        "set-A-02.png": {
+          "what": "f00060-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00060-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 60,
+            "beat": "arrival",
+            "moment": "middle"
+          }
+        },
+        "set-A-03.png": {
+          "what": "f00119-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00119-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 119,
+            "beat": "arrival",
+            "moment": "end"
+          }
+        },
+        "set-A-04.png": {
+          "what": "f00120-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00120-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 120,
+            "beat": "wake",
+            "moment": "start"
+          }
+        },
+        "set-A-05.png": {
+          "what": "f00195-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00195-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 195,
+            "beat": "wake",
+            "moment": "middle"
+          }
+        },
+        "set-A-06.png": {
+          "what": "f00269-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00269-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 269,
+            "beat": "wake",
+            "moment": "end"
+          }
+        },
+        "set-A-07.png": {
+          "what": "f00270-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00270-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 270,
+            "beat": "paint",
+            "moment": "start"
+          }
+        },
+        "set-A-08.png": {
+          "what": "f00360-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00360-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 360,
+            "beat": "paint",
+            "moment": "middle"
+          }
+        },
+        "set-A-09.png": {
+          "what": "f00449-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00449-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 449,
+            "beat": "paint",
+            "moment": "end"
+          }
+        },
+        "set-A-10.png": {
+          "what": "f00450-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00450-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 450,
+            "beat": "wheel",
+            "moment": "start"
+          }
+        },
+        "set-A-11.png": {
+          "what": "f00525-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00525-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 525,
+            "beat": "wheel",
+            "moment": "middle"
+          }
+        },
+        "set-A-12.png": {
+          "what": "f00599-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00599-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 599,
+            "beat": "wheel",
+            "moment": "end"
+          }
+        },
+        "set-A-13.png": {
+          "what": "f00600-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00600-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 600,
+            "beat": "lamp",
+            "moment": "start"
+          }
+        },
+        "set-A-14.png": {
+          "what": "f00675-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00675-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 675,
+            "beat": "lamp",
+            "moment": "middle"
+          }
+        },
+        "set-A-15.png": {
+          "what": "f00749-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00749-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 749,
+            "beat": "lamp",
+            "moment": "end"
+          }
+        },
+        "set-A-16.png": {
+          "what": "f00750-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00750-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 750,
+            "beat": "detail",
+            "moment": "start"
+          }
+        },
+        "set-A-17.png": {
+          "what": "f00810-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00810-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 810,
+            "beat": "detail",
+            "moment": "middle"
+          }
+        },
+        "set-A-18.png": {
+          "what": "f00869-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00869-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 869,
+            "beat": "detail",
+            "moment": "end"
+          }
+        },
+        "set-A-19.png": {
+          "what": "f00870-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00870-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 870,
+            "beat": "ignition",
+            "moment": "start"
+          }
+        },
+        "set-A-20.png": {
+          "what": "f00975-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00975-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 975,
+            "beat": "ignition",
+            "moment": "middle"
+          }
+        },
+        "set-A-21.png": {
+          "what": "f01079-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f01079-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 1079,
+            "beat": "ignition",
+            "moment": "end"
+          }
+        },
+        "set-A-22.png": {
+          "what": "f01080-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f01080-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 1080,
+            "beat": "return",
+            "moment": "start"
+          }
+        },
+        "set-A-23.png": {
+          "what": "f01215-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f01215-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 1215,
+            "beat": "return",
+            "moment": "middle"
+          }
+        },
+        "set-A-24.png": {
+          "what": "f01349-16x9-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f01349-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 1349,
+            "beat": "return",
+            "moment": "end"
+          }
+        },
+        "set-B-01.png": {
+          "what": "f00000-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00000-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 0,
+            "beat": "arrival",
+            "moment": "start"
+          }
+        },
+        "set-B-02.png": {
+          "what": "f00060-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00060-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 60,
+            "beat": "arrival",
+            "moment": "middle"
+          }
+        },
+        "set-B-03.png": {
+          "what": "f00119-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00119-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 119,
+            "beat": "arrival",
+            "moment": "end"
+          }
+        },
+        "set-B-04.png": {
+          "what": "f00120-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00120-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 120,
+            "beat": "wake",
+            "moment": "start"
+          }
+        },
+        "set-B-05.png": {
+          "what": "f00195-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00195-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 195,
+            "beat": "wake",
+            "moment": "middle"
+          }
+        },
+        "set-B-06.png": {
+          "what": "f00269-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00269-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 269,
+            "beat": "wake",
+            "moment": "end"
+          }
+        },
+        "set-B-07.png": {
+          "what": "f00270-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00270-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 270,
+            "beat": "paint",
+            "moment": "start"
+          }
+        },
+        "set-B-08.png": {
+          "what": "f00360-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00360-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 360,
+            "beat": "paint",
+            "moment": "middle"
+          }
+        },
+        "set-B-09.png": {
+          "what": "f00449-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00449-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 449,
+            "beat": "paint",
+            "moment": "end"
+          }
+        },
+        "set-B-10.png": {
+          "what": "f00450-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00450-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 450,
+            "beat": "wheel",
+            "moment": "start"
+          }
+        },
+        "set-B-11.png": {
+          "what": "f00525-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00525-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 525,
+            "beat": "wheel",
+            "moment": "middle"
+          }
+        },
+        "set-B-12.png": {
+          "what": "f00599-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00599-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 599,
+            "beat": "wheel",
+            "moment": "end"
+          }
+        },
+        "set-B-13.png": {
+          "what": "f00600-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00600-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 600,
+            "beat": "lamp",
+            "moment": "start"
+          }
+        },
+        "set-B-14.png": {
+          "what": "f00675-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00675-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 675,
+            "beat": "lamp",
+            "moment": "middle"
+          }
+        },
+        "set-B-15.png": {
+          "what": "f00749-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00749-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 749,
+            "beat": "lamp",
+            "moment": "end"
+          }
+        },
+        "set-B-16.png": {
+          "what": "f00750-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00750-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 750,
+            "beat": "detail",
+            "moment": "start"
+          }
+        },
+        "set-B-17.png": {
+          "what": "f00810-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00810-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 810,
+            "beat": "detail",
+            "moment": "middle"
+          }
+        },
+        "set-B-18.png": {
+          "what": "f00869-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00869-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 869,
+            "beat": "detail",
+            "moment": "end"
+          }
+        },
+        "set-B-19.png": {
+          "what": "f00870-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00870-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 870,
+            "beat": "ignition",
+            "moment": "start"
+          }
+        },
+        "set-B-20.png": {
+          "what": "f00975-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00975-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 975,
+            "beat": "ignition",
+            "moment": "middle"
+          }
+        },
+        "set-B-21.png": {
+          "what": "f01079-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f01079-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 1079,
+            "beat": "ignition",
+            "moment": "end"
+          }
+        },
+        "set-B-22.png": {
+          "what": "f01080-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f01080-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 1080,
+            "beat": "return",
+            "moment": "start"
+          }
+        },
+        "set-B-23.png": {
+          "what": "f01215-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f01215-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 1215,
+            "beat": "return",
+            "moment": "middle"
+          }
+        },
+        "set-B-24.png": {
+          "what": "f01349-9x16-review-beauty-black-pearl",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f01349-9x16-review-beauty-black-pearl.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 1349,
+            "beat": "return",
+            "moment": "end"
+          }
+        },
+        "set-C-01.png": {
+          "what": "contact sheet arrival, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-arrival-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "arrival",
+            "frames": [
+              0,
+              11,
+              22,
+              32,
+              43,
+              54,
+              65,
+              76,
+              87,
+              97,
+              108,
+              119
+            ]
+          }
+        },
+        "set-C-02.png": {
+          "what": "contact sheet wake, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-wake-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "wake",
+            "frames": [
+              120,
+              134,
+              147,
+              161,
+              174,
+              188,
+              201,
+              215,
+              228,
+              242,
+              255,
+              269
+            ]
+          }
+        },
+        "set-C-03.png": {
+          "what": "contact sheet paint, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-paint-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "paint",
+            "frames": [
+              270,
+              286,
+              303,
+              319,
+              335,
+              351,
+              368,
+              384,
+              400,
+              416,
+              433,
+              449
+            ]
+          }
+        },
+        "set-C-04.png": {
+          "what": "contact sheet wheel, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-wheel-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "wheel",
+            "frames": [
+              450,
+              464,
+              477,
+              491,
+              504,
+              518,
+              531,
+              545,
+              558,
+              572,
+              585,
+              599
+            ]
+          }
+        },
+        "set-C-05.png": {
+          "what": "contact sheet lamp, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-lamp-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "lamp",
+            "frames": [
+              600,
+              614,
+              627,
+              641,
+              654,
+              668,
+              681,
+              695,
+              708,
+              722,
+              735,
+              749
+            ]
+          }
+        },
+        "set-C-06.png": {
+          "what": "contact sheet detail, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-detail-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "detail",
+            "frames": [
+              750,
+              761,
+              772,
+              782,
+              793,
+              804,
+              815,
+              826,
+              837,
+              847,
+              858,
+              869
+            ]
+          }
+        },
+        "set-C-07.png": {
+          "what": "contact sheet ignition, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-ignition-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "ignition",
+            "frames": [
+              870,
+              889,
+              908,
+              927,
+              946,
+              965,
+              984,
+              1003,
+              1022,
+              1041,
+              1060,
+              1079
+            ]
+          }
+        },
+        "set-C-08.png": {
+          "what": "contact sheet return, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-return-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "return",
+            "frames": [
+              1080,
+              1104,
+              1129,
+              1153,
+              1178,
+              1202,
+              1227,
+              1251,
+              1276,
+              1300,
+              1325,
+              1349
+            ]
+          }
+        },
+        "set-C-09.png": {
+          "what": "contact sheet seam, review tier, 16x9",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/sheets/sheet-seam-16x9-review-beauty-black-pearl.png",
+          "width": 1400,
+          "height": 653,
+          "meta": {
+            "beat": "seam",
+            "frames": [
+              1314,
+              1321,
+              1328,
+              1335,
+              1342,
+              1349,
+              0,
+              7,
+              14,
+              21,
+              28,
+              35
+            ]
+          }
+        }
+      }
+    }
+  }
+}
