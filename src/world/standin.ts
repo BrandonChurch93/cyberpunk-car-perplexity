@@ -85,6 +85,12 @@ export function createStandInWorld(): WorldModule {
     })
   }
 
+  const vent = add(new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 1.2), steel), deck)
+  vent.position.set(-22, 0.45, -15)
+  const ventTop = new THREE.Object3D()
+  ventTop.position.set(-22, 0.92, -15)
+  deck.add(ventTop)
+
   const rng = stream('standin-city')
   const towerMaterial = new THREE.MeshStandardMaterial({ color: 0x0b0c0f, roughness: 0.7 })
   const windowColors = [new THREE.Color(1, 0.75, 0.45), new THREE.Color(0.55, 0.75, 1), new THREE.Color(0.9, 0.95, 1), new THREE.Color(1, 0.2, 0.25), new THREE.Color(0.2, 1, 0.9)]
@@ -158,6 +164,7 @@ export function createStandInWorld(): WorldModule {
     deck: { meshes: [slab], material: deckMaterial, bounds: new THREE.Box2(new THREE.Vector2(-40, -40), new THREE.Vector2(40, 40)), heightMap: null },
     reflectionBox: new THREE.Box3(new THREE.Vector3(-31, 0, -21), new THREE.Vector3(31, 80, 21)),
     surfaces: [{ material: deckMaterial, wetness: 'porous' }, { material: concrete, wetness: 'porous' }, { material: steel, wetness: 'sheet' }],
+    steamSources: [{ object: ventTop, strength: 1, kind: 'vent' }],
     beginFrame: () => undefined,
     beginSample: (sample) => setEmitters(sample.timeSeconds),
   }
