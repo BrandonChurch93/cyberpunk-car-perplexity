@@ -18,6 +18,7 @@ uniform vec4 surfReliefBounds;
 uniform float surfReliefScale;
 uniform float surfReliefOffset;
 uniform vec4 surfShelter;
+uniform float surfPorosity;
 
 float surfFineRelief(vec2 p, float detail) {
   float h = 1.2 * (surfNoise2(p / 0.55, 11u) - 0.5) + 0.5 * (surfNoise2(p / 0.17 + 3.1, 12u) - 0.5);
@@ -77,7 +78,7 @@ const porousFragment = /* glsl */ `
   surfSlope += surfRipples(surfXZ, min(surfDeep, 1.0), surfWet * surfUp * (1.0 - surfWater) * 0.6, 0.0) * surfDetail;
 
   float surfDamp = clamp(surfWet + surfFringe * 0.6, 0.0, 1.0);
-  float surfDark = mix(1.0, mix(0.5, 0.6, surfAgg), surfDamp);
+  float surfDark = mix(1.0, mix(0.9, mix(0.5, 0.6, surfAgg), surfPorosity), surfDamp);
   surfDark *= mix(1.0, 0.82, surfFringe);
   surfDark *= mix(1.0, mix(0.55, 0.3, smoothstep(0.0, 3.0, surfDepth)), surfWater);
   float surfL = surfLuma(diffuseColor.rgb);
@@ -106,10 +107,12 @@ if (surfDiag > 0.5) {
 }
 `
 
+/** Sealed or painted ground carries `userData.wetPorosity` below 1: it darkens less when wet and still turns glossy. */
 export function applyPorous(material: THREE.Material, uniforms: Uniforms, deck: boolean): void {
+  const porosity = typeof material.userData.wetPorosity === 'number' ? THREE.MathUtils.clamp(material.userData.wetPorosity, 0, 1) : 1
   patchMaterial(material, {
     id: deck ? 'surface water deck' : 'surface water porous',
-    uniforms,
+    uniforms: { ...uniforms, surfPorosity: { value: porosity } },
     defines: deck ? { SURF_DECK: 1, SURF_STANDING: 1 } : {},
     apply(shader) {
       shader.vertexShader = surfaceVaryingsGlsl(false) + insertAfter(shader.vertexShader, '#include <project_vertex>', surfaceVertexGlsl(false))
