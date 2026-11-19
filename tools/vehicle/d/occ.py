@@ -24,15 +24,29 @@ G1 = bool(os.environ.get('OCC_G1'))
 VERBOSE = bool(os.environ.get('OCC_VERBOSE'))
 
 
+CURVE = os.environ.get('OCC_CURVE', 'smooth')
+FILL = [float(x) for x in os.environ.get('OCC_FILL', '3,18,3,1e-5,2e-5,0.005,0.1,9,12').split(',')]
+CANDIDATES = [FILL] if os.environ.get('OCC_FILL') else [
+    (3, 18, 3, 1e-5, 2e-5, 0.005, 0.1, 9, 12), (2, 12, 1, 1e-4, 5e-4, 0.02, 0.1, 6, 4), (2, 15, 2, 1e-5, 1e-4, 0.01, 0.1, 6, 4),
+    (2, 20, 1, 1e-5, 1e-4, 0.01, 0.1, 8, 6), (3, 24, 2, 1e-5, 2e-4, 0.01, 0.1, 6, 2), (2, 30, 2, 1e-5, 1e-4, 0.01, 0.1, 6, 3)]
+
+
 def _curve(P, tol=2e-5):
     a = Array1_gp_Pnt(1, len(P))
     for i, p in enumerate(P):
         a.SetValue(i + 1, gp_Pnt(*map(float, p)))
+    if CURVE == 'smooth':
+        w = [float(x) for x in os.environ.get('OCC_SMOOTH', '1e-6,1e-5,1e-7,3e-4').split(',')]
+        c = GeomAPI_PointsToBSpline(a, w[0], w[1], w[2], 8, GeomAbs_C2, w[3]).Curve()
+        c.SetPole(1, gp_Pnt(*map(float, P[0])))
+        c.SetPole(c.NbPoles(), gp_Pnt(*map(float, P[-1])))
+        return c
     return GeomAPI_PointsToBSpline(a, Approx_ChordLength, 3, 8, GeomAbs_C2, tol).Curve()
 
 
-def _filling(edges, points=(), g1=(), free=()):
-    f = BRepOffsetAPI_MakeFilling(3, 18, 3, False, 1e-5, 2e-5, 0.005, 0.1, 9, 12)
+def _filling(edges, points=(), g1=(), free=(), params=None):
+    d, np_, it, t2, t3, ta, tc, md, ms = params or FILL
+    f = BRepOffsetAPI_MakeFilling(int(d), int(np_), int(it), False, t2, t3, ta, tc, int(md), int(ms))
     for e in free:
         f.Add(e, GeomAbs_C0, False)
     for e in edges:
@@ -89,12 +103,21 @@ def _triangulate(face):
     loc = TopLoc_Location()
     tri = BRep_Tool.Triangulation_s(face, loc)
     if tri is None:
-        return np.zeros((0, 3)), np.zeros((0, 3), int)
+        return np.zeros((0, 3)), np.zeros((0, 3), int), np.zeros((0, 3))
     tr = loc.Transformation()
-    V = []
+    ad = BRepAdaptor_Surface(face)
+    pr = BRepLProp_SLProps(ad, 1, 1e-7)
+    V, N = [], []
     for i in range(1, tri.NbNodes() + 1):
         p = tri.Node(i).Transformed(tr)
         V.append((p.X(), p.Y(), p.Z()))
+        uv = tri.UVNode(i)
+        pr.SetParameters(uv.X(), uv.Y())
+        if pr.IsNormalDefined():
+            n = pr.Normal()
+            N.append((n.X(), n.Y(), n.Z()))
+        else:
+            N.append((0.0, 0.0, 0.0))
     T = []
     for i in range(1, tri.NbTriangles() + 1):
         a, b, c = tri.Triangle(i).Get()
@@ -102,10 +125,24 @@ def _triangulate(face):
     T = np.array(T, int)
     if face.Orientation() == TopAbs_REVERSED:
         T = T[:, [0, 2, 1]]
-    return np.array(V), T
+    return np.array(V), T, np.array(N)
 
 
-def build(half, deflection=float(os.environ.get("OCC_DEFL", 0.0003)), angle=float(os.environ.get("OCC_ANGLE", 0.1)), log=print):
+def _orient_normals(V, T, N):
+    fn = np.cross(V[T[:, 1]] - V[T[:, 0]], V[T[:, 2]] - V[T[:, 0]])
+    vn = np.zeros_like(V)
+    for k in range(3):
+        np.add.at(vn, T[:, k], fn)
+    bad = np.linalg.norm(N, axis=1) < 0.5
+    N = N.copy()
+    N[bad] = vn[bad]
+    s = np.sign((N * vn).sum(1))
+    s[s == 0] = 1
+    N = N * s[:, None]
+    return N / np.maximum(np.linalg.norm(N, axis=1), 1e-12)[:, None]
+
+
+def build(half, deflection=float(os.environ.get("OCC_DEFL", 0.0003)), angle=float(os.environ.get("OCC_ANGLE", 0.1)), log=print, faces_only=False):
     from net import full
     net = full(half)
     verts = {n: BRepBuilderAPI_MakeVertex(gp_Pnt(*map(float, p))).Vertex() for n, p in net.points.items()}
@@ -125,6 +162,7 @@ def build(half, deflection=float(os.environ.get("OCC_DEFL", 0.0003)), angle=floa
         samples[name] = spline(ctrl, spacing=0.002)
     faces = {}
     owner = {}
+    chosen = {}
     for f in net.facets:
         g1 = {}
         for en in f['loop']:
@@ -137,10 +175,28 @@ def build(half, deflection=float(os.environ.get("OCC_DEFL", 0.0003)), angle=floa
         free = [e for h in hs for e in h] if f.get('through', True) else []
         free += [edges[en] for en in f.get('inner', ())]
         try:
-            face, err = _filling(es, g1=g1, free=free)
-            if f['crown']:
-                c, n = _center(face, f['hint'])
-                face, err = _filling(es, [c + f['crown'] * n], g1=g1, free=free)
+            base = f['name'][:-2] if f['name'].endswith('.R') else f['name']
+            cands = [chosen[base]] if base in chosen else CANDIDATES
+            best = None
+            for prm in cands:
+                try:
+                    face, err = _filling(es, g1=g1, free=free, params=prm)
+                    if f['crown']:
+                        c, n = _center(face, f['hint'])
+                        face, err = _filling(es, [c + f['crown'] * n], g1=g1, free=free, params=prm)
+                except Exception:
+                    continue
+                if len(cands) == 1:
+                    best = (0, face, err, prm)
+                    break
+                from fair import face_stats
+                k = face_stats(face, 14)[1]
+                score = k * (1 + max(0.0, err - 2e-4) / 1e-4)
+                if best is None or score < best[0]:
+                    best = (score, face, err, prm)
+            if best is None:
+                raise RuntimeError('filling failed for every parameter set')
+            _, face, err, chosen[base] = best
             for h in hs:
                 face = _cut(face, h)
         except Exception as ex:
@@ -150,6 +206,8 @@ def build(half, deflection=float(os.environ.get("OCC_DEFL", 0.0003)), angle=floa
         faces[f['name']] = face
         for en in f['loop']:
             owner.setdefault(en, f['name'])
+    if faces_only:
+        return faces
     sew = BRepBuilderAPI_Sewing(1e-4)
     for face in faces.values():
         sew.Add(face)
@@ -167,16 +225,17 @@ def _assemble(net, sewn, samples, log):
     finfo = {f['name']: f for f in net.facets}
     objs = {}
     for name, face in sewn.items():
-        V, T = _triangulate(face)
-        if face.Orientation() != TopAbs_REVERSED:
-            pass
+        V, T, N = _triangulate(face)
         hint = finfo[name]['hint']
         if hint is not None and len(T):
             fn = np.cross(V[T[:, 1]] - V[T[:, 0]], V[T[:, 2]] - V[T[:, 0]]).sum(0)
             if fn @ np.asarray(hint, float) < 0:
                 T = T[:, [0, 2, 1]]
-        o = objs.setdefault(finfo[name]['obj'], {'V': [], 'T': [], 'mats': [], 'facet': [], 'n': 0})
+        if len(T):
+            N = _orient_normals(V, T, N)
+        o = objs.setdefault(finfo[name]['obj'], {'V': [], 'T': [], 'N': [], 'mats': [], 'facet': [], 'n': 0})
         o['V'].append(V)
+        o['N'].append(N[T] if len(T) else np.zeros((0, 3, 3)))
         o['T'].append(T + o['n'])
         o['n'] += len(V)
         o['mats'] += [finfo[name]['mat']] * len(T)
@@ -190,11 +249,31 @@ def _assemble(net, sewn, samples, log):
         _, first, inv = np.unique(key, axis=0, return_index=True, return_inverse=True)
         V = V[first]
         T = inv.ravel()[T]
-        T = T[(T[:, 0] != T[:, 1]) & (T[:, 1] != T[:, 2]) & (T[:, 0] != T[:, 2])]
-        facet = np.array(o['facet'])[: len(T)] if False else o['facet']
-        crease = _feature_edges(V, T, o['facet'], net, samples)
-        out[oname] = {'V': V, 'T': T, 'mats': o['mats'], 'facet': o['facet'], 'crease': crease}
+        CN = np.vstack(o['N'])
+        keep = (T[:, 0] != T[:, 1]) & (T[:, 1] != T[:, 2]) & (T[:, 0] != T[:, 2])
+        T, CN = T[keep], CN[keep]
+        facets = [f for f, k in zip(o['facet'], keep) if k]
+        mats = [m for m, k in zip(o['mats'], keep) if k]
+        crease = _feature_edges(V, T, facets, net, samples)
+        CN = _soft_normals(V, T, CN, crease)
+        out[oname] = {'V': V, 'T': T, 'N': CN, 'mats': mats, 'facet': facets, 'crease': crease}
         log(f'{oname}: {len(out[oname]["V"])} verts {len(out[oname]["T"])} tris')
+    return out
+
+
+def _soft_normals(V, T, CN, crease):
+    """Corner normals from the exact surfaces, averaged across faces except at crease vertices."""
+    hard = np.zeros(len(V), bool)
+    for a, b in crease:
+        hard[a] = hard[b] = True
+    acc = np.zeros_like(V)
+    for k in range(3):
+        np.add.at(acc, T[:, k], CN[:, k])
+    acc /= np.maximum(np.linalg.norm(acc, axis=1), 1e-12)[:, None]
+    out = CN.copy()
+    for k in range(3):
+        soft = ~hard[T[:, k]]
+        out[soft, k] = acc[T[soft, k]]
     return out
 
 

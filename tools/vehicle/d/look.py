@@ -22,8 +22,15 @@ built = occ.build(NET)
 
 bl.reset()
 COL = {'paint': (0.62, 0.62, 0.62), 'black': (0.05, 0.05, 0.05), 'glass': (0.08, 0.09, 0.1), 'dark': (0.03, 0.03, 0.03)}
+IDS = os.environ.get('IDS')
 for name, o in built.items():
-    ob = bl.mesh_object(name, o['V'], o['T'], o['mats'], o['crease'], bevel=float(os.environ.get('BEVEL', '0.004')))
+    mats = o['facet'] if IDS and name == 'body' else o['mats']
+    ob = bl.mesh_object(name, o['V'], o['T'], mats, o['crease'], bevel=float(os.environ.get('BEVEL', '0.004')), normals=o.get('N'))
+    if IDS and name == 'body':
+        import zlib
+        for fn in set(o['facet']):
+            h = zlib.crc32(fn.replace('.R', '').encode())
+            COL[fn] = ((h & 255) / 255 * 0.8 + 0.1, ((h >> 8) & 255) / 255 * 0.8 + 0.1, ((h >> 16) & 255) / 255 * 0.8 + 0.1)
 parts.all_parts(NET)
 COL.update({'tire': (0.03, 0.03, 0.03), 'rim': (0.5, 0.5, 0.52), 'disc': (0.15, 0.15, 0.15), 'caliper': (0.3, 0.3, 0.3)})
 if os.environ.get('LINES'):

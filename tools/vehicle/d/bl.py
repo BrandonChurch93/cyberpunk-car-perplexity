@@ -34,7 +34,7 @@ def material(name, color=(0.5, 0.5, 0.5), rough=0.5, metal=0.0, emit=None):
     return m
 
 
-def mesh_object(name, V, T, mats, crease=(), parent=None, matlib=None, bevel=0.004, segments=3, smooth=True):
+def mesh_object(name, V, T, mats, crease=(), parent=None, matlib=None, bevel=0.004, segments=3, smooth=True, normals=None):
     me = bpy.data.meshes.new(name)
     Vb = np.stack([V[:, 0], -V[:, 2], V[:, 1]], 1)
     me.from_pydata(Vb.tolist(), [], T.tolist())
@@ -46,6 +46,9 @@ def mesh_object(name, V, T, mats, crease=(), parent=None, matlib=None, bevel=0.0
     me.polygons.foreach_set('material_index', [idx[m] for m in mats])
     if smooth:
         me.polygons.foreach_set('use_smooth', [True] * len(me.polygons))
+    if normals is not None and len(me.polygons) == len(T):
+        Nb = np.stack([normals[..., 0], -normals[..., 2], normals[..., 1]], -1).reshape(-1, 3)
+        me.normals_split_custom_set(Nb.tolist())
     ob = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(ob)
     if parent:
