@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import * as T from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { config, defaultPaint, paintById } from '../src/config'
+import { cameraAt } from '../src/director/shots'
 import { events, lampThresholds, stateAt } from '../src/director/timeline'
 import { createVehicle, type VehicleModule, type VehicleState } from '../src/vehicle'
 import { zAt } from '../src/vehicle/body'
@@ -77,19 +78,30 @@ function instantaneous(car: VehicleModule, state: VehicleState) {
 }
 
 describe('vehicle geometry and state', () => {
-  it('turns the hood normal at each fold while retaining fair panels on either side', () => {
+  it('turns the hood and flank normals at the folds while retaining fair adjoining panels', () => {
     full.root.updateMatrixWorld(true)
-    const normalAt = (x: number, s: number): T.Vector3 => {
-      const ray = new T.Raycaster(new T.Vector3(x, 2, zAt(s)), new T.Vector3(0, -1, 0))
+    const normalAt = (across: number, s: number, side = false): T.Vector3 => {
+      const eye = side ? new T.Vector3(2, across, zAt(s)) : new T.Vector3(across, 2, zAt(s))
+      const ray = new T.Raycaster(eye, side ? new T.Vector3(-1, 0, 0) : new T.Vector3(0, -1, 0))
       const hit = ray.intersectObject(full.root, true)[0]
       return hit.normal!.clone().applyNormalMatrix(new T.Matrix3().getNormalMatrix(hit.object.matrixWorld))
     }
-    for (const [x, s] of [[.410, .104], [.557, .104], [.359, .140], [.627, .140]]) {
+    for (const [x, s] of [[.410, .104], [.557, .104], [.359, .140], [.627, .140], [.7022, .102]]) {
       const a = normalAt(x - .002, s), b = normalAt(x + .002, s)
-      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(8)
-      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(15)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
       expect(T.MathUtils.radToDeg(a.angleTo(normalAt(x - .010, s)))).toBeLessThan(3)
       expect(T.MathUtils.radToDeg(b.angleTo(normalAt(x + .010, s)))).toBeLessThan(3)
+    }
+    for (const [y, s] of [[.338, .530], [.650, .460], [.896, .760], [.924, .812], [.7814, .724]]) {
+      const a = normalAt(y - .002, s, true), b = normalAt(y + .002, s, true)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
+    }
+    for (const [x, s] of [[-.318, .520], [.318, .490], [.686, .750], [.849, .789]]) {
+      const a = normalAt(x - .003, s), b = normalAt(x + .003, s)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
     }
   })
 
@@ -187,6 +199,22 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('recesses the flat cap behind the machined rim and seats the lugs above the hub plate', () => {
+    for (const vehicle of [full, blockout]) {
+      const wheel = vehicle.root.getObjectByName('front wheel')!
+      const outerX = (name: string) => {
+        const mesh = wheel.getObjectByName(name) as T.Mesh
+        mesh.geometry.computeBoundingBox()
+        return mesh.geometry.boundingBox!.max.x
+      }
+      const plate = outerX('flat recessed hub plate')
+      const cap = outerX('flat center cap')
+      expect(cap - plate).toBeCloseTo(.0018, 5)
+      expect(outerX('machined flange') - cap).toBeGreaterThan(.025)
+      expect(outerX('five lug nuts')).toBeGreaterThan(cap)
+    }
+  })
+
   it('holds both outlet centers and their rear-facing heat origins across LODs', () => {
     for (const vehicle of [full, blockout]) {
       const ports = vehicle.root.getObjectsByProperty('name', 'formed hexagonal outlet')
@@ -206,6 +234,47 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('keeps both hexagonal cavities open to the ignition camera', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const { position } = cameraAt(950 / config.film.fps, config.formats.preview, vehicle.anchors)
+      for (const { object } of vehicle.heatSources) {
+        const center = object.getWorldPosition(new T.Vector3())
+        for (const [x, y] of [[0, 0], [.064, .022], [-.064, -.022]]) {
+          const target = center.clone().add(new T.Vector3(x, y, 0))
+          const ray = new T.Raycaster(position, target.sub(position).normalize())
+          expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('hexagonal outlet cavities')
+        }
+      }
+    }
+  })
+
+  it('keeps the diffuser inside the lower side profile at the tail', () => {
+    for (const vehicle of [full, blockout]) {
+      const diffuser = vehicle.root.getObjectByName('channeled graphite rear diffuser') as T.Mesh
+      const points = diffuser.geometry.getAttribute('position')
+      for (const [station, minY] of [[.98, .309], [.995, .407]]) {
+        let bottom = Number.POSITIVE_INFINITY
+        for (let i = 0; i < points.count; i++) {
+          if (Math.abs(points.getZ(i) - zAt(station)) < .008) bottom = Math.min(bottom, points.getY(i))
+        }
+        expect(bottom).toBeLessThan(.54)
+        expect(bottom).toBeGreaterThan(minY)
+      }
+    }
+  })
+
+  it('keeps the painted rear fascia in front of the internal liner', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const { position } = cameraAt(950 / config.film.fps, config.formats.preview, vehicle.anchors)
+      for (const [x, y, z] of [[.390, .648, -2.310], [.374, .637, -2.307], [.354, .609, -2.314], [.287, .656, -2.294]]) {
+        const ray = new T.Raycaster(position, new T.Vector3(x, y, z).sub(position).normalize())
+        expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('rear bumper paint surfaces')
+      }
+    }
+  })
+
   it('keeps surface radiance and emitted light intensity on the stage scale', () => {
     const lampsOn = stateAt(events.lampStageThree)
     const material = (name: string) =>
@@ -221,6 +290,24 @@ describe('vehicle geometry and state', () => {
     const sum = full.lamps.filter((lamp) => lamp.beam && lamp.object.position.x > 0)
       .reduce((total, lamp) => total + (lamp.intensity ?? 0) * (lamp.level ?? 0), 0)
     expect(sum).toBeCloseTo(250)
+  })
+
+  it('shows both projector cores through two separate lens surfaces in the lamp shot', () => {
+    for (const vehicle of [blockout, full]) {
+      const cores = vehicle.root.getObjectsByProperty('name', 'main beam projector').filter((node) => node.position.x > 0)
+      expect(cores).toHaveLength(2)
+      vehicle.root.updateMatrixWorld(true)
+      for (const frame of [610, 690]) {
+        const { position } = cameraAt(frame / config.film.fps, config.formats.preview, vehicle.anchors)
+        for (const core of cores) {
+          const center = core.getWorldPosition(new T.Vector3())
+          const ray = new T.Raycaster(position, center.sub(position).normalize())
+          expect(ray.intersectObject(vehicle.root, true).slice(0, 3).map(({ object }) => object.name)).toEqual([
+            'front optical lens shells', 'convex projector lenses', 'main beam projector',
+          ])
+        }
+      }
+    }
   })
 
   it('switches the full base paint and leaves the phase blockout gray', () => {

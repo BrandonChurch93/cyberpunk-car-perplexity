@@ -22,8 +22,8 @@ function tireGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
   const H = w.width / 2
   const cross = curve([
     [0, w.rim - .011], [.08, w.rim + .013], [.18, w.radius - .054], [.23, w.radius - .026],
-    [.27, w.radius - .010], [.33, w.radius - .0012], [.39, w.radius], [.61, w.radius],
-    [.67, w.radius - .0012], [.73, w.radius - .010], [.77, w.radius - .026], [.82, w.radius - .054], [.92, w.rim + .013], [1, w.rim - .011],
+    [.27, w.radius - .010], [.34, w.radius - .0012], [.39, w.radius], [.61, w.radius],
+    [.66, w.radius - .0012], [.73, w.radius - .010], [.77, w.radius - .026], [.82, w.radius - .054], [.92, w.rim + .013], [1, w.rim - .011],
   ])
   const width = curve([[0, -.86], [.12, -.974], [.179, -1], [.226, -.985], [.27, -.93], [.50, 0], [.73, .93], [.774, .985], [.821, 1], [.88, .974], [1, .86]])
   const axial = (v: number) => {
@@ -31,12 +31,12 @@ function tireGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
     return mix(-.93, .93, (v - .27) / .46) * H
   }
   const depth = (u: number, v: number): number => {
-    const grooves = [.362, .448, .552, .638]
+    const grooves = [.381, .449, .551, .619]
     const groove = grooves.reduce((r, g) => Math.max(r, 1 - smooth(Math.abs(v - g), .004, .01)), 0)
     if (!full) return .0025 * groove
     const pitch = u * 70 + (v - .5) * 7 + .24 * Math.sin(u * tau * 7)
     const stagger = Math.abs(pitch - Math.round(pitch))
-    const crossSipe = (1 - smooth(stagger, .055, .17)) * (smooth(v, .32, .385) - smooth(v, .615, .68))
+    const crossSipe = (1 - smooth(stagger, .055, .17)) * (smooth(v, .369, .405) - smooth(v, .595, .631))
     return .0064 * groove + .0037 * crossSipe
   }
   const position = (u: number, v: number): Point => {
@@ -160,7 +160,7 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
   let anchor: Point = [0, 0, 0]
   for (const w of [frontWheel, rearWheel]) {
     const H = w.width / 2, R = w.rim
-    const axis = H - .040, face = H - .008, hubFace = H - .011
+    const axis = H - .040, face = H - .008, hubPlane = face - .030, hubFace = hubPlane + .0018
     const count = full ? 144 : 96
     const tire = tireGeometry(w, full)
     const barrel = lathe([
@@ -168,8 +168,11 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
       [-.049, R - .017], [-.026, R - .026], [.020, R - .022], [face - .015, R - .009], [face - .008, R - .007],
       [face - .002, R - .004], [face, R + .001], [face - .001, R + .006], [face - .011, R + .007],
     ], count)
-    const hub = disk(.092, .024, face - .043, count)
-    const forging: T.BufferGeometry[] = [barrel, hub]
+    const hub = disk(.084, .023, hubPlane - .0115, count)
+    const cap = disk(.028, .006, hubFace - .003, 64)
+    const forging: T.BufferGeometry[] = [barrel, lathe([
+      [hubPlane - .010, .089], [hubPlane - .005, .093], [hubPlane - .001, .087], [hubPlane, .084],
+    ], count)]
     const faces: T.BufferGeometry[] = []
     for (let i = 0; i < 5; i++) {
       const [skin, side] = spoke(w, (i / 5) * tau + .10, face, full)
@@ -179,14 +182,10 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
     const faceBits: T.BufferGeometry[] = [
       lathe([[face - .001, R - .003], [face + .001, R + .001], [face - .0002, R + .0034]], count),
     ]
-    forging.push(
-      lathe([[face - .033, .088], [face - .023, .077], [face - .024, .052], [face - .029, .029]], count),
-      disk(.028, .017, hubFace - .0085, 40),
-    )
     const lugs: T.BufferGeometry[] = []
     for (let i = 0; i < 5; i++) {
       const [, y, z] = axisRoll(0, .051, tau * i / 5 + .33)
-      lugs.push(disk(.0106, .016, face - .019, 6).translate(0, y, z))
+      lugs.push(disk(.0106, .010, hubPlane - .001, 6).translate(0, y, z))
     }
     const relief: T.BufferGeometry[] = []
     if (full) {
@@ -195,9 +194,8 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
         [w.radius - .010, .93], [w.radius, .67],
       ])
       const sideX = (r: number) => outerSidewall(r) * H - treadInset(w, r)
-      for (const r of [R + .019, w.radius - .044]) {
-        relief.push(lathe([[sideX(r - .001) - .0005, r - .001], [sideX(r) + .00035, r], [sideX(r + .001) - .0005, r + .001]], count))
-      }
+      const r = R + .019
+      relief.push(lathe([[sideX(r - .001) - .0005, r - .001], [sideX(r) + .00035, r], [sideX(r + .001) - .0005, r + .001]], count))
     }
     const forged = joined(forging), milled = joined(faces), hardware = joined(faceBits), brake = rotor(w, full, axis), cal = caliper(w, full, axis)
     const lugNuts = joined(lugs)
@@ -211,6 +209,8 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
       add(group, 'forged divided spokes and barrel', forged, m.forged)
       add(group, 'diamond cut spoke faces', milled, m.spoke)
       add(group, 'machined flange', hardware, m.brushed)
+      add(group, 'flat recessed hub plate', hub, m.forged)
+      add(group, 'flat center cap', cap, m.forged)
       add(group, 'five lug nuts', lugNuts, m.brushed)
       add(group, 'drilled ceramic rotor', brake, m.brake)
       add(group, 'recessed brake shield', disk(R - .013, .010, -.052, 64), m.dark)
