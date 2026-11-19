@@ -1,0 +1,159 @@
+import * as THREE from 'three'
+import { impactCellMeters, impactForCell, impactPeriodSeconds, impactsPerCellPeriod } from './impact-source'
+
+/** Seconds a ring packet stays visible on standing water. Board 05: fade over 0.4 to 0.8 s, diameter capped at 100 to 180 mm. */
+export const ringLifeSeconds = 0.55
+/** Radial speed of the packet front in m/s. Board 05: 0.22 to 0.35, bounded by the 0.23 m/s capillary-gravity minimum. */
+export const ringSpeed = 0.2
+export const binMeters = 0.25
+export const gridBins = 128
+export const slotsPerBin = 24
+
+export interface ExtraImpact {
+  x: number
+  z: number
+  timeSeconds: number
+  diameter: number
+}
+
+/**
+ * Rain impacts near the camera, binned on a grid in world X and Z once per frame and uploaded as a float texture,
+ * so the deck shader only reads the few impacts whose rings can reach a fragment.
+ */
+export class RippleField {
+  readonly data = new Float32Array(gridBins * slotsPerBin * gridBins * 4)
+  readonly counts = new Uint8Array(gridBins * gridBins)
+  readonly texture: THREE.DataTexture
+  readonly origin = new THREE.Vector4(0, 0, binMeters, gridBins)
+  overflow = 0
+
+  constructor() {
+    this.texture = new THREE.DataTexture(this.data, gridBins * slotsPerBin, gridBins, THREE.RGBAFormat, THREE.FloatType)
+    this.texture.minFilter = THREE.NearestFilter
+    this.texture.magFilter = THREE.NearestFilter
+    this.texture.generateMipmaps = false
+    this.texture.colorSpace = THREE.NoColorSpace
+    this.texture.needsUpdate = true
+  }
+
+  /** Collects every impact whose ring is alive at some time in [t0, t1], centered on `center`. Times are stored against `t0`. */
+  update(t0: number, t1: number, center: THREE.Vector2, extra: ExtraImpact[] = []): void {
+    this.data.fill(0)
+    this.counts.fill(0)
+    this.overflow = 0
+    const span = gridBins * binMeters
+    const ox = Math.floor((center.x - span / 2) / binMeters) * binMeters
+    const oz = Math.floor((center.y - span / 2) / binMeters) * binMeters
+    this.origin.set(ox, oz, binMeters, gridBins)
+    const earliest = t0 - ringLifeSeconds
+    const add = (x: number, z: number, t: number, diameter: number): void => {
+      if (t < earliest || t > t1) return
+      const bx = Math.floor((x - ox) / binMeters)
+      const bz = Math.floor((z - oz) / binMeters)
+      if (bx < 0 || bz < 0 || bx >= gridBins || bz >= gridBins) return
+      const bin = bz * gridBins + bx
+      const k = this.counts[bin]
+      if (k >= slotsPerBin) {
+        this.overflow++
+        return
+      }
+      this.counts[bin] = k + 1
+      const at = ((bz * gridBins + bx) * slotsPerBin + k) * 4
+      this.data[at] = x - ox
+      this.data[at + 1] = z - oz
+      this.data[at + 2] = t - t0
+      this.data[at + 3] = diameter * 1000
+    }
+    const c0x = Math.floor(ox / impactCellMeters)
+    const c0z = Math.floor(oz / impactCellMeters)
+    const c1x = Math.floor((ox + span) / impactCellMeters)
+    const c1z = Math.floor((oz + span) / impactCellMeters)
+    const tc0 = Math.floor(earliest / impactPeriodSeconds) - 1
+    const tc1 = Math.floor(t1 / impactPeriodSeconds) + 1
+    for (let cz = c0z; cz <= c1z; cz++) {
+      for (let cx = c0x; cx <= c1x; cx++) {
+        for (let tc = tc0; tc <= tc1; tc++) {
+          for (let slot = 0; slot < impactsPerCellPeriod; slot++) {
+            const hit = impactForCell(cx, cz, tc, slot)
+            add(hit.x, hit.z, hit.timeSeconds, hit.diameter)
+          }
+        }
+      }
+    }
+    for (const e of extra) add(e.x, e.z, e.timeSeconds, e.diameter)
+    this.texture.needsUpdate = true
+  }
+}
+
+export const ripplesGlsl = /* glsl */ `
+uniform sampler2D surfImpacts;
+uniform vec4 surfImpactGrid;
+uniform float surfImpactTime;
+uniform vec4 surfPulse[2];
+uniform float surfPulseTime;
+#define SURF_SLOTS ${slotsPerBin}
+#define SURF_RING_LIFE ${ringLifeSeconds.toFixed(4)}
+#define SURF_RING_SPEED ${ringSpeed.toFixed(4)}
+
+/** Slope of one ring packet at distance r from its center. deep: 1 on standing water, 0 on a thin film. */
+float surfRing(float r, float age, float diameterMm, float deep) {
+  float life = mix(0.5, 1.0, deep) * SURF_RING_LIFE;
+  if (age <= 0.0 || age > life) return 0.0;
+  float lambda = mix(0.0055, 0.0085 + 0.0016 * diameterMm, deep);
+  float width = mix(1.6, 3.8, deep) * lambda;
+  float front = 0.002 + 0.0006 * diameterMm + SURF_RING_SPEED * age;
+  float s = front - r;
+  if (s < -0.6 * lambda || s > width) return 0.0;
+  float envelope = smoothstep(-0.6 * lambda, 0.25 * lambda, s) * (1.0 - smoothstep(0.35 * width, width, s));
+  float wave = lambda * (1.0 - 0.3 * clamp(s / width, 0.0, 1.0));
+  float tau = mix(0.08, 0.2, deep);
+  float amp = mix(0.35, 1.0, deep) * 0.16 * (diameterMm / 2.0) * exp(-age / tau) * sqrt(0.02 / (front + 0.02));
+  amp *= smoothstep(life, life * 0.6, age);
+  float slope = amp * envelope * cos(6.2831853 * s / wave);
+  float rb = 0.0012 * diameterMm + 0.0015;
+  float young = 1.0 - smoothstep(0.0, 0.07, age);
+  slope += young * 0.9 * (r / rb) * exp(-(r * r) / (rb * rb)) * (age < 0.025 ? -1.0 : 1.0);
+  return slope;
+}
+
+/** Ripple slope (d height / dx, d height / dz) on the deck from the binned rain impacts and the exhaust pulses. */
+vec2 surfRipples(vec2 p, float deep, float film, float sampleOffset) {
+  vec2 slope = vec2(0.0);
+  float weight = max(deep, film);
+  if (weight <= 0.001) return slope;
+  vec2 local = p - surfImpactGrid.xy;
+  vec2 g = local / surfImpactGrid.z;
+  int n = int(surfImpactGrid.w);
+  ivec2 b0 = ivec2(floor(g - 0.5));
+  float t = surfImpactTime + sampleOffset;
+  for (int j = 0; j < 2; j++) {
+    for (int i = 0; i < 2; i++) {
+      ivec2 b = b0 + ivec2(i, j);
+      if (b.x < 0 || b.y < 0 || b.x >= n || b.y >= n) continue;
+      for (int k = 0; k < SURF_SLOTS; k++) {
+        vec4 e = texelFetch(surfImpacts, ivec2(b.x * SURF_SLOTS + k, b.y), 0);
+        if (e.w <= 0.0) break;
+        vec2 d = local - e.xy;
+        float r = length(d);
+        if (r > 0.16) continue;
+        float s = surfRing(r, t - e.z, e.w, deep);
+        slope += s * d / max(r, 1e-5);
+      }
+    }
+  }
+  slope *= weight;
+  for (int i = 0; i < 2; i++) {
+    vec4 pulse = surfPulse[i];
+    if (pulse.z <= 0.0) continue;
+    vec2 d = p - pulse.xy;
+    float r = length(d);
+    float reach = 1.0 - smoothstep(0.4, 2.6, r);
+    if (reach <= 0.0) continue;
+    float tt = surfPulseTime + sampleOffset;
+    float surge = 0.6 + 0.4 * sin(6.2831853 * 3.0 * tt);
+    float phase = 6.2831853 * (r / 0.011 - 30.0 * tt);
+    slope += deep * pulse.z * surge * reach * 0.05 * cos(phase) * d / max(r, 1e-4);
+  }
+  return slope;
+}
+`
