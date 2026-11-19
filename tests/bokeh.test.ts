@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { config } from '../src/config'
 import { applyLens, type CameraState } from '../src/core/lens'
 import { circleScale, pupilCell, pupilIsActive, pupilLayout, pupilTapCount } from '../src/core/bokeh/pupil'
+import { sensorWidthMm } from '../src/director/rig'
 
 const width = config.formats.master.width
 const height = config.formats.master.height
@@ -57,9 +58,13 @@ describe('pupil coverage', () => {
   })
 
   it('bypasses wide angles and uses sensor scale for both master formats', () => {
+    const circles = []
     for (const format of [config.formats.master, config.formats.vertical]) {
-      expect(pupilIsActive(state, format.width, config.tiers.final.samplesPerFrame)).toBe(true)
+      const camera = { ...state, sensorWidthMm: sensorWidthMm(format) }
+      expect(pupilIsActive(camera, format.width, config.tiers.final.samplesPerFrame)).toBe(true)
       expect(pupilIsActive({ ...state, focusDistance: 5.2, focalMm: 24, fNumber: 2 }, format.width, config.tiers.review.samplesPerFrame)).toBe(false)
+      circles.push(circleScale(camera, format.width) / Math.max(format.width, format.height))
     }
+    expect(circles[0]).toBeCloseTo(circles[1], 12)
   })
 })

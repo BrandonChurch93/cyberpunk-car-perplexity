@@ -57,7 +57,7 @@ void main() {
   float cellRadius = coc / rootSamples;
   if (cellRadius < 0.8) return;
 
-  vec2 field = (vUv * 2.0 - 1.0) * vec2(1.0, inverseSize.x / inverseSize.y);
+  vec2 field = (vUv * 2.0 - 1.0) * (min(inverseSize.x, inverseSize.y) / inverseSize);
   float edge = smoothstep(0.22, 1.24, length(field));
   vec2 radial = field * inversesqrt(max(dot(field, field), 1e-6));
   vec2 tangent = vec2(-radial.y, radial.x);
