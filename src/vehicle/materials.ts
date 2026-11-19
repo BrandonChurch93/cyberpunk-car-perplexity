@@ -130,6 +130,10 @@ export function palette(spec: PaintSpec, full: boolean) {
   const carbon = new T.MeshPhysicalMaterial({
     color: full ? 0x34383b : 0x363a3f, metalness: .17, roughness: .43, clearcoat: .45, clearcoatRoughness: .19, anisotropy: full ? .32 : 0,
   })
+  const bayCover = carbon.clone()
+  bayCover.color.setHex(full ? 0x565a60 : 0x55595f)
+  bayCover.roughness = .51
+  bayCover.clearcoat = .28
   const mirror = new T.MeshPhysicalMaterial({ color: 0x89969e, metalness: .94, roughness: .145, clearcoat: .78 })
   const hot = new T.MeshPhysicalMaterial({ color: full ? 0x494241 : 0x626367, metalness: .72, roughness: .4, anisotropy: full ? .38 : 0 })
   const engine = new T.MeshStandardMaterial({ color: full ? 0x2b2d31 : 0x55595f, metalness: .38, roughness: .59 })
@@ -183,6 +187,7 @@ export function palette(spec: PaintSpec, full: boolean) {
     return material
   }
   for (const m of [paint, glass, optics, rearOptics, carbon, mirror]) tag(m, 'beads')
+  tag(bayCover, 'none')
   for (const m of [matte, tire, diffuser]) tag(m, 'sheet')
   for (const m of [projector, brushed, forged, spoke, brake, caliper, dark, hot, engine]) tag(m, 'none')
   if (full) tag(cabin, 'none')
@@ -203,11 +208,14 @@ export function palette(spec: PaintSpec, full: boolean) {
       tex.anisotropy = 4
       tex.colorSpace = key === 'map' ? T.SRGBColorSpace : T.NoColorSpace
       carbon[key as keyof typeof carbonPaths] = tex
+      bayCover[key as keyof typeof carbonPaths] = tex
     }))
     carbon.normalScale.setScalar(.2)
     carbon.needsUpdate = true
+    bayCover.normalScale.setScalar(.16)
+    bayCover.needsUpdate = true
   }
-  return { paint, glass, optics, rearOptics, projector, brushed, forged, spoke, brake, caliper, matte, dark, diffuser, tire, carbon, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
+  return { paint, glass, optics, rearOptics, projector, brushed, forged, spoke, brake, caliper, matte, dark, diffuser, tire, carbon, bayCover, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
 }
 
 export type Palette = ReturnType<typeof palette>

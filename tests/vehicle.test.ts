@@ -145,7 +145,7 @@ describe('vehicle geometry and state', () => {
         expect(o.receiveShadow).toBe(true)
       })
       expect(triangles(vehicle)).toBeLessThan(budget)
-      expect(vehicle.lamps).toHaveLength(8)
+      expect(vehicle.lamps).toHaveLength(9)
       expect(vehicle.lamps.filter((lamp) => !lamp.beam && lamp.object.position.z > 0)).toHaveLength(2)
       expect(vehicle.lamps.filter((lamp) => lamp.beam)).toHaveLength(4)
       expect(vehicle.heatSources).toHaveLength(2)
@@ -157,6 +157,24 @@ describe('vehicle geometry and state', () => {
         expect(lamp.intensity).toBeGreaterThan(0)
         expect(lamp.color).toBeInstanceOf(T.Color)
       }
+    }
+  })
+
+  it('keeps both cam covers exposed and targets the dark gap in both LODs', () => {
+    for (const car of [blockout, full]) {
+      const detail = car.anchors.detail.position
+      const topHit = (x: number) => new T.Raycaster(
+        new T.Vector3(x, 2, detail.z), new T.Vector3(0, -1, 0),
+      ).intersectObject(car.root, true)[0]
+      expect(detail.x).toBe(0)
+      expect(topHit(0).object.name).toBe('dark intake plenum and engine hardware')
+      for (const x of [-.125, .125]) {
+        const hit = topHit(x)
+        expect(hit.object.name).toBe('carbon cam covers with hex relief')
+        expect(Math.abs(hit.point.y - detail.y)).toBeLessThan(.005)
+      }
+      expect(car.root.getObjectByName('high rear brake lamp bar')).toBeDefined()
+      expect(car.root.getObjectByName('front airbox hex grilles')).toBeDefined()
     }
   })
 

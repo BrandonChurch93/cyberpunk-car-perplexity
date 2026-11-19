@@ -66,8 +66,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const projectorGlass: T.BufferGeometry[] = [], projectorCups: T.BufferGeometry[] = []
   const lamps: VehicleModule['lamps'] = []
   const heatSources: VehicleModule['heatSources'] = []
-  const lumens: Array<{ mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>; lamp: VehicleModule['lamps'][number]; rear: boolean }> = []
-  const emit = (objectName: string, geometry: T.BufferGeometry, rear: boolean, beam: boolean, outlet?: Point, candela?: number): void => {
+  const lumens: Array<{ mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>; lamp: VehicleModule['lamps'][number]; rear: boolean; luminance: number }> = []
+  const emit = (objectName: string, geometry: T.BufferGeometry, rear: boolean, beam: boolean, outlet?: Point, candela?: number,
+    luminance = beam ? 260 : rear ? 60 : 144): void => {
     const material = m.tag(new T.MeshStandardMaterial({
       color: rear ? 0x571416 : 0x939ca1, roughness: .28, metalness: .05,
       emissive: rear ? 0xff1713 : beam ? 0xe4f3ff : 0xe5f3ff, emissiveIntensity: 0,
@@ -86,7 +87,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     parent.add(object)
     const lamp = { object, stage, beam, level: 0, color: material.emissive.clone(), intensity: candela ?? (rear ? .47 : 1.33) }
     lamps.push(lamp)
-    lumens.push({ mesh, lamp, rear })
+    lumens.push({ mesh, lamp, rear, luminance })
   }
   const outFront: Point = [0, 0, 1], outRear: Point = [0, 0, -1]
   const lipY = curve([[0, .168], [.27, .151], [.71, .146], [.91, .155], [.967, .174]])
@@ -350,6 +351,15 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     return [x, y, fascia(false, 1, Math.abs(x), y, .121)[2]]
   }, 49, 9, outRear, .013))
   black.push(patch(rearBridge, 16, 18, outRear, .009))
+  const stopBar = (u: number, v: number): Point => {
+    const x = mix(-.226, .226, u), edge = Math.abs(x) / .226
+    return [x, .954 + .008 * edge ** 2 + .009 * v, zAt(.895 - .008 * edge ** 2) - .003 * v]
+  }
+  black.push(patch((u, v) => {
+    const p = stopBar(u, mix(-.38, 1.38, v))
+    return [p[0], p[1], p[2] + .002]
+  }, 26, 3, outRear, .006))
+  emit('high rear brake lamp bar', patch(stopBar, 32, 3, outRear, .002), true, false, undefined, .13, 23)
   add(parent, 'nose blades, shield and lower lip', joined(frontPaint), m.paint)
   add(parent, 'rear bumper paint surfaces', joined(rearPaint), m.paint)
   if (carbon.length) add(parent, 'radiator mesh', joined(carbon), m.carbon)
@@ -368,7 +378,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     for (const part of lumens) {
       const level = part.lamp.beam ? beam * (.045 + .955 * fullBeam) : part.rear ? running * (.53 + .47 * rise) : running
       part.lamp.level = level
-      part.mesh.material.emissiveIntensity = level * (part.lamp.beam ? 260 : part.rear ? 60 : 144)
+      part.mesh.material.emissiveIntensity = level * part.luminance
     }
   }
   return { lamps, heatSources, lamp: lens, exhaust: anchor(rearBridge(.5, .5), outRear, .34), update }
