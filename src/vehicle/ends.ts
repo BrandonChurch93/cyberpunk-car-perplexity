@@ -63,7 +63,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const carbon: T.BufferGeometry[] = [], black: T.BufferGeometry[] = [], dark: T.BufferGeometry[] = []
   const outletCavities: T.BufferGeometry[] = [], diffuserShell: T.BufferGeometry[] = [], diffuserFins: T.BufferGeometry[] = []
   const optical: T.BufferGeometry[] = [], rearOptical: T.BufferGeometry[] = []
-  const projectorGlass: T.BufferGeometry[] = [], projectorCups: T.BufferGeometry[] = []
+  const projectorGlass: T.BufferGeometry[] = [], projectorCollars: T.BufferGeometry[] = [], projectorBowls: T.BufferGeometry[] = []
   const lamps: VehicleModule['lamps'] = []
   const heatSources: VehicleModule['heatSources'] = []
   const lumens: Array<{ mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>; lamp: VehicleModule['lamps'][number]; rear: boolean; luminance: number }> = []
@@ -205,29 +205,25 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const eyeOutline = [[.498, .464], [.584, .473], [.704, .480], [.801, .501], [.863, .558], [.915, .635], [.908, .656], [.873, .640], [.780, .597], [.680, .552], [.579, .510]]
     const edge = eyeOutline.map(([x, y]) => f(x, y, -.005))
     black.push(contour(edge, .0043, true, 7))
-    for (const [x, y, radius, intensity] of [[.743, .526, .029, 170], [.827, .560, .023, 80]]) {
+    for (const [x, y, radius, lift, intensity] of [[.743, .526, .029, .002, 170], [.827, .560, .023, .008, 80]]) {
       const normal = new T.Vector3(side * .51, .12, .851).normalize()
       const transform = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), normal)
-      const p = vec(f(x, y, .027))
+      const p = vec(f(x, y + lift, .018))
       const hardware = (r: number, a: number, z: number, aspect = .84): Point =>
         new T.Vector3(radius * r * Math.cos(a), radius * r * aspect * Math.sin(a), z)
           .applyQuaternion(transform).add(p).toArray()
       const segments = full ? 52 : 24
       const ring = (r0: number, r1: number, z0: number, z1: number, crown: number, steps: number) =>
         patch((u, v) => hardware(mix(r0, r1, v), tau * u, mix(z0, z1, v) + crown * Math.sin(Math.PI * v)), segments, steps, outFront)
-      black.push(ring(1.24, 1.10, -.028, -.001, .0025, 5))
-      projectorCups.push(ring(1.10, .92, -.001, .001, .0019, 4))
-      const throat = (v: number) => .205 + .715 * v
-      projectorCups.push(patch((u, v) => {
-        const a = tau * u
-        const facets = full ? .0012 * Math.cos(16 * a) * Math.sin(Math.PI * v) ** 2 : 0
-        return hardware(throat(v), a, -.029 + .029 * v ** 1.7 + facets)
-      }, segments, 10, outFront))
-      const glassCenter = p.clone().addScaledVector(normal, -.004)
-      projectorGlass.push(new T.SphereGeometry(radius * .89, segments, 14)
-        .scale(1, .84, .29).applyQuaternion(transform).translate(...glassCenter.toArray()))
-      const core = p.clone().addScaledVector(normal, -.015)
-      emit('main beam projector', new T.SphereGeometry(radius * .35, 24, 10)
+      black.push(ring(1.17, 1.06, -.020, -.002, .001, 5))
+      projectorCollars.push(ring(1.07, .90, -.002, -.001, .0015, 5))
+      projectorBowls.push(patch((u, v) => hardware(mix(.27, .92, v), tau * u, -.015 + .0135 * v ** 1.9),
+        segments, 12, outFront))
+      const glassCenter = p.clone().addScaledVector(normal, -.001)
+      projectorGlass.push(new T.SphereGeometry(radius * .903, segments, 18, 0, tau, 0, Math.PI / 2)
+        .rotateX(Math.PI / 2).scale(1, .84, .20).applyQuaternion(transform).translate(...glassCenter.toArray()))
+      const core = p.clone().addScaledVector(normal, -.009)
+      emit('main beam projector', new T.SphereGeometry(radius * .32, 32, 12)
         .scale(1.10, .80, .22).applyQuaternion(transform).translate(...core.toArray()), false, true, f(x, y, -.025), intensity)
     }
     if (side === 1) {
@@ -371,7 +367,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   bladeFinish.color.setHex(full ? 0x474b50 : 0x4b4e52)
   bladeFinish.roughness = .41
   add(parent, 'thin graphite diffuser blades', joined(diffuserFins), bladeFinish)
-  add(parent, 'projector cups and machined collars', joined(projectorCups), m.brushed)
+  add(parent, 'machined projector collars', joined(projectorCollars), m.brushed)
+  add(parent, 'smooth dark projector bowls', joined(projectorBowls), m.dark)
   add(parent, 'convex projector lenses', joined(projectorGlass), m.projector)
   add(parent, 'front optical lens shells', joined(optical), m.optics)
   add(parent, 'rear optical lens shells', joined(rearOptical), m.rearOptics)

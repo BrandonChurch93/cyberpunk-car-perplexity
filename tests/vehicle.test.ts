@@ -351,17 +351,22 @@ describe('vehicle geometry and state', () => {
 
   it('shows both projector cores through two separate lens surfaces in the lamp shot', () => {
     for (const vehicle of [blockout, full]) {
-      const cores = vehicle.root.getObjectsByProperty('name', 'main beam projector').filter((node) => node.position.x > 0)
+      const cores = vehicle.root.getObjectsByProperty('name', 'main beam projector')
+        .filter((node): node is T.Mesh => node instanceof T.Mesh && node.position.x > 0)
       expect(cores).toHaveLength(2)
       vehicle.root.updateMatrixWorld(true)
       for (const frame of [610, 690]) {
         const { position } = cameraAt(frame / config.film.fps, config.formats.preview, vehicle.anchors)
         for (const core of cores) {
-          const center = core.getWorldPosition(new T.Vector3())
-          const ray = new T.Raycaster(position, center.sub(position).normalize())
-          expect(ray.intersectObject(vehicle.root, true).slice(0, 3).map(({ object }) => object.name)).toEqual([
-            'front optical lens shells', 'convex projector lenses', 'main beam projector',
-          ])
+          core.geometry.computeBoundingBox()
+          const size = core.geometry.boundingBox!.getSize(new T.Vector3()).multiplyScalar(.31)
+          for (const [x, y] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
+            const p = core.localToWorld(new T.Vector3(size.x * x, size.y * y, 0))
+            const ray = new T.Raycaster(position, p.sub(position).normalize())
+            expect(ray.intersectObject(vehicle.root, true).slice(0, 3).map(({ object }) => object.name)).toEqual([
+              'front optical lens shells', 'convex projector lenses', 'main beam projector',
+            ])
+          }
         }
       }
     }
