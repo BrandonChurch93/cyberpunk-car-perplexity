@@ -1,7 +1,7 @@
 import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
 import { fascia, frontHoodEdge, limitTailZ, sAt, tailLipY, zAt } from './body'
-import { add, blend, contour, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
+import { add, blend, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
 import type { Palette } from './materials'
 import type { Anchor, VehicleModule } from './contract'
 
@@ -55,7 +55,12 @@ function lightGuide(face: Face, hub: XY, tips: readonly XY[], width: number, dep
     const corner = left.clone().addScaledVector(a, right.clone().sub(left).cross(b) / a.cross(b))
     return [ray.clone().sub(left), ray.clone().add(left), corner]
   })
-  return polygon(outline.map((v) => face(v.x + hub[0], v.y + hub[1], depth)), out, .0025)
+  return joined(outline.map((a, i) => {
+    const b = outline[(i + 1) % outline.length]
+    return patch((u, v) => {
+      return face(hub[0] + v * mix(a.x, b.x, u), hub[1] + v * mix(a.y, b.y, u), depth)
+    }, Math.max(1, Math.ceil(a.distanceTo(b) / .016)), 3, out)
+  }))
 }
 
 export function createEnds(parent: T.Group, m: Palette, full: boolean) {
@@ -192,7 +197,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 18, 9, [side, 0, 1], .009))
     const hub: XY = [.834, .429]
     const tips: XY[] = [[.877, .285], [.879, .644], [.470, .421]]
-    black.push(lightGuide(f, hub, tips, .040, .002, outFront))
+    black.push(lightGuide(f, hub, tips, .038, .010, outFront))
     emit('front running guide', lightGuide(f, hub, tips, .015, -.007, outFront), false, false, f(...hub, -.008), 3.99)
     const eyeStart = .495, eyeEnd = .919
     const window = (u: number, v: number, d: number): Point => {
@@ -202,9 +207,11 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }
     black.push(patch((u, v) => window(u, v, .071), 44, 17, outFront, .009))
     optical.push(patch((u, v) => window(u, v, -.008), 52, 20, outFront, .0034))
-    const eyeOutline = [[.498, .464], [.584, .473], [.704, .480], [.801, .501], [.863, .558], [.915, .635], [.908, .656], [.873, .640], [.780, .597], [.680, .552], [.579, .510]]
-    const edge = eyeOutline.map(([x, y]) => f(x, y, -.005))
-    black.push(contour(edge, .0043, true, 7))
+    for (const edge of [0, 1]) {
+      const sign = 2 * edge - 1
+      black.push(patch((u, v) => window(u, edge + sign * mix(-.030, .053, v), mix(-.006, .005, v)), 68, 4, outFront, .003))
+      black.push(patch((u, v) => window(edge + sign * mix(-.004, .012, v), u, mix(-.006, .005, v)), 14, 4, outFront, .003))
+    }
     for (const [x, y, radius, lift, intensity] of [[.743, .526, .029, .002, 170], [.827, .560, .023, .008, 80]]) {
       const normal = new T.Vector3(side * .51, .12, .851).normalize()
       const transform = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), normal)

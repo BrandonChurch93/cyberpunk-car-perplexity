@@ -31,11 +31,13 @@ const tailWidth = curve([
 ])
 const tailPlan = curve([[0, 1], [.426, 1], [.437, .995], [.451, .99], [.543, .98], [.657, .97], [.701, .96], [.771, .95], [.837, .94], [.909, .92], [.946, .90], [.986, .88], [1.0165, .825]])
 export const limitTailZ = (x: number, z: number) => Math.max(zAt(tailPlan(Math.abs(x))), z)
-const shoulder = curve([
+const shoulderBase = curve([
   [0, .431], [.016, .447], [.024, .465], [.044, .552], [.08, .623], [.10, .658], [.15, .735], [.20, .779], [.25, .772],
   [.30, .738], [.34, .747], [.40, .765], [.51, .803], [.59, .860], [.67, .888], [.736, .936],
   [.793, .943], [.85, .918], [.89, .889], [.92, .865], [.96, .848], [1, .833],
 ])
+const shoulder = (s: number) => shoulderBase(s)
+  + .033 * smooth(s, .315, .440) * (1 - smooth(s, .638, .745))
 const hoodLine = curve([[0, .431], [.024, .449], [.06, .523], [.105, .608], [.165, .716], [.225, .761], [.265, .769], [.33, .764], [.6, .83]])
 const spine = curve([
   [.575, 1.149], [.6, 1.146], [.62, 1.135], [.64, 1.124], [.66, 1.099], [.68, 1.085], [.70, 1.078], [.72, 1.068],
@@ -94,11 +96,25 @@ function sidePoint(s: number, y: number, side: number): Point {
   return [side * (plan(s) - inset), y, zAt(s)]
 }
 
+function bonnetSection(s: number, x: number) {
+  return (hinge(x - hoodInner(s), foldHalf) - hinge(x - hoodOuter(s), foldHalf))
+    * smooth(s, hoodTipS - .00025, hoodTipS + .001) * (1 - smooth(s, .290, .326))
+    + .80 * smooth(s, .041, .050) * (1 - smooth(s, .163, .190)) * hinge(x - lampFold(s), foldHalf)
+}
+
 function wingEdge(s: number) {
   const width = plan(s)
   const center = hoodLine(s), outer = shoulder(s)
   const radius = wingRadius(s)
-  const angle = Math.PI / 2 + Math.atan((outer - center) / width - .050)
+  let angle = Math.PI / 2
+  if (radius > 0) for (let i = 0; i < 3; i++) {
+    const x = width - radius + radius * Math.cos(angle)
+    const y = outer + radius * Math.sin(angle)
+    const sectionTangent = (bonnetSection(s, x + .00005) - bonnetSection(s, x - .00005)) / .0001
+    const sectionRise = (bonnetSection(s, x) - bonnetSection(s, 0)) / x
+    const slope = (.95 * (y - center) + .063 * smooth(s, .127, .236)) / x - .83 * foldSlope * (sectionTangent - sectionRise)
+    angle = Math.PI / 2 + Math.atan(slope)
+  }
   const x = width - radius + radius * Math.cos(angle)
   const y = outer + radius * Math.sin(angle)
   return { width, center, outer, radius, angle, x, y }
@@ -106,9 +122,7 @@ function wingEdge(s: number) {
 
 function bonnet(s: number, v: number): Point {
   const w = wingEdge(s), x = w.x * v
-  const section = (position: number) => (hinge(position - hoodInner(s), foldHalf) - hinge(position - hoodOuter(s), foldHalf))
-    * smooth(s, hoodTipS - .00025, hoodTipS + .001) * (1 - smooth(s, .290, .326))
-    + .80 * smooth(s, .041, .050) * (1 - smooth(s, .163, .190)) * hinge(position - lampFold(s), foldHalf)
+  const section = (position: number) => bonnetSection(s, position)
   const across = -.83 * foldSlope * (section(x) - mix(section(0), section(w.x), v))
   const base = mix(w.center, w.y, v * v * (2 - v) + .05 * v ** 6 * (1 - v))
   const cowlDrop = .021 * smooth(s, .127, .236) * (1 - v ** 3)
@@ -282,8 +296,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const tBend = y - line
       const flatten = mix(hinge(inY - line, foldHalf), hinge(outside[1] - line, foldHalf), v)
       const deckFold = .33 * smooth(s, .610, .665) * (1 - smooth(s, .846, .857)) * vane
-      const crown = .031 * smooth(s, .639, .735) * (1 - smooth(s, .799, .906))
-        * Math.sin(Math.PI * v) ** 1.35 * (1 - smooth(v, .53, .82))
+      const crown = .034 * smooth(s, .619, .751) * (1 - smooth(s, .799, .912))
+        * Math.sin(Math.PI * v) ** 1.30 * (1 - .48 * smooth(v, .58, .90))
       return [x, y + crown + deckFold + .58 * smooth(s, .604, .630) * (hinge(tBend, foldHalf) - flatten), zAt(s)]
     }), [0, 1, 0], [haunchLine, lateralTrace(deckIn), lateralTrace(deckOut)])
     part(paint, sided((u, v) => {
@@ -313,7 +327,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const { theta0, theta1, before, after } = archEnds(w)
       const lower = (u: number): Point => {
         const theta = mix(theta0, theta1, u)
-        const faceted = w.arch * (1 + .012 * Math.cos(6 * theta) * Math.sin(Math.PI * u) ** 2)
+        const faceted = w.arch * (1 + .0035 * Math.cos(6 * theta) * Math.sin(Math.PI * u) ** 2)
         const s = sAt(w.z + Math.cos(theta) * faceted)
         return sidePoint(s, w.loaded + Math.sin(theta) * faceted, side)
       }
