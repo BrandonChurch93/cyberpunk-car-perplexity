@@ -5,7 +5,7 @@ import { diagnosticViews } from '../diagnostics/views'
 
 export interface Showcase {
   ready: Promise<void>
-  info(): { frameCount: number; fps: number; format: string; tier: string; paint: string; buildHash: string; versions: Record<string, string> }
+  info(): { frameCount: number; fps: number; format: string; tier: string; paint: string; detail: string; buildHash: string; versions: Record<string, string> }
   setFormat(id: string): Promise<void>
   setDiagnostic(view: string): void
   setPaint(id: string): void
@@ -29,7 +29,7 @@ declare global {
 
 const sumEndpoint = '__harness/sum'
 
-export function createShowcase(engine: FrameEngine, ready: Promise<void>, initial: { tier: string; paint: string }): Showcase {
+export function createShowcase(engine: FrameEngine, ready: Promise<void>, initial: { tier: string; paint: string; detail: string }): Showcase {
   let tier = initial.tier
   let paint = initial.paint
   const showcase: Showcase = {
@@ -40,6 +40,7 @@ export function createShowcase(engine: FrameEngine, ready: Promise<void>, initia
       format: engine.format.id,
       tier,
       paint,
+      detail: initial.detail,
       buildHash: __BUILD_HASH__,
       versions: __VERSIONS__,
     }),

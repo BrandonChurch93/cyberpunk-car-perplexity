@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { frameCount, type FormatSpec, type TierId } from '../../src/config.ts'
 import { config, readJson, workDir } from './env.ts'
 import { megabytes, probe, type Probe } from './probe.ts'
+import type { StageDetail } from '../../src/core/detail.ts'
 import { recordMatches, type StillRecord, type StillSpec } from './render.ts'
 
 export interface FilmFrameCheck {
@@ -19,6 +20,7 @@ export interface FilmRecord {
   tier: string
   paint: string
   diagnostic: string
+  detail: StageDetail
   first: number
   last: number
   frameCount: number
@@ -35,19 +37,20 @@ export interface FilmSpec {
   format: FormatSpec
   paint: string
   diag: string
+  detail: StageDetail
 }
 
-export function framesDir(spec: Pick<FilmSpec, 'format' | 'tier'>): string {
-  return join(workDir, 'frames', `${spec.format.id}-${spec.tier}`)
+export function framesDir(spec: Pick<FilmSpec, 'format' | 'tier' | 'detail'>): string {
+  return join(workDir, 'frames', `${spec.format.id}-${spec.tier}-${spec.detail}`)
 }
 
 export function frameFileName(frame: number): string {
   return `f${String(frame).padStart(5, '0')}.png`
 }
 
-export function filmPath(spec: Pick<FilmSpec, 'format' | 'tier'>, first = 0, last = frameCount - 1): string {
+export function filmPath(spec: Pick<FilmSpec, 'format' | 'tier' | 'detail'>, first = 0, last = frameCount - 1): string {
   const whole = first === 0 && last === frameCount - 1
-  return join(workDir, `film-${spec.format.id}-${spec.tier}${whole ? '' : `-${first}-${last}`}.mp4`)
+  return join(workDir, `film-${spec.format.id}-${spec.tier}-${spec.detail}${whole ? '' : `-${first}-${last}`}.mp4`)
 }
 
 export const recordPathFor = (file: string): string => file.replace(/\.mp4$/, '.json')
@@ -71,7 +74,7 @@ export function rangeFromArgs(a: Record<string, string>): { first: number; last:
 }
 
 export function frameSpec(spec: FilmSpec, frame: number): StillSpec {
-  return { frame, tier: spec.tier, format: spec.format, diag: spec.diag, paint: spec.paint }
+  return { frame, tier: spec.tier, format: spec.format, diag: spec.diag, paint: spec.paint, detail: spec.detail }
 }
 
 /** Which frames in the range still need a frame file whose record matches the current build. */
@@ -87,7 +90,7 @@ export function missingFrames(spec: FilmSpec, first: number, last: number, build
 }
 
 export function filmMatches(record: FilmRecord | null, spec: FilmSpec, buildHash: string, first: number, last: number): record is FilmRecord {
-  return record !== null && record.buildHash === buildHash && record.format === spec.format.id && record.tier === spec.tier && record.paint === spec.paint && record.diagnostic === spec.diag && record.first === first && record.last === last
+  return record !== null && record.buildHash === buildHash && record.format === spec.format.id && record.tier === spec.tier && record.paint === spec.paint && record.diagnostic === spec.diag && record.detail === spec.detail && record.first === first && record.last === last
 }
 
 function x264(dir: string, first: number, count: number, out: string, crf: number): void {

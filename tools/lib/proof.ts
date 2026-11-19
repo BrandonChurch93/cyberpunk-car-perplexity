@@ -1,3 +1,4 @@
+import { detailFrom } from './detail.ts'
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import sharp from 'sharp'
@@ -329,6 +330,7 @@ async function openExport(browser: Browser, harness: Harness, options: ExportOpt
   page.setDefaultTimeout(driverTimeoutMs)
   const q = new URLSearchParams({ mode: 'export', format: options.format, tier: options.tier, first: String(options.first), last: String(options.last) })
   if (codec) q.set('codec', codec)
+  q.set('detail', detailFrom())
   await page.goto(`${harness.url}index.html?${q.toString()}`)
   await page.waitForFunction(() => {
     const s = document.querySelector('main')?.dataset.state

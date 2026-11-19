@@ -10,7 +10,7 @@ import { decode, meanAbsDiff, ssim } from './image.ts'
 import { judgedFrames } from './judged.ts'
 import { heroFrame, macroFrame } from './pack.ts'
 import { megabytes, probe } from './probe.ts'
-import { recordMatches, RenderSession, stillName, type StillRecord, type StillSpec } from './render.ts'
+import { detailFrom, recordMatches, RenderSession, stillName, type StillRecord, type StillSpec } from './render.ts'
 
 export interface Result {
   ok: boolean
@@ -23,9 +23,9 @@ const tierOrder = ['final', 'review', 'draft'] as const
 export function currentPreviewFilm(hash = buildHash(), paint = defaultPaint): { file: string; record: FilmRecord } | null {
   const kept = readJson<FilmRecord>(join(repoRoot, 'out', 'preview.json'))
   const keptFile = join(repoRoot, 'out', 'preview.mp4')
-  if (kept && existsSync(keptFile) && filmMatches(kept, { tier: kept.tier as 'draft', format: config.formats.preview, paint, diag: 'beauty' }, hash, 0, frameCount - 1)) return { file: keptFile, record: kept }
+  if (kept && existsSync(keptFile) && filmMatches(kept, { tier: kept.tier as 'draft', format: config.formats.preview, paint, diag: 'beauty', detail: detailFrom() }, hash, 0, frameCount - 1)) return { file: keptFile, record: kept }
   for (const tier of tierOrder) {
-    const spec = { tier, format: config.formats.preview, paint, diag: 'beauty' }
+    const spec = { tier, format: config.formats.preview, paint, diag: 'beauty', detail: detailFrom() }
     const file = filmPath(spec)
     const record = readJson<FilmRecord>(recordPathFor(file))
     if (existsSync(file) && filmMatches(record, spec, hash, 0, frameCount - 1)) return { file, record }
@@ -167,10 +167,11 @@ export function g8(): Result {
   if (!record) return { ok: false, detail: 'out/preview.json is missing. Run npm run keep' }
   if (record.buildHash !== hash) return { ok: false, detail: `out/preview.json is for build ${record.buildHash}, the current build is ${hash}` }
   if (record.format !== config.formats.preview.id) return { ok: false, detail: `out/preview.json is for format ${record.format}` }
+  if (record.detail !== detailFrom()) return { ok: false, detail: `out/preview.json is for ${record.detail ?? 'unstated'} detail, ${detailFrom()} is asked` }
   const p = probe(file)
   const bad = verifyProbe(p, config.formats.preview, frameCount)
   if (p.bytes !== record.bytes) bad.push(`file is ${p.bytes} bytes, the record says ${record.bytes}`)
-  return { ok: bad.length === 0, detail: bad.length ? bad.join('; ') : `${p.frames} frames at ${p.fps} fps, ${p.width} x ${p.height}, ${megabytes(p.bytes).toFixed(1)} MB, ${record.tier} tier, build ${hash}` }
+  return { ok: bad.length === 0, detail: bad.length ? bad.join('; ') : `${p.frames} frames at ${p.fps} fps, ${p.width} x ${p.height}, ${megabytes(p.bytes).toFixed(1)} MB, ${record.tier} tier, ${record.detail} detail, build ${hash}` }
 }
 
 function verifyProbe(p: ReturnType<typeof probe>, format: FormatSpec, count: number): string[] {
@@ -186,6 +187,7 @@ interface ProofRecord {
   buildHash: string
   format: string
   tier: string
+  detail?: string
   frames: number
   fps: number
   width: number
@@ -206,12 +208,14 @@ export function g9(): Result {
   if (record.buildHash !== hash) bad.push(`record is for build ${record.buildHash}, current is ${hash}`)
   if (record.format !== config.formats.preview.id) bad.push(`format ${record.format}`)
   if (record.tier !== 'draft') bad.push(`tier ${record.tier}`)
+  const detail = detailFrom()
+  if ((record.detail ?? 'blockout') !== detail) bad.push(`record is for ${record.detail ?? 'unstated (taken as blockout)'} detail, ${detail} is asked`)
   const count = Math.round(config.export.proofSeconds * config.film.fps)
   if (record.frames !== count) bad.push(`record holds ${record.frames} frames, expected ${count}`)
   if (!(record.minPsnrAgainstCapture >= minProofPsnr)) bad.push(`lowest PSNR against capture ${record.minPsnrAgainstCapture} dB, needs ${minProofPsnr}`)
   if (!record.ok) bad.push('the proof record is not ok (interface visible or a check failed)')
   bad.push(...verifyProbe(probe(file), config.formats.preview, count))
-  return { ok: bad.length === 0, detail: bad.length ? bad.join('; ') : `${count} frames, ${config.formats.preview.width} x ${config.formats.preview.height}, lowest PSNR against capture ${record.minPsnrAgainstCapture.toFixed(1)} dB, no interface, build ${hash}` }
+  return { ok: bad.length === 0, detail: bad.length ? bad.join('; ') : `${count} frames, ${config.formats.preview.width} x ${config.formats.preview.height}, lowest PSNR against capture ${record.minPsnrAgainstCapture.toFixed(1)} dB, no interface, ${detail} detail, build ${hash}` }
 }
 
 export function signProblems(signs: string[]): string[] {

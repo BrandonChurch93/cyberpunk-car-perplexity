@@ -32,6 +32,9 @@ describe('full roof world', () => {
     expect(samples[iz * w + ix]).toBeLessThan(0)
     expect(deck.meshes.every(m => m.material === deck.material)).toBe(true)
     expect(world.surfaces.some(s => s.material === deck.material && s.wetness === 'porous')).toBe(true)
+    const stripes = world.root.getObjectByName('parking bay stripes') as THREE.Mesh
+    expect(world.surfaces.find(s => s.material === stripes.material)?.wetness).toBe('porous')
+    expect((stripes.material as THREE.Material).userData.wetPorosity).toBe(.23)
   })
 
   it('has rooted vent and drain origins, approved text, and a bounded light rig', () => {
@@ -41,15 +44,17 @@ describe('full roof world', () => {
     expect(vent.y).toBeGreaterThan(1)
     expect(drain.y).toBeLessThan(.024)
     expect(world.signs.includes('STAIRS')).toBe(true)
+    expect(world.signs.includes('LEVEL 9')).toBe(true)
     expect(new Set(world.signs).size).toEqual(world.signs.length)
     expect(world.signs.every(s => [...config.signage.generic, ...config.signage.invented].includes(s))).toBe(true)
     expect(world.lights.length).toBeLessThanOrEqual(8)
-    expect(world.lights.filter(l => l.shadow).length).toBeLessThanOrEqual(4)
+    expect(world.lights.filter(l => l.shadow).length).toBe(3)
   })
 
   it('sets the billboard for both capture times and supplies a periodic mean to the rig', () => {
     const { durationSeconds } = config.film
     const emitter = world.lights.find(l => l.id === 'billboard')!
+    const raking = world.lights.find(l => l.id === 'raking billboard')!
     const start = radiance(0)
     const end = radiance(durationSeconds)
     expect(end.position).toBeCloseTo(start.position, 12)
@@ -60,6 +65,8 @@ describe('full roof world', () => {
     expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
     world.beginSample({ timeSeconds: 2 } as SampleContext)
     expect(face.material.uniforms.centerX.value).toBeCloseTo(expected.position, 12)
+    expect(raking.level(2)).toBeCloseTo(emitter.level(2), 10)
+    expect(world.lights.some(l => l.id === 'wheel deck pole' && l.shadow)).toBe(true)
     expect(Math.abs(expected.position - start.position)).toBeGreaterThan(.025)
     const color = new THREE.Color()
     emitter.colorAt!(2, color)

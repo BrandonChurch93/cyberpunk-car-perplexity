@@ -7,7 +7,7 @@ import { buildCrops, type CropManifest } from './crops.ts'
 import { config, ensureDir, readJson, repoRoot, workDir, writeJson } from './env.ts'
 import { judgedFrames, type JudgedFrame } from './judged.ts'
 import { beatMoments, configValues, eventRuns, extractSection, heroFrame, hookFrames, juryText, macroFrame, neutralName, neutralProblems, returnFormat, roundName, shuffle } from './pack.ts'
-import { recordMatches, RenderSession, stillName, type StillRecord, type StillSpec } from './render.ts'
+import { detailFrom, recordMatches, RenderSession, stillName, type StillRecord, type StillSpec } from './render.ts'
 import { beatOfFrame } from './scene.ts'
 import { buildFrameSheet, buildSheet, sheetFrames } from './sheet.ts'
 
@@ -43,6 +43,7 @@ export class PackContext {
     readonly paint: string,
     readonly buildHash: string,
     readonly budgetMinutes: number | undefined,
+    readonly tierOverride?: TierId,
   ) {}
 
   session(): Promise<RenderSession> {
@@ -55,7 +56,7 @@ export class PackContext {
   }
 
   spec(frame: number, tier: TierId, format: FormatSpec, diag = 'beauty'): StillSpec {
-    return { frame, tier, format, diag, paint: this.paint }
+    return { frame, tier: this.tierOverride ?? tier, format, diag, paint: this.paint, detail: detailFrom() }
   }
 
   async still(spec: StillSpec): Promise<string> {
@@ -65,11 +66,11 @@ export class PackContext {
   }
 
   async sheet(beat: string, tier: TierId, format: FormatSpec): Promise<string> {
-    return (await buildSheet(await this.session(), { beat, tier, format, paint: this.paint, diag: 'beauty' })).file
+    return (await buildSheet(await this.session(), { beat, tier: this.tierOverride ?? tier, format, paint: this.paint, diag: 'beauty' })).file
   }
 
   async run(name: string, frames: number[], tier: TierId, format: FormatSpec): Promise<string> {
-    return (await buildFrameSheet(await this.session(), { name, frames, tier, format, paint: this.paint, diag: 'beauty' })).file
+    return (await buildFrameSheet(await this.session(), { name, frames, tier: this.tierOverride ?? tier, format, paint: this.paint, diag: 'beauty' })).file
   }
 
   async crops(spec: StillSpec): Promise<CropManifest & { dir: string }> {
@@ -332,8 +333,8 @@ export interface StressPair {
 }
 
 async function c7(ctx: PackContext): Promise<CriticPack> {
-  const manifest = readJson<{ buildHash: string; paint: string; pairs: StressPair[] }>(join(workDir, 'stress', 'manifest.json'))
-  if (!manifest || manifest.buildHash !== ctx.buildHash || manifest.paint !== ctx.paint) throw new Error('no stress output for the current build. Run npm run stress first')
+  const manifest = readJson<{ buildHash: string; paint: string; detail: string; pairs: StressPair[] }>(join(workDir, 'stress', 'manifest.json'))
+  if (!manifest || manifest.buildHash !== ctx.buildHash || manifest.paint !== ctx.paint || manifest.detail !== detailFrom()) throw new Error(`no stress output for the current build at ${detailFrom()} detail. Run npm run stress -- --detail ${detailFrom()} first`)
   const items: PackItem[] = []
   const cropDir = ensureDir(join(workDir, 'stress', 'crops'))
   for (const p of manifest.pairs) {

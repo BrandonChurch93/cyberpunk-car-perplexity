@@ -123,11 +123,12 @@ function textureMaterial(material: THREE.MeshStandardMaterial, type: Type): void
   })
 }
 
-export function finishRoof(deck: DeckSurface, roof: THREE.Group): { material: THREE.MeshStandardMaterial; wetness: 'porous' | 'sheet' | 'beads' }[] {
+export function finishRoof(deck: DeckSurface, roof: THREE.Group): { material: THREE.MeshStandardMaterial; wetness: 'porous' | 'sheet' }[] {
   const floor = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(.12, .129, .141), roughness: .73, metalness: 0 })
   const concrete = new THREE.MeshStandardMaterial({ color: new THREE.Color(.116, .133, .15), roughness: .83 })
   const zinc = new THREE.MeshStandardMaterial({ color: new THREE.Color(.30, .33, .37), roughness: .49, metalness: .88 })
   const stripe = new THREE.MeshStandardMaterial({ color: new THREE.Color(.47, .46, .39), roughness: .69 })
+  stripe.userData.wetPorosity = .23
   const tar = new THREE.MeshStandardMaterial({ color: new THREE.Color(.021, .026, .032), roughness: .88 })
   for (const [mat, type] of [[floor, 'deck'], [concrete, 'concrete'], [zinc, 'zinc'], [stripe, 'stripe']] as const) textureMaterial(mat, type)
   for (const mesh of deck.meshes) mesh.material = floor
@@ -136,11 +137,11 @@ export function finishRoof(deck: DeckSurface, roof: THREE.Group): { material: TH
   roof.traverse(o => {
     if (!(o instanceof THREE.Mesh) || o.material === floor) return
     const n = o.name
-    if (/stripes|arrow paint|blank wayfinding|arm$|security camera body/.test(n)) o.material = stripe
+    if (/stripes|arrow paint|blank wayfinding/.test(n)) o.material = stripe
     else if (/slot bed|joint seal|underside|doorway back/.test(n)) o.material = tar
-    else if (/rail|steel|posts|rim|flange|grate bars|frame|conduit|plate|enclosure|housing|lamp head|camera bracket|louvres|riser/.test(n)) o.material = zinc
+    else if (/rail|steel|posts|rim|flange|grate bars|frame|conduit|plate|enclosure|housing|lamp head|camera bracket|louvres|riser|arm$|security camera body/.test(n)) o.material = zinc
     else o.material = concrete
     if (/stripes|arrow paint|joint nosing/.test(n)) o.castShadow = false
   })
-  return [{ material: floor, wetness: 'porous' }, { material: concrete, wetness: 'porous' }, { material: zinc, wetness: 'sheet' }, { material: stripe, wetness: 'beads' }]
+  return [{ material: floor, wetness: 'porous' }, { material: concrete, wetness: 'porous' }, { material: zinc, wetness: 'sheet' }, { material: stripe, wetness: 'porous' }]
 }

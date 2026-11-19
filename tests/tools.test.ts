@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest'
 import { config, frameCount } from '../src/config'
 import { createVehicle } from '../src/vehicle'
 import { clampRect, gridShape, planCrops } from '../tools/lib/crops'
-import { partRange } from '../tools/lib/film'
+import { filmMatches, filmPath, framesDir, partRange, type FilmRecord } from '../tools/lib/film'
+import { detailFrom } from '../tools/lib/detail'
+import { recordMatches, stillName, type StillRecord } from '../tools/lib/render'
 import { signProblems } from '../tools/lib/gates'
 import { parseJudged } from '../tools/lib/judged'
 import { beatMoments, configValues, eventRuns, extractSection, heroFrame, hookFrames, isNeutral, juryText, macroFrame, neutralName, neutralProblems, returnFormat, roundName, shuffle } from '../tools/lib/pack'
@@ -262,5 +264,44 @@ describe('png metadata', () => {
     const clean = onlyImageChunks(png)
     expect(types(clean).every((t) => ['IHDR', 'IDAT', 'IEND'].includes(t))).toBe(true)
     expect(await sharp(clean).raw().toBuffer()).toEqual(await sharp(png).raw().toBuffer())
+  })
+})
+
+describe('stage detail in every record', () => {
+  const format = config.formats.preview
+  it('reads the flag, then SHOWCASE_DETAIL, and refuses other words', () => {
+    const before = process.env.SHOWCASE_DETAIL
+    process.env.SHOWCASE_DETAIL = 'full'
+    expect(detailFrom()).toBe('full')
+    expect(detailFrom('blockout')).toBe('blockout')
+    expect(() => detailFrom('high')).toThrow()
+    if (before === undefined) delete process.env.SHOWCASE_DETAIL
+    else process.env.SHOWCASE_DETAIL = before
+  })
+  it('never lets a blockout record stand for a full detail request', () => {
+    const spec = { frame: 195, tier: 'draft' as const, format, diag: 'beauty', paint: 'p' }
+    const record = { buildHash: 'h', format: format.id, tier: 'draft', paint: 'p', diagnostic: 'beauty', detail: 'blockout', frame: 195 } as StillRecord
+    expect(recordMatches(record, { ...spec, detail: 'blockout' }, 'h')).toBe(true)
+    expect(recordMatches(record, { ...spec, detail: 'full' }, 'h')).toBe(false)
+    expect(recordMatches({ ...record, detail: undefined } as unknown as StillRecord, { ...spec, detail: 'blockout' }, 'h')).toBe(false)
+    expect(stillName({ ...spec, detail: 'full' })).not.toBe(stillName({ ...spec, detail: 'blockout' }))
+    const film = { tier: 'draft' as const, format, paint: 'p', diag: 'beauty' }
+    const filmRecord = { buildHash: 'h', format: format.id, tier: 'draft', paint: 'p', diagnostic: 'beauty', detail: 'blockout', first: 0, last: frameCount - 1 } as FilmRecord
+    expect(filmMatches(filmRecord, { ...film, detail: 'blockout' }, 'h', 0, frameCount - 1)).toBe(true)
+    expect(filmMatches(filmRecord, { ...film, detail: 'full' }, 'h', 0, frameCount - 1)).toBe(false)
+    expect(filmPath({ ...film, detail: 'full' })).not.toBe(filmPath({ ...film, detail: 'blockout' }))
+    expect(framesDir({ ...film, detail: 'full' })).not.toBe(framesDir({ ...film, detail: 'blockout' }))
+  })
+})
+
+describe('anchor crops on close shots', () => {
+  it('keeps an anchor whose center is just off frame when its disk fills the frame', () => {
+    const format = config.formats.master
+    const ids = (frame: number) => planCrops(cameraForFrame(frame, format, anchors), format, anchors).filter((c) => c.kind === 'anchor').flatMap((c) => c.on)
+    expect(ids(300)).toContain('paint')
+    expect(ids(300)).not.toContain('wheel')
+    expect(ids(765)).toContain('detail')
+    expect(ids(765)).not.toContain('paint')
+    expect(ids(615)).toEqual(['lamp'])
   })
 })
