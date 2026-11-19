@@ -1,11 +1,10 @@
 import * as THREE from 'three'
 import { config } from '../../config'
-import { applyLens } from '../../core/lens'
 import type { FrameContext, SampleContext, SceneSystem, WetnessKind } from '../../core/contract'
 import { cameraAt } from '../../director/shots'
 import { beatById, events, stateAt } from '../../director/timeline'
 import type { WeatherDeps } from '../contract'
-import { applyBeads, type BeadClass } from './beads'
+import { applyBeads, type BeadClass, trackClear, trackPoints } from './beads'
 import { DropGeometry, geometryRange } from './drop-geometry'
 import { applyPorous, type Uniforms } from './porous'
 import { heroBasin, SyntheticRelief, type Basin } from './relief'
@@ -43,35 +42,6 @@ function rearPuddle(anchors: Parameters<typeof cameraAt>[2]): Basin {
   return { center, axis: f, halfLength: 1.5, halfWidth: 0.85, depthMm: 5 }
 }
 
-/** The point of the panel in the lower middle of the macro frame that lies at the focus distance the pull rests on. */
-function rivuletStart(vehicle: WeatherDeps['vehicle']): THREE.Vector3 {
-  const format = config.formats.master
-  const state = cameraAt(config.film.macroFrameSeconds, format, vehicle.anchors)
-  const camera = new THREE.PerspectiveCamera()
-  applyLens(camera, state, format.width, format.height, { pixel: [0.5, 0.5], aperture: [0, 0] }, 1)
-  const ray = new THREE.Raycaster()
-  ray.near = 0
-  const hitAt = (y: number): THREE.Intersection | null => {
-    ray.setFromCamera(new THREE.Vector2(-0.3, y), camera)
-    return ray.intersectObject(vehicle.root, true)[0] ?? null
-  }
-  let lo = -0.7
-  let hi = 0.15
-  let best = hitAt(-0.2)
-  for (let i = 0; i < 24; i++) {
-    const mid = (lo + hi) / 2
-    const hit = hitAt(mid)
-    if (!hit) {
-      hi = mid
-      continue
-    }
-    best = hit
-    if (hit.distance < state.focusDistance) lo = mid
-    else hi = mid
-  }
-  return best ? best.point.clone() : vehicle.anchors.paint.position.clone()
-}
-
 export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
   const { world, vehicle } = deps
   const root = new THREE.Group()
@@ -90,6 +60,9 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
     surfRefill: { value: 0 },
     surfGeo: { value: new THREE.Vector4(0, 0, 0, 0) },
     surfVehicleCenter: { value: bodyCenter.clone() },
+    surfTrack: { value: Array.from({ length: trackPoints }, () => new THREE.Vector4(0, 0, 0, 1e9)) },
+    surfTrackBox: { value: new THREE.Vector4() },
+    surfTrackLen: { value: 0 },
     surfImpacts: { value: ripples.texture },
     surfImpactGrid: { value: ripples.origin },
     surfImpactTime: { value: 0 },
@@ -137,8 +110,11 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
 
   const drops = new DropGeometry(vehicleMeshes(vehicle.root, beadMaterials), uniforms)
   root.add(drops.group)
-  const runners = new Runners(vehicle, drops.runner, drops.plain, rivuletStart(vehicle))
+  const runners = new Runners(vehicle, drops.runner, drops.plain, vehicle.anchors.paint.position)
   root.add(runners.group)
+  const track = runners.track(trackPoints)
+  track.points.forEach((p, i) => (uniforms.surfTrack.value[i] as THREE.Vector4).copy(p))
+  uniforms.surfTrackBox.value.set(track.center.x, track.center.y, track.center.z, track.radius)
 
   const shutter = config.film.shutterDegrees / 360 / config.film.fps
   let frameStart = 0
@@ -160,7 +136,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       const center = new THREE.Vector2(cam.position.x, cam.position.z).addScaledVector(flat, ahead)
       const extra: ExtraImpact[] = runners.impacts(frameStart - 0.6, frameStart + shutter)
       ripples.update(frameStart, frameStart + shutter, center, extra)
-      drops.update(cam, frame.format.width / frame.format.height)
+      drops.update(cam, frame.format.width / frame.format.height, (p, r) => runners.sweptDistance(p, t) < trackClear + r)
       uniforms.surfGeo.value.set(cam.position.x, cam.position.y, cam.position.z, drops.count > 0 ? geometryRange : 0)
       runners.beginFrame(cam)
     },
@@ -181,6 +157,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
         pulse.set(scratch.x, scratch.z, state.engine * pulseStrength, 0)
       } else pulse.set(0, 0, 0, 0)
       runners.beginSample(t)
+      uniforms.surfTrackLen.value = runners.travel(t)
     },
     setDiagnostic(view: string) {
       uniforms.surfDiag.value = view === 'wetness' ? 1 : 0

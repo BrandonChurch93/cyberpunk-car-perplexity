@@ -6,8 +6,8 @@ import { type BeadClass, beadLayers, cellDrops, dominantAxis, geometryMinMm } fr
 import { surfHash3 } from './hash'
 
 /** Beyond this distance from the lens a drop is small enough on screen, and soft enough in focus, for the shader field. */
-export const geometryRange = 1.1
-const maxInstances = 24000
+export const geometryRange = 1.7
+const maxInstances = 40000
 const chunk = 4096
 
 interface Source {
@@ -148,7 +148,8 @@ export class DropGeometry {
     return t
   }
 
-  update(camera: CameraState, aspect: number): void {
+  /** `swept` says whether a drop of this radius at this world point has been taken up by the runner. */
+  update(camera: CameraState, aspect: number, swept: (world: THREE.Vector3, radius: number) => boolean = () => false): void {
     const film = new THREE.PerspectiveCamera(
       THREE.MathUtils.radToDeg(2 * Math.atan(camera.sensorWidthMm / aspect / 2 / camera.focalMm)), aspect, camera.near, camera.far)
     film.position.copy(camera.position)
@@ -232,6 +233,7 @@ export class DropGeometry {
                   }
                   world.copy(center).divideScalar(scale).applyMatrix4(mesh.matrixWorld)
                   if (world.distanceTo(camera.position) > geometryRange) continue
+                  if (swept(world, drop.radius)) continue
                   if (!frustum.intersectsSphere(sphere.set(world, drop.radius * 3 + 0.004))) continue
                   const up = 1 + 1.1 * slope, dn = 1 + 0.2 * slope
                   const along = (drop.radius * (up + dn)) / 2

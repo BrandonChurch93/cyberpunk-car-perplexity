@@ -12,8 +12,8 @@ import type { ExtraImpact } from './ripples'
 const gravity = 9.81
 const paint = beatById('paint')
 const wheel = beatById('wheel')
-/** The hero rivulet lets go three seconds into the paint beat, at the macro frame. */
-const breakLoose = config.film.macroFrameSeconds
+/** The hero rivulet lets go just before the macro frame. */
+const breakLoose = config.film.macroFrameSeconds - 0.25
 /** Drips leave the wheel arch lip at these times, in the wheel beat. */
 export const archDrips = [wheel.start + 1.2, wheel.start + 2.9, wheel.start + 4.1]
 const pendantGrowSeconds = 1.4
@@ -53,7 +53,7 @@ export class Runners {
   private readonly dripMesh: THREE.InstancedMesh
   private active = false
 
-  /** `start` is where the rivulet waits on the panel: in the macro frame, at the depth the focus pull lands on. */
+  /** `start` is where the rivulet waits on the panel, the point the macro focus rests on. */
   constructor(vehicle: VehicleModule, private readonly material: THREE.Material, plain: THREE.Material, start: THREE.Vector3) {
     this.group.name = 'surface water runners'
     vehicle.root.updateMatrixWorld(true)
@@ -165,6 +165,35 @@ export class Runners {
     }
   }
 
+  /** The path as `count` points with their distance along it in w, and a sphere around all of them. */
+  track(count: number): { points: THREE.Vector4[]; center: THREE.Vector3; radius: number } {
+    const length = Math.max(0, (this.path.length - 1) * pathStep)
+    const points = Array.from({ length: count }, (_, i) => {
+      const s = (length * i) / (count - 1)
+      const p = this.path.length > 0 ? this.pointAt(s) : new THREE.Vector3()
+      return new THREE.Vector4(p.x, p.y, p.z, this.path.length > 1 ? s : 1e9)
+    })
+    const box = new THREE.Box3().setFromPoints(points.map((p) => new THREE.Vector3(p.x, p.y, p.z)))
+    const center = box.getCenter(new THREE.Vector3())
+    return { points, center, radius: box.getSize(new THREE.Vector3()).length() / 2 + 0.02 }
+  }
+
+  /** Distance from p to the stretch of path already swept by time t. */
+  sweptDistance(p: THREE.Vector3, t: number): number {
+    const s = this.travel(t)
+    if (s <= 0 || this.path.length < 2) return Infinity
+    const last = Math.min(this.path.length - 1, Math.ceil(s / pathStep))
+    const seg = new THREE.Line3()
+    const q = new THREE.Vector3()
+    let best = Infinity
+    for (let i = 0; i < last; i++) {
+      seg.set(this.path[i], this.path[i + 1])
+      seg.closestPointToPoint(p, true, q)
+      best = Math.min(best, q.distanceTo(p))
+    }
+    return best
+  }
+
   private pointAt(s: number): THREE.Vector3 {
     const f = THREE.MathUtils.clamp(s / pathStep, 0, this.path.length - 1.001)
     const i = Math.floor(f)
@@ -189,8 +218,8 @@ export class Runners {
     const positions: number[] = []
     const normals: number[] = []
     const index: number[] = []
-    const width = 0.0011
-    const height = 0.00022
+    const width = 0.0017
+    const height = 0.0007
     const across = 5
     for (let i = 0; i < this.path.length; i++) {
       const s = i * pathStep
