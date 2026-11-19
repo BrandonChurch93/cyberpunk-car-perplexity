@@ -98,6 +98,7 @@ export function liner(z: number, y: number, r: number, x0: number, x1: number): 
     [r, x1],
     [r * 1.02, (x0 + x1) / 2],
     [r * 0.98, x0],
+    [0.002, x0],
   ], 64, undefined, -a0, Math.PI + a0)
   const g = b.geometry()
   g.translate(0, y, z)

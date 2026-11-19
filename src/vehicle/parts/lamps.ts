@@ -133,6 +133,8 @@ export function exhaust(rear: SurfaceMap, outline: V2[]): { lip: THREE.BufferGeo
   }
   ring(outer, inner)
   extrude(lip, outer.map(([x, y]): V2 => [x, y]), o, ex, ey, ez, 0.12, false)
+  const bridge: V2[] = [[-cx, -0.045], [-cx + 0.032, -0.045], [-cx + 0.032, 0.045], [-cx, 0.045]]
+  extrude(lip, bridge, o, ex, ey, ez, 0.1, true)
   const innerRev = [...inner].reverse()
   extrude(lip, innerRev, o, ex, ey, ez, 0.2, false)
   const soot = new MeshBuilder()

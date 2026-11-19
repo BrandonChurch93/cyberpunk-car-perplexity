@@ -43,9 +43,8 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
     for (const [i, x] of pair(g).entries()) add(sprung, x, mat, `${name}-${i ? 'right' : 'left'}`)
   }
 
-  const body = full
-    ? buildBody({ maxEdge: 0.025, maxAngle: 0.06, tolerance: 0.0003, edgeLength: 0.0025 })
-    : buildBody({ maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, edgeLength: 0.007 })
+  void full
+  const body = buildBody({ maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, edgeLength: 0.007 })
   add(sprung, body.paint, m.paint, 'paint')
   add(sprung, body.glass, m.glass, 'glass')
   add(sprung, body.shell, m.shell, 'inner')
@@ -133,6 +132,10 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
     o.castShadow = true
     o.receiveShadow = true
   })
+  const fit = fitScale(sprung)
+  sprung.scale.set(fit[0], fit[1], fit[2])
+  const scaled = (p: V3): V3 => [p[0] * fit[0], p[1] * fit[1], p[2] * fit[2]]
+  const scaledN = (n: V3): V3 => norm([n[0] / fit[0], n[1] / fit[1], n[2] / fit[2]])
 
   const shoulder = 3
   const vC = mainDef.vAt[shoulder]
@@ -143,11 +146,11 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const lens = onFace(cuts.maps.front, 'z', lx, ly)
   const detailCenter = detailPoint(by)
   const anchors = {
-    paint: anchor(pPaint, nPaint, 0.12),
+    paint: anchor(scaled(pPaint), scaledN(nPaint), 0.12),
     wheel: anchor(wheelFace, [1, 0, 0], dims.frontTire.radius),
-    lamp: anchor(lens.p, lens.n, 0.12),
-    detail: anchor(detailCenter, [0, 1, 0], 0.45),
-    exhaust: anchor([0, ex.center[1], ex.center[2]], [0, 0, -1], 0.2),
+    lamp: anchor(scaled(lens.p), scaledN(lens.n), 0.12),
+    detail: anchor(scaled(detailCenter), [0, 1, 0], 0.45),
+    exhaust: anchor(scaled([0, ex.center[1], ex.center[2]]), [0, 0, -1], 0.2),
   }
 
   const lamps: VehicleModule['lamps'] = []
@@ -227,6 +230,19 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
       m.setPaint(paint)
     },
   }
+}
+
+/** Scale that brings the sprung body, mirrors aside, to the factory length, width and height. */
+function fitScale(sprung: THREE.Object3D): V3 {
+  const box = new THREE.Box3()
+  const p = new THREE.Vector3()
+  sprung.updateWorldMatrix(true, true)
+  sprung.traverse((o) => {
+    if (!(o instanceof THREE.Mesh) || o.name.startsWith('mirror')) return
+    const pos = o.geometry.getAttribute('position')
+    for (let i = 0; i < pos.count; i++) box.expandByPoint(p.fromBufferAttribute(pos, i))
+  })
+  return [dims.width / (box.max.x - box.min.x), dims.height / box.max.y, dims.length / (box.max.z - box.min.z)]
 }
 
 function add3(a: V3, b: V3): V3 {

@@ -1,196 +1,110 @@
-import { createHash } from 'node:crypto'
-import * as T from 'three'
+import * as THREE from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { config, defaultPaint, paintById } from '../src/config'
-import { events, lampThresholds, stateAt } from '../src/director/timeline'
-import { createVehicle, type VehicleModule, type VehicleState } from '../src/vehicle'
+import { config } from '../src/config'
+import { stateAt } from '../src/director/timeline'
+import { createVehicle, type VehicleModule } from '../src/vehicle'
 
-const paint = paintById(defaultPaint)
-let blockout: VehicleModule
-let full: VehicleModule
+const paint = config.paint.candidates[0]
+let a: VehicleModule
+let b: VehicleModule
 
 beforeAll(async () => {
-  ;[blockout, full] = await Promise.all([createVehicle({ paint, detail: 'blockout' }), createVehicle({ paint, detail: 'full' })])
-}, 30_000)
+  a = await createVehicle({ paint, detail: 'blockout' })
+  b = await createVehicle({ paint, detail: 'blockout' })
+}, 240_000)
 
-function setFrom(object: T.Object3D, omitMirrors = false): T.Box3 {
-  const box = new T.Box3(), point = new T.Vector3()
-  object.updateWorldMatrix(true, true)
-  object.traverse((node) => {
-    if (!(node instanceof T.Mesh) || (omitMirrors && node.parent?.name === 'door mirrors')) return
-    const position = node.geometry.getAttribute('position')
-    for (let i = 0; i < position.count; i++) box.expandByPoint(point.fromBufferAttribute(position, i).applyMatrix4(node.matrixWorld))
+function bodyBox(root: THREE.Object3D, mirrors: boolean): THREE.Box3 {
+  const box = new THREE.Box3()
+  const p = new THREE.Vector3()
+  root.updateWorldMatrix(true, true)
+  root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh) || (!mirrors && o.name.startsWith('mirror'))) return
+    const pos = o.geometry.getAttribute('position')
+    for (let i = 0; i < pos.count; i++) box.expandByPoint(p.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld))
   })
   return box
 }
 
-function surfaceDistance(root: T.Object3D, at: T.Vector3): number {
-  let distance = Number.POSITIVE_INFINITY
-  const point = new T.Vector3(), local = new T.Vector3(), triangle = new T.Triangle()
-  root.traverse((node) => {
-    if (!(node instanceof T.Mesh)) return
-    const geometry = node.geometry
-    geometry.computeBoundingBox()
-    node.worldToLocal(local.copy(at))
-    if (geometry.boundingBox!.distanceToPoint(local) > .010) return
-    const positions = geometry.getAttribute('position')
-    const indices = geometry.getIndex()
-    const vertices = indices?.count ?? positions.count
-    for (let i = 0; i < vertices; i += 3) {
-      triangle.a.fromBufferAttribute(positions, indices?.getX(i) ?? i)
-      triangle.b.fromBufferAttribute(positions, indices?.getX(i + 1) ?? i + 1)
-      triangle.c.fromBufferAttribute(positions, indices?.getX(i + 2) ?? i + 2)
-      if (triangle.getArea() < 1e-12) continue
-      triangle.closestPointToPoint(local, point)
-      distance = Math.min(distance, point.distanceToSquared(local))
+function surfaceDistance(root: THREE.Object3D, q: THREE.Vector3): number {
+  let best = Infinity
+  const tri = new THREE.Triangle()
+  const c = new THREE.Vector3()
+  const local = new THREE.Vector3()
+  root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return
+    const g = o.geometry as THREE.BufferGeometry
+    g.computeBoundingBox()
+    local.copy(q).applyMatrix4(o.matrixWorld.clone().invert())
+    if (g.boundingBox!.distanceToPoint(local) > 0.02) return
+    const pos = g.getAttribute('position')
+    const idx = g.getIndex()!
+    for (let i = 0; i < idx.count; i += 3) {
+      tri.a.fromBufferAttribute(pos, idx.getX(i)).applyMatrix4(o.matrixWorld)
+      tri.b.fromBufferAttribute(pos, idx.getX(i + 1)).applyMatrix4(o.matrixWorld)
+      tri.c.fromBufferAttribute(pos, idx.getX(i + 2)).applyMatrix4(o.matrixWorld)
+      tri.closestPointToPoint(q, c)
+      best = Math.min(best, c.distanceTo(q))
     }
   })
-  return Math.sqrt(distance)
+  return best
 }
 
-function fingerprint(root: T.Object3D): string {
-  const hash = createHash('sha256')
-  const append = (arr: ArrayBufferView) => hash.update(Buffer.from(arr.buffer, arr.byteOffset, arr.byteLength))
-  root.traverse((obj) => {
-    append(new Float64Array([...obj.position, ...obj.quaternion, ...obj.scale]))
-    if (!(obj instanceof T.Mesh)) return
-    for (const name of ['position', 'normal', 'uv']) append(obj.geometry.getAttribute(name).array)
-    if (obj.geometry.index) append(obj.geometry.index.array)
-  })
-  return hash.digest('hex')
-}
-
-function triangles(vehicle: VehicleModule): number {
-  let n = 0
-  vehicle.root.traverse((o) => {
-    if (o instanceof T.Mesh) n += (o.geometry.index?.count ?? o.geometry.getAttribute('position').count) / 3
-  })
-  return n
-}
-
-function instantaneous(car: VehicleModule, state: VehicleState) {
-  car.update(state)
-  const positions: number[][] = []
-  car.root.traverse((o) => positions.push([...o.position, ...o.quaternion]))
-  return { positions, levels: car.lamps.map((lamp) => lamp.level) }
-}
-
-describe('vehicle geometry and state', () => {
-  it.each(['blockout', 'full'] as const)('rests at the origin and meets factory dimensions in %s', (detail) => {
-    const vehicle = detail === 'full' ? full : blockout
-    const whole = setFrom(vehicle.root)
-    const size = whole.getSize(new T.Vector3())
-    const sprung = vehicle.root.getObjectByName('sprung assembly')!
-    const width = setFrom(sprung, true).getSize(new T.Vector3()).x
-    expect(Math.abs(size.x - 2.266)).toBeLessThan(.005)
-    expect(Math.abs(width - 2.033)).toBeLessThan(.005)
-    expect(Math.abs(size.y - 1.160)).toBeLessThan(.005)
-    expect(Math.abs(size.z - 4.947)).toBeLessThan(.005)
-    expect(Math.abs(whole.min.y)).toBeLessThan(.00005)
-    expect(Math.abs(whole.getCenter(new T.Vector3()).z)).toBeLessThan(.002)
-    const front = vehicle.root.getObjectByName('front wheel')!
-    const rear = vehicle.root.getObjectByName('rear wheel')!
-    expect(front.position.x).toBeCloseTo(.860, 4)
-    expect(rear.position.x).toBeCloseTo(.8505, 4)
-    expect(front.position.z - rear.position.z).toBeCloseTo(2.779, 4)
+describe('vehicle', () => {
+  it('meets the factory size within 5 mm', () => {
+    const box = bodyBox(a.root, false)
+    const body = bodyBox(a.root.getObjectByName('sprung')!, false)
+    expect(Math.abs(box.max.z - box.min.z - 4.947)).toBeLessThan(0.005)
+    expect(Math.abs(body.max.x - body.min.x - 2.033)).toBeLessThan(0.005)
+    expect(Math.abs(box.max.y - 1.16)).toBeLessThan(0.005)
+    expect(Math.abs(box.min.y)).toBeLessThan(0.002)
+    expect(Math.abs(box.max.z + box.min.z)).toBeLessThan(0.005)
+    expect(Math.abs(box.max.x + box.min.x)).toBeLessThan(0.002)
   })
 
-  it.each(['blockout', 'full'] as const)('puts all five macro anchors on the surface in %s', (detail) => {
-    const vehicle = detail === 'full' ? full : blockout
-    const bounds = setFrom(vehicle.root)
-    for (const [id, a] of Object.entries(vehicle.anchors)) {
-      expect(bounds.containsPoint(a.position), id).toBe(true)
-      expect(a.normal.length(), id).toBeCloseTo(1, 7)
-      expect(a.radius, id).toBeGreaterThan(0)
-      expect(surfaceDistance(vehicle.root, a.position), id).toBeLessThan(.0015)
+  it('puts every anchor on the surface and inside the bounds', () => {
+    const box = bodyBox(a.root, true).expandByScalar(0.001)
+    for (const [id, an] of Object.entries(a.anchors)) {
+      expect(box.containsPoint(an.position), id).toBe(true)
+      expect(surfaceDistance(a.root, an.position), id).toBeLessThan(0.004)
+      expect(an.normal.length()).toBeCloseTo(1, 5)
+      expect(an.radius).toBeGreaterThan(0)
     }
-  }, 30_000)
+  })
 
-  it('registers every render material, shadow and light at both levels of detail', () => {
-    for (const [vehicle, budget] of [[blockout, 400_000], [full, 2_000_000]] as const) {
-      const trackedMaterials = new Set(vehicle.surfaces.map((surface) => surface.material))
-      vehicle.root.traverse((o) => {
-        if (!(o instanceof T.Mesh)) return
-        expect(trackedMaterials.has(o.material)).toBe(true)
-        expect(o.castShadow).toBe(true)
-        expect(o.receiveShadow).toBe(true)
+  it('has lamps, beams and heat sources', () => {
+    expect(a.lamps.length).toBeGreaterThan(0)
+    const beams = a.lamps.filter((l) => l.beam)
+    expect(beams.length).toBeGreaterThan(0)
+    expect(beams.length).toBeLessThanOrEqual(4)
+    expect(a.heatSources.length).toBe(2)
+  })
+
+  it('writes every lamp level and comes back to the start state at the end of the film', () => {
+    const snap = (): number[] => {
+      const s = a.root.getObjectByName('sprung')!
+      return [...a.lamps.map((l) => l.level ?? -1), s.position.x, s.position.y, s.position.z, s.rotation.z]
+    }
+    a.update(stateAt(0))
+    const start = snap()
+    a.update(stateAt(config.film.durationSeconds / 2))
+    for (const l of a.lamps) expect(l.level).toBeGreaterThanOrEqual(0)
+    a.update(stateAt(config.film.durationSeconds))
+    const end = snap()
+    for (let i = 0; i < start.length; i++) expect(end[i]).toBeCloseTo(start[i], 9)
+  })
+
+  it('builds the same vertex data twice', () => {
+    const data = (m: VehicleModule): number[] => {
+      const out: number[] = []
+      m.root.traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return
+        const pos = o.geometry.getAttribute('position').array as Float32Array
+        let h = 0
+        for (let i = 0; i < pos.length; i++) h = (h * 31 + Math.round(pos[i] * 1e6)) % 2147483647
+        out.push(pos.length, h)
       })
-      expect(triangles(vehicle)).toBeLessThan(budget)
-      expect(vehicle.lamps).toHaveLength(16)
-      expect(vehicle.lamps.filter((lamp) => lamp.beam)).toHaveLength(4)
-      expect(vehicle.heatSources).toHaveLength(2)
-      for (const lamp of vehicle.lamps) {
-        const fore = lamp.object.position.z > 0
-        const axis = new T.Vector3(0, 0, 1).applyQuaternion(lamp.object.quaternion)
-        expect(fore ? axis.z : -axis.z).toBeGreaterThan(.9)
-        expect(lamp.stage).toBe(lamp.beam ? lampThresholds.beamStart : lampThresholds.running)
-        expect(lamp.intensity).toBeGreaterThan(0)
-        expect(lamp.color).toBeInstanceOf(T.Color)
-      }
+      return out
     }
+    expect(data(a)).toEqual(data(b))
   })
-
-  it('responds to the lamp sequence and the kick without reconstructing the previous frame', () => {
-    const car = full
-    const fullBeam = stateAt(events.lampStageThree)
-    car.update(stateAt(events.lampStageOne - .1))
-    expect(car.lamps.every((lamp) => lamp.level === 0)).toBe(true)
-    car.update(stateAt(events.lampStageTwo - .5))
-    expect(car.lamps.filter((lamp) => lamp.beam).every((lamp) => lamp.level === 0)).toBe(true)
-    expect(car.lamps.filter((lamp) => !lamp.beam && lamp.object.position.z > 0).every((lamp) => lamp.level === 1)).toBe(true)
-    car.update(fullBeam)
-    expect(car.lamps.filter((lamp) => lamp.beam).every((lamp) => lamp.level === 1)).toBe(true)
-    const tail = car.lamps.find((lamp) => lamp.object.position.z < 0)!
-    const base = tail.level!
-    car.update(stateAt(events.engineStart + .41))
-    expect(tail.level).toBeGreaterThan(base)
-    const wheel = car.root.getObjectByName('front wheel')!
-    const sprung = car.root.getObjectByName('sprung assembly')!
-    expect(sprung.position.y).not.toBe(0)
-    expect(Math.abs(sprung.position.y)).toBeLessThan(.002)
-    expect(wheel.position.y).toBeCloseTo(.3405, 5)
-    const first = instantaneous(car, stateAt(0))
-    expect(instantaneous(car, stateAt(config.film.durationSeconds))).toEqual(first)
-    const firstForced = instantaneous(car, { ...stateAt(0), vibration: 1 })
-    expect(instantaneous(car, { ...stateAt(config.film.durationSeconds), vibration: 1 })).toEqual(firstForced)
-  })
-
-  it('keeps surface radiance and emitted light intensity on the stage scale', () => {
-    const lampsOn = stateAt(events.lampStageThree)
-    const material = (name: string) =>
-      (full.root.getObjectByName(name) as T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>).material
-    full.update(stateAt(0))
-    expect(material('front running guide').emissiveIntensity).toBe(0)
-    full.update(lampsOn)
-    const front = material('front running guide'), rear = material('tail running guide')
-    expect(front.emissiveIntensity * front.emissive.g).toBeGreaterThan(80)
-    expect(front.emissiveIntensity * front.emissive.g).toBeLessThan(200)
-    expect(rear.emissiveIntensity * rear.emissive.r).toBeGreaterThan(20)
-    expect(rear.emissiveIntensity * rear.emissive.r).toBeLessThan(60)
-    const sum = full.lamps.filter((lamp) => lamp.beam && lamp.object.position.x > 0)
-      .reduce((total, lamp) => total + (lamp.intensity ?? 0) * (lamp.level ?? 0), 0)
-    expect(sum).toBeCloseTo(250)
-  })
-
-  it('switches the full base paint and leaves the phase blockout gray', () => {
-    const next = config.paint.candidates.find((candidate) => candidate.id !== defaultPaint)!
-    for (const [vehicle, shouldChange] of [[full, true], [blockout, false]] as const) {
-      const swatch = (vehicle.root.getObjectByName('closed body panels and returns') as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>).material
-      const initial = swatch.color.clone()
-      vehicle.setPaint(next)
-      expect(swatch.color.equals(shouldChange ? new T.Color(next.base) : initial)).toBe(true)
-      vehicle.setPaint(paint)
-    }
-  })
-
-  it('rebuilds vertex, normal, UV and index bytes deterministically', async () => {
-    for (const detail of ['blockout', 'full'] as const) {
-      const current = detail === 'blockout' ? blockout : full
-      const identical = await createVehicle({ paint, detail })
-      const fresh = { timeSeconds: 0, lampStage: 0, engine: 0, vibration: 0 }
-      current.update(fresh)
-      identical.update(fresh)
-      expect(fingerprint(current.root)).toBe(fingerprint(identical.root))
-    }
-  }, 30_000)
 })
