@@ -1,0 +1,29 @@
+.page {
+  margin: 0;
+  background: #0b0c10;
+  color: #e9e6df;
+  overflow: hidden;
+  font: 14px/1.4 system-ui, sans-serif;
+}
+
+.native {
+  display: block;
+}
+
+.fit {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain;
+}
+
+.notice {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: #0b0c10;
+  color: #e9e6df;
+  text-align: center;
+}

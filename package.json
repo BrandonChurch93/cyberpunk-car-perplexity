@@ -1,0 +1,39 @@
+{
+  "name": "rooftop",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "still": "tsx tools/still.ts",
+    "sheet": "tsx tools/sheet.ts",
+    "crops": "tsx tools/crops.ts",
+    "film": "tsx tools/film.ts",
+    "stress": "tsx tools/stress.ts",
+    "pack": "tsx tools/pack.ts",
+    "keep": "tsx tools/keep.ts",
+    "proof": "tsx tools/proof.ts",
+    "determinism": "tsx tools/determinism.ts",
+    "gate": "tsx tools/gate.ts"
+  },
+  "dependencies": {
+    "gsap": "3.15.1",
+    "mediabunny": "1.66.2",
+    "three": "0.187.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "@types/three": "0.187.0",
+    "playwright": "1.59.0",
+    "sharp": "0.35.5",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.8",
+    "vitest": "4.1.12"
+  }
+}
