@@ -67,4 +67,4 @@ Once per frame, in `finishFrame`: the post stage (`src/post/`) reads the average
 
 - Signs, the billboard, the doorway and the pole heads are `area` or `spot` lights with a real emitter size. Their emissive geometry is what the camera and the reflections see. The light is what the surfaces around them receive. The two must agree in color and brightness.
 - The rig holds 16 lights. The world may carry 8, at most 4 of them with shadows. Distant signage lights nothing directly: it reaches the scene through the environment capture, the deck reflection and the haze.
-- The vehicle's `lamps` become lights in the stage. A `beam` lamp is a shadowed spot that the haze pass marches, at most 4. All other lamps are merged into one point light per corner of the vehicle, so a lamp may be made of as many lit parts as it needs.
+- The vehicle's `lamps` become lights in the stage. A `beam` lamp is a shadowed spot that the haze pass marches, at most 4. All other lamps are merged into one light per corner of the vehicle, set just outside the body and aimed out and down so it lights the deck and never the parts around the lamp. A lamp may be made of as many lit parts as it needs.
