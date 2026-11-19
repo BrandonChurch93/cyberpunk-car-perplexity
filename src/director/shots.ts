@@ -54,9 +54,9 @@ const master: Record<string, ShotMaker> = {
     }
   },
   paint: (t, a) => {
-    const direction = heading(180 + 35, -12)
-    const travel = mix(0.275, -0.275, glide(t, paint.start, paint.end, 1.2, 1.2))
-    const position = a.paint.position.clone().addScaledVector(direction, -0.45).add(v(0, 0.03, travel))
+    const direction = heading(180 + 62, -9)
+    const travel = mix(0.15, -0.15, glide(t, paint.start, paint.end, 1.2, 1.2))
+    const position = a.paint.position.clone().addScaledVector(direction, -0.45).add(v(0, 0.02, travel))
     return {
       position,
       target: position.clone().add(direction),

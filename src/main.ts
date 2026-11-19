@@ -30,6 +30,7 @@ async function start(): Promise<void> {
   resolver.setDiagnostic(launch.diagnostic)
   const showcase = createShowcase(engine, Promise.resolve(), { tier: launch.tier, paint: launch.paint })
   window.showcase = showcase
+  ;(window as unknown as { filmStage: FilmStage }).filmStage = stage
   runMode({ launch, canvas, engine, stage, showcase })
 }
 
