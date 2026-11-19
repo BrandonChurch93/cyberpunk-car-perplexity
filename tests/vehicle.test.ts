@@ -169,8 +169,8 @@ describe('vehicle geometry and state', () => {
   it('keeps both cam covers exposed and targets the dark gap in both LODs', () => {
     for (const car of [blockout, full]) {
       const detail = car.anchors.detail.position
-      const topHit = (x: number) => new T.Raycaster(
-        new T.Vector3(x, 2, detail.z), new T.Vector3(0, -1, 0),
+      const topHit = (x: number, z = detail.z) => new T.Raycaster(
+        new T.Vector3(x, 2, z), new T.Vector3(0, -1, 0),
       ).intersectObject(car.root, true)[0]
       expect(detail.x).toBe(0)
       expect(topHit(0).object.name).toBe('dark intake plenum and engine hardware')
@@ -180,7 +180,18 @@ describe('vehicle geometry and state', () => {
         expect(Math.abs(hit.point.y - detail.y)).toBeLessThan(.005)
       }
       expect(car.root.getObjectByName('high rear brake lamp bar')).toBeDefined()
-      expect(car.root.getObjectByName('front airbox hex grilles')).toBeDefined()
+      const grille = car.root.getObjectByName('front airbox hex grilles') as T.Mesh
+      const covers = car.root.getObjectByName('carbon cam covers with hex relief') as T.Mesh
+      grille.geometry.computeBoundingBox()
+      covers.geometry.computeBoundingBox()
+      expect(grille.geometry.boundingBox!.max.y).toBeLessThan(covers.geometry.boundingBox!.max.y)
+      let previous = 0
+      for (const s of [.853, .870, .887]) {
+        const hit = topHit(0, zAt(s))
+        expect(hit.object.name).toBe('dark chevron rear bay louvers')
+        expect(hit.point.y - previous).toBeGreaterThan(.02)
+        previous = hit.point.y
+      }
     }
   })
 
