@@ -1,6 +1,6 @@
 import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
-import { fascia, frontHoodEdge, sAt, tailLipY, zAt } from './body'
+import { fascia, frontHoodEdge, limitTailZ, sAt, tailLipY, zAt } from './body'
 import { add, blend, contour, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point } from './geometry'
 import type { Palette } from './materials'
 import type { Anchor, VehicleModule } from './contract'
@@ -135,13 +135,21 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     black.push(mapped(f, outline, outFront, .025, .055))
     dark.push(mapped(f, points, outFront, .123, .036))
     black.push(joinRim(points, 1.035, .88, f, -.002, .085, outFront))
-    const blade = [[.295, .313, .372, .380], [.524, .160, .558, .222],
-      [.839, .178, .807, .220], [.907, .252, .872, .284]]
-    for (let i = 0; i < blade.length - 1; i++) frontPaint.push(patch((u, v) => {
-      const [a, b, c, d] = blade[i]
-      const [e, g, h, j] = blade[i + 1]
-      return f(mix(mix(a, c, v), mix(e, h, v), u), mix(mix(b, d, v), mix(g, j, v), u), -.006 + .026 * v)
-    }, 18, 4, outFront, .005))
+    const blade = [
+      [.909, .362, .894, .360], [.929, .287, .907, .286], [.861, .182, .842, .218],
+      [.818, .172, .808, .205], [.531, .167, .548, .198], [.456, .238, .467, .252],
+    ]
+    const trace = (i: number) => curve(blade.map((row, j) => [j / (blade.length - 1), row[i]]))
+    const [outerXAt, outerYAt, innerXAt, innerYAt] = [0, 1, 2, 3].map(trace)
+    const bladeSkin = (u: number, v: number) => {
+      const x = mix(outerXAt(u), innerXAt(u), v), y = mix(outerYAt(u), innerYAt(u), v)
+      return f(x, y, mix(-.006, .020, v) - .004 * Math.sin(Math.PI * v))
+    }
+    frontPaint.push(patch(bladeSkin, 65, 8, outFront, .008))
+    black.push(patch((u, v) => {
+      const lip = bladeSkin(u, 1)
+      return f(Math.abs(lip[0]), lip[1] + .009 * v, mix(.020, .085, v))
+    }, 65, 6, [0, 1, 1], .006))
     dark.push(ribbon(f, [[.462, .395], [.578, .411], [.729, .426], [.801, .436]], .028, .024))
     const dh = full ? .019 : .032
     if (full) {
@@ -250,10 +258,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     dark.push(mapped(outlet, hex, outRear, .126, .011, outletRound))
     const diffuser = (u: number, v: number): Point => {
       const x = mix(0, .969 - .054 * v, u)
-      const edge = r(x, .27, -.012)
+      const edge = r(x, .27, .009)
       const s = mix(.842, sAt(edge[2]) + .015 * (1 - u), v)
       const low = .181 + .021 * smooth(u, .69, 1)
-      return [side * x, low + .258 * v, zAt(Math.min(1, s))]
+      return [side * x, low + .258 * v, limitTailZ(x, zAt(s))]
     }
     dark.push(patch(diffuser, 50, 18, [0, -1, 0], .016))
     dark.push(patch((u, v) => {
@@ -264,7 +272,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     dark.push(patch((u, v) => {
       const x = mix(0, .969, u)
       const diff = diffuser(u, 1)
-      return r(x, mix(diff[1] - .011, tailLower(x), v), mix(-.006, .022, v))
+      return r(x, mix(diff[1] - .011, tailLower(x), v), mix(.027, .036, v))
     }, 48, 18, outRear, .010))
     dark.push(patch((u, v) => {
       const x = mix(.39, .62, u)
@@ -281,7 +289,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
         const x = fin - .029 * smooth(u, .76, 1) * v * (fin > .5 ? 1 : 0)
         const s = mix(.843, sAt(r(x, .39, -.019)[2]) + .009, u)
         const y = mix(.225, tailLower(x) + .031, u) - v * depth
-        return [side * x, y, zAt(Math.min(1, s))]
+        return [side * x, y, limitTailZ(x, zAt(s))]
       }, 37, 11, [side, 0, 0], .012))
     }
     const vent = (u: number, v: number): Point => r(mix(.019, .395, u), mix(.420, .533, v) - .027 * u ** 4, -.023)
