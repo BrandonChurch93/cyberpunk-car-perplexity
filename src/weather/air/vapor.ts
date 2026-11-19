@@ -10,7 +10,7 @@ import { prevailingWind } from './motion'
 
 const maxVaporSources = 8
 const slabHeight = 0.29
-const vaporScale = 0.33
+const vaporScale = 0.42
 
 const optics = /* glsl */ `
 #define MAX_VAPOR_SOURCES ${maxVaporSources}
@@ -81,14 +81,14 @@ float deckSpray(vec3 p) {
   float primary = sin(dot(p.xz, vec2(2.04, -2.14)) - TAU * 12.0 * uPhase + uNoise.x);
   float secondary = sin(dot(p.xz, vec2(3.89, 1.13)) - TAU * 15.0 * uPhase + uNoise.y);
   float pockets = 0.48 + 0.52 * smoothstep(-0.62, 0.78, primary * 0.68 + secondary * 0.32);
-  return 0.051 * edge * e * pockets;
+  return 0.032 * edge * e * pockets;
 }
 
 float plumeDensity(vec3 q, vec3 axis, float type, float index) {
   bool vent = type < 1.5;
   bool drain = type > 1.5 && type < 2.5;
   bool exhaust = type > 3.5;
-  float span = vent ? 2.8 : drain ? 1.35 : 1.02;
+  float span = vent ? 2.8 : drain ? 1.35 : 0.86;
   vec3 main = vent || drain ? axis : vec3(0.0, 1.0, 0.0);
   vec3 wind = vec3(uWind.x, 0.0, uWind.y);
   float y = dot(q, main);
@@ -97,17 +97,17 @@ float plumeDensity(vec3 q, vec3 axis, float type, float index) {
   float t = TAU * (uPhase * (vent ? 11.0 : 21.0) + index * 0.341 + uNoise.x);
   float bend = vent ? 0.85 * y * u : drain ? (0.18 + 0.52 * sqrt(u)) : 0.47 * y;
   vec3 p = q - main * y - wind * bend;
-  if (exhaust) p -= axis * (0.12 + 0.56 * sqrt(u));
+  if (exhaust) p -= axis * (0.055 + 0.42 * sqrt(u));
   vec3 left = cross(main, wind);
   float twist = y * (vent ? 4.9 : 9.4) - t;
-  p -= left * ((vent ? 0.32 : 0.21) * u * sin(twist));
-  p -= wind * ((vent ? 0.19 : 0.13) * u * cos(twist * 1.0 + 1.4));
-  float width = (vent ? 0.105 : 0.062) + (vent ? 0.25 : 0.29) * y;
+  p -= left * ((vent ? 0.32 : 0.14) * u * sin(twist));
+  p -= wind * ((vent ? 0.19 : 0.085) * u * cos(twist + 1.4));
+  float width = (vent ? 0.105 : 0.071) + (vent ? 0.25 : 0.35) * y;
   float core = 1.0 - smoothstep(0.22, 1.0, length(p) / max(width, 0.001));
   vec3 noisePoint = q * (vent ? 2.2 : 4.2);
-  float billows = 0.18 + 0.82 * smoothstep(-0.52, 0.8, smootherNoise(noisePoint, t - 1.4 * y));
-  float life = smoothstep(0.025, vent ? 0.19 : 0.10, y) * (1.0 - smoothstep(0.34, 1.0, u));
-  return core * billows * life * (vent ? 0.96 : 0.79);
+  float billows = 0.31 + 0.69 * smoothstep(-0.55, 0.8, smootherNoise(noisePoint, t - 1.4 * y));
+  float life = smoothstep(0.025, vent ? 0.19 : 0.07, y) * (1.0 - smoothstep(0.26, 1.0, u));
+  return core * billows * life * (vent ? 0.96 : 0.66);
 }
 
 void main() {
@@ -123,8 +123,8 @@ void main() {
     float enter = max(uClip.x, min(water.x, water.y));
     float exit = min(scene, min(26.0 / rayLength, max(water.x, water.y)));
     if (exit > enter) {
-      float dt = (exit - enter) / 5.0;
-      for (int j = 0; j < 5; ++j) {
+      float dt = (exit - enter) / 7.0;
+      for (int j = 0; j < 7; ++j) {
         float t = enter + (float(j) + 0.5) * dt;
         vec3 p = uEye + ray * t;
         float density = deckSpray(p) * dt * rayLength * (1.0 - smoothstep(18.0, 26.0, t * rayLength));
@@ -183,6 +183,7 @@ uniform float uEnabled;
 ${optics}
 
 vec4 upsampleVapor(float depth) {
+  depth = min(depth, 25.0);
   vec2 extent = vUv * uLowRes - 0.5;
   vec2 base = floor(extent);
   vec2 fraction = extent - base;
@@ -192,13 +193,13 @@ vec4 upsampleVapor(float depth) {
     vec2 corner = vec2(float(i % 2), float(i / 2));
     vec2 uv = clamp((base + corner + 0.5) / uLowRes, 0.5 / uLowRes, 1.0 - 0.5 / uLowRes);
     vec2 bilinear = 1.0 - abs(corner - fraction);
-    float d = viewDepth(uv);
-    float overlap = abs(d - depth) / max(0.12, min(d, depth) * 0.055);
-    float w = bilinear.x * bilinear.y / (1.0 + overlap * overlap * overlap);
+    float d = min(viewDepth(uv), 25.0);
+    float mismatch = max(d - depth, (depth - d) * 0.35) / max(0.30, min(d, depth) * 0.16);
+    float w = bilinear.x * bilinear.y / (1.0 + mismatch * mismatch * mismatch);
     sum += w * texture(uVapor, uv);
     total += w;
   }
-  return sum / max(0.32, total);
+  return sum / max(0.24, total);
 }
 
 vec2 shimmer(vec3 ray, float scene, out float guard) {

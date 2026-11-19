@@ -248,6 +248,7 @@ export class RibbonView {
         uniform.uFocus.value = s.state.focusDistance
         uniform.uOpticalEye.value.copy(s.state.position)
         if (s.sample.frame.tier !== 'final') {
+          // The analytic footprint replaces aperture motion but keeps camera and pixel motion.
           const radius = apertureRadius(s.state)
           uniform.uAperture.value.set(radius / (config.lens.anamorphic ? 1.5 : 1), radius)
           offset.copy(camera.position).sub(s.state.position).applyQuaternion(inverse.copy(s.state.quaternion).invert())
