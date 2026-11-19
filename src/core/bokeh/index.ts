@@ -5,6 +5,9 @@ import { FullscreenPass, passMaterial } from '../fullscreen'
 import type { CameraState } from '../lens'
 import { circleScale, pupilCell, pupilIsActive, pupilTapCount } from './pupil'
 
+const pyramidLevels = 6
+const pyramidAlignment = 2 ** pyramidLevels
+
 const depthCode = /* glsl */ `
 uniform sampler2D sceneDepth;
 uniform vec2 inverseDepth;
@@ -29,7 +32,8 @@ void main() {
   vec4 total = vec4(0.0);
   for (int y = 0; y < 2; y++) {
     for (int x = 0; x < 2; x++) {
-      ivec2 at = min(start + ivec2(x, y), last);
+      ivec2 at = start + ivec2(x, y);
+      if (any(greaterThan(at, last))) continue;
       if (isDistant(sceneDistance(at))) total += vec4(texelFetch(sceneColor, at, 0).rgb, 1.0);
     }
   }
@@ -40,6 +44,7 @@ void main() {
 const reconstructFragment = depthCode + /* glsl */ `
 uniform sampler2D farMip;
 uniform vec2 inverseSize;
+uniform vec2 farUvScale;
 uniform vec2 apertureCenter;
 uniform vec2 apertureTaps[${pupilTapCount}];
 uniform float rootSamples;
@@ -63,14 +68,14 @@ void main() {
   vec2 tangent = vec2(-radial.y, radial.x);
   vec2 anamorphic = vec2(1.0 / squeeze, 1.0);
   float tapRadius = cellRadius * inversesqrt(float(${pupilTapCount}));
-  float lod = log2(max(1.0, 0.85 * tapRadius));
+  float lod = clamp(log2(0.85 * tapRadius), 0.0, float(${pyramidLevels}));
   vec4 sum = vec4(0.0);
   for (int j = 0; j < ${pupilTapCount}; j++) {
     vec2 p = apertureTaps[j] * anamorphic;
     p -= radial * edge * (dot(radial, p) * (0.18 + 0.16 * abs(dot(tangent, p))) + 0.045);
     vec2 uv = vUv - (p - apertureCenter) * coc * inverseSize;
     if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) continue;
-    sum += textureLod(farMip, uv, lod);
+    sum += textureLod(farMip, uv * farUvScale, lod);
   }
   if (sum.a < 1e-5) return;
   float strength = smoothstep(0.8, 2.0, cellRadius) * smoothstep(0.1, 0.8, sum.a);
@@ -120,6 +125,7 @@ export function createBokeh(squeeze: number): BokehPass {
     farMip: { value: far.texture },
     farFill: { value: fill.texture },
     inverseSize: { value: new THREE.Vector2() },
+    farUvScale: { value: new THREE.Vector2() },
     apertureCenter: { value: new THREE.Vector2() },
     apertureTaps: { value: Array.from({ length: pupilTapCount }, () => new THREE.Vector2()) },
     rootSamples: { value: 1 },
@@ -146,8 +152,13 @@ export function createBokeh(squeeze: number): BokehPass {
       uniforms.apertureCenter.value.set(center[0] / squeeze, center[1])
       uniforms.rootSamples.value = Math.sqrt(sample.frame.samples)
       taps.forEach((tap, index) => uniforms.apertureTaps.value[index].set(...tap))
-      far.setSize(Math.ceil(width / 2), Math.ceil(height / 2))
-      fill.setSize(far.width, far.height)
+      // Odd mip levels use uneven reduction weights, which can erase subpixel highlights.
+      far.setSize(
+        Math.ceil(width / 2 / pyramidAlignment) * pyramidAlignment,
+        Math.ceil(height / 2 / pyramidAlignment) * pyramidAlignment,
+      )
+      uniforms.farUvScale.value.set(width / 2 / far.width, height / 2 / far.height)
+      fill.setSize(Math.ceil(width / 2), Math.ceil(height / 2))
       prefilter.render(renderer, far)
       reconstruct.render(renderer, fill)
       composite.render(renderer, output)
