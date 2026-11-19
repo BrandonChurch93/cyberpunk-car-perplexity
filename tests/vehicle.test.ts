@@ -156,6 +156,20 @@ describe('vehicle geometry and state', () => {
     expect(instantaneous(car, { ...stateAt(config.film.durationSeconds), vibration: 1 })).toEqual(firstForced)
   })
 
+  it('keeps the machined spoke tips inside the bead-seat radius', () => {
+    for (const vehicle of [full, blockout]) {
+      for (const [name, radius] of [['front wheel', .254], ['rear wheel', .2667]] as const) {
+        const wheel = vehicle.root.getObjectByName(name)!
+        const face = wheel.getObjectByName('diamond cut spoke faces') as T.Mesh
+        const positions = face.geometry.getAttribute('position')
+        let outer = 0
+        for (let i = 0; i < positions.count; i++) outer = Math.max(outer, Math.hypot(positions.getY(i), positions.getZ(i)))
+        expect(outer).toBeLessThan(radius - .004)
+        expect(outer).toBeGreaterThan(radius - .010)
+      }
+    }
+  })
+
   it('keeps surface radiance and emitted light intensity on the stage scale', () => {
     const lampsOn = stateAt(events.lampStageThree)
     const material = (name: string) =>
