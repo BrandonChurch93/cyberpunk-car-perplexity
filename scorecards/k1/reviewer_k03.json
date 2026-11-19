@@ -1,0 +1,38 @@
+{
+  "set-K-01.png": {
+    "scrollStop": 8,
+    "carFilm": 7,
+    "realCamera": 5,
+    "why": "Strong warm-vs-cool contrast from the orange billboard and stairwell catches the eye, though garbled background neon text and CG-like rain streaks reveal its synthetic look at 1400x781."
+  },
+  "set-K-02.png": {
+    "scrollStop": 6,
+    "carFilm": 8,
+    "realCamera": 7,
+    "why": "At 400x225 thumbnail size the moody cyan-and-red wet rooftop atmosphere reads cleanly like an authentic cinematic frame, though the dark monochrome palette is slightly less eye-catching in a fast scroll."
+  },
+  "set-K-03.png": {
+    "scrollStop": 7,
+    "carFilm": 6,
+    "realCamera": 4,
+    "why": "Tighter framing and vivid magenta-cyan reflections create punchy visual drama, but the oversaturated cyberpunk palette and uniform water-droplet textures look more like a video game render than live action at full resolution."
+  },
+  "set-K-04.png": {
+    "scrollStop": 7,
+    "carFilm": 6,
+    "realCamera": 5,
+    "why": "Downscaled to 400x225, the high-contrast Y-headlights and neon reflections still pop on a small screen while softening some surface artifacts, though the stylized purple grading remains distinctly CG."
+  },
+  "set-K-05.png": {
+    "scrollStop": 7,
+    "carFilm": 8,
+    "realCamera": 6,
+    "why": "The full-res 1400x788 version of the blue-graded rooftop shot has the best cinematic composition, volumetric headlight beams, and lens bokeh, marred only by repetitive AI signage ('BAR', 'EXIT', 'HOTEL') upon close inspection."
+  },
+  "set-K-06.png": {
+    "scrollStop": 8,
+    "carFilm": 8,
+    "realCamera": 7,
+    "why": "At 400x223 phone-thumbnail scale, the bold orange billboard and glowing green doorway create immediate visual separation while hiding the garbled neon signage seen in set-K-01."
+  }
+}

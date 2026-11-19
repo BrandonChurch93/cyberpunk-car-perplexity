@@ -1,0 +1,38 @@
+{
+  "set-K-01.png": {
+    "scrollStop": 8,
+    "carFilm": 8,
+    "realCamera": 8,
+    "why": "The amber headlight and wet-deck color contrast hold attention; the grounded stairwell and puddles sell the shot, though the orange billboard competes with the car."
+  },
+  "set-K-02.png": {
+    "scrollStop": 7,
+    "carFilm": 9,
+    "realCamera": 7,
+    "why": "The blue headlight beam gives the frame a cinematic hook, but at phone size the dark car loses definition and the skyline looks a little too evenly lit."
+  },
+  "set-K-03.png": {
+    "scrollStop": 9,
+    "carFilm": 9,
+    "realCamera": 7,
+    "why": "The wide-set headlights and big low-angle silhouette read immediately, though the saturated billboard and dense signage make the location feel art-directed."
+  },
+  "set-K-04.png": {
+    "scrollStop": 9,
+    "carFilm": 9,
+    "realCamera": 7,
+    "why": "Both headlights and the nose still read in the thumbnail, with the magenta backdrop adding impact at the cost of some naturalism."
+  },
+  "set-K-05.png": {
+    "scrollStop": 7,
+    "carFilm": 9,
+    "realCamera": 7,
+    "why": "The beam through mist and the low camera give it a polished reveal, but the black body recedes and the repeated skyline signage feels staged."
+  },
+  "set-K-06.png": {
+    "scrollStop": 8,
+    "carFilm": 8,
+    "realCamera": 8,
+    "why": "The warm Y-shaped headlight survives the reduction, and the practical doorway and wet parking lines feel believable, but the billboard pulls the eye upward."
+  }
+}

@@ -72,7 +72,7 @@
   },
   "signage": {
     "generic": ["PARKING", "LEVEL 9", "EXIT", "STAIRS", "PAY HERE", "OPEN", "24H", "HOTEL", "ARCADE", "NOODLES", "PHARMACY", "KARAOKE", "TAILOR", "SAUNA", "BAR"],
-    "invented": ["ORBITAL DINER", "LANTERN AND VOLT", "SILVERFIN SUSHI", "NINTH CLOUD HOTEL", "QUIET HOURS CLUB", "SALT MOTH"]
+    "invented": ["ORBITAL DINER", "LANTERN AND VOLT", "BRINESCALE SUSHI", "VAPOR SILL HOTEL", "SHUTTER HUSH CLUB", "SALT MOTH"]
   },
   "reference": {
     "minSourcesPerElement": 6,

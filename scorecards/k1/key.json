@@ -1,0 +1,50 @@
+{
+  "set-K-01.png": {
+    "direction": "B",
+    "size": "fit",
+    "pixels": [
+      1400,
+      781
+    ]
+  },
+  "set-K-02.png": {
+    "direction": "C",
+    "size": "phone",
+    "pixels": [
+      400,
+      225
+    ]
+  },
+  "set-K-03.png": {
+    "direction": "A",
+    "size": "fit",
+    "pixels": [
+      1400,
+      788
+    ]
+  },
+  "set-K-04.png": {
+    "direction": "A",
+    "size": "phone",
+    "pixels": [
+      400,
+      225
+    ]
+  },
+  "set-K-05.png": {
+    "direction": "C",
+    "size": "fit",
+    "pixels": [
+      1400,
+      788
+    ]
+  },
+  "set-K-06.png": {
+    "direction": "B",
+    "size": "phone",
+    "pixels": [
+      400,
+      223
+    ]
+  }
+}

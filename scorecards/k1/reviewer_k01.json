@@ -1,0 +1,38 @@
+{
+  "set-K-01.png": {
+    "scrollStop": 5,
+    "carFilm": 5,
+    "realCamera": 4,
+    "why": "The wet amber-and-teal rooftop mood works, but the car sits small and dim under a big blank orange billboard, and up close the signs give it away as AI, with garbled text like 'EA ICH', 'GDAIL' and 'EXOHM' and the same HOTEL, OPEN, 24H and BAR words repeated."
+  },
+  "set-K-02.png": {
+    "scrollStop": 7,
+    "carFilm": 7,
+    "realCamera": 6,
+    "why": "This is the small version of 05: at phone size the cool blue palette, the headlight beam through the rain and the DRL signature read clean and cinematic, and the sign-text errors are too small to see."
+  },
+  "set-K-03.png": {
+    "scrollStop": 8,
+    "carFilm": 6,
+    "realCamera": 4,
+    "why": "The strongest scroll-stopper, with a low front three-quarter hero view of the car and saturated magenta and cyan, but it leans toward a cyberpunk wallpaper more than a premium car film, and it looks rendered: the 'PARKNG' sign is misspelled, the rain on the bodywork looks like CG, and the signs are generic."
+  },
+  "set-K-04.png": {
+    "scrollStop": 8,
+    "carFilm": 6,
+    "realCamera": 5,
+    "why": "This is the small version of 03: it still reads as a bold neon hero shot at phone size, the misspelling disappears, but the glossy over-graded CG look still comes through."
+  },
+  "set-K-05.png": {
+    "scrollStop": 7,
+    "carFilm": 8,
+    "realCamera": 5,
+    "why": "The most cinematic grade of the set, with restrained blue, volumetric headlight beams, a red reflection and good framing of the car, but at full size the signs are filler and misspelled ('EXTL', 'OREL', 'BAR' repeated), and the evenly placed bokeh balls look fake."
+  },
+  "set-K-06.png": {
+    "scrollStop": 5,
+    "carFilm": 5,
+    "realCamera": 5,
+    "why": "This is the small version of 01: the garbled text is hidden at this size, but the car is still small and backlit while the flat orange billboard takes the eye, so it doesn't stop the scroll."
+  }
+}

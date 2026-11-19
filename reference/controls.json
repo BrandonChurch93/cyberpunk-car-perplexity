@@ -1,0 +1,1623 @@
+[
+  {
+    "id": "k666be8d3",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-car-emblem-with-raindrops-35493177/",
+    "imageUrl": "https://images.pexels.com/photos/35493177/pexels-photo-35493177.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Holyson h",
+    "category": "paint-water",
+    "description": "Water beads on a black hood around a round badge and chrome grille.",
+    "cacheFile": "scout-b/scout-b-01.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          88,
+          97,
+          97
+        ],
+        "median": 97
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kf37d995d",
+    "pageUrl": "https://www.pexels.com/photo/water-drop-metal-and-plastic-car-parts-17216297/",
+    "imageUrl": "https://images.pexels.com/photos/17216297/pexels-photo-17216297.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Adonyi Gábor",
+    "category": "paint-water",
+    "description": "Drops bead on dark glossy paint beside a hood seam and headlamp.",
+    "cacheFile": "scout-b/scout-b-02.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          80,
+          89,
+          91
+        ],
+        "median": 89
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kb91307ea",
+    "pageUrl": "https://www.pexels.com/photo/closeup-of-raindrops-on-car-trunk-in-urban-setting-30008257/",
+    "imageUrl": "https://images.pexels.com/photos/30008257/pexels-photo-30008257.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Bayram Yalçın",
+    "category": "paint-water",
+    "description": "Dense rain beads on a metallic trunk above a narrow red tail lamp.",
+    "cacheFile": "scout-b/scout-b-03.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          85,
+          95,
+          93
+        ],
+        "median": 93
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kc28ce3a0",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-sleek-car-hood-with-water-droplets-29909550/",
+    "imageUrl": "https://images.pexels.com/photos/29909550/pexels-photo-29909550.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Kağan Karatay",
+    "category": "paint-water",
+    "description": "Water beads on a dark glossy hood lit by vertical white bars.",
+    "cacheFile": "scout-b/scout-b-04.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          80,
+          94,
+          91
+        ],
+        "median": 91
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kc04794a7",
+    "pageUrl": "https://unsplash.com/photos/raindrops-on-a-cars-trunk-at-night-PsxdXMeaC_w",
+    "imageUrl": "https://images.unsplash.com/photo-1758403944370-e5f29f12d5a8",
+    "source": "Unsplash",
+    "license": "Unsplash License",
+    "photographer": "Aykan Nakus",
+    "category": "paint-water",
+    "description": "Cool street light picks out rain beads on a muted green trunk.",
+    "cacheFile": "scout-b/scout-b-05.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          55,
+          95,
+          95
+        ],
+        "median": 95
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k47c6deae",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-sports-car-with-raindrops-on-hood-31922129/",
+    "imageUrl": "https://images.pexels.com/photos/31922129/pexels-photo-31922129.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Anuoluwapo Abosede",
+    "category": "paint-water",
+    "description": "Small rain beads cover a red-orange hood above the corner of a headlamp.",
+    "cacheFile": "scout-b/scout-b-06.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          80,
+          94,
+          97
+        ],
+        "median": 94
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kc794696c",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-wet-exterior-of-a-car-13805670/",
+    "imageUrl": "https://images.pexels.com/photos/13805670/pexels-photo-13805670.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Manuel Aldana",
+    "category": "paint-water",
+    "description": "Wet dark teal paint and glass catch cool and amber reflections.",
+    "cacheFile": "scout-b/scout-b-07.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          88,
+          98,
+          90
+        ],
+        "median": 90
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k844f420f",
+    "pageUrl": "https://unsplash.com/photos/close-up-of-water-droplets-on-a-dark-surface-7EMYjpQ4IG4",
+    "imageUrl": "https://images.unsplash.com/photo-1755279217102-947755911799",
+    "source": "Unsplash",
+    "license": "Unsplash License",
+    "photographer": "Ben Wicks",
+    "category": "paint-water",
+    "description": "Backlit water beads run along a dark rear quarter below the window trim.",
+    "cacheFile": "scout-b/scout-b-08.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          85,
+          97,
+          91
+        ],
+        "median": 91
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k794ff923",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-luxury-car-wheel-and-brake-caliper-38494610/",
+    "imageUrl": "https://images.pexels.com/photos/38494610/pexels-photo-38494610.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Redyar Rzgar",
+    "category": "front-wheel",
+    "description": "A black wheel with thin spokes, a drilled brake disc and an orange caliper.",
+    "cacheFile": "scout-b/scout-b-09.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          88,
+          98,
+          98
+        ],
+        "median": 98
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k7214a0d4",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-luxury-car-wheel-and-brake-29851074/",
+    "imageUrl": "https://images.pexels.com/photos/29851074/pexels-photo-29851074.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Ali Senan Köroğlu",
+    "category": "front-wheel",
+    "description": "A graphite wheel, red caliper and perforated disc in soft blue light.",
+    "cacheFile": "scout-b/scout-b-10.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          88,
+          97,
+          96
+        ],
+        "median": 96
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "ka872be61",
+    "pageUrl": "https://www.pexels.com/photo/front-wheel-of-a-black-car-9661292/",
+    "imageUrl": "https://images.pexels.com/photos/9661292/pexels-photo-9661292.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Erik Mclean",
+    "category": "front-wheel",
+    "description": "A white front wheel on a black car above wet pavement and orange reflections.",
+    "cacheFile": "scout-b/scout-b-11.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          88,
+          96,
+          2
+        ],
+        "median": 88
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k7298dfad",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-car-wheel-with-yellow-brake-caliper-29149444/",
+    "imageUrl": "https://images.pexels.com/photos/29149444/pexels-photo-29149444.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Luke Miller",
+    "category": "front-wheel",
+    "description": "A silver and black five-spoke front wheel with a yellow caliper in a dark garage.",
+    "cacheFile": "scout-b/scout-b-12.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          92,
+          98,
+          98
+        ],
+        "median": 98
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k6da775e6",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-an-orange-porsche-wheel-in-garage-39407165/",
+    "imageUrl": "https://images.pexels.com/photos/39407165/pexels-photo-39407165.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "atelierbyvineeth . . .",
+    "category": "front-wheel",
+    "description": "An orange front wheel with a yellow caliper and drilled disc in a dim garage.",
+    "cacheFile": "scout-b/scout-b-13.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          88,
+          97,
+          88
+        ],
+        "median": 88
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kc8bcd7bd",
+    "pageUrl": "https://www.pexels.com/photo/wheel-of-sports-car-at-night-18032064/",
+    "imageUrl": "https://images.pexels.com/photos/18032064/pexels-photo-18032064.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Sofía Nuñez",
+    "category": "front-wheel",
+    "description": "A machined five-spoke front wheel and dark brake caliper on a white car at night.",
+    "cacheFile": "scout-b/scout-b-14.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          88,
+          97,
+          92
+        ],
+        "median": 92
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "ke1ac62fa",
+    "pageUrl": "https://www.pexels.com/photo/extreme-close-up-of-a-cars-left-front-light-15469365/",
+    "imageUrl": "https://images.pexels.com/photos/15469365/pexels-photo-15469365.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Luca Istrate",
+    "category": "lit-lamp",
+    "description": "A bright white headlamp under a rain-covered hood with drops on its lens.",
+    "cacheFile": "scout-b/scout-b-15.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          88,
+          97,
+          97
+        ],
+        "median": 97
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kec4de906",
+    "pageUrl": "https://www.pexels.com/photo/a-close-up-shot-of-the-headlight-of-a-car-11079820/",
+    "imageUrl": "https://images.pexels.com/photos/11079820/pexels-photo-11079820.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Abdulvahap Demir",
+    "category": "lit-lamp",
+    "description": "A lit headlamp with flare on a wet dark car beside pavement at night.",
+    "cacheFile": "scout-b/scout-b-16.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          85,
+          95,
+          95
+        ],
+        "median": 95
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k086edb83",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-car-tail-light-at-night-28914537/",
+    "imageUrl": "https://images.pexels.com/photos/28914537/pexels-photo-28914537.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Oli Liao",
+    "category": "lit-lamp",
+    "description": "A red LED tail lamp on black paint with soft lights in the background.",
+    "cacheFile": "scout-b/scout-b-17.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          82,
+          97,
+          78
+        ],
+        "median": 82
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kfcd6609a",
+    "pageUrl": "https://www.pexels.com/photo/red-taillights-of-sports-car-at-night-16896009/",
+    "imageUrl": "https://images.pexels.com/photos/16896009/pexels-photo-16896009.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Matheus Bertelli",
+    "category": "lit-lamp",
+    "description": "Angular red tail lamps on a dark metallic rear corner under a street light.",
+    "cacheFile": "scout-b/scout-b-18.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          85,
+          93,
+          94
+        ],
+        "median": 93
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kd404914c",
+    "pageUrl": "https://unsplash.com/photos/a-close-up-of-the-tail-lights-of-a-sports-car-6NCZZuDR4I4",
+    "imageUrl": "https://images.unsplash.com/photo-1738796520046-93113605350a",
+    "source": "Unsplash",
+    "license": "Unsplash License",
+    "photographer": "Rana Singh",
+    "category": "lit-lamp",
+    "description": "A thin red tail lamp on a silver sports car in a dark setting.",
+    "cacheFile": "scout-b/scout-b-19.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          85,
+          96,
+          97
+        ],
+        "median": 96
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k04aa9bd8",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-car-back-light-15666128/",
+    "imageUrl": "https://images.pexels.com/photos/15666128/pexels-photo-15666128.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "HamZa NOUASRIA",
+    "category": "lit-lamp",
+    "description": "A wet red tail lamp with blue street lights out of focus behind it.",
+    "cacheFile": "scout-b/scout-b-20.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          85,
+          95,
+          96
+        ],
+        "median": 95
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k2181dd77",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-carbon-fiber-car-spoiler-39174735/",
+    "imageUrl": "https://images.pexels.com/photos/39174735/pexels-photo-39174735.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Quentin Martinez",
+    "category": "fine-detail",
+    "description": "A close-up of a woven carbon fiber spoiler against black and green.",
+    "cacheFile": "scout-b/scout-b-21.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          80,
+          94,
+          88
+        ],
+        "median": 88
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k961289ec",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-turbocharged-car-engine-bay-31618512/",
+    "imageUrl": "https://images.pexels.com/photos/31618512/pexels-photo-31618512.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Jagjeet Dhuna",
+    "category": "fine-detail",
+    "description": "A symmetrical engine bay with twin curved pipes and dark metal hardware.",
+    "cacheFile": "scout-b/scout-b-22.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          92,
+          98,
+          95
+        ],
+        "median": 95
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k5a2274d3",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-car-grille-17094818/",
+    "imageUrl": "https://images.pexels.com/photos/17094818/pexels-photo-17094818.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Boys in Bristol Photography",
+    "category": "fine-detail",
+    "description": "A close-up of the repeating hexagons of a dark grille with bright metal edges.",
+    "cacheFile": "scout-b/scout-b-23.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          80,
+          96,
+          98
+        ],
+        "median": 96
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kea6db14e",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-dark-green-mclaren-19106767/",
+    "imageUrl": "https://images.pexels.com/photos/19106767/pexels-photo-19106767.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "WAVYVISUALS",
+    "category": "fine-detail",
+    "description": "Glossy dark green carbon fiber weave over a curved nose and black trim.",
+    "cacheFile": "scout-b/scout-b-24.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          88,
+          97,
+          96
+        ],
+        "median": 96
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kc1cc805d",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-aerodynamic-blue-carbon-fiber-car-30644944/",
+    "imageUrl": "https://images.pexels.com/photos/30644944/pexels-photo-30644944.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Quentin Martinez",
+    "category": "fine-detail",
+    "description": "Blue and gray carbon fiber weave on a sharp V-shaped nose above a black lip.",
+    "cacheFile": "scout-b/scout-b-25.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          80,
+          94,
+          88
+        ],
+        "median": 88
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kb4a2dc44",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-dual-exhaust-pipes-on-a-car-30497323/",
+    "imageUrl": "https://images.pexels.com/photos/30497323/pexels-photo-30497323.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Tim Diercks",
+    "category": "rear-exhaust",
+    "description": "Two sculpted exhaust outlets in a dark rear panel above the pavement.",
+    "cacheFile": "scout-b/scout-b-26.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          85,
+          92,
+          82
+        ],
+        "median": 85
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k7ad3312c",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-sports-car-exhaust-19828709/",
+    "imageUrl": "https://images.pexels.com/photos/19828709/pexels-photo-19828709.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Sebastian Bautista",
+    "category": "rear-exhaust",
+    "description": "Twin blue-tinted exhaust tips under a rear bumper and carbon fiber trim.",
+    "cacheFile": "scout-b/scout-b-27.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          85,
+          95,
+          99
+        ],
+        "median": 95
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k743afc0c",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-the-back-of-a-sports-car-on-a-parking-lot-at-night-17594683/",
+    "imageUrl": "https://images.pexels.com/photos/17594683/pexels-photo-17594683.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Erik Mclean",
+    "category": "rear-exhaust",
+    "description": "A dark sports car rear corner and diffuser in a night parking lot.",
+    "cacheFile": "scout-b/scout-b-28.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          85,
+          96,
+          98
+        ],
+        "median": 96
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k39793517",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-luxury-sports-car-exhaust-design-30674492/",
+    "imageUrl": "https://images.pexels.com/photos/30674492/pexels-photo-30674492.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Quentin Martinez",
+    "category": "rear-exhaust",
+    "description": "Two round center exhaust openings below polished bodywork with warm reflections.",
+    "cacheFile": "scout-b/scout-b-29.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          78,
+          92,
+          92
+        ],
+        "median": 92
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kae61b8b8",
+    "pageUrl": "https://www.pexels.com/photo/close-up-of-car-exhaust-pipes-in-garage-31646382/",
+    "imageUrl": "https://images.pexels.com/photos/31646382/pexels-photo-31646382.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License",
+    "photographer": "Borta",
+    "category": "rear-exhaust",
+    "description": "Twin bronze-toned exhaust tips below a glossy dark blue bumper in a garage.",
+    "cacheFile": "scout-b/scout-b-30.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          85,
+          98,
+          94
+        ],
+        "median": 94
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kb116048e",
+    "pageUrl": "https://unsplash.com/photos/grayscale-photo-of-car-on-road-mugDbuNnbd0",
+    "imageUrl": "https://images.unsplash.com/photo-1611651186486-415f04eb78e4",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "redcharlie",
+    "category": "supercar-wet-night",
+    "description": "Porsche 911 rear three-quarter side view parked in rain at night, wet road",
+    "cacheFile": "scout-a/scout-a-01.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          80,
+          90,
+          95
+        ],
+        "median": 90
+      }
+    ],
+    "status": "dropped",
+    "excluded": "One juror reported a driver visible through the side glass. The pool rule is no people"
+  },
+  {
+    "id": "kfb1bd6f2",
+    "pageUrl": "https://unsplash.com/photos/a-car-driving-in-the-rain-at-night-lqSVdnmI-J4",
+    "imageUrl": "https://images.unsplash.com/photo-1722553708495-6c8a5f184704",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Michał Robak",
+    "category": "supercar-wet-night",
+    "description": "Black Mazda MX-5 parked in a car park in heavy rain at night, lamps on",
+    "cacheFile": "scout-a/scout-a-02.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          92,
+          97,
+          97
+        ],
+        "median": 97
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kdadf11ae",
+    "pageUrl": "https://unsplash.com/photos/a-red-car-driving-down-a-rain-soaked-street-GyZSMud-hQY",
+    "imageUrl": "https://images.unsplash.com/photo-1722553708493-5a22cfdac07f",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Michał Robak",
+    "category": "supercar-wet-night",
+    "description": "Red Mazda MX-5 parked in heavy rain at night, same location and shoot as 02",
+    "cacheFile": "scout-a/scout-a-03.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          82,
+          96,
+          90
+        ],
+        "median": 90
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k9137bfea",
+    "pageUrl": "https://unsplash.com/photos/grey-lamborghini-aventador-W1PF7llLxMc",
+    "imageUrl": "https://images.unsplash.com/photo-1552176625-e47ff529b595",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Håkon Sataøen",
+    "category": "supercar-wet-night",
+    "description": "Lamborghini Huracan front three-quarter in a dark wet space with smoke and ice effect on body",
+    "cacheFile": "scout-a/scout-a-04.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          85,
+          96,
+          95
+        ],
+        "median": 95
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kb4796a9a",
+    "pageUrl": "https://unsplash.com/photos/black-sports-coupe-YoGzQqqWZP0",
+    "imageUrl": "https://images.unsplash.com/photo-1542128962-9d50ad7bf014",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Troy T",
+    "category": "supercar-wet-night",
+    "description": "McLaren 570S rear three-quarter in a dark parking garage with tail lamps lit, dry floor",
+    "cacheFile": "scout-a/scout-a-05.jpg",
+    "vettings": [],
+    "status": "candidate"
+  },
+  {
+    "id": "k57dce1a7",
+    "pageUrl": "https://unsplash.com/photos/red-ferrari-458-italia-parked-near-building-ANY0Pyj5X8Y",
+    "imageUrl": "https://images.unsplash.com/photo-1610847499832-918a1c3c6811",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Jesse G-C",
+    "category": "supercar-wet-night",
+    "description": "Red Ferrari F8 front three-quarter under a lit hotel entrance at night, dry ground",
+    "cacheFile": "scout-a/scout-a-06.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          88,
+          95,
+          97
+        ],
+        "median": 95
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k773e2b5b",
+    "pageUrl": "https://unsplash.com/photos/a-blue-sports-car-parked-in-a-parking-garage-OmLA6HDVtFI",
+    "imageUrl": "https://images.unsplash.com/photo-1733406872273-3c16b5b8134a",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Angry._.Kat",
+    "category": "supercar-wet-night",
+    "description": "Blue Ferrari 296 front three-quarter in a dark parking garage, dry floor",
+    "cacheFile": "scout-a/scout-a-07.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          82,
+          92,
+          75
+        ],
+        "median": 82
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k204b7d77",
+    "pageUrl": "https://unsplash.com/photos/silver-car-parked-on-sidewalk-during-night-time-CyHghCkq0bg",
+    "imageUrl": "https://images.unsplash.com/photo-1610684003787-d6a8c36b8547",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Naseem Buras",
+    "category": "supercar-wet-night",
+    "description": "Jaguar F-Type front three-quarter on wet cobbles in blue night light",
+    "cacheFile": "scout-a/scout-a-08.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          85,
+          96,
+          91
+        ],
+        "median": 91
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k26a064c3",
+    "pageUrl": "https://unsplash.com/photos/matte-black-sports-car-on-street-4-MxVqPiPk0",
+    "imageUrl": "https://images.unsplash.com/photo-1628519592419-bf288f08cef5",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Jack Lucas Smith",
+    "category": "supercar-wet-night",
+    "description": "Matte black Lamborghini Aventador rear three-quarter on a wet city street at night",
+    "cacheFile": "scout-a/scout-a-09.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          85,
+          94,
+          97
+        ],
+        "median": 94
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kac1c7a0a",
+    "pageUrl": "https://unsplash.com/photos/orange-toyota-86-in-parking-garage--6uHEz_b6gM",
+    "imageUrl": "https://images.unsplash.com/photo-1790463293070-9c2c8a1e1651",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Erik Mclean",
+    "category": "supercar-wet-night",
+    "description": "Orange widebody Toyota 86 rear three-quarter in a parking garage with tail lamps lit",
+    "cacheFile": "scout-a/scout-a-10.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          85,
+          94,
+          98
+        ],
+        "median": 94
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k131555b4",
+    "pageUrl": "https://www.pexels.com/photo/a-parked-toyota-subaru-with-open-headlights-9754912/",
+    "imageUrl": "https://images.pexels.com/photos/9754912/pexels-photo-9754912.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License (https://www.pexels.com/license/)",
+    "photographer": "Jonathan Cooper",
+    "category": "supercar-wet-night",
+    "description": "White Toyota GT86 front three-quarter with lamps on in a wet car park with fog",
+    "cacheFile": "scout-a/scout-a-11.jpg",
+    "vettings": [],
+    "status": "candidate"
+  },
+  {
+    "id": "k0f75f106",
+    "pageUrl": "https://www.pexels.com/photo/photo-of-expensive-car-on-pavement-4674333/",
+    "imageUrl": "https://images.pexels.com/photos/4674333/pexels-photo-4674333.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License (https://www.pexels.com/license/)",
+    "photographer": "Erik Mclean",
+    "category": "supercar-wet-night",
+    "description": "Nissan 370Z Nismo on a wet car park beside a parking structure at night",
+    "cacheFile": "scout-a/scout-a-12.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          88,
+          95,
+          91
+        ],
+        "median": 91
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k2a785427",
+    "pageUrl": "https://unsplash.com/photos/a-car-is-parked-in-a-parking-garage-0tj-eYyCEFU",
+    "imageUrl": "https://images.unsplash.com/photo-1635704764831-082c47202c6c",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Rolando Garrido",
+    "category": "empty-deck-night",
+    "description": "Dark parking garage deck with one parked car and a Spanish sign",
+    "cacheFile": "scout-a/scout-a-13.jpg",
+    "vettings": [],
+    "status": "candidate"
+  },
+  {
+    "id": "k80dee6ec",
+    "pageUrl": "https://unsplash.com/photos/road-lights-at-night-xRVEuJXVMH4",
+    "imageUrl": "https://images.unsplash.com/photo-1575472929780-13c272d1d2dc",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Keagan Henman",
+    "category": "empty-deck-night",
+    "description": "Empty wet surface car park at night with street lamps, not a rooftop",
+    "cacheFile": "scout-a/scout-a-14.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          85,
+          94,
+          96
+        ],
+        "median": 94
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k0bfb58fb",
+    "pageUrl": "https://unsplash.com/photos/an-empty-parking-garage-filled-with-lots-of-parking-spaces-D8r1WeidnsQ",
+    "imageUrl": "https://images.unsplash.com/photo-1640840109153-ff640b8ed955",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Brice Cooper",
+    "category": "empty-deck-night",
+    "description": "Empty covered parking garage deck at night with ceiling lights",
+    "cacheFile": "scout-a/scout-a-15.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          88,
+          96,
+          90
+        ],
+        "median": 90
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k447ba529",
+    "pageUrl": "https://unsplash.com/photos/white-and-black-parking-lot-mRX5QFPUilE",
+    "imageUrl": "https://images.unsplash.com/photo-1607170040603-66bd4c448205",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "kevin laminto",
+    "category": "empty-deck-night",
+    "description": "Dark empty parking garage deck with an EXIT sign",
+    "cacheFile": "scout-a/scout-a-16.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          72,
+          86,
+          88
+        ],
+        "median": 86
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k98479214",
+    "pageUrl": "https://unsplash.com/photos/a-empty-parking-lot-at-night-with-lights-on-cyGL_U1CzKo",
+    "imageUrl": "https://images.unsplash.com/photo-1725069296405-4498123f8ef1",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Sam Tsonis",
+    "category": "empty-deck-night",
+    "description": "Empty rooftop car park deck at night with a lit tower behind",
+    "cacheFile": "scout-a/scout-a-17.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          85,
+          98,
+          96
+        ],
+        "median": 96
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kb6c621c3",
+    "pageUrl": "https://unsplash.com/photos/empty-road-at-nighttime-Fm_aWbuWCRQ",
+    "imageUrl": "https://images.unsplash.com/photo-1566636137426-500b3b61dcaa",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Thomas Stephan",
+    "category": "empty-deck-night",
+    "description": "Empty covered parking garage deck at night, wide view",
+    "cacheFile": "scout-a/scout-a-18.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          85,
+          95,
+          94
+        ],
+        "median": 94
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k2502b3b5",
+    "pageUrl": "https://unsplash.com/photos/black-hatchback-parked-at-night-xUMpg3uzI0s",
+    "imageUrl": "https://images.unsplash.com/photo-1790268668204-9f7b58e2891a",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Felipe Souza",
+    "category": "low-wide-single-car-rain",
+    "description": "Low wide shot of a single black hatchback parked in rain at night",
+    "cacheFile": "scout-a/scout-a-19.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          88,
+          95,
+          90
+        ],
+        "median": 90
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k1fa94938",
+    "pageUrl": "https://unsplash.com/photos/dark-car-parked-on-wet-street-at-night-pg6harARHFM",
+    "imageUrl": "https://images.unsplash.com/photo-1756242789762-0c29ed7281dd",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Hamza Şamil Yavuz",
+    "category": "low-wide-single-car-rain",
+    "description": "Low wide shot of a dark Seat Leon parked on a wet street in sleet with city buildings behind",
+    "cacheFile": "scout-a/scout-a-20.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          92,
+          98,
+          90
+        ],
+        "median": 92
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k673005d0",
+    "pageUrl": "https://unsplash.com/photos/a-car-parked-in-a-parking-lot-at-night-VHqmuqChIdM",
+    "imageUrl": "https://images.unsplash.com/photo-1731753234335-88cab4492da7",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Hamza Şamil Yavuz",
+    "category": "low-wide-single-car-rain",
+    "description": "Same Seat Leon as 20 in a car park at night with towers behind, different scene",
+    "cacheFile": "scout-a/scout-a-21.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          35,
+          89,
+          95
+        ],
+        "median": 89
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "ka256ffdb",
+    "pageUrl": "https://unsplash.com/photos/white-car-on-road-during-night-time-iuoRWt4hYXs",
+    "imageUrl": "https://images.unsplash.com/photo-1611633909202-3f5e674775e1",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "R.Louis Mac Photo",
+    "category": "low-wide-single-car-rain",
+    "description": "Single white car parked in fog under a street lamp at night, low wide view",
+    "cacheFile": "scout-a/scout-a-22.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          80,
+          96,
+          94
+        ],
+        "median": 94
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kc9435ef0",
+    "pageUrl": "https://www.pexels.com/photo/white-car-parked-on-rooftop-parking-lot-17245127/",
+    "imageUrl": "https://images.pexels.com/photos/17245127/pexels-photo-17245127.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License (https://www.pexels.com/license/)",
+    "photographer": "Erik Mclean",
+    "category": "low-wide-single-car-rain",
+    "description": "White Toyota GT86 on a rooftop car park in fog with city lights behind",
+    "cacheFile": "scout-a/scout-a-23.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          88,
+          98,
+          93
+        ],
+        "median": 93
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k2e2d12ff",
+    "pageUrl": "https://www.pexels.com/photo/an-old-gray-sedan-car-parked-on-a-rooftop-9582583/",
+    "imageUrl": "https://images.pexels.com/photos/9582583/pexels-photo-9582583.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License (https://www.pexels.com/license/)",
+    "photographer": "Leif Bergerson",
+    "category": "low-wide-single-car-rain",
+    "description": "Grey BMW E36 on a rooftop car park with city skyline behind, underglow, dry",
+    "cacheFile": "scout-a/scout-a-24.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          88,
+          98,
+          90
+        ],
+        "median": 90
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kb3acfef1",
+    "pageUrl": "https://unsplash.com/photos/red-and-black-car-tail-light-GqbSYjxkWvk",
+    "imageUrl": "https://images.unsplash.com/photo-1589270618430-e2e652059aac",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Asdrubal luna",
+    "category": "rear-taillights-wet",
+    "description": "Porsche 911 GTS rear view in rain at night with tail lamps lit",
+    "cacheFile": "scout-a/scout-a-25.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          72,
+          91,
+          97
+        ],
+        "median": 91
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k7a02be15",
+    "pageUrl": "https://unsplash.com/photos/black-bmw-car-on-road-during-night-time-AYQLep_PVns",
+    "imageUrl": "https://images.unsplash.com/photo-1605088672804-b8b7f43df157",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Brecht Denil",
+    "category": "rear-taillights-wet",
+    "description": "Porsche Cayman rear view on a wet street at night with tail lamps lit",
+    "cacheFile": "scout-a/scout-a-26.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          92,
+          97,
+          97
+        ],
+        "median": 97
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "k0d60b2d9",
+    "pageUrl": "https://unsplash.com/photos/black-car-_dwspiRmIAY",
+    "imageUrl": "https://images.unsplash.com/photo-1536169470159-76dca77c6db0",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Goh Rhy Yan",
+    "category": "rear-taillights-wet",
+    "description": "McLaren 600LT rear view at night with tail lamps lit and light beams",
+    "cacheFile": "scout-a/scout-a-27.jpg",
+    "vettings": [],
+    "status": "candidate"
+  },
+  {
+    "id": "k3bec6a55",
+    "pageUrl": "https://unsplash.com/photos/a-car-driving-down-a-street-at-night-rrZ1YO2k6TE",
+    "imageUrl": "https://images.unsplash.com/photo-1673978478775-7b3f9b8145b6",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "Amit Ovadia",
+    "category": "rear-taillights-wet",
+    "description": "Nissan GT-R rear view on a wet road at night with tail lamps lit",
+    "cacheFile": "scout-a/scout-a-28.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          88,
+          88,
+          16
+        ],
+        "median": 88
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "kbdcdcdb4",
+    "pageUrl": "https://unsplash.com/photos/a-car-parked-on-the-side-of-the-road-at-night-62blorGADtk",
+    "imageUrl": "https://images.unsplash.com/photo-1649282061414-82832525b912",
+    "source": "Unsplash",
+    "license": "Unsplash License (https://unsplash.com/license)",
+    "photographer": "AngelsSloppyPhotos",
+    "category": "rear-taillights-wet",
+    "description": "Ford Mustang rear three-quarter at night with tail lamps lit and wet reflections",
+    "cacheFile": "scout-a/scout-a-29.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          85,
+          97,
+          97
+        ],
+        "median": 97
+      }
+    ],
+    "status": "kept"
+  },
+  {
+    "id": "ke123817d",
+    "pageUrl": "https://www.pexels.com/photo/sleek-sports-car-at-night-with-reflective-puddle-28467943/",
+    "imageUrl": "https://images.pexels.com/photos/28467943/pexels-photo-28467943.jpeg",
+    "source": "Pexels",
+    "license": "Pexels License (https://www.pexels.com/license/)",
+    "photographer": "FBO Media",
+    "category": "rear-taillights-wet",
+    "description": "Toyota Supra rear view at night with tail lamps lit and a reflective puddle",
+    "cacheFile": "scout-a/scout-a-30.jpg",
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          90,
+          97,
+          97
+        ],
+        "median": 97
+      }
+    ],
+    "status": "kept"
+  }
+]

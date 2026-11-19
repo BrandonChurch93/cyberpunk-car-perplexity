@@ -59,6 +59,60 @@ const checks: Record<string, Check> = {
     }
     return { ok: problems.length === 0, detail: problems.length ? problems.join('; ') : `${count} current stills match their format, frameCount ${frameCount}` }
   },
+  R1: () => {
+    const r = run('npx', ['tsx', 'tools/board.ts', 'check'])
+    return { ok: r.ok, detail: r.ok ? `every board element has at least ${config.reference.minSourcesPerElement} sources with at least ${config.reference.minObservationsPerSource} observations each` : r.tail }
+  },
+  R2: () => {
+    const ledger = readJson<{ status: string; vettings: { median: number }[] }[]>(join(repoRoot, 'reference', 'controls.json')) ?? []
+    const kept = ledger.filter((c) => c.status === 'kept' && c.vettings.length > 0 && c.vettings[c.vettings.length - 1].median >= config.quality.blind.minControlMean)
+    const need = config.quality.blind.minControlPool
+    const board = existsSync(join(repoRoot, 'reference', 'BOARD.md')) ? readFileSync(join(repoRoot, 'reference', 'BOARD.md'), 'utf8') : ''
+    const listed = kept.filter((c) => board.includes((c as unknown as { id: string }).id)).length
+    const ok = kept.length >= need && listed === kept.length
+    return { ok, detail: `${kept.length} vetted controls kept, ${need} needed, ${listed} listed on the board` }
+  },
+  R3: () => {
+    const dir = join(repoRoot, 'reference', 'keyframes')
+    const files = existsSync(dir) ? readdirSync(dir) : []
+    const prompts = files.includes('PROMPTS.md') ? readFileSync(join(dir, 'PROMPTS.md'), 'utf8') : ''
+    const bad: string[] = []
+    const directions = files.filter((f) => /^direction-/.test(f))
+    if (directions.length < config.keyframes.directions) bad.push(`${directions.length} directions`)
+    for (const f of directions) if (!prompts.includes(f)) bad.push(`${f} has no prompt`)
+    config.beats.forEach((beat, i) => {
+      const f = files.find((n) => n.startsWith(`${String(i + 1).padStart(2, '0')}-${beat.id}.`))
+      if (!f) bad.push(`no key frame for ${beat.id}`)
+      else if (!prompts.includes(f)) bad.push(`${f} has no prompt`)
+    })
+    const progress = readFileSync(join(repoRoot, 'kit', 'PROGRESS.md'), 'utf8')
+    if (!/K1 scores/.test(progress)) bad.push('K1 scores are not logged')
+    return { ok: bad.length === 0, detail: bad.length ? bad.join('; ') : `${directions.length} directions, one key frame for each of ${config.beats.length} beats, prompts and K1 scores logged` }
+  },
+  R4: () => {
+    const path = join(repoRoot, 'cut', 'SHOTS.md')
+    if (!existsSync(path)) return { ok: false, detail: 'cut/SHOTS.md is missing' }
+    const text = readFileSync(path, 'utf8')
+    const sections = text.split(/^## /m)
+    const bad: string[] = []
+    for (const [label, key] of [['master', 'formats.master'], ['vertical', 'formats.vertical']] as const) {
+      const section = sections.find((s) => s.split('\n')[0].includes(key))
+      if (!section) {
+        bad.push(`no ${label} section`)
+        continue
+      }
+      for (const beat of config.beats) {
+        const row = section.split('\n').find((l) => l.startsWith(`| \`${beat.id}\``))
+        const cells = row ? row.split('|').map((c) => c.trim()).filter(Boolean) : []
+        if (cells.length < 8) bad.push(`${label} ${beat.id}`)
+        else {
+          const mm = Number(/(\d+) mm/.exec(cells[1])?.[1])
+          if (!config.lens.focalLengthsMm.includes(mm)) bad.push(`${label} ${beat.id} lens`)
+        }
+      }
+    }
+    return { ok: bad.length === 0, detail: bad.length ? `incomplete: ${bad.join(', ')}` : `${config.beats.length} beats in both formats, each with lens, rig, move, start, end, focus and contents` }
+  },
   G10: () => {
     const p = config.platform
     const f = config.formats
@@ -77,12 +131,12 @@ const checks: Record<string, Check> = {
       for (const n of readdirSync(d)) {
         const p = join(d, n)
         if (statSync(p).isDirectory()) walk(p)
-        else if (n !== '.gitkeep') files.push(p.slice(dir.length + 1))
+        else files.push(p.slice(dir.length + 1))
       }
     }
     if (existsSync(dir)) walk(dir)
     const ledger = existsSync(join(repoRoot, 'ASSETS.md')) ? readFileSync(join(repoRoot, 'ASSETS.md'), 'utf8') : ''
-    const missing = files.filter((f) => !ledger.includes(`\`${f}\``))
+    const missing = files.filter((f) => !ledger.includes(`\`${f}\``) && !ledger.includes(`\`public/assets/third-party/${f}\``))
     return { ok: missing.length === 0, detail: missing.length ? `not in ASSETS.md: ${missing.slice(0, 5).join(', ')}` : `${files.length} third-party files, all listed` }
   },
   G13: () => {
@@ -117,7 +171,7 @@ const checks: Record<string, Check> = {
 
 const phases: Record<string, string[]> = {
   '0': ['G1', 'G2', 'G3', 'G4'],
-  '1': ['G1', 'G2'],
+  '1': ['G1', 'G2', 'R1', 'R2', 'R3', 'R4', 'G12', 'G13'],
   '2': ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9'],
   '3': ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G9', 'G10', 'G11', 'G12', 'G13', 'G14'],
   '4': ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11', 'G12', 'G13', 'G14'],

@@ -4,17 +4,17 @@ The Builder's memory. Read this first in every task. Update it before every comm
 
 ## Status
 
-- Current phase: 1 · Reference and key frames
+- Current phase: 2 · Blockout in motion
 - Current round: none
 - Blocked: no
-- Last push: c74357a (vehicle file), 2026-11-19
+- Last push: see the push log, 2026-11-19
 
 ## Phases
 
 | Phase | State | Gate evidence | Commit |
 | --- | --- | --- | --- |
 | 0 · Ground truth | done | Push c74357a and 97ddecb succeeded. `npm run gate -- --phase 0` on build 33fa88298cbaea4f: G1 PASS (build clean), G2 PASS (29 tests), G3 PASS (5 frames identical across fresh loads and reverse order, frame 195 identical when chunked across 3 page loads), G4 PASS (3 stills match their formats, frameCount 1350). Workspace record, pinned versions and render budget are below | see push log |
-| 1 · Reference and key frames | in progress | | |
+| 1 · Reference and key frames | done | `npm run gate -- --phase 1`: G1 PASS, G2 PASS, R1 PASS (`reference/BOARD.md`: 13 elements, 150 sources, every element at or above `reference.minSourcesPerElement` and every source at or above `reference.minObservationsPerSource`), R2 PASS (55 vetted controls kept, the pool needs 30, every kept id is on the board), R3 PASS (3 directions, 8 beat key frames, K1 scores logged below), R4 PASS (`cut/SHOTS.md` has a row for every beat in both formats), G12 PASS, G13 PASS | see push log |
 | 2 · Blockout in motion | not started | | |
 | 3 · Look lock | not started | | |
 | 4 · Full build | not started | | |
@@ -86,7 +86,30 @@ Chunking strategy:
 
 ## Control pool
 
-Filled in Phase 1: size, date vetted, mean vetting score.
+Vetted 2026-11-19. The ledger is `reference/controls.json` (URLs, licenses and scores, no images). The images stay in `reference/cache/controls/`, which git ignores. `npx tsx tools/controls.ts restore` downloads again any image the cache has lost.
+
+- Size: 55 kept of 60 candidates. 1 dropped. 4 candidates still wait on a late juror and stay out of the pool until their third vote arrives.
+- Mean vetting score: 92.5 (the mean of the kept medians). A control is kept when the median of its three juror likelihoods is at least `quality.blind.minControlMean`.
+- How it was vetted: each candidate was prepared the way a judged frame is (centre crop to the master aspect, critic size, PNG, no metadata) and sent alone, with the C1 text, to three fresh jurors on three model families. Two families are fixed and the third rotates among four more.
+- Kept by kind: paint with water 8, front wheel 6, lit lamp 6, fine detail 5, rear and exhaust 5, wet supercar at night 9, empty deck at night 5, low wide single car in rain 6, rear with taillights in the wet 5.
+- Dropped: `kb116048e`. One juror reported a driver behind the side glass, and the pool holds no people.
+- Rule kept from here on: a control whose jurors mention a person, a watermark or a caption is excluded by hand with `npx tsx tools/controls.ts exclude <id> <why>`.
+
+## Key frames
+
+- K1 scores, 2026-11-19, three jurors on three model families, six scores per cell (three questions at two sizes). Scorecards are in `scorecards/k1/`.
+
+| Juror | Direction A | Direction B | Direction C |
+| --- | --- | --- | --- |
+| reviewer_k01 | 6.17 | 4.83 | 6.67 |
+| reviewer_k02 | 8.33 | 8.00 | 7.67 |
+| reviewer_k03 | 5.83 | 7.17 | 7.00 |
+| Mean | 6.778 | 6.667 | 7.111 |
+
+- Chosen: direction C. Cold blue with one red accent, 24 mm and very low, headlamp beams and haze as the main event, a long puddle in the foreground.
+- One key frame per beat in that direction is in `reference/keyframes/`, with every prompt in `PROMPTS.md`. Four of them (arrival, wheel, ignition, return) were made again because the first takes carried a real maker name on a skyline sign or on the brake caliper.
+- What the jurors named, carried into the build as things to avoid: garbled or repeated sign text, out of focus highlights spaced evenly, a black body that recedes at phone size, sign color so saturated that it reads as a game.
+- The key frames are targets for composition, palette and mood only. They are never used as textures, backgrounds or frames.
 
 ## Judged frames
 
@@ -107,12 +130,22 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | Critics and jurors run as fresh agents in their own sandbox VM and receive attachments only, with neutral names | `AGENTS.md` and `kit/07-QUALITY-BAR.md`. A separate VM cannot read this repo's working tree | Every round |
 | 2026-11-19 | Development agents each own one folder, work in their own sandbox VM and push a branch. The Builder merges and verifies through the harness | One owner per folder. Separate VMs do not compete for the render slot | Phases 2 to 4 |
 | 2026-11-19 | Phase 1 reference research may start while Phase 0 scaffolding finishes. Gates are still evaluated in order | Research does not depend on the scaffold | Schedule only |
+| 2026-11-19 | The detail beat shows the exposed engine bay under the rear deck: the carbon twill bracing and the hexagonal mesh | It is the most particular close detail the car has, and reference for both materials is on the board | `anchors.detail`, the detail row in `cut/SHOTS.md` |
+| 2026-11-19 | The car is built procedurally in code from the design grant drawings and photographs. No third-party car mesh is used | No mesh found had a license that passes the rule above. Idea kept in reserve: build the body in a scripted modeling tool from the drawings and export it, if the code route cannot reach the silhouette | `src/vehicle/`, Phase 3 |
+| 2026-11-19 | The lamp wake sequence is the Builder's own design in three stages | Research found no welcome light animation on the real car | `lamps` stage thresholds, the event timeline in `cut/SHOTS.md` |
+| 2026-11-19 | World layout and gate conventions are fixed in `cut/SHOTS.md`: meters, Y up, car at the origin facing +Z, bay grid turned 12 degrees against the car, focal length measured across the long side of a 36 mm gate in both formats | One written source for the world, vehicle and director folders | Phases 2 to 4 |
+| 2026-11-19 | Jurors are spawned in bulk from a script, one fresh agent per image. The third juror family rotates. Tickets, answers and the family of each juror are kept in a ledger under `out/work/jury/` | 180 one-image calls cannot be made by hand, and rotation keeps one slow family from holding the pool | `tools/lib/jury.ts`, `tools/controls.ts` |
+| 2026-11-19 | Only the third-party files the blockout and look lock need are copied in now (3 texture sets, 3 fonts). The rest are a shortlist in `ASSETS.md` | Keeps the repo small until a file is used | `public/assets/third-party/`, `ASSETS.md` |
+| 2026-11-19 | The Phase 1 gate is checked by the harness as R1 to R4 | The build order lists four Phase 1 conditions that had no G number | `tools/gate.ts` |
 | 2026-11-19 | Animation is closed form wherever possible. The running sum is saved as raw Float32 through the harness endpoint | Determinism and resumable chunks | `src/core/`, `tools/lib/` |
 
 ## Config changes
 
 | Date | Key | From | To | Why |
 | --- | --- | --- | --- | --- |
+| 2026-11-19 | `signage.invented` | QUIET HOURS CLUB | SHUTTER HUSH CLUB | A web search found an existing business with the first name |
+| 2026-11-19 | `signage.invented` | NINTH CLOUD HOTEL | VAPOR SILL HOTEL | A web search found an existing business with the first name |
+| 2026-11-19 | `signage.invented` | SILVERFIN SUSHI | BRINESCALE SUSHI | A web search found an existing business with the first name |
 
 ## Rounds
 
@@ -134,10 +167,19 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | Date | Commit | Result |
 | --- | --- | --- |
 | 2026-11-19 | c74357a | pushed to main. Fills `kit/02-VEHICLE.md` from the task prompt |
+| 2026-11-19 | 97ddecb | pushed to main. Phase 0 scaffold, workspace record, pinned versions |
+| 2026-11-19 | 569ad5b | pushed to main. Phase 0 gate |
+| 2026-11-19 | the commit titled "Phase 1 gate" | pushed to main. Board, control pool, key frames, shot plan, asset ledger |
 
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-19, session 3
+
+- Done: Phase 1. Board of 13 elements and 150 sources assembled from four writers and link checked. Control pool vetted with 180 one-image juror calls: 55 kept, 1 dropped. Three key frame directions scored by K1, direction C chosen, eight beat key frames made. Vehicle part and lamp notes written. `ASSETS.md` started with 19 files in the repo and a shortlist. `cut/SHOTS.md` written for every beat in both formats. Three sign names replaced. Gate checks R1 to R4 added. Phase 1 gate green.
+- Measured: kept control medians average 92.5. K1 means A 6.778, B 6.667, C 7.111.
+- Next: Phase 2. Gray-box world, blockout vehicle module, camera rig with operator motion, the three modes and the menu, harness commands `sheet`, `crops`, `film`, `pack`, `proof`, `keep`, the judged frame list, then C5 blockout and C8 blockout.
 
 ### 2026-11-19, session 2
 
