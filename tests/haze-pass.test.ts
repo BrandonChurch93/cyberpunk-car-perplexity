@@ -31,8 +31,10 @@ it('feeds the current sample camera, depth and seeded jitter to the scattering p
   const camera = new THREE.PerspectiveCamera(46, 1, 0.05, 800)
   camera.position.set(2, 1, 5)
   camera.updateMatrixWorld()
-  const frame = { frameIndex: 195, frameKey: 195, timeSeconds: 195 / config.film.fps, tier: 'review' as const, format: config.formats.preview, samples: config.tiers.review.samplesPerFrame }
-  const indices = [7, 1, 7]
+  const frameIndex = Math.round(config.film.heroFrameSeconds * config.film.fps)
+  const frame = { frameIndex, frameKey: frameIndex, timeSeconds: frameIndex / config.film.fps, tier: 'review' as const, format: config.formats.preview, samples: config.tiers.review.samplesPerFrame }
+  const indices = [frame.samples - 1, 1, frame.samples - 1]
+  parts.resize(frame.format)
   const observed: [number, number][] = []
   for (const sampleIndex of indices) {
     const noise = sampleSet(frame.frameIndex, sampleIndex)
@@ -53,5 +55,7 @@ it('feeds the current sample camera, depth and seeded jitter to the scattering p
   expect(observed[0]).not.toEqual(observed[1])
   expect(observed[0]).toEqual(observed[2])
   expect(sync).toHaveBeenCalledTimes(indices.length)
+  expect(render).toHaveBeenCalledTimes(indices.length * 2)
+  expect(setRenderTarget.mock.calls[0][0].width).toBe(Math.ceil(frame.format.width / 2))
   expect(setRenderTarget).toHaveBeenLastCalledWith(output)
 })

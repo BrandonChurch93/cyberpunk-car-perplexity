@@ -12,9 +12,11 @@ export const atmosphere = {
   scatterFraction: 0.56,
 } as const
 
-const fragment = /* glsl */ `
+const scattering = /* glsl */ `
 uniform sampler2D sceneColor;
 uniform sampler2D sceneDepth;
+uniform sampler2D coarseHaze;
+uniform ivec2 coarseResolution;
 uniform mat4 inverseProjection;
 uniform mat4 cameraWorld;
 uniform vec4 deckBounds;
@@ -98,11 +100,8 @@ vec2 clipCone(vec2 segment, vec3 eyeFromLight, vec3 ray, vec3 axis, float cutoff
   return segment;
 }
 
-void main() {
-  ivec2 pixel = ivec2(gl_FragCoord.xy);
-  vec4 scene = texelFetch(sceneColor, pixel, 0);
-  float depth = texelFetch(sceneDepth, pixel, 0).r;
-  vec4 eye = inverseProjection * vec4(vUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+vec4 scatterToDepth(vec2 uv, float depth) {
+  vec4 eye = inverseProjection * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
   vec3 eyePoint = eye.xyz / eye.w;
   float far = length(eyePoint);
   vec3 ray = mat3(cameraWorld) * (eyePoint / far);
@@ -113,7 +112,8 @@ void main() {
   float transmission = exp(-airDepth - layerDepth);
   vec3 skyGlow = mix(vec3(0.032, 0.076, 0.103), vec3(0.019, 0.036, 0.054), smoothstep(0.02, 0.48, ray.y));
   vec3 radiance = skyGlow * (1.0 - exp(-airDepth));
-  float pixelNoise = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  vec2 pixel = floor(uv * vec2(textureSize(sceneDepth, 0)));
+  float pixelNoise = fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
 
   for (int i = 0; i < MAX_FILM_LIGHTS; i++) {
     if (i >= filmLightCount) break;
@@ -169,24 +169,79 @@ void main() {
       radiance += light * (visible * weight * densityAt(t, p.y, layer) * phase(dot(ray, toLight)) * exp(-opticalDepth) * scatterFraction);
     }
   }
-  outColor = vec4(scene.rgb * transmission + radiance, scene.a);
+  return vec4(radiance, transmission);
+}
+`
+
+const integrate = scattering + /* glsl */ `
+void main() {
+  ivec2 size = textureSize(sceneDepth, 0);
+  ivec2 pixel = ((ivec2(gl_FragCoord.xy) * 2 + 1) * size) / (2 * coarseResolution);
+  float depth = texelFetch(sceneDepth, pixel, 0).r;
+  outColor = scatterToDepth((vec2(pixel) + 0.5) / vec2(size), depth);
+}
+`
+
+const composite = scattering + /* glsl */ `
+float eyeDepth(float d) {
+  return 1.0 / (inverseProjection[2].w * (d * 2.0 - 1.0) + inverseProjection[3].w);
+}
+
+void main() {
+  ivec2 pixel = ivec2(gl_FragCoord.xy);
+  ivec2 fineSize = textureSize(sceneDepth, 0);
+  ivec2 coarseSize = textureSize(coarseHaze, 0);
+  vec2 at = vUv * vec2(coarseSize) - 0.5;
+  vec2 f = fract(at);
+  ivec2 q = ivec2(floor(at));
+  float depth = texelFetch(sceneDepth, pixel, 0).r;
+  float z = eyeDepth(depth);
+  vec4 total = vec4(0.0);
+  float totalWeight = 0.0;
+  for (int y = 0; y < 2; y++) {
+    for (int x = 0; x < 2; x++) {
+      ivec2 t = clamp(q + ivec2(x, y), ivec2(0), coarseSize - 1);
+      ivec2 p = ((t * 2 + 1) * fineSize) / (2 * coarseSize);
+      float tapZ = eyeDepth(texelFetch(sceneDepth, p, 0).r);
+      float w = (x == 0 ? 1.0 - f.x : f.x) * (y == 0 ? 1.0 - f.y : f.y);
+      w *= 1.0 - smoothstep(0.009, 0.055, abs(tapZ - z) / max(z, 0.5));
+      total += texelFetch(coarseHaze, t, 0) * w;
+      totalWeight += w;
+    }
+  }
+  vec4 fog = totalWeight > 0.08 ? total / totalWeight : scatterToDepth(vUv, depth);
+  vec4 scene = texelFetch(sceneColor, pixel, 0);
+  outColor = vec4(scene.rgb * fog.a + fog.rgb, scene.a);
 }
 `
 
 export function createHaze({ rig, world }: StageDeps): StagePart {
+  const coarse = new THREE.WebGLRenderTarget(1, 1, {
+    type: THREE.HalfFloatType,
+    minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter,
+    depthBuffer: false,
+    generateMipmaps: false,
+  })
   const uniforms = {
     ...rig.uniforms,
     ...rig.shadowUniforms,
     sceneColor: { value: null as THREE.Texture | null },
     sceneDepth: { value: null as THREE.Texture | null },
+    coarseHaze: { value: coarse.texture },
+    coarseResolution: { value: new THREE.Vector2(1, 1) },
     inverseProjection: { value: new THREE.Matrix4() },
     cameraWorld: { value: new THREE.Matrix4() },
     deckBounds: { value: new THREE.Vector4() },
     sampleJitter: { value: new THREE.Vector2() },
   }
-  const pass = new FullscreenPass(passMaterial(fragment, uniforms, { blending: THREE.NoBlending }))
+  const integratePass = new FullscreenPass(passMaterial(integrate, uniforms, { blending: THREE.NoBlending }))
+  const compositePass = new FullscreenPass(passMaterial(composite, uniforms, { blending: THREE.NoBlending }))
   return {
-    resize() {},
+    resize({ width, height }) {
+      coarse.setSize(Math.ceil(width / 2), Math.ceil(height / 2))
+      uniforms.coarseResolution.value.set(coarse.width, coarse.height)
+    },
     samplePasses: [{
       id: 'haze',
       render(renderer, input, output, { camera, sample }) {
@@ -198,7 +253,8 @@ export function createHaze({ rig, world }: StageDeps): StagePart {
         const { min, max } = world.deck.bounds
         uniforms.deckBounds.value.set(min.x, min.y, max.x, max.y)
         uniforms.sampleJitter.value.set(...sample.misc)
-        pass.render(renderer, output)
+        integratePass.render(renderer, coarse)
+        compositePass.render(renderer, output)
       },
     }],
   }
