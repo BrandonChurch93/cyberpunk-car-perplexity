@@ -5,6 +5,7 @@ import { createRenderer } from './core/renderer'
 import { parseLaunch } from './director/modes'
 import { runMode } from './director/run'
 import { BasicResolver } from './post/resolve'
+import { stageDetail, type StageDetail } from './core/detail'
 import { FilmStage } from './core/film-stage'
 
 function notice(message: string): void {
@@ -20,7 +21,9 @@ async function start(): Promise<void> {
   const canvas = document.getElementById('stage') as HTMLCanvasElement
   canvas.className = launch.mode === 'live' ? styles.fit : styles.native
   const renderer = createRenderer(canvas)
-  const stage = await FilmStage.create(renderer, launch.paint)
+  const asked = new URLSearchParams(location.search).get('detail')
+  const detail: StageDetail = asked === 'full' || asked === 'blockout' ? asked : stageDetail
+  const stage = await FilmStage.create(renderer, launch.paint, detail)
   const resolver = new BasicResolver(renderer)
   const engine = new FrameEngine(renderer, stage, resolver, launch.format)
   stage.setDiagnostic(launch.diagnostic)
