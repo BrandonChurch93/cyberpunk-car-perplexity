@@ -266,6 +266,24 @@ describe('vehicle geometry and state', () => {
     expect(sum).toBeCloseTo(250)
   })
 
+  it('shows both projector cores through two separate lens surfaces in the lamp shot', () => {
+    for (const vehicle of [blockout, full]) {
+      const cores = vehicle.root.getObjectsByProperty('name', 'main beam projector').filter((node) => node.position.x > 0)
+      expect(cores).toHaveLength(2)
+      vehicle.root.updateMatrixWorld(true)
+      for (const frame of [610, 690]) {
+        const { position } = cameraAt(frame / config.film.fps, config.formats.preview, vehicle.anchors)
+        for (const core of cores) {
+          const center = core.getWorldPosition(new T.Vector3())
+          const ray = new T.Raycaster(position, center.sub(position).normalize())
+          expect(ray.intersectObject(vehicle.root, true).slice(0, 3).map(({ object }) => object.name)).toEqual([
+            'front optical lens shells', 'convex projector lenses', 'main beam projector',
+          ])
+        }
+      }
+    }
+  })
+
   it('switches the full base paint and leaves the phase blockout gray', () => {
     const next = config.paint.candidates.find((candidate) => candidate.id !== defaultPaint)!
     for (const [vehicle, shouldChange] of [[full, true], [blockout, false]] as const) {

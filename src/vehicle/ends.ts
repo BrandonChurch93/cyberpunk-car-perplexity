@@ -39,12 +39,6 @@ function joinRim(loop: readonly XY[], scale1: number, scale2: number, face: Face
   }, curve.length, 5, out, thickness)
 }
 
-function projectorLens(face: Face, x: number, y: number, r: number, depth: number, direction: T.Vector3): T.BufferGeometry {
-  const fn = (rr: number, n: number) => new T.SphereGeometry(rr, 32, 10).scale(1.06, .83, n)
-  const start = face(x, y, depth)
-  return fn(r, .25).applyQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), direction)).translate(...start)
-}
-
 function lightGuide(face: Face, hub: XY, tips: readonly XY[], width: number, depth: number, out: Point): T.BufferGeometry {
   const origin = new T.Vector2(...hub)
   const rays = tips.map((p) => new T.Vector2(...p).sub(origin))
@@ -64,6 +58,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const carbon: T.BufferGeometry[] = [], black: T.BufferGeometry[] = [], dark: T.BufferGeometry[] = []
   const outletCavities: T.BufferGeometry[] = [], diffuserShell: T.BufferGeometry[] = []
   const optical: T.BufferGeometry[] = [], rearOptical: T.BufferGeometry[] = []
+  const projectorGlass: T.BufferGeometry[] = [], projectorCups: T.BufferGeometry[] = []
   const lamps: VehicleModule['lamps'] = []
   const heatSources: VehicleModule['heatSources'] = []
   const lumens: Array<{ mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>; lamp: VehicleModule['lamps'][number]; rear: boolean }> = []
@@ -207,14 +202,27 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     for (const [x, y, radius, intensity] of [[.743, .526, .029, 170], [.827, .560, .023, 80]]) {
       const normal = new T.Vector3(side * .51, .12, .851).normalize()
       const transform = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), normal)
-      const p = f(x, y, .026)
-      black.push(patch((u, v) => {
-        const a = u * tau, rr = radius * mix(1.14, .80, v)
-        return new T.Vector3(rr * Math.cos(a), rr * .85 * Math.sin(a), -.020 * v)
-          .applyQuaternion(transform).add(vec(p)).toArray()
-      }, full ? 40 : 22, 3, outFront, .003))
-      optical.push(projectorLens(f, x, y, radius * .79, .043, normal))
-      emit('main beam projector', projectorLens(f, x, y, radius * .54, .037, normal), false, true, f(x, y, -.025), intensity)
+      const p = vec(f(x, y, .027))
+      const hardware = (r: number, a: number, z: number, aspect = .84): Point =>
+        new T.Vector3(radius * r * Math.cos(a), radius * r * aspect * Math.sin(a), z)
+          .applyQuaternion(transform).add(p).toArray()
+      const segments = full ? 52 : 24
+      const ring = (r0: number, r1: number, z0: number, z1: number, crown: number, steps: number) =>
+        patch((u, v) => hardware(mix(r0, r1, v), tau * u, mix(z0, z1, v) + crown * Math.sin(Math.PI * v)), segments, steps, outFront)
+      black.push(ring(1.24, 1.10, -.028, -.001, .0025, 5))
+      projectorCups.push(ring(1.10, .92, -.001, .001, .0019, 4))
+      const throat = (v: number) => .205 + .715 * v
+      projectorCups.push(patch((u, v) => {
+        const a = tau * u
+        const facets = full ? .0012 * Math.cos(16 * a) * Math.sin(Math.PI * v) ** 2 : 0
+        return hardware(throat(v), a, -.029 + .029 * v ** 1.7 + facets)
+      }, segments, 10, outFront))
+      const glassCenter = p.clone().addScaledVector(normal, -.004)
+      projectorGlass.push(new T.SphereGeometry(radius * .89, segments, 14)
+        .scale(1, .84, .29).applyQuaternion(transform).translate(...glassCenter.toArray()))
+      const core = p.clone().addScaledVector(normal, -.015)
+      emit('main beam projector', new T.SphereGeometry(radius * .35, 24, 10)
+        .scale(1.10, .80, .22).applyQuaternion(transform).translate(...core.toArray()), false, true, f(x, y, -.025), intensity)
     }
     if (side === 1) {
       const u = .61, v = .52
@@ -317,6 +325,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   add(parent, 'recessed backing', joined(dark), m.dark)
   add(parent, 'hexagonal outlet cavities', joined(outletCavities), m.dark)
   add(parent, 'channeled graphite rear diffuser', joined(diffuserShell), m.diffuser)
+  add(parent, 'projector cups and machined collars', joined(projectorCups), m.brushed)
+  add(parent, 'convex projector lenses', joined(projectorGlass), m.projector)
   add(parent, 'front optical lens shells', joined(optical), m.optics)
   add(parent, 'rear optical lens shells', joined(rearOptical), m.rearOptics)
   const update = (stage: number, rise: number): void => {
