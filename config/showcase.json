@@ -1,0 +1,118 @@
+{
+  "name": "Rooftop",
+  "seed": 20261119,
+  "repo": {
+    "url": "https://github.com/BrandonChurch93/cyberpunk-car-perplexity",
+    "branch": "main",
+    "maxFileMb": 95
+  },
+  "film": {
+    "fps": 30,
+    "durationSeconds": 45,
+    "shutterDegrees": 180,
+    "loopSeamless": true,
+    "hookSeconds": 2,
+    "heroFrameSeconds": 6.5,
+    "macroFrameSeconds": 12
+  },
+  "formats": {
+    "master": { "id": "16x9", "width": 1920, "height": 1080 },
+    "vertical": { "id": "9x16", "width": 1068, "height": 1900 },
+    "preview": { "id": "preview", "width": 960, "height": 540 }
+  },
+  "platform": {
+    "name": "X",
+    "maxWidth": 1920,
+    "maxHeight": 1200,
+    "maxPortraitWidth": 1200,
+    "maxPortraitHeight": 1900,
+    "maxFps": 40,
+    "maxBitrateMbps": 25,
+    "loopsAtOrUnderSeconds": 60
+  },
+  "export": {
+    "container": "mp4",
+    "videoCodec": "h264",
+    "bitrateMbps": 20,
+    "audio": "none",
+    "proofSeconds": 1,
+    "memoryTestSeconds": 5,
+    "files": {
+      "master": "master-16x9.mp4",
+      "vertical": "master-9x16.mp4",
+      "preview": "proof-preview.mp4"
+    }
+  },
+  "tiers": {
+    "draft": { "samplesPerFrame": 1 },
+    "review": { "samplesPerFrame": 8 },
+    "final": { "samplesPerFrame": 48 }
+  },
+  "beats": [
+    { "id": "arrival", "start": 0, "end": 4 },
+    { "id": "wake", "start": 4, "end": 9 },
+    { "id": "paint", "start": 9, "end": 15 },
+    { "id": "wheel", "start": 15, "end": 20 },
+    { "id": "lamp", "start": 20, "end": 25 },
+    { "id": "detail", "start": 25, "end": 29 },
+    { "id": "ignition", "start": 29, "end": 36 },
+    { "id": "return", "start": 36, "end": 45 }
+  ],
+  "lens": {
+    "focalLengthsMm": [24, 35, 50, 85, 100],
+    "anamorphic": true
+  },
+  "paint": {
+    "locked": null,
+    "candidates": [
+      { "id": "black-pearl", "base": "#0b0b10", "flake": "#6f5bd6", "finish": "gloss black with a fine violet pearl" },
+      { "id": "ember-orange", "base": "#e2520f", "flake": "#ffd08a", "finish": "saturated metallic orange" },
+      { "id": "liquid-silver", "base": "#aeb4bd", "flake": "#f2f4f7", "finish": "bright silver metallic" }
+    ]
+  },
+  "signage": {
+    "generic": ["PARKING", "LEVEL 9", "EXIT", "STAIRS", "PAY HERE", "OPEN", "24H", "HOTEL", "ARCADE", "NOODLES", "PHARMACY", "KARAOKE", "TAILOR", "SAUNA", "BAR"],
+    "invented": ["ORBITAL DINER", "LANTERN AND VOLT", "SILVERFIN SUSHI", "NINTH CLOUD HOTEL", "QUIET HOURS CLUB", "SALT MOTH"]
+  },
+  "reference": {
+    "minSourcesPerElement": 6,
+    "minObservationsPerSource": 3
+  },
+  "keyframes": {
+    "directions": 3,
+    "minImageModels": 2
+  },
+  "quality": {
+    "passScore": 9,
+    "plateauRounds": 3,
+    "judgedFramesPerBeat": 2,
+    "loopSeamMinSsim": 0.98,
+    "compressionStressMbps": 5,
+    "stress": {
+      "seconds": 0.5,
+      "beats": ["arrival", "paint", "ignition"],
+      "tier": "review",
+      "confirmTier": "final"
+    },
+    "blind": {
+      "jurors": 3,
+      "controlsPerRender": 1,
+      "minControlPool": 30,
+      "maxInvalidRuns": 2,
+      "maxGapPoints": 10,
+      "minControlMean": 60,
+      "minRenderMedian": 50
+    }
+  },
+  "critics": {
+    "maxImageLongEdgePx": 1400,
+    "contactSheetFrames": 12,
+    "phonePreviewWidthPx": 400
+  },
+  "sandbox": {
+    "stepTimeoutMinutes": 10,
+    "chunkBudgetMinutes": 7,
+    "previewFilmMaxHours": 8,
+    "maxRenderProcesses": 1
+  }
+}
