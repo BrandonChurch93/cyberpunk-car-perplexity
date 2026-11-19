@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { defaultPaint } from '../src/config.ts'
+import { detailFrom } from './lib/detail.ts'
 import { args, config, distDir, ensureBuild, ensureDir, renderLock, workDir, writeJson } from './lib/env.ts'
 import { launchBrowser } from './lib/browser.ts'
 import { startHarness } from './lib/server.ts'
@@ -57,6 +58,7 @@ void runTool(async () => {
 
   const base = {
     buildHash,
+    detail: detailFrom(),
     format: format.id,
     tier,
     paint: defaultPaint,
