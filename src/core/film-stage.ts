@@ -3,31 +3,122 @@ import { config, paintById, type FormatSpec } from '../config'
 import { cameraAt } from '../director/shots'
 import { stateAt } from '../director/timeline'
 import { createVehicle, type VehicleModule } from '../vehicle'
+import { createWeather } from '../weather'
 import { createWorld, type WorldModule } from '../world'
+import type { FilmLight, SceneSystem } from './contract'
+import { stageDetail, type StageDetail } from './detail'
 import type { FrameInfo, SampleInfo, Stage } from './engine'
 import { applyLens, type CameraState } from './lens'
+import { LightRig } from './lights'
+
+const shadowMapSize = 2048
+const beamHalfAngle = THREE.MathUtils.degToRad(17)
+
+type Lamp = VehicleModule['lamps'][number]
+
+const maxWorldLights = 8
+const maxBeams = 4
+
+function beamLight(lamp: Lamp, i: number): FilmLight {
+  return {
+    id: `vehicle-beam-${i}`,
+    kind: 'spot',
+    object: lamp.object,
+    color: lamp.color ?? new THREE.Color(1, 1, 1),
+    intensity: lamp.intensity ?? 250,
+    size: [0.04, 0.04],
+    angle: beamHalfAngle,
+    penumbra: 0.6,
+    range: 120,
+    shadow: true,
+    beam: true,
+    level: () => lamp.level ?? 0,
+  }
+}
+
+/** Lamps that are not beams light the ground near them. They are merged into one point light per corner of the vehicle. */
+function glowLights(vehicle: VehicleModule, lamps: Lamp[]): FilmLight[] {
+  vehicle.root.updateWorldMatrix(true, true)
+  const toVehicle = vehicle.root.matrixWorld.clone().invert()
+  const corners = new Map<string, { lamps: Lamp[]; at: THREE.Vector3[] }>()
+  for (const lamp of lamps) {
+    const at = lamp.object.getWorldPosition(new THREE.Vector3()).applyMatrix4(toVehicle)
+    const key = `${at.z >= 0 ? 'front' : 'rear'}-${at.x >= 0 ? 'left' : 'right'}`
+    const corner = corners.get(key) ?? { lamps: [], at: [] }
+    corner.lamps.push(lamp)
+    corner.at.push(at)
+    corners.set(key, corner)
+  }
+  return [...corners.entries()].map(([key, corner]) => {
+    const weights = corner.lamps.map((lamp) => lamp.intensity ?? 4)
+    const total = weights.reduce((a, b) => a + b, 0)
+    const anchor = new THREE.Object3D()
+    const color = new THREE.Color(0, 0, 0)
+    corner.lamps.forEach((lamp, i) => {
+      const w = weights[i] / total
+      anchor.position.addScaledVector(corner.at[i], w)
+      const c = lamp.color ?? new THREE.Color(1, 1, 1)
+      color.r += c.r * w
+      color.g += c.g * w
+      color.b += c.b * w
+    })
+    vehicle.root.add(anchor)
+    return {
+      id: `vehicle-glow-${key}`,
+      kind: 'point',
+      object: anchor,
+      color,
+      intensity: total,
+      size: [0.3, 0.1],
+      range: 14,
+      shadow: false,
+      beam: false,
+      level: () => corner.lamps.reduce((sum, lamp, i) => sum + (lamp.level ?? 0) * weights[i], 0) / total,
+    } satisfies FilmLight
+  })
+}
+
+function filmLights(world: WorldModule, vehicle: VehicleModule): FilmLight[] {
+  if (world.lights.length > maxWorldLights) throw new Error(`The world carries ${world.lights.length} lights. The stage takes ${maxWorldLights}.`)
+  const beams = vehicle.lamps.filter((lamp) => lamp.beam)
+  if (beams.length > maxBeams) throw new Error(`The vehicle carries ${beams.length} beams. The stage takes ${maxBeams}.`)
+  return [...world.lights, ...beams.map(beamLight), ...glowLights(vehicle, vehicle.lamps.filter((lamp) => !lamp.beam))]
+}
 
 export class FilmStage implements Stage {
   readonly scene = new THREE.Scene()
   readonly camera = new THREE.PerspectiveCamera()
+  readonly rig: LightRig
   cameraOverride: CameraState | null = null
   private readonly clay = new THREE.MeshStandardMaterial({ color: 0x8a8a8a, roughness: 0.95 })
   private format: FormatSpec = config.formats.master
   private frameSeconds = 0
 
-  static async create(renderer: THREE.WebGLRenderer, paint: string): Promise<FilmStage> {
-    const [world, vehicle] = await Promise.all([createWorld({ detail: 'blockout' }), createVehicle({ paint: paintById(paint), detail: 'blockout' })])
-    return new FilmStage(renderer, world, vehicle)
+  static async create(renderer: THREE.WebGLRenderer, paint: string, detail: StageDetail = stageDetail): Promise<FilmStage> {
+    const [world, vehicle] = await Promise.all([createWorld({ detail }), createVehicle({ paint: paintById(paint), detail })])
+    const lights = detail === 'full' ? filmLights(world, vehicle) : []
+    const rig = new LightRig(lights, shadowMapSize)
+    const weather = detail === 'full' ? await createWeather({ world, vehicle, lights: rig.uniforms }) : null
+    return new FilmStage(renderer, detail, world, vehicle, weather, rig)
   }
 
   private constructor(
     private readonly renderer: THREE.WebGLRenderer,
+    readonly detail: StageDetail,
     readonly world: WorldModule,
     readonly vehicle: VehicleModule,
+    readonly weather: SceneSystem | null,
+    rig: LightRig,
   ) {
+    this.rig = rig
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFSoftShadowMap
-    this.scene.add(this.world.root, this.vehicle.root)
+    this.scene.add(world.root, vehicle.root, rig.group)
+    if (weather) this.scene.add(weather.root)
+    if (detail === 'blockout') this.grayBoxLight()
+  }
+
+  private grayBoxLight(): void {
     this.scene.background = new THREE.Color(0x23262c)
     this.scene.fog = new THREE.Fog(0x23262c, 60, 420)
     const sun = new THREE.DirectionalLight(0xffffff, 2.2)
@@ -47,12 +138,21 @@ export class FilmStage implements Stage {
     this.scene.add(new THREE.HemisphereLight(0xcfd6e6, 0x3a3c42, 1.6))
   }
 
+  private systems(): SceneSystem[] {
+    return this.weather ? [this.world, this.weather] : [this.world]
+  }
+
   resize(format: FormatSpec): void {
     this.format = format
   }
 
   setDiagnostic(view: string): void {
     this.scene.overrideMaterial = view === 'clay' ? this.clay : null
+    for (const system of this.systems()) system.setDiagnostic?.(view)
+  }
+
+  signs(): string[] {
+    return this.world.signs
   }
 
   setPaint(id: string): void {
@@ -61,17 +161,27 @@ export class FilmStage implements Stage {
 
   beginFrame(frame: FrameInfo): void {
     this.frameSeconds = frame.timeSeconds
+    this.setVehicle(frame.timeSeconds)
+    const camera = this.cameraState(frame.timeSeconds)
+    for (const system of this.systems()) system.beginFrame({ frame, format: this.format, camera })
   }
 
   cameraState(timeSeconds: number): CameraState {
     return this.cameraOverride ?? cameraAt(timeSeconds, this.format, this.vehicle.anchors, this.frameSeconds)
   }
 
+  private setVehicle(timeSeconds: number): void {
+    const state = stateAt(timeSeconds)
+    this.vehicle.update({ timeSeconds, lampStage: state.lampStage, engine: state.engine, vibration: state.vibration })
+  }
+
   renderSample(sample: SampleInfo, target: THREE.WebGLRenderTarget): void {
-    const state = stateAt(sample.timeSeconds)
-    this.vehicle.update({ timeSeconds: sample.timeSeconds, lampStage: state.lampStage, engine: state.engine, vibration: state.vibration })
-    this.world.update(sample.timeSeconds)
-    applyLens(this.camera, this.cameraState(sample.timeSeconds), this.format.width, this.format.height, sample, config.lens.anamorphic ? 1.5 : 1)
+    const timeSeconds = sample.timeSeconds
+    this.setVehicle(timeSeconds)
+    const state = this.cameraState(timeSeconds)
+    applyLens(this.camera, state, this.format.width, this.format.height, sample, config.lens.anamorphic ? 1.5 : 1)
+    for (const system of this.systems()) system.beginSample({ sample, timeSeconds, camera: this.camera, state })
+    this.rig.update(timeSeconds, sample.light)
     this.renderer.setRenderTarget(target)
     this.renderer.setClearColor(0x000000, 1)
     this.renderer.clear(true, true, false)

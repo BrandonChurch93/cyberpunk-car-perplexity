@@ -26,6 +26,7 @@ export interface Stage {
   setPaint(id: string): void
   beginFrame(frame: FrameInfo): void
   renderSample(sample: SampleInfo, target: THREE.WebGLRenderTarget): void
+  signs(): string[]
 }
 
 export interface Resolver {

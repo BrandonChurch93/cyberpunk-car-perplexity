@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import type { DeckSurface } from './contract'
 import { type Box, Forms, group, streetY, type Tuple } from './forms'
 
 const west = -29
@@ -11,18 +12,20 @@ const seam = { z: 3.65, width: 0.05 }
 const coreX = 7.6
 const coreZ = -16.6
 
-function floors(forms: Forms, roof: THREE.Group): void {
-  const slab = (name: string, x0: number, x1: number, z0: number, z1: number, y: number, depth = slabDepth): void => {
+function floors(forms: Forms, roof: THREE.Group): DeckSurface {
+  const slab = (name: string, x0: number, x1: number, z0: number, z1: number, y: number, depth = slabDepth) =>
     forms.box(roof, name, 'stone', [x1 - x0, depth, z1 - z0], [(x0 + x1) / 2, y - depth / 2, (z0 + z1) / 2])
-  }
   const x1 = ramp.x0 + ramp.width
-  slab('west rim slab', west, ramp.x0, south, north, 0)
-  slab('ramp approach slab', ramp.x0, x1, south, ramp.topZ, 0)
-  slab('ramp end rim', ramp.x0, x1, ramp.endZ, north, 0)
   const rearEdge = seam.z - seam.width / 2
   const frontEdge = seam.z + seam.width / 2
-  slab('south slab', x1, east, south, rearEdge, 0)
-  slab('north slab', x1, east, frontEdge, north, 0)
+  const westSlab = slab('west rim slab', west, ramp.x0, south, north, 0)
+  const meshes = [
+    westSlab,
+    slab('ramp approach slab', ramp.x0, x1, south, ramp.topZ, 0),
+    slab('ramp end rim', ramp.x0, x1, ramp.endZ, north, 0),
+    slab('south slab', x1, east, south, rearEdge, 0),
+    slab('north slab', x1, east, frontEdge, north, 0),
+  ]
   slab('expansion joint foundation', x1, east, rearEdge, frontEdge, -0.065, slabDepth - 0.065)
   forms.box(roof, 'expansion joint seal', 'graphite', [east - x1, 0.02, seam.width], [(x1 + east) / 2, -0.013, seam.z])
   for (const side of [-1, 1]) {
@@ -52,6 +55,12 @@ function floors(forms: Forms, roof: THREE.Group): void {
   forms.boxes(sublevels, 'slabs and edge beams', 'stone', decks)
   forms.boxes(sublevels, 'garage columns', 'slate', support)
   forms.box(sublevels, 'stair shaft to street', 'slate', [7.5, -streetY, 4.8], [coreX, streetY / 2, coreZ])
+  return {
+    meshes,
+    material: westSlab.material,
+    bounds: new THREE.Box2(new THREE.Vector2(west, south), new THREE.Vector2(east, north)),
+    heightMap: null,
+  }
 }
 
 function edges(forms: Forms, roof: THREE.Group): void {
@@ -221,11 +230,12 @@ function coreAndServices(forms: Forms, roof: THREE.Group): void {
   forms.cylinder(plant, 'roof vent cap', 'stone', [-1.65, 1.24, -1.08], 0.09, 0.25)
 }
 
-export function buildDeck(forms: Forms, roof: THREE.Group): void {
-  floors(forms, roof)
+export function buildDeck(forms: Forms, roof: THREE.Group): DeckSurface {
+  const deck = floors(forms, roof)
   edges(forms, roof)
   stripePattern(forms, roof)
   for (const [x, z] of [[-1.7, 2.75], [1.75, 2.6], [2.1, -3.4], [-12.5, -15.7], [15.45, 11.4], [20.1, -14.6]]) drain(forms, roof, x, z)
   rampAndControl(forms, roof)
   coreAndServices(forms, roof)
+  return deck
 }

@@ -36,7 +36,7 @@ export class Forms {
     return mesh
   }
 
-  box(parent: Parent, name: string, tone: Tone, size: Tuple, at: Tuple): THREE.Mesh {
+  box(parent: Parent, name: string, tone: Tone, size: Tuple, at: Tuple): THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial> {
     const mesh = new THREE.Mesh(this.cube, this.tones[tone])
     mesh.position.set(...at)
     mesh.scale.set(...size)

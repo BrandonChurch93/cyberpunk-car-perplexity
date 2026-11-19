@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { config, frameCount } from '../src/config'
 import { apertureRadius, applyLens } from '../src/core/lens'
+import { sampleSet } from '../src/core/sampler'
 import { cameraAt } from '../src/director/shots'
 import { createVehicle } from '../src/vehicle'
 import { createWorld } from '../src/world'
@@ -52,14 +53,22 @@ function required(name: string): THREE.Object3D {
 }
 
 describe('world blockout', () => {
-  it('builds both detail options as the same static, deterministic, unlettered gray-box', async () => {
+  it('builds a static, deterministic, unlettered gray-box with no world lights or wet surfaces', async () => {
     const start = signature(world.root)
-    world.update(config.film.durationSeconds / 3)
+    const format = config.formats.master
+    const timeSeconds = config.beats[2].start
+    const sampleIndex = 0
+    const frameIndex = timeSeconds * config.film.fps
+    const frame = { frameIndex, frameKey: frameIndex, timeSeconds, tier: 'draft' as const, format, samples: config.tiers.draft.samplesPerFrame }
+    const state = cameraAt(timeSeconds, format, anchors)
+    world.beginFrame({ frame, format, camera: state })
+    world.beginSample({ timeSeconds, sample: { ...sampleSet(frameIndex, sampleIndex), frame, sampleIndex, timeSeconds }, camera, state })
     expect(signature(world.root)).toEqual(start)
     expect(world.signs).toEqual([])
-    const full = await createWorld({ detail: 'full' })
-    expect(signature(full.root)).toEqual(start)
-    expect(full.signs).toEqual([])
+    expect(world.lights).toEqual([])
+    expect(world.surfaces).toEqual([])
+    const second = await createWorld({ detail: 'blockout' })
+    expect(signature(second.root)).toEqual(start)
   })
 
   it('has four matte gray tones, shadow flags on all meshes and low triangle count', () => {
@@ -86,7 +95,10 @@ describe('world blockout', () => {
     const solid = bounds(world.root)
     const origin = new THREE.Vector3(0, 1, 0)
     const down = new THREE.Raycaster(origin, new THREE.Vector3(0, -1, 0), 0, 2)
-    expect(down.intersectObject(required('south slab'))[0]?.point.y).toBeCloseTo(0, 8)
+    expect(world.deck.heightMap).toBeNull()
+    expect(world.deck.meshes.every((mesh) => mesh.material === world.deck.material)).toBe(true)
+    expect(down.intersectObjects(world.deck.meshes)[0]?.point.y).toBeCloseTo(0, 8)
+    expect(world.deck.bounds.containsPoint(new THREE.Vector2())).toBe(true)
     for (const box of solid) {
       if (box.max.y <= 0.15) continue
       const x = Math.max(0, box.min.x, -box.max.x)
