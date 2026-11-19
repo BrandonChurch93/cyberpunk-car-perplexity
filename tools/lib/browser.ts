@@ -37,6 +37,7 @@ export async function openPage(browser: Browser, harness: Harness, options: Page
   if (options.diag) query.set('diag', options.diag)
   if (options.paint) query.set('paint', options.paint)
   if (options.tier) query.set('tier', options.tier)
+  if (process.env.SHOWCASE_DETAIL) query.set('detail', process.env.SHOWCASE_DETAIL)
   for (const [k, v] of Object.entries(options.extra ?? {})) query.set(k, v)
   await page.goto(`${harness.url}index.html?${query.toString()}`)
   await page.waitForFunction(() => window.showcase !== undefined || document.body.textContent?.trim() !== '', undefined, { timeout: 120_000 })
