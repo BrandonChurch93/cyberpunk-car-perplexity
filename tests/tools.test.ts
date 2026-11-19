@@ -9,7 +9,8 @@ import { partRange } from '../tools/lib/film'
 import { signProblems } from '../tools/lib/gates'
 import { parseJudged } from '../tools/lib/judged'
 import { beatMoments, eventRuns, extractSection, heroFrame, hookFrames, isNeutral, juryText, macroFrame, neutralName, neutralProblems, returnFormat, roundName, shuffle } from '../tools/lib/pack'
-import { boardObservations } from '../tools/lib/pack-build'
+import { boardObservations, onlyImageChunks } from '../tools/lib/pack-build'
+import sharp from 'sharp'
 import { cameraForFrame, project, rayThrough } from '../tools/lib/scene'
 import { sheetFrames } from '../tools/lib/sheet'
 
@@ -239,5 +240,20 @@ describe('signage check', () => {
   it('flags strings outside the config', () => {
     expect(signProblems([config.signage.generic[0], config.signage.invented[0]])).toEqual([])
     expect(signProblems(['PARKING', 'NOT A SIGN', 'NOT A SIGN'])).toEqual(['NOT A SIGN'])
+  })
+})
+
+describe('png metadata', () => {
+  it('keeps only image chunks and the same pixels', async () => {
+    const png = await sharp({ create: { width: 4, height: 3, channels: 3, background: { r: 10, g: 20, b: 30 } } }).withMetadata({ density: 300 }).png().toBuffer()
+    const types = (b: Buffer) => {
+      const out: string[] = []
+      for (let at = 8; at < b.length; at += 12 + b.readUInt32BE(at)) out.push(b.toString('latin1', at + 4, at + 8))
+      return out
+    }
+    expect(types(png)).toContain('pHYs')
+    const clean = onlyImageChunks(png)
+    expect(types(clean).every((t) => ['IHDR', 'IDAT', 'IEND'].includes(t))).toBe(true)
+    expect(await sharp(clean).raw().toBuffer()).toEqual(await sharp(png).raw().toBuffer())
   })
 })

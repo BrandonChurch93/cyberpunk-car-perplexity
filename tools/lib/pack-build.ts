@@ -362,6 +362,21 @@ export const packTable: Record<number, Record<string, PackBuilder>> = {
   4: { C1: c1, C2: c2, C3: c3, C4: c4, C5: c5, C6: c6, C7: c7, C8: c8 },
 }
 
+const imageChunks = new Set(['IHDR', 'PLTE', 'IDAT', 'IEND'])
+
+/** Drops every PNG chunk that is not image data, so no density, time, text or profile is left. */
+export function onlyImageChunks(png: Buffer): Buffer {
+  const parts: Buffer[] = [png.subarray(0, 8)]
+  for (let at = 8; at < png.length; ) {
+    const length = png.readUInt32BE(at)
+    const type = png.toString('latin1', at + 4, at + 8)
+    const end = at + 12 + length
+    if (imageChunks.has(type)) parts.push(png.subarray(at, end))
+    at = end
+  }
+  return Buffer.concat(parts)
+}
+
 async function prepare(item: PackItem, dst: string): Promise<{ width: number; height: number }> {
   const limit = config.critics.maxImageLongEdgePx
   let img = sharp(item.source).rotate()
@@ -370,7 +385,8 @@ async function prepare(item: PackItem, dst: string): Promise<{ width: number; he
   else if (item.fit === 'phone') img = img.resize({ width: config.critics.phonePreviewWidthPx, kernel: 'lanczos3' })
   const { data, info } = await img.removeAlpha().raw().toBuffer({ resolveWithObject: true })
   if (Math.max(info.width, info.height) > limit) throw new Error(`${item.what} is ${info.width} x ${info.height}, over the long edge limit of ${limit}`)
-  await sharp(data, { raw: { width: info.width, height: info.height, channels: 3 } }).png({ compressionLevel: 9 }).toFile(dst)
+  const png = await sharp(data, { raw: { width: info.width, height: info.height, channels: 3 } }).png({ compressionLevel: 9 }).toBuffer()
+  writeFileSync(dst, onlyImageChunks(png))
   return { width: info.width, height: info.height }
 }
 

@@ -145,6 +145,7 @@ export async function g7(paint = defaultPaint): Promise<Result> {
     for (const mode of ['capture', 'autopilot'] as const) {
       const page = await openPage(session.rawBrowser, session.rawHarness, { mode, format: config.formats.preview, paint })
       try {
+        if (mode === 'capture') await page.evaluate(() => window.showcase!.renderFrame(0, 'draft'))
         const r = await mod.checkInterface(page)
         if (!r.ok) ok = false
         parts.push(`${mode}: ${r.ok ? 'no interface visible' : `interface visible (${r.elements.join(', ') || 'pixels'}, ${r.differingPixels} pixels differ, max delta ${r.maxDelta})`}${r.detail ? `, ${r.detail}` : ''}`)
