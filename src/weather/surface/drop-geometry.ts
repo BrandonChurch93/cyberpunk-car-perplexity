@@ -63,8 +63,9 @@ export function capTemplate(contactDegrees: number, rings: number, segments: num
 /** Water drops near the lens as real refracting geometry, placed from the same cells as the shader field. */
 export class DropGeometry {
   readonly group = new THREE.Group()
-  /** Lens material for 100 degree caps, shared with the runner. */
   readonly material: THREE.MeshPhysicalMaterial
+  /** The same lens for the hero rivulet and its trail beads. */
+  readonly runner: THREE.MeshPhysicalMaterial
   /** Water without a cap shape: ribbons and falling drips. */
   readonly plain: THREE.MeshPhysicalMaterial
   private readonly lenses = new Map<number, THREE.MeshPhysicalMaterial>()
@@ -77,7 +78,8 @@ export class DropGeometry {
     this.group.name = 'surface water drops'
     this.uniforms = uniforms
     this.material = dropMaterial(uniforms, 100)
-    this.plain = dropMaterial(uniforms, null)
+    this.runner = dropMaterial(uniforms, 100, true)
+    this.plain = dropMaterial(uniforms, null, true)
     for (const { mesh, bead } of meshes) {
       const geometry = mesh.geometry
       const pos = geometry.getAttribute('position')
@@ -356,7 +358,8 @@ const lensFragment = /* glsl */ `
 }
 `
 
-function dropMaterial(uniforms: Record<string, THREE.IUniform>, contact: number | null): THREE.MeshPhysicalMaterial {
+/** Standing drops show magenta in the wetness view and running water yellow green, so the rivulet can be found in a frame. */
+function dropMaterial(uniforms: Record<string, THREE.IUniform>, contact: number | null, running = false): THREE.MeshPhysicalMaterial {
   const material = new THREE.MeshPhysicalMaterial({
     color: 0xffffff, metalness: 0, roughness: 0.02, transmission: 1, ior: 1.333, thickness: 0.002, specularIntensity: 1, envMapIntensity: 1,
   })
@@ -364,17 +367,17 @@ function dropMaterial(uniforms: Record<string, THREE.IUniform>, contact: number 
   const radius = 1 / Math.sin(theta)
   patchMaterial(material, {
     id: contact === null ? 'surface water drop' : `surface water drop lens ${contact}`,
-    uniforms,
+    uniforms: { ...uniforms, surfDiagColor: { value: running ? new THREE.Color(0.6, 1, 0.1) : new THREE.Color(1, 0.1, 0.9) } },
     defines: contact === null ? {} : { SURF_CAP_LENS: 1, SURF_CAP_HS: (radius * (1 - Math.cos(theta))).toFixed(6), SURF_CAP_CY: (-radius * Math.cos(theta)).toFixed(6), SURF_CAP_R: radius.toFixed(6) },
     apply(shader) {
       if (contact !== null) {
         shader.vertexShader = lensPars + insertAfter(shader.vertexShader, '#include <project_vertex>', lensVertex)
-        let f = lensPars + 'uniform float surfDiag;\n' + shader.fragmentShader
+        let f = lensPars + 'uniform float surfDiag;\nuniform vec3 surfDiagColor;\n' + shader.fragmentShader
         f = insertAfter(f, '#include <transmission_fragment>', lensFragment)
-        f = insertAfter(f, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(1.0, 0.1, 0.9, 1.0); }')
+        f = insertAfter(f, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(surfDiagColor, 1.0); }')
         shader.fragmentShader = f
       } else {
-        shader.fragmentShader = insertAfter('uniform float surfDiag;\n' + shader.fragmentShader, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(1.0, 0.1, 0.9, 1.0); }')
+        shader.fragmentShader = insertAfter('uniform float surfDiag;\nuniform vec3 surfDiagColor;\n' + shader.fragmentShader, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(surfDiagColor, 1.0); }')
       }
     },
   })

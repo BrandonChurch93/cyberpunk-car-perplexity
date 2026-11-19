@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { config } from '../../config'
+import { applyLens } from '../../core/lens'
 import type { FrameContext, SampleContext, SceneSystem, WetnessKind } from '../../core/contract'
 import { cameraAt } from '../../director/shots'
 import { beatById, events, stateAt } from '../../director/timeline'
@@ -40,6 +41,35 @@ function rearPuddle(anchors: Parameters<typeof cameraAt>[2]): Basin {
   const r = new THREE.Vector2(right.x, right.z).normalize()
   const center = new THREE.Vector2(cam.position.x, cam.position.z).addScaledVector(f, 2.2).addScaledVector(r, 0.9)
   return { center, axis: f, halfLength: 1.5, halfWidth: 0.85, depthMm: 5 }
+}
+
+/** The point of the panel in the lower middle of the macro frame that lies at the focus distance the pull rests on. */
+function rivuletStart(vehicle: WeatherDeps['vehicle']): THREE.Vector3 {
+  const format = config.formats.master
+  const state = cameraAt(config.film.macroFrameSeconds, format, vehicle.anchors)
+  const camera = new THREE.PerspectiveCamera()
+  applyLens(camera, state, format.width, format.height, { pixel: [0.5, 0.5], aperture: [0, 0] }, 1)
+  const ray = new THREE.Raycaster()
+  ray.near = 0
+  const hitAt = (y: number): THREE.Intersection | null => {
+    ray.setFromCamera(new THREE.Vector2(-0.3, y), camera)
+    return ray.intersectObject(vehicle.root, true)[0] ?? null
+  }
+  let lo = -0.7
+  let hi = 0.15
+  let best = hitAt(-0.2)
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2
+    const hit = hitAt(mid)
+    if (!hit) {
+      hi = mid
+      continue
+    }
+    best = hit
+    if (hit.distance < state.focusDistance) lo = mid
+    else hi = mid
+  }
+  return best ? best.point.clone() : vehicle.anchors.paint.position.clone()
 }
 
 export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
@@ -107,7 +137,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
 
   const drops = new DropGeometry(vehicleMeshes(vehicle.root, beadMaterials), uniforms)
   root.add(drops.group)
-  const runners = new Runners(vehicle, drops.material, drops.plain)
+  const runners = new Runners(vehicle, drops.runner, drops.plain, rivuletStart(vehicle))
   root.add(runners.group)
 
   const shutter = config.film.shutterDegrees / 360 / config.film.fps

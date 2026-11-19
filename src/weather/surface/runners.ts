@@ -53,11 +53,11 @@ export class Runners {
   private readonly dripMesh: THREE.InstancedMesh
   private active = false
 
-  constructor(vehicle: VehicleModule, private readonly material: THREE.Material, plain: THREE.Material) {
+  /** `start` is where the rivulet waits on the panel: in the macro frame, at the depth the focus pull lands on. */
+  constructor(vehicle: VehicleModule, private readonly material: THREE.Material, plain: THREE.Material, start: THREE.Vector3) {
     this.group.name = 'surface water runners'
     vehicle.root.updateMatrixWorld(true)
     const beadMats = new Set(vehicle.surfaces.filter((s) => s.wetness === 'beads' && !s.material.transparent).map((s) => s.material))
-    const anchor = vehicle.anchors.paint
     const tris: Tri[] = []
     const lower: Array<{ p: THREE.Vector3; n: THREE.Vector3 }> = []
     const v = new THREE.Vector3()
@@ -83,17 +83,17 @@ export class Runners {
         const ib = index ? index.getX(k + 1) : k + 1
         const ic = index ? index.getX(k + 2) : k + 2
         const a = new THREE.Vector3().fromBufferAttribute(pos, ia).applyMatrix4(mesh.matrixWorld)
-        if (a.distanceTo(anchor.position) > 0.4) continue
+        if (a.distanceTo(start) > 0.4) continue
         const b = new THREE.Vector3().fromBufferAttribute(pos, ib).applyMatrix4(mesh.matrixWorld)
         const c = new THREE.Vector3().fromBufferAttribute(pos, ic).applyMatrix4(mesh.matrixWorld)
         const n = new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a))
         if (n.lengthSq() < 1e-16) continue
         n.normalize()
-        if (n.dot(anchor.normal) < 0) continue
+        if (n.y < 0.15) continue
         tris.push({ a, b, c, n })
       }
     })
-    this.tracePath(tris, anchor.position.clone().add(new THREE.Vector3(-0.03, 0, 0.05)))
+    this.tracePath(tris, start)
     this.runner = new THREE.Mesh(capTemplate(100, 9, 22), this.material)
     this.runner.layers.set(layers.cameraOnly)
     this.runner.matrixAutoUpdate = false
@@ -292,7 +292,7 @@ export class Runners {
   travel(t: number): number {
     const age = t - breakLoose
     if (age <= 0 || t > paint.end + 6) return 0
-    const speed = 0.055
+    const speed = 0.03
     const ramp = Math.min(age, 0.6)
     const base = 0.5 * (speed / 0.6) * ramp * ramp + speed * Math.max(0, age - 0.6)
     const surge = 0.0025 * Math.sin(age * 9) * Math.min(1, age)
