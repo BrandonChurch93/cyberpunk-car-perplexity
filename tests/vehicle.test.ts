@@ -98,6 +98,11 @@ describe('vehicle geometry and state', () => {
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
     }
+    for (const [x, s] of [[-.318, .520], [.318, .490], [.686, .750], [.849, .789]]) {
+      const a = normalAt(x - .003, s), b = normalAt(x + .003, s)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
+    }
   })
 
   it.each(['blockout', 'full'] as const)('rests at the origin and meets factory dimensions in %s', (detail) => {

@@ -63,6 +63,7 @@ const foldRadius = .004
 const foldAngle = T.MathUtils.degToRad(20)
 const foldSlope = Math.tan(foldAngle)
 const foldHalf = foldRadius * Math.sin(foldAngle / 2)
+const foldTangent = Math.tan(foldAngle / 2)
 
 function hinge(t: number, width: number): number {
   if (t <= -width) return 0
@@ -70,7 +71,7 @@ function hinge(t: number, width: number): number {
   const x = t / width * foldHalf
   const bend = foldRadius - Math.sqrt(foldRadius ** 2 - x ** 2)
   const end = foldRadius - Math.sqrt(foldRadius ** 2 - foldHalf ** 2)
-  return (t + width) / 2 + width * (bend / end - 1) / 2
+  return (t + width) / 2 + (bend - end) * width / (2 * foldHalf * foldTangent)
 }
 
 function sidePoint(s: number, y: number, side: number): Point {
@@ -85,7 +86,7 @@ function sidePoint(s: number, y: number, side: number): Point {
     const base = mix(hinge(rockerY(s) - line, foldHalf), hinge(shoulder(s) - line, foldHalf), q)
     return direction * first * foldSlope * (hinge(t, foldHalf) - base)
   }
-  const belt = fold(doorBelt(s), smooth(s, .271, .302) * (1 - smooth(s, .895, .928)), -.78)
+  const belt = fold(doorBelt(s), smooth(s, .271, .302) * (1 - smooth(s, .895, .928)), -.84)
   const heel = fold(heelFold(s), smooth(s, .352, .383) * (1 - smooth(s, .700, .735)), .84)
   const haunch = fold(haunchFold(s), smooth(s, .644, .666) * (1 - smooth(s, .756, .786)), -.68)
   const inset = Math.max(0, sill + thickness * q + dent + face + belt + heel + haunch)
@@ -107,7 +108,7 @@ function bonnet(s: number, v: number): Point {
   const section = (position: number) => (hinge(position - hoodInner(s), foldHalf) - hinge(position - hoodOuter(s), foldHalf))
     * smooth(s, hoodTipS - .00025, hoodTipS + .001) * (1 - smooth(s, .290, .326))
     + .80 * smooth(s, .041, .050) * (1 - smooth(s, .163, .190)) * hinge(position - lampFold(s), foldHalf)
-  const across = -.78 * foldSlope * (section(x) - mix(section(0), section(w.x), v))
+  const across = -.83 * foldSlope * (section(x) - mix(section(0), section(w.x), v))
   const base = mix(w.center, w.y, v * v * (2 - v) + .05 * v ** 6 * (1 - v))
   const cowlDrop = .021 * smooth(s, .127, .236) * (1 - v ** 3)
     - .015 * smooth(s, .122, .189) * (1 - smooth(s, .260, .317)) * (1 - smooth(v, .819, 1))
@@ -165,7 +166,16 @@ const cowl = (v: number): Point => bonnet(cabFront(v), v * .818)
 const roofWidth = curve([[.417, .637], [.46, .645], [.51, .652], [.56, .620], [.595, .552], [.625, .49]])
 const roofHeight = curve([[.417, 1.122], [.445, 1.14], [.472, 1.157], [.5, 1.16], [.545, 1.16], [.578, 1.153], [.595, 1.15]])
 const roofCross = curve([[0, -.019], [.25, -.019], [.37, -.016], [.48, 0], [.66, -.006], [.84, -.018], [1, -.042]])
-const roof = (s: number, v: number): Point => [roofWidth(s) * v, roofHeight(s) + roofCross(Math.abs(v)), zAt(s)]
+const roofRidge = .318
+const roof = (s: number, v: number): Point => {
+  const width = roofWidth(s), x = Math.abs(v) * width
+  const inner = hinge(roofRidge - x, foldHalf), outer = hinge(x - roofRidge, foldHalf)
+  const innerFall = .183 * inner * (1 - inner / roofRidge) ** 2 + .019 * smooth(inner, 0, roofRidge)
+  const run = width - roofRidge
+  const outerFall = .042 * (1 - Math.max(0, 1 - outer / run) ** (.174 * run / .042))
+  const crown = mix(roofCross(Math.abs(v)), -innerFall - outerFall, smooth(s, .4175, .425) * (1 - smooth(s, .589, .5965)))
+  return [width * v, roofHeight(s) + crown, zAt(s)]
+}
 const glassLowerX = curve([[.264, cowl(1)[0]], [.35, .844], [.46, .822], [.55, .790], [.60, .723], [.65, .576]])
 const glassLowerY = curve([[.264, cowl(1)[1]], [.35, .750], [.45, .785], [.55, .851], [.60, .918], [.65, .959]])
 const glassUpperY = curve([[.261, cowl(1)[1]], [.30, .94], [.35, 1.01], [.40, 1.064], [.417, roof(.417, 1)[1]], [.46, roof(.46, 1)[1]], [.51, roof(.51, 1)[1]], [.565, roof(.565, 1)[1]], [.595, roof(.595, 1)[1]], [.625, 1.048], [.65, .959]])
@@ -271,7 +281,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const line = haunchFold(s)
       const tBend = y - line
       const flatten = mix(hinge(inY - line, foldHalf), hinge(outside[1] - line, foldHalf), v)
-      const deckFold = .21 * smooth(s, .610, .665) * (1 - smooth(s, .846, .857)) * vane
+      const deckFold = .33 * smooth(s, .610, .665) * (1 - smooth(s, .846, .857)) * vane
       return [x, y + deckFold + .58 * smooth(s, .604, .630) * (hinge(tBend, foldHalf) - flatten), zAt(s)]
     }), [0, 1, 0], [haunchLine, lateralTrace(deckIn), lateralTrace(deckOut)])
     part(paint, sided((u, v) => {
@@ -501,9 +511,18 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     mirrorShells.push(shellGeo)
     mirrorMounts.push(polygon(loop(0), [0, 0, -1], .010))
     steel.push(polygon(section(.79, .006, 0, -.004), [0, 0, -1], .002))
-    const foot: Point[] = [[.805, .756, zAt(.337)], [.826, .749, zAt(.357)],
-      [1.015, .823, zAt(.361)], [.968, .840, zAt(.347)]].map((p) => mirror(p as unknown as Point))
-    mirrorMounts.push(polygon(roundedPath(foot), uSide, .026))
+    const stem = new T.CatmullRomCurve3([
+      [.799, .750, zAt(.346)], [.850, .762, zAt(.346)], [.924, .792, zAt(.350)],
+      [.991, .824, zAt(.354)], [1.029, .844, zAt(.355)],
+    ].map(([x, y, z]) => new T.Vector3(x, y, z)), false, 'centripetal')
+    const stalkDepth = curve([[0, .035], [.25, .033], [.66, .024], [1, .031]])
+    const stalkHeight = curve([[0, .014], [.25, .013], [.68, .010], [1, .017]])
+    part(mirrorMounts, (u, v) => {
+      const p = stem.getPoint(u), t = stem.getTangent(u)
+      const width = stalkDepth(u) * Math.cos(tau * v)
+      const rise = stalkHeight(u) * Math.sin(tau * v)
+      return mirror([p.x - t.y * rise, p.y + t.x * rise, p.z + width])
+    }, [0, 0, -1], full ? 25 : 14, full ? 24 : 12, 0)
 
     const doorHandle = (u: number, v: number): Point => {
       const s = mix(.601, .626, u)
@@ -515,7 +534,9 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
 
   const windshield: Surface = (u, v) => forwardWind(u, 2 * v - 1)
   add(parent, 'windscreen', patch(windshield, n, k * 2, [0, 1, 1], .0048), m.glass)
-  part(paint, (u, v) => roof(mix(.4165, .5965, u), 2 * v - 1), [0, 1, 0], n, k * 2, .004)
+  for (const side of [1, -1]) {
+    folded((u, v) => roof(mix(.4165, .5965, u), side * v), [0, 1, 0], [lateralTrace(() => roofRidge)], n, .004)
+  }
   for (const v of [0, 1]) {
     const p = (u: number) => windshield(u, v)
     if (full) {
