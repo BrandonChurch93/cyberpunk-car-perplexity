@@ -146,15 +146,6 @@
   color: #cfcbc2;
 }
 
-.bad {
-  background: #3a2020;
-  color: #f2d6d0;
-}
-
-.good {
-  background: #1d2a22;
-  color: #d3eadb;
-}
 
 .row {
   display: flex;
@@ -213,6 +204,16 @@
 
 .message:empty {
   display: none;
+}
+
+.bad {
+  background: #3a2020;
+  color: #f2d6d0;
+}
+
+.good {
+  background: #1d2a22;
+  color: #d3eadb;
 }
 
 .help {

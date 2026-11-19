@@ -110,9 +110,9 @@ interface Progress {
 
 class Stopped extends Error {}
 
-async function supportFor(codec: VideoCodec, format: FormatSpec): Promise<{ codecString: string; bitrateMode: VideoEncoderBitrateMode } | string> {
+async function supportFor(codec: VideoCodec, name: string, format: FormatSpec): Promise<{ codecString: string; bitrateMode: VideoEncoderBitrateMode } | string> {
   if (typeof VideoEncoder === 'undefined') {
-    return 'This browser has no video encoder that a web page can use, so Export cannot run here. Use a current desktop Chrome or Edge, opened from an https or localhost address.'
+    return 'This browser has no video encoder that a web page can use, so Export cannot run here. Use a current desktop browser and open this page from an https or localhost address.'
   }
   for (const codecString of codecStrings(codec, format.width, format.height, config.film.fps)) {
     for (const bitrateMode of ['constant', 'variable'] as const) {
@@ -124,7 +124,7 @@ async function supportFor(codec: VideoCodec, format: FormatSpec): Promise<{ code
       }
     }
   }
-  return `This browser cannot encode ${config.export.videoCodec} video at ${format.width} x ${format.height}, so Export cannot run here. Try a current desktop Chrome or Edge on a computer with a graphics card.`
+  return `This browser cannot encode ${name} video at ${format.width} x ${format.height}, so Export cannot run here. Try a current desktop browser on a computer with a graphics card.`
 }
 
 function encoderConfig(codecString: string, format: FormatSpec, bitrateMode: VideoEncoderBitrateMode): VideoEncoderConfig {
@@ -249,7 +249,7 @@ export function runExport(context: AppContext): void {
     { key: 'vertical', label: 'Vertical' },
   ]
   const launchKey = formatKeyOf(launch.format)
-  if (!choices.some((c) => c.key === launchKey)) choices.push({ key: launchKey, label: 'Preview, set by the address' })
+  if (!choices.some((c) => c.key === launchKey)) choices.push({ key: launchKey, label: 'Preview from the address' })
   let selected: FormatKey = launchKey
 
   const layout = el('div', css.layout)
@@ -283,7 +283,8 @@ export function runExport(context: AppContext): void {
       }
     })
     radios.push(input)
-    label.append(input, document.createTextNode(`${c.label}, ${f.id}, ${f.width} x ${f.height}`))
+    const text = c.key === 'master' || c.key === 'vertical' ? `${c.label}, ${f.id}, ${f.width} x ${f.height}` : `${c.label}, ${f.width} x ${f.height}`
+    label.append(input, document.createTextNode(text))
     group.append(label)
   }
   panel.append(group)
@@ -386,7 +387,7 @@ export function runExport(context: AppContext): void {
     support.className = css.support
     support.textContent = 'Checking whether this browser can encode the video.'
     setState('checking')
-    void supportFor(codec, format).then((r) => {
+    void supportFor(codec, codecName, format).then((r) => {
       if (id !== checkId) return
       if (typeof r === 'string') {
         support.textContent = r
@@ -466,6 +467,7 @@ export function runExport(context: AppContext): void {
         setState('done')
       })
       .catch((error: unknown) => {
+        if (context.engine.renderer.getContext().isContextLost()) lost = true
         const text = lost
           ? lostMessage(Number(panel.dataset.done), total)
           : error instanceof Stopped

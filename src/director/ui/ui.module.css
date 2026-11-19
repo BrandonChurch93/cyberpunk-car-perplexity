@@ -66,6 +66,10 @@
   gap: 12px;
 }
 
+.wide {
+  grid-column: 1 / -1;
+}
+
 .select {
   width: 100%;
   box-sizing: border-box;

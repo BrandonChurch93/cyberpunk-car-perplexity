@@ -98,11 +98,15 @@ export class Menu {
       return [t, `${t}, ${n} ${n === 1 ? 'sample' : 'samples'}`]
     })
     const grid = el('div', css.grid)
+    const paintField = field('Paint', select(config.paint.candidates.map((p): [string, string] => [p.id, `${p.id.replaceAll('-', ' ')}, ${p.finish}`]), state.paint, handlers.paint))
+    paintField.classList.add(css.wide)
+    const formatField = field('Format', select(formats, state.format, handlers.format))
+    formatField.classList.add(css.wide)
     grid.append(
-      field('Format', select(formats, state.format, handlers.format)),
+      formatField,
       field('Tier when still', select(tiers, state.tier, (v) => handlers.tier(v as TierId))),
       field('View', select(diagnosticViews.map((v) => [v, v]), state.diagnostic, handlers.diagnostic)),
-      field('Paint', select(config.paint.candidates.map((p) => [p.id, p.id.replaceAll('-', ' ')]), state.paint, handlers.paint)),
+      paintField,
     )
     root.append(grid)
 
@@ -176,6 +180,7 @@ export class Menu {
   }
 
   close(): void {
+    if (this.root.contains(document.activeElement)) (document.activeElement as HTMLElement).blur()
     this.root.hidden = true
     if (this.lastFocus instanceof HTMLElement && !this.root.contains(this.lastFocus)) this.lastFocus.focus()
     else (document.activeElement as HTMLElement | null)?.blur()
