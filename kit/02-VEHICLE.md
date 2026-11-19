@@ -1,6 +1,6 @@
 # 02 · The vehicle
 
-Status: NOT WRITTEN
+Lamborghini Revuelto
 
 This file belongs to Brandon. It says what the vehicle is and how it is built.
 
