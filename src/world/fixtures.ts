@@ -94,42 +94,75 @@ export function addSky(root: THREE.Group): void {
 }
 
 const bbSize = [9.6, 4.8] as const
-const bbSigma = .31
-const bbSaturation = .63
-const bbBase = .39
-const bbPeak = 8.95
-const bbWaveMean = .85
+const bbSigma = .151
+const bbBase = .20
+const bbPeak = 20.7
+const bbFill = 1.60
+const bbWaveMean = .81
+const bbStripeFloor = .48
+
+const ease = THREE.MathUtils.smoothstep
 
 export function billboardState(t: number, out: THREE.Color, cool: THREE.Color, light: THREE.Color): { center: number; mean: number } {
   const phase = tau * t / duration
-  const center = .5 + .25 * Math.sin(2 * phase - 1.15) + .055 * Math.sin(3 * phase + .31)
+  const center = .63 + .15 * Math.sin(2 * phase - 1.15) + .041 * Math.sin(3 * phase + .31)
   const k = .5 + .5 * Math.sin(phase - .85)
-  cool.setRGB(.29 + .10*k, .58 + .09*k, .88 + .11*k)
-  light.setRGB(.65 + .19*k, .85 + .09*k, 1)
-  let mean = 0
-  for (let j = 0; j < 32; j++) { const x = (j + .5) / 32; mean += Math.exp(-(((x - center) / bbSigma) ** 4)) / 32 }
-  const stripe = bbWaveMean * bbPeak * mean
-  out.setRGB(bbBase * cool.r + stripe * light.r, bbBase * cool.g + stripe * light.g, bbBase * cool.b + stripe * light.b)
+  cool.setRGB(.37 + .16*k, .61 + .09*k, .84 + .10*k)
+  light.setRGB(.76 + .12*k, .88 + .07*k, 1)
+  let fill = 0, stripe = 0
+  for (let j = 0; j < 48; j++) for (let i = 0; i < 12; i++) {
+    const x = (j+.5)/48, y = (i+.5)/12
+    const rail = x-center-(y-.5)*.20
+    const cover = ease(x,.29,.39)
+    const ridge = y+.115*Math.sin((x-center*.72)*9.8)+x*.52
+    const chart = 1-ease(Math.abs(ridge*7-Math.floor(ridge*7)-.5),.035,.13)
+    const lanes = ease(ridge,.18,.35)*(1-ease(ridge,1.08,1.26))
+    const wave = bbWaveMean+.19*Math.cos((y-.48+.20*Math.sin(x*6.28))*6.283)
+    const ruled = ease(Math.abs(y-.167),.016,.026)*ease(Math.abs(y-.833),.025,.04)
+    fill += (bbBase*(.35+.65*cover)+cover*(.45+(.12+.75*chart)*lanes*bbFill+.012))*(.28+.72*ruled)
+    stripe += bbPeak*Math.exp(-((rail/bbSigma)**4))*wave*cover*(bbStripeFloor+(1-bbStripeFloor)*chart)
+  }
+  fill /= 48*12
+  stripe /= 48*12
+  out.setRGB(fill * cool.r + stripe * light.r, fill * cool.g + stripe * light.g, fill * cool.b + stripe * light.b)
   return { center, mean: Math.max(out.r, out.g, out.b) }
 }
 
-function addBillboard(sign: THREE.Object3D, metal: THREE.Material): { film: FilmLight; set(t: number): void } {
+function addBillboard(sign: THREE.Object3D, metal: THREE.Material, key: boolean, labels?: Label): { film: FilmLight; set(t: number): void } {
   const [width, height] = bbSize
   const cool = new THREE.Color(), light = new THREE.Color(), average = new THREE.Color()
-  const uniforms = { centerX: { value: .5 }, cool: { value: cool }, light: { value: light }, pixelCount: { value: new THREE.Vector2(width / .008, height / .008) } }
+  const title = labels?.(generic('LEVEL 9'), 'World Condensed', undefined, 3.25) ?? null
+  const uniforms = { centerX: { value: .5 }, cool: { value: cool }, light: { value: light }, headline: { value: title }, pixelCount: { value: new THREE.Vector2(width / .008, height / .008) } }
   const shader = new THREE.ShaderMaterial({
-    uniforms, toneMapped: false,
+    uniforms, defines: title ? { WORLD_BILLBOARD_TITLE: 1 } : {}, toneMapped: false,
     vertexShader: /* glsl */ `varying vec2 faceUV; void main() { faceUV = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
     fragmentShader: /* glsl */ `
       varying vec2 faceUV;
       uniform float centerX;
       uniform vec3 cool, light;
       uniform vec2 pixelCount;
+      uniform sampler2D headline;
       void main() {
-        float a = (faceUV.x - centerX) / ${bbSigma.toFixed(3)};
+        vec2 uv = faceUV;
+        float cover = smoothstep(.29,.39,uv.x);
+        float a = (uv.x - centerX - (uv.y-.5)*.20) / ${bbSigma.toFixed(3)};
         float band = exp(-a*a*a*a);
-        float wave = ${bbWaveMean.toFixed(3)} + .15*cos((faceUV.y-.48+.24*sin(faceUV.x*6.28))*6.283);
-        vec3 rgb = ${bbBase.toFixed(3)}*cool + ${bbPeak.toFixed(3)}*band*wave*light;
+        float wave = ${bbWaveMean.toFixed(3)} + .19*cos((uv.y-.48+.20*sin(uv.x*6.28))*6.283);
+        float ridge = uv.y + .115*sin((uv.x - centerX*.72)*9.8) + uv.x*.52;
+        float chart = 1.0-smoothstep(.035, .13+fwidth(ridge)*6.0, abs(fract(ridge*7.0)-.5));
+        float lanes = smoothstep(.18,.35,ridge) * (1.0-smoothstep(1.08,1.26,ridge));
+        float detail = (.12+.75*chart) * lanes;
+        float dots = pow(1.0-abs(fract(uv.x*21.0+uv.y*13.0)-.5)*2.0,8.0);
+        float ruled = smoothstep(.016,.026,abs(uv.y-.167)) * smoothstep(.025,.04,abs(uv.y-.833));
+        vec3 rgb = ${bbBase.toFixed(3)}*cool*(.35+.65*cover);
+        rgb += cool*cover*(.45+detail*${bbFill.toFixed(3)}+.12*dots);
+        rgb = rgb * mix(.28,1.0,ruled) + ${bbPeak.toFixed(3)}*band*wave*light*cover*mix(${bbStripeFloor.toFixed(3)},1.,chart);
+        #ifdef WORLD_BILLBOARD_TITLE
+          vec2 mark = (uv-vec2(.018,.34))/vec2(.295,.228);
+          if (all(greaterThan(mark,vec2(0))) && all(lessThan(mark,vec2(1)))) rgb += vec3(.88,.95,1.0)*1.36*texture2D(headline,mark).a;
+          float track = smoothstep(.028,.039,uv.x)*(1.0-smoothstep(.248,.258,uv.x));
+          rgb += (.29+.68*smoothstep(.03,.23,centerX-uv.x-.35))*cool*track*(1.0-smoothstep(.008,.012,abs(uv.y-.267)));
+        #endif
         float fine = max(fwidth(faceUV.x)*pixelCount.x, fwidth(faceUV.y)*pixelCount.y);
         vec2 dotXY = abs(fract(faceUV*pixelCount)-.5);
         float led = 1.0-smoothstep(.31,.49,max(dotXY.x,dotXY.y));
@@ -152,15 +185,69 @@ function addBillboard(sign: THREE.Object3D, metal: THREE.Material): { film: Film
     const state = billboardState(t, average, cool, light)
     uniforms.centerX.value = state.center
     color.copy(average).multiplyScalar(1 / state.mean)
-    anchor.position.set((state.center - .5) * bbSaturation * 2, 0, face.position.z + .017)
+    anchor.position.set(THREE.MathUtils.clamp((state.center - .53) * width, -1.65, 1.65), 0, face.position.z + .054)
   }
   set(0)
   return { set, film: {
-    id: 'billboard', kind: 'area', object: anchor, color, intensity: 4.5 * width * height,
-    size: [width-1.05, height], range: 112, shadow: true, beam: true,
+    id: key ? 'raking billboard' : 'billboard', kind: 'area', object: anchor, color, intensity: 4.5 * width * height,
+    size: [width-3.4, height-.32], range: key ? 52 : 112, shadow: key, beam: false,
     level: (t) => billboardState(t, scratch, scratchCool, scratchLight).mean / 4.5,
     colorAt: (t, out) => { const { mean } = billboardState(t, out, scratchCool, scratchLight); out.multiplyScalar(1 / mean) },
   } }
+}
+
+function addRakingCabinet(roof: THREE.Group, metal: THREE.Material, frame: THREE.Material): THREE.Group {
+  const sign = new THREE.Group()
+  sign.name = 'side-facing billboard cabinet'
+  sign.position.set(15.0, 7.25, -10.15)
+  sign.rotation.y = -1.00
+  roof.add(sign)
+  block(sign, 'screen cabinet enclosure', frame, [0, 0, -.16], [9.66, 4.92, .55])
+  for (const side of [-1, 1]) {
+    block(sign, 'billboard lattice post', metal, [side*4.56,-4.87,-.67], [.205,4.41,.205])
+    block(sign, 'ballasted billboard foot', frame, [side*4.56,-7.08,-.67], [.86,.32,.89])
+    block(sign, 'cabinet vertical rear rail', frame, [side*4.38,-.31,-.69], [.18,4.2,.2])
+    block(sign, 'cabinet mounting clevis', metal, [side*4.38,-2.55,-.5], [.43,.29,.87])
+    const diagonal = block(sign, 'billboard diagonal steel tie', metal, [side*3.98,-3.42,-.67], [.095,2.03,.10])
+    diagonal.rotation.z = side*.60
+  }
+  block(sign, 'billboard cross beam', metal, [0,-2.71,-.67], [9.29,.23,.27])
+  return sign
+}
+
+function rearDeckPractical(pole: THREE.Object3D, metal: THREE.Material, frame: THREE.Material): FilmLight {
+  const tint = new THREE.Color(.76,.86,1)
+  const radiance = 370
+  const face = new THREE.MeshBasicMaterial({ color: tint.clone().multiplyScalar(radiance), toneMapped: false })
+  const mast = pole.getObjectByName('tapered steel post')!
+  mast.scale.y *= 1.64
+  mast.position.y = 3.78
+  pole.position.set(-6.45,0,12.86)
+  for (const child of [...pole.children]) if (/opaque lamp head|unlit lamp diffuser|luminaire cross arm/.test(child.name)) child.removeFromParent()
+  block(pole, 'worklight mast socket', metal, [0,7.31,0], [.23,.36,.25])
+  const rack = new THREE.Group()
+  rack.name = 'rear service flood bank'
+  rack.position.set(0,7.52,0)
+  const aim = new THREE.Vector3(0,.93,-1.05).sub(new THREE.Vector3(pole.position.x,7.52,pole.position.z))
+    .applyAxisAngle(new THREE.Vector3(0,1,0),-pole.rotation.y).normalize()
+  const across = new THREE.Vector3(0,1,0).cross(aim).normalize()
+  rack.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(across, aim.clone().cross(across), aim))
+  pole.add(rack)
+  block(rack, 'worklight bracket plate', metal, [0,0,-.22], [3.06,.31,.34])
+  for (const x of [-.98,0,.98]) {
+    block(rack, 'worklight weather hood', frame, [x,0,-.05], [.98,.44,.19])
+    plate(rack, 'rear service flood diffuser', face, [x,0,.053], .88, .35)
+    for (let i=0; i<9; i++) {
+      const vane = block(rack, 'downward-cutoff worklight louvre', frame, [x,(i-4)*.044-.016,.279], [.91,.010,.46])
+      vane.rotation.x = .063
+      vane.castShadow = false
+    }
+  }
+  const anchor = new THREE.Object3D()
+  anchor.position.z = .54
+  rack.add(anchor)
+  return { id: 'north deck pole', kind: 'area', object: anchor, color: tint, intensity: radiance * (3*.88*.35), size: [2.78,.35],
+    range: 39, shadow: true, beam: false, level: () => 1 }
 }
 
 export interface RoofFixtures { lights: FilmLight[]; signs: string[]; steamSources: NonNullable<import('./contract').WorldModule['steamSources']>; set(t: number): void }
@@ -177,9 +264,11 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   surfaces.push({ material: metal, wetness: 'sheet' })
   const billboard = city.getObjectByName('billboard')!
   billboard.getObjectByName('blank unlit face')?.removeFromParent()
-  const primary = addBillboard(billboard, metal)
-  const lights = [primary.film]
+  const primary = addBillboard(billboard, metal, false, labels)
+  const raking = addBillboard(addRakingCabinet(roof, metal, frame), metal, true)
+  const lights = [primary.film, raking.film]
   const signs: string[] = []
+  signs.push(generic('LEVEL 9'))
   const dirtyAcrylic = new THREE.MeshStandardMaterial({ color: 0x30383b, roughness: .54 })
   const install = (key: string, text: string, width: number, height: number, color: THREE.Color, intensity: number, direct = false) => {
     const fixture = city.getObjectByName(key)!
@@ -189,9 +278,9 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
     signs.push(text)
     if (direct) lights.push({ id: key, kind: 'area', object: fixture, color, intensity: intensity * width * height * .42, size: [width, height], range: 105, shadow: false, beam: false, level: () => 1 })
   }
-  install('red sign', generic('BAR'), 2.3, 1, new THREE.Color(1, .105, .16), 15, true)
-  install('wide cool panel', generic('ARCADE'), 4.4, 1.5, new THREE.Color(.49, .74, 1), 7, true)
-  install('wide warm panel', generic('HOTEL'), 3.1, 1.22, new THREE.Color(1, .75, .48), 4.5, true)
+  install('red sign', generic('BAR'), 2.3, 1, new THREE.Color(1, .28, .31), 9.8, true)
+  install('wide cool panel', generic('ARCADE'), 4.4, 1.5, new THREE.Color(.73, .85, 1), 4.8, true)
+  install('wide warm panel', generic('HOTEL'), 3.1, 1.22, new THREE.Color(1, .82, .63), 3.8, true)
   for (const name of ['vertical cool panel', 'small cool panel', 'corner cool panel', 'vertical warm panel', 'small warm panel']) {
     const blank = city.getObjectByName(name)?.getObjectByName('blank unlit face')
     if (blank instanceof THREE.Mesh) blank.material = frame
@@ -227,8 +316,8 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
     signs.push(pay)
   }
 
-  const cool = new THREE.Color(.60, .79, 1)
-  const flicker = stream('world/roof/pole/south/flicker')
+  const cool = new THREE.Color(.73, .86, 1)
+  const flicker = stream('world/roof/pole/wheel/flicker')
   const phase = flicker.range(0, tau)
   const slow = flicker.int(4) + 5
   const fast = flicker.int(11) + 26
@@ -236,8 +325,12 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   const poleMats = new Map<string, THREE.MeshBasicMaterial>()
   const poles = roof.children.filter(o => o.name === 'deck light pole')
   for (const [i, pole] of poles.entries()) {
-    const key = i === 0 ? 'south deck pole' : i === 8 ? 'north deck pole' : 'auxiliary pole'
-    const radiance = key === 'auxiliary pole' ? 3.5 : 19
+    if (i === 8) {
+      lights.push(rearDeckPractical(pole, metal, frame))
+      continue
+    }
+    const key = i === 5 ? 'wheel deck pole' : 'auxiliary pole'
+    const radiance = key === 'wheel deck pole' ? 580 : 11
     let mat = poleMats.get(key)
     if (!mat) {
       mat = new THREE.MeshBasicMaterial({ color: cool.clone().multiplyScalar(radiance), toneMapped: false })
@@ -245,12 +338,23 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
     }
     for (const o of pole.children) if (o.name === 'unlit lamp diffuser' && o instanceof THREE.Mesh) { o.material = mat; o.castShadow = false }
     if (key !== 'auxiliary pole') {
+      pole.position.set(13.45, 0, -2.22)
+      const aim = new THREE.Vector3(.80, .46, 1.20)
+        .sub(new THREE.Vector3(pole.position.x, 4.586, pole.position.z)).applyAxisAngle(new THREE.Vector3(0,1,0), -pole.rotation.y).normalize()
+      const tilt = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,-1,0), aim)
+      for (const o of pole.children) {
+        if (o.name === 'opaque lamp head') o.quaternion.copy(tilt)
+        if (o.name === 'unlit lamp diffuser') {
+          o.quaternion.copy(tilt)
+          o.position.set(o.position.x, 4.586, 0).addScaledVector(aim,.051)
+        }
+      }
       const anchor = new THREE.Object3D()
-      anchor.position.set(0, 4.528, 0)
-      anchor.rotation.x = Math.PI / 2
+      anchor.position.set(0, 4.586, 0).addScaledVector(aim,.27)
+      anchor.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), aim)
       pole.add(anchor)
-      lights.push({ id: key, kind: 'spot', object: anchor, color: cool, intensity: 10.8, size: [1.26, .16], angle: 1.04,
-        penumbra: .71, range: 22, shadow: true, beam: true, level: key === 'south deck pole' ? mild : () => 1 })
+      lights.push({ id: key, kind: 'spot', object: anchor, color: cool, intensity: 112, size: [.94, .16], angle: .41,
+        penumbra: .73, range: 26, shadow: true, beam: false, level: mild })
     }
   }
 
@@ -267,7 +371,8 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
     lights, signs, steamSources: [{ object: vent, kind: 'vent', strength: .7 }, { object: drain, kind: 'drain', strength: .38 }],
     set(t) {
       primary.set(t)
-      poleMats.get('south deck pole')?.color.copy(cool).multiplyScalar(19 * mild(t))
+      raking.set(t)
+      poleMats.get('wheel deck pole')?.color.copy(cool).multiplyScalar(580 * mild(t))
     },
   }
 }
