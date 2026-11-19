@@ -39,7 +39,7 @@ export interface CropManifest {
   crops: Array<CropPlan & { file: string }>
 }
 
-export const cropPlanVersion = 2
+export const cropPlanVersion = 3
 const limit = (): number => config.critics.maxImageLongEdgePx
 
 export function gridShape(format: FormatSpec): { columns: number; rows: number } {
@@ -78,8 +78,8 @@ export function planCrops(state: CameraState, format: FormatSpec, anchors: Ancho
     const p = project(state, format, a.position)
     if (!p) continue
     const r = a.radius * p.pixelsPerMeter
-    const margin = Math.min(r, minSide / 2) * 0.5
-    if (p.x < -margin || p.x > format.width + margin || p.y < -margin || p.y > format.height + margin) continue
+    const outside = Math.hypot(Math.max(0, -p.x, p.x - format.width), Math.max(0, -p.y, p.y - format.height))
+    if (outside > 0.5 * r) continue
     const side = Math.min(limit(), Math.max(minSide, Math.round(3 * r)))
     const rect = clampRect(p.x, p.y, side, side, format)
     const merged = plans.find((q) => overlap(q.rect, rect) > 0.8 && Math.hypot(q.center[0] - p.x, q.center[1] - p.y) < side / 4)

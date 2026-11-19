@@ -293,3 +293,15 @@ describe('stage detail in every record', () => {
     expect(framesDir({ ...film, detail: 'full' })).not.toBe(framesDir({ ...film, detail: 'blockout' }))
   })
 })
+
+describe('anchor crops on close shots', () => {
+  it('keeps an anchor whose center is just off frame when its disk fills the frame', () => {
+    const format = config.formats.master
+    const ids = (frame: number) => planCrops(cameraForFrame(frame, format, anchors), format, anchors).filter((c) => c.kind === 'anchor').flatMap((c) => c.on)
+    expect(ids(300)).toContain('paint')
+    expect(ids(300)).not.toContain('wheel')
+    expect(ids(765)).toContain('detail')
+    expect(ids(765)).not.toContain('paint')
+    expect(ids(615)).toEqual(['lamp'])
+  })
+})
