@@ -170,6 +170,25 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('holds both outlet centers and their rear-facing heat origins across LODs', () => {
+    for (const vehicle of [full, blockout]) {
+      const ports = vehicle.root.getObjectsByProperty('name', 'formed hexagonal outlet')
+      expect(ports).toHaveLength(2)
+      const origins = vehicle.heatSources.map(({ object }) => object).sort((a, b) => a.position.x - b.position.x)
+      for (const [i, origin] of origins.entries()) {
+        const outlet = origin.parent as T.Mesh
+        expect(ports).toContain(outlet)
+        expect(origin.position.x).toBeCloseTo(i === 0 ? -.18 : .18, 6)
+        expect(origin.position.y).toBeCloseTo(.80, 6)
+        expect(new T.Vector3(0, 0, 1).applyQuaternion(origin.quaternion).z).toBeLessThan(-.999)
+        outlet.geometry.computeBoundingBox()
+        const size = outlet.geometry.boundingBox!.getSize(new T.Vector3())
+        expect(size.x / size.y).toBeGreaterThan(2.53)
+        expect(size.x / size.y).toBeLessThan(2.63)
+      }
+    }
+  })
+
   it('keeps surface radiance and emitted light intensity on the stage scale', () => {
     const lampsOn = stateAt(events.lampStageThree)
     const material = (name: string) =>

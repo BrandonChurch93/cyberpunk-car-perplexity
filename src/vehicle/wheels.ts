@@ -36,8 +36,8 @@ function tireGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
     if (!full) return .0025 * groove
     const pitch = u * 70 + (v - .5) * 7 + .24 * Math.sin(u * tau * 7)
     const stagger = Math.abs(pitch - Math.round(pitch))
-    const crossSipe = (1 - smooth(stagger, .05, .16)) * (smooth(v, .265, .31) - smooth(v, .68, .735))
-    return .0064 * groove + .0045 * crossSipe
+    const crossSipe = (1 - smooth(stagger, .055, .17)) * (smooth(v, .32, .385) - smooth(v, .615, .68))
+    return .0064 * groove + .0037 * crossSipe
   }
   const position = (u: number, v: number): Point => {
     const th = u * tau
@@ -79,6 +79,7 @@ function rotor(w: WheelSize, full: boolean, axis: number): T.BufferGeometry {
 
 function spoke(w: WheelSize, theta: number, axial: number, full: boolean): [T.BufferGeometry, T.BufferGeometry] {
   const rr = w.rim
+  const faceAt = (r: number) => axial - .034 + .034 * smooth(r, .045, rr) - .004 * smooth(r, rr * .8, rr)
   const local: readonly [number, number][] = [[.042, -.024], [.103, -.0275], [.149, -.0275], [rr * .83, -.076],
     [rr * .95, -.077], [rr * .99, -.069], [rr * .99, -.037], [rr * .92, -.035], [.183, -.011],
     [.173, .004], [.185, .020], [rr * .93, .047], [rr * .99, .058], [rr * .99, .093], [rr * .91, .090],
@@ -86,7 +87,7 @@ function spoke(w: WheelSize, theta: number, axial: number, full: boolean): [T.Bu
   const point = (r: number, t: number, depth: number): Point => {
     r = Math.min(r, Math.sqrt((rr - .006) ** 2 - t ** 2))
     const a = theta + .15 * (r / rr - .48)
-    return [axial - .015 * (1 - r / rr) - .005 * smooth(r, rr * .8, rr) - depth,
+    return [faceAt(Math.hypot(r, t)) - depth,
       Math.cos(a) * r - Math.sin(a) * t, Math.sin(a) * r + Math.cos(a) * t]
   }
   const outline = roundedPath(local.map(([r, t]) => point(r, t, 0)), full ? 4 : 2, .10)
@@ -102,14 +103,14 @@ function spoke(w: WheelSize, theta: number, axial: number, full: boolean): [T.Bu
     const bevel = Math.min(.006, .0042 / Math.max(.65, m.dot(b)))
     const y = p[1] - m.x * bevel, z = p[2] - m.y * bevel
     const scale = Math.min(1, (rr - .006) / Math.hypot(y, z))
-    return [p[0], y * scale, z * scale]
+    return [faceAt(Math.hypot(y, z) * scale), y * scale, z * scale]
   })
   const skin = polygon(inner, [1, 0, 0])
   const pos = skin.getAttribute('position'), normal = skin.getAttribute('normal')
   const n = new T.Vector3()
   for (let i = 0; i < pos.count; i++) {
     const y = pos.getY(i), z = pos.getZ(i), r = Math.hypot(y, z)
-    const slope = .015 / rr
+    const slope = (faceAt(r + .001) - faceAt(r - .001)) / .002
     n.set(1, -slope * y / r, -slope * z / r).normalize()
     normal.setXYZ(i, n.x, n.y, n.z)
   }
@@ -167,7 +168,8 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
       [-.049, R - .017], [-.026, R - .026], [.020, R - .022], [face - .015, R - .009], [face - .008, R - .007],
       [face - .002, R - .004], [face, R + .001], [face - .001, R + .006], [face - .011, R + .007],
     ], count)
-    const forging: T.BufferGeometry[] = [barrel, disk(.065, .055, hubFace - .045, count)]
+    const hub = disk(.092, .024, face - .043, count)
+    const forging: T.BufferGeometry[] = [barrel, hub]
     const faces: T.BufferGeometry[] = []
     for (let i = 0; i < 5; i++) {
       const [skin, side] = spoke(w, (i / 5) * tau + .10, face, full)
@@ -176,15 +178,15 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
     }
     const faceBits: T.BufferGeometry[] = [
       lathe([[face - .001, R - .003], [face + .001, R + .001], [face - .0002, R + .0034]], count),
-      disk(.028, .008, hubFace - .004, 40), disk(.084, .028, axis - .006, 45),
     ]
+    forging.push(
+      lathe([[face - .033, .088], [face - .023, .077], [face - .024, .052], [face - .029, .029]], count),
+      disk(.028, .017, hubFace - .0085, 40),
+    )
+    const lugs: T.BufferGeometry[] = []
     for (let i = 0; i < 5; i++) {
       const [, y, z] = axisRoll(0, .051, tau * i / 5 + .33)
-      faceBits.push(disk(.0106, .013, hubFace - .012, 6).translate(0, y, z))
-    }
-    for (let i = 0; i < 10; i++) {
-      const [, y, z] = axisRoll(0, .091, tau * i / 10)
-      faceBits.push(disk(.0074, .007, axis + .003, 8).translate(0, y, z))
+      lugs.push(disk(.0106, .016, face - .019, 6).translate(0, y, z))
     }
     const relief: T.BufferGeometry[] = []
     if (full) {
@@ -193,22 +195,12 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
         [w.radius - .010, .93], [w.radius, .67],
       ])
       const sideX = (r: number) => outerSidewall(r) * H - treadInset(w, r)
-      for (const r of [R + .019, w.radius - .043, w.radius - .036]) {
-        relief.push(lathe([[sideX(r - .002) - .0005, r - .002], [sideX(r) + .00065, r], [sideX(r + .002) - .0005, r + .002]], count))
-      }
-      for (let i = 0; i < 48; i++) {
-        const a = tau * i / 48
-        const r = w.radius - .036, q = w.radius - .027
-        const points: Point[] = [
-          axisRoll(sideX(r) + .0012, r, a - .011),
-          axisRoll(sideX(r) + .0012, r + .0005, a + .010),
-          axisRoll(sideX(q) + .0012, q, a + .019),
-          axisRoll(sideX(q) + .0012, q - .001, a - .008),
-        ]
-        relief.push(polygon(roundedPath(points, 3, .14), [1, 0, 0], .0031))
+      for (const r of [R + .019, w.radius - .044]) {
+        relief.push(lathe([[sideX(r - .001) - .0005, r - .001], [sideX(r) + .00035, r], [sideX(r + .001) - .0005, r + .001]], count))
       }
     }
     const forged = joined(forging), milled = joined(faces), hardware = joined(faceBits), brake = rotor(w, full, axis), cal = caliper(w, full, axis)
+    const lugNuts = joined(lugs)
     const sidewall = relief.length > 0 ? joined(relief) : null
     for (const side of [1, -1]) {
       const group = new T.Group()
@@ -218,7 +210,8 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
       add(group, 'loaded rubber and tread', tire, m.tire)
       add(group, 'forged divided spokes and barrel', forged, m.forged)
       add(group, 'diamond cut spoke faces', milled, m.spoke)
-      add(group, 'machined flange and unmarked hub', hardware, m.brushed)
+      add(group, 'machined flange', hardware, m.brushed)
+      add(group, 'five lug nuts', lugNuts, m.brushed)
       add(group, 'drilled ceramic rotor', brake, m.brake)
       add(group, 'recessed brake shield', disk(R - .013, .010, -.052, 64), m.dark)
       add(group, 'fixed brake caliper', cal, m.caliper)
