@@ -12,6 +12,7 @@ os.makedirs(outdir, exist_ok=True)
 bl.reset()
 if len(argv) > 1:
     bpy.ops.import_scene.gltf(filepath=argv[1])
+    bl.mirror_wheels()
 else:
     import importlib
     import occ

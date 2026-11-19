@@ -163,6 +163,9 @@ def build(level):
     for ob in parts.bay(NET, full):
         ob.parent = sprung
     bpy.context.view_layer.update()
+    for ob in parts.fins(car.zp):
+        ob.parent = sprung
+    bpy.context.view_layer.update()
     lamp_obs = lamps.front(NET, full) + lamps.rear(NET, full)
     for ob in lamp_obs:
         ob.parent = sprung

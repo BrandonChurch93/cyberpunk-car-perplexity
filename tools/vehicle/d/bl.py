@@ -166,3 +166,22 @@ def render(path, cam, w=1600, h=1000, samples=24, engine='CYCLES', film_transpar
     sc.view_settings.view_transform = 'Standard'
     sc.render.filepath = path
     bpy.ops.render.render(write_still=True)
+
+
+def mirror_wheels(names=('front wheel', 'rear wheel')):
+    """The glb carries the left wheels only, as the runtime mirrors them: do the same for checks."""
+    for nm in names:
+        src = bpy.data.objects.get(nm)
+        if src is None:
+            continue
+        new = {}
+        for ob in [src] + list(src.children_recursive):
+            c = ob.copy()
+            bpy.context.scene.collection.objects.link(c)
+            new[ob] = c
+        for ob, c in new.items():
+            if ob.parent in new:
+                c.parent = new[ob.parent]
+        r = new[src]
+        r.parent = None
+        r.matrix_world = Matrix.Diagonal((-1, 1, 1, 1)) @ src.matrix_world

@@ -173,17 +173,28 @@ def arch_outline(net, names):
     return np.array(pts)
 
 
-def tub(w, side_sign, name, outline, lip_x=0.99):
-    """Arch liner: a wall following the arch opening at the inner side, closed down to the floor."""
+def tub(w, side_sign, name, outline, lip_x=0.99, gap=0.02):
+    """Arch liner: a return flange from the arch lip in to a tub ring 20 mm over the tire, closed down to the floor."""
     bm = bmesh.new()
     x0 = w['x'] - w['width'] / 2 - 0.04
-    ring = [(max(p[1], 0.13), p[2]) for p in outline]
+    hy, hz = w['hub'], w['z']
+    lip, ring = [], []
+    for p in outline:
+        d = np.array([p[1] - hy, p[2] - hz])
+        r = np.linalg.norm(d)
+        q = d / r * min(r, w['R'] + gap)
+        lip.append((max(p[1], 0.13), p[2]))
+        ring.append((max(hy + q[0], 0.13), hz + q[1]))
+    lip = [(0.13, lip[0][1])] + lip + [(0.13, lip[-1][1])]
     ring = [(0.13, ring[0][1])] + ring + [(0.13, ring[-1][1])]
+    xm = min(lip_x - 0.03, w['x'] + w['width'] / 2 + 0.01)
     inner = [bm.verts.new(bl.b((side_sign * x0, y, z))) for y, z in ring]
-    outer = [bm.verts.new(bl.b((side_sign * (lip_x - 0.02), y, z))) for y, z in ring]
+    mid = [bm.verts.new(bl.b((side_sign * xm, y, z))) for y, z in ring]
+    outer = [bm.verts.new(bl.b((side_sign * (lip_x - 0.02), y, z))) for y, z in lip]
     bm.faces.new(inner)
     for i in range(len(ring) - 1):
-        bm.faces.new((inner[i], inner[i + 1], outer[i + 1], outer[i]))
+        bm.faces.new((inner[i], inner[i + 1], mid[i + 1], mid[i]))
+        bm.faces.new((mid[i], mid[i + 1], outer[i + 1], outer[i]))
     bmesh.ops.triangulate(bm, faces=bm.faces)
     bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
     return _obj(name, bm, 'dark')
@@ -294,6 +305,41 @@ def bay(net, full):
         md.segments = 3
         ob['part'] = 'engine cover banks'
         obs.append(ob)
+    return obs
+
+
+FIN_LOW = ((-1.90, 0.13), (-1.976, 0.154), (-2.04, 0.163), (-2.15, 0.191), (-2.255, 0.218), (-2.31, 0.241), (-2.36, 0.30),
+           (-2.42, 0.377), (-2.466, 0.468))
+
+
+def fins(z_end):
+    """Diffuser fins: thin chamfered plates hanging from the diffuser, lower edge from the side drawing."""
+    dg = bpy.context.evaluated_depsgraph_get()
+    obs = []
+    for k, (x, rear, lift) in enumerate(((0.425, -2.462, 0.0), (0.656, z_end(0.656) + 0.02, 0.03))):
+        zs = np.linspace(-1.90, rear, 24)
+        cols = []
+        for z in zs:
+            hit, loc, *_ = bpy.context.scene.ray_cast(dg, Vector(bl.b((x, 0.02, z))), Vector(bl.b((0, 1, 0))))
+            top = (loc.z if hit else 0.5) + 0.02
+            low = float(np.interp(-z, *zip(*[(-a, b) for a, b in FIN_LOW]))) + lift
+            cols.append((z, min(low, top - 0.03), top))
+        for s in (1, -1):
+            bm = bmesh.new()
+            t = 0.008
+            vs = [[bm.verts.new(bl.b((s * x + d, y, z))) for d in (-t, t) for y in (lo, hi)] for z, lo, hi in cols]
+            for a, c in zip(vs[:-1], vs[1:]):
+                for i, j in ((0, 1), (1, 3), (3, 2), (2, 0)):
+                    bm.faces.new((a[i], a[j], c[j], c[i]))
+            bm.faces.new((vs[0][0], vs[0][1], vs[0][3], vs[0][2]))
+            bm.faces.new((vs[-1][2], vs[-1][3], vs[-1][1], vs[-1][0]))
+            bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+            ob = _obj(f'diffuser fin {k} {"left" if s > 0 else "right"}', bm, 'carbon', smooth=False)
+            md = ob.modifiers.new('chamfer', 'BEVEL')
+            md.width = 0.003
+            md.segments = 1
+            ob['part'] = 'diffuser fin'
+            obs.append(ob)
     return obs
 
 

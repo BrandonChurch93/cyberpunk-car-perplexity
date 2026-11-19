@@ -170,7 +170,8 @@ def rear(net, full):
     L = [net.points[f'L{i}'] for i in range(4)]
     top, bot = L[0][1], L[3][1]
     xi, xo = L[0][0], L[1][0]
-    z = lambda x: -2.39 - 0.03 * (0.85 - x) + 0.022
+    from car import zb
+    z = lambda x: zb(x) + 0.024
     ym = 0.5 * (top + bot)
     paths = [
         [(xi + 0.01, ym + 0.002), (xi + 0.10, ym + 0.004), (xi + 0.17, ym + 0.006)],
@@ -180,8 +181,8 @@ def rear(net, full):
     n = 36 if full else 12
     for P in paths:
         S = spline([np.array([x, y, z(x)]) for x, y in P], spacing=0.004)
-        ob = _obj('tail running guide', strip(S, 0.011, 0.005, (0.12, 0.0, -1.0), n=n), 'emitter_rear', 'tail running guide')
+        ob = _obj('tail running guide', strip(S, 0.011, 0.005, (0.6, 0.0, -1.0), n=n), 'emitter_rear', 'tail running guide')
         ob['lamp'] = 'running'
         obs.append(ob)
-        obs.append(_obj('tail guide channel', strip(S + np.array([0, 0, 0.004]), 0.020, 0.006, (0.12, 0.0, -1.0), n=n), 'matte', 'tail guide channel'))
+        obs.append(_obj('tail guide channel', strip(S + np.array([0, 0, 0.004]), 0.020, 0.006, (0.6, 0.0, -1.0), n=n), 'matte', 'tail guide channel'))
     return obs

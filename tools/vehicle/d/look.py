@@ -85,6 +85,14 @@ for v in views:
             so = bpy.data.objects.new('sun', sd); bpy.context.scene.collection.objects.link(so)
             so.rotation_euler = (0.7, 0.2, 2.3)
         mode = kind
+    if cam.startswith('m-'):
+        import json
+        mj = json.load(open(os.path.join(os.environ.get('MATCH', '/home/user/work/match'), cam[2:] + '-cam.json')))
+        tgt = mj.get('target') or list(np.add(mj['cam'], np.multiply(mj['fwd'], 5)))
+        c = bl.camera(v, mj['cam'], tgt, mj['f'] / mj['W'] * 36)
+        sc = 1200 / mj['W']
+        bl.render(os.path.join(outdir, f'{v}.png'), c, 1200, int(mj['H'] * sc), int(os.environ.get('SAMPLES', '16')))
+        continue
     loc, tgt, lens = CAMS[cam]
     c = bl.camera(v, loc, tgt, lens)
     bl.render(os.path.join(outdir, f'{v}.png'), c, 1600, 1000, int(os.environ.get('SAMPLES', '16')))
