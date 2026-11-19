@@ -1,5 +1,6 @@
 import { apertureRadius, type CameraState } from '../lens'
 import { hashInts, streamSeed } from '../random'
+import { concentricDisk } from '../sampler'
 
 const blades = 9
 const rim = 0.23
@@ -10,9 +11,9 @@ const seed = streamSeed('bokeh-pupil')
 
 const lattice = [
   [0.125, 0.125], [0.375, 0.125], [0.625, 0.125], [0.875, 0.125],
-  [0.245, 0.375], [0.495, 0.375], [0.745, 0.375], [0.995, 0.375],
-  [0.055, 0.625], [0.305, 0.625], [0.555, 0.625], [0.805, 0.625],
-  [0.185, 0.875], [0.435, 0.875], [0.685, 0.875], [0.935, 0.875],
+  [0.21, 0.375], [0.46, 0.375], [0.71, 0.375], [0.96, 0.375],
+  [0.04, 0.625], [0.29, 0.625], [0.54, 0.625], [0.79, 0.625],
+  [0.125, 0.875], [0.375, 0.875], [0.625, 0.875], [0.875, 0.875],
 ] as const
 
 export const pupilTapCount = lattice.length
@@ -53,35 +54,23 @@ function radiusAt(mass: number): number {
   return Math.sqrt(Math.max(0, t))
 }
 
-function ringCounts(count: number): number[] {
-  if (count < 4) return [count]
-  const rings = Math.max(2, Math.round(Math.sqrt(count) * 0.71))
-  const result: number[] = []
-  let previous = 0
-  for (let r = 1; r <= rings; r++) {
-    const next = Math.round(count * (r / rings) ** 2)
-    result.push(next - previous)
-    previous = next
-  }
-  return result
-}
-
 const layouts = new Map<number, PupilCell[]>()
 
 export function pupilLayout(count: number): PupilCell[] {
   const existing = layouts.get(count)
   if (existing) return existing
   const cells: PupilCell[] = []
-  for (const [ring, sectors] of ringCounts(count).entries()) {
-    const inner = cells.length / count
-    const radialMass = sectors / count
-    const shift = ring * 0.38196601125
-    for (let sector = 0; sector < sectors; sector++) {
+  const rows = Math.max(1, Math.floor(Math.sqrt(count)))
+  for (let row = 0; row < rows; row++) {
+    const columns = Math.floor(count / rows) + Number(row < count % rows)
+    const v0 = cells.length / count
+    const dv = columns / count
+    for (let column = 0; column < columns; column++) {
       const center: Point = [0, 0]
       const taps = lattice.map(([u, v]): Point => {
-        const turn = (sector + u) / sectors + shift
-        const a = angleAt(turn - Math.floor(turn))
-        const r = radiusAt(inner + radialMass * v) * bladeRadius(a)
+        const [dx, dy] = concentricDisk((column + u) / columns, v0 + v * dv)
+        const a = angleAt((Math.atan2(dy, dx) / tau + 1) % 1)
+        const r = radiusAt(dx * dx + dy * dy) * bladeRadius(a)
         const x = r * Math.cos(a)
         const y = r * Math.sin(a)
         center[0] += x / pupilTapCount
