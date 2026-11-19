@@ -5,7 +5,7 @@ import { stateAt } from '../director/timeline'
 import { createVehicle, type VehicleModule } from '../vehicle'
 import { createWeather } from '../weather'
 import { createWorld, type WorldModule } from '../world'
-import type { FilmLight, SamplePass, SampleContext, SceneSystem } from './contract'
+import { layers, type FilmLight, type SamplePass, type SampleContext, type SceneSystem } from './contract'
 import { stageDetail, type StageDetail } from './detail'
 import type { FrameInfo, SampleInfo, Stage } from './engine'
 import { applyLens, type CameraState } from './lens'
@@ -156,6 +156,7 @@ export class FilmStage implements Stage {
     rig: LightRig,
   ) {
     this.rig = rig
+    this.camera.layers.enable(layers.cameraOnly)
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFShadowMap
     this.scene.add(world.root, vehicle.root, rig.group)
