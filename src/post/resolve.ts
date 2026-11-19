@@ -3,7 +3,8 @@ import { config, type FormatSpec } from '../config'
 import type { FrameInfo, Resolver } from '../core/engine'
 import { FullscreenPass, passMaterial } from '../core/fullscreen'
 import { hashInts, streamSeed } from '../core/random'
-import { Scatter, BLOOM_WEIGHT, HALATION_WEIGHT } from './scatter'
+import { opticsGlsl } from './optics'
+import { Scatter, BLOOM_WEIGHT, HALATION_WEIGHT, STREAK_WEIGHT } from './scatter'
 import { FILM_CURVE, toneMapGlsl } from './tone'
 
 export const FILM_EXPOSURE = 0.78
@@ -19,16 +20,20 @@ precision highp int;
 uniform sampler2D sum;
 uniform sampler2D bloom;
 uniform sampler2D halation;
+uniform sampler2D streak;
 uniform float exposurePerSample;
 uniform float inverseCount;
+uniform float imageScale;
 uniform float grainSize;
 uniform uint grainSeed;
 uniform uint ditherSeed;
 uniform int treatment;
+uniform bool anamorphic;
 in vec2 vUv;
 out vec4 outColor;
 
 ${toneMapGlsl}
+${opticsGlsl}
 
 uint scramble(uint x) {
   x = (x ^ (x >> 16u)) * 0x7feb352du;
@@ -55,21 +60,31 @@ vec3 grainAt(vec2 p) {
 
 void main() {
   ivec2 pixel = ivec2(gl_FragCoord.xy);
-  vec3 hdr = texelFetch(sum, pixel, 0).rgb;
+  vec3 hdr;
   if (treatment == 2) {
+    hdr = texelFetch(sum, pixel, 0).rgb;
     outColor = vec4(hdr * inverseCount, 1.0);
     return;
   }
   vec3 display;
   if (treatment == 3) {
+    hdr = texelFetch(sum, pixel, 0).rgb;
     display = encodeDisplay(clamp(hdr * inverseCount, 0.0, 1.0));
   } else {
-    hdr *= exposurePerSample;
     if (treatment == 0) {
-      hdr += ${BLOOM_WEIGHT} * texture(bloom, vUv).rgb;
-      hdr += vec3(${HALATION_WEIGHT.join(', ')}) * texture(halation, vUv).rgb;
+      vec2 gate = vec2(textureSize(sum, 0));
+      float radius2;
+      vec2 uv = lensGeometry(vUv, gate, radius2);
+      hdr = lensSample(uv, gate, radius2) * exposurePerSample;
+      hdr += ${BLOOM_WEIGHT} * texture(bloom, uv).rgb;
+      hdr += vec3(${HALATION_WEIGHT.join(', ')}) * texture(halation, uv).rgb;
+      if (anamorphic) hdr += vec3(${STREAK_WEIGHT.join(', ')}) * texture(streak, uv).r;
+      hdr *= lensVignette(radius2);
+    } else {
+      hdr = texelFetch(sum, pixel, 0).rgb * exposurePerSample;
     }
-    display = encodeDisplay(toneMap(hdr, ${FILM_CURVE}));
+    vec3 mapped = toneMap(hdr, ${FILM_CURVE});
+    display = encodeDisplay(treatment == 0 ? grade(mapped) : mapped);
     if (treatment == 0) {
       float y = dot(display, LUMA);
       float response = mix(0.22, 1.0, smoothstep(0.0, 0.10, y))
@@ -95,18 +110,22 @@ export class BasicResolver implements Resolver {
       sum: { value: null },
       bloom: { value: null },
       halation: { value: null },
+      streak: { value: null },
       exposurePerSample: { value: 1 },
       inverseCount: { value: 1 },
+      imageScale: { value: 1 },
       grainSize: { value: GRAIN_SIZE_PX },
       grainSeed: { value: 0 },
       ditherSeed: { value: 0 },
       treatment: { value: 0 },
+      anamorphic: { value: config.lens.anamorphic },
     }))
   }
 
   resize(format: FormatSpec): void {
     const scale = format.height / config.formats.master.height
     this.scatter.resize(format, scale)
+    this.pass.material.uniforms.imageScale.value = scale
     this.pass.material.uniforms.grainSize.value = GRAIN_SIZE_PX * scale
   }
 
@@ -120,9 +139,10 @@ export class BasicResolver implements Resolver {
     u.inverseCount.value = 1 / count
     u.exposurePerSample.value = FILM_EXPOSURE / count
     if (this.treatment === 0) {
-      this.scatter.render(this.renderer, sum, u.exposurePerSample.value)
+      this.scatter.render(this.renderer, sum, u.exposurePerSample.value, config.lens.anamorphic)
       u.bloom.value = this.scatter.bloom
       u.halation.value = this.scatter.halation
+      u.streak.value = this.scatter.streak
     }
     u.grainSeed.value = hashInts(grainStream, frame.frameKey)
     u.ditherSeed.value = hashInts(ditherStream, frame.frameKey)

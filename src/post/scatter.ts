@@ -5,6 +5,8 @@ import { FullscreenPass, passMaterial } from '../core/fullscreen'
 const BLOOM_LEVEL_WEIGHTS = [0.36, 0.24, 0.16, 0.10, 0.08, 0.06]
 export const BLOOM_WEIGHT = 0.027
 export const HALATION_WEIGHT = [0.020, 0.0045, 0.0015]
+export const STREAK_WEIGHT = [0.0012, 0.0028, 0.0055]
+const STREAK_TAPS = [1, 2, 4, 8, 16, 32]
 
 const firstFragment = /* glsl */ `
 precision highp float;
@@ -58,8 +60,27 @@ void main() {
 }
 `
 
-function target(): THREE.WebGLRenderTarget {
+const streakFragment = /* glsl */ `
+precision highp float;
+uniform sampler2D source;
+uniform float reach;
+uniform bool ingress;
+in vec2 vUv;
+out vec4 outColor;
+float light(vec2 uv) {
+  vec3 v = texture(source, uv).rgb;
+  return ingress ? dot(v, vec3(0.2126, 0.7152, 0.0722)) : v.r;
+}
+void main() {
+  vec2 d = vec2(reach / float(textureSize(source, 0).x), 0.0);
+  float s = 0.5 * light(vUv) + 0.25 * (light(vUv - d) + light(vUv + d));
+  outColor = vec4(s, 0.0, 0.0, 1.0);
+}
+`
+
+function target(format: THREE.PixelFormat = THREE.RGBAFormat): THREE.WebGLRenderTarget {
   return new THREE.WebGLRenderTarget(1, 1, {
+    format,
     type: THREE.HalfFloatType,
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
@@ -70,8 +91,10 @@ function target(): THREE.WebGLRenderTarget {
 }
 
 export class Scatter {
-  private readonly down = BLOOM_LEVEL_WEIGHTS.map(target)
-  private readonly up = BLOOM_LEVEL_WEIGHTS.slice(1).map(target)
+  private readonly down = BLOOM_LEVEL_WEIGHTS.map(() => target())
+  private readonly up = BLOOM_LEVEL_WEIGHTS.slice(1).map(() => target())
+  private readonly streakTargets = [target(THREE.RedFormat), target(THREE.RedFormat)]
+  private streakScale = 1
   private readonly firstPass = new FullscreenPass(passMaterial(firstFragment, {
     source: { value: null },
     exposurePerSample: { value: 1 },
@@ -87,13 +110,21 @@ export class Scatter {
     weight: { value: 1 },
     wideWeight: { value: 1 },
   }))
+  private readonly streakPass = new FullscreenPass(passMaterial(streakFragment, {
+    source: { value: null },
+    reach: { value: 1 },
+    ingress: { value: true },
+  }))
 
   get bloom(): THREE.Texture { return this.up[0].texture }
   get halation(): THREE.Texture { return this.down[1].texture }
+  get streak(): THREE.Texture { return this.streakTargets[(STREAK_TAPS.length - 1) % 2].texture }
 
   resize(format: FormatSpec, scale: number): void {
     this.downPass.material.uniforms.kernelScale.value = scale
     this.upPass.material.uniforms.kernelScale.value = scale
+    this.streakScale = scale
+    for (const streak of this.streakTargets) streak.setSize(Math.ceil(format.width / 4), Math.ceil(format.height / 2))
     let { width, height } = format
     for (const [i, down] of this.down.entries()) {
       width = Math.ceil(width / 2)
@@ -103,7 +134,7 @@ export class Scatter {
     }
   }
 
-  render(renderer: THREE.WebGLRenderer, sum: THREE.Texture, exposurePerSample: number): void {
+  render(renderer: THREE.WebGLRenderer, sum: THREE.Texture, exposurePerSample: number, anamorphic: boolean): void {
     const first = this.firstPass.material.uniforms
     first.source.value = sum
     first.exposurePerSample.value = exposurePerSample
@@ -121,6 +152,17 @@ export class Scatter {
       up.weight.value = BLOOM_LEVEL_WEIGHTS[i]
       up.wideWeight.value = i === last - 1 ? BLOOM_LEVEL_WEIGHTS[last] : 1
       this.upPass.render(renderer, this.up[i])
+    }
+    if (anamorphic) {
+      const streak = this.streakPass.material.uniforms
+      streak.source.value = this.down[0].texture
+      for (const [i, tap] of STREAK_TAPS.entries()) {
+        streak.ingress.value = i === 0
+        streak.reach.value = Math.max(0.5, tap * this.streakScale * (i === 0 ? 2 : 1))
+        const output = this.streakTargets[i % 2]
+        this.streakPass.render(renderer, output)
+        streak.source.value = output.texture
+      }
     }
   }
 }
