@@ -30,7 +30,7 @@ export function palette(spec: PaintSpec, full: boolean) {
     }
     const microtexture = new T.DataTexture(data, 64, 64, T.RGBAFormat)
     microtexture.wrapS = microtexture.wrapT = T.RepeatWrapping
-    microtexture.magFilter = T.NearestFilter
+    microtexture.magFilter = T.LinearFilter
     microtexture.minFilter = T.LinearMipmapLinearFilter
     microtexture.generateMipmaps = true
     microtexture.needsUpdate = true
@@ -38,8 +38,8 @@ export function palette(spec: PaintSpec, full: boolean) {
       id: 'vehicle paint stack',
       uniforms: { carFlakeTint: flake, carBaseTint: tint, carMicrostructure: { value: microtexture } },
       apply(shader) {
-      shader.vertexShader = 'varying vec3 carLocal;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ncarLocal = position;')
-      shader.fragmentShader = `varying vec3 carLocal;
+        shader.vertexShader = 'varying vec3 carLocal;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ncarLocal = position;')
+        shader.fragmentShader = `varying vec3 carLocal;
         uniform vec3 carFlakeTint;
         uniform vec3 carBaseTint;
         uniform sampler2D carMicrostructure;
@@ -48,16 +48,29 @@ export function palette(spec: PaintSpec, full: boolean) {
             + weights.y * texture2D(carMicrostructure, carLocal.xz * frequency.y).rgb
             + weights.z * texture2D(carMicrostructure, carLocal.xy * frequency.z).rgb;
         }
+        float carFlake(vec2 surface, float scale) {
+          vec2 cells = surface * scale;
+          ivec2 tileSize = textureSize(carMicrostructure, 0);
+          vec3 grain = texelFetch(carMicrostructure, ivec2(mod(floor(cells), vec2(tileSize))), 0).rgb;
+          vec2 delta = fract(cells) - (0.32 + grain.gb * 0.36);
+          float theta = 6.2831853 * grain.g;
+          float c = cos(theta), s = sin(theta);
+          delta = mat2(c, -s, s, c) * delta;
+          float edge = length(delta * vec2(1.0, 1.6 + grain.b * 0.6));
+          float footprint = min(0.24, 0.42 * length(fwidth(cells)));
+          float radius = 0.13 + 0.15 * grain.b;
+          return smoothstep(0.64, 0.98, grain.r) * (1.0 - smoothstep(radius - footprint, radius + footprint, edge));
+        }
       ` + shader.fragmentShader
         .replace('#include <color_fragment>', `#include <color_fragment>
           vec3 basis = normalize(abs(cross(dFdx(carLocal), dFdy(carLocal))) + vec3(0.000000001));
           vec3 weights = pow(basis, vec3(8.0));
           weights /= max(0.00001, weights.x + weights.y + weights.z);
-          vec3 flakeGrain = carGrain(vec3(23.0, 22.0, 24.0), weights);
+          float flakeGrain = dot(weights, vec3(carFlake(carLocal.yz, 1460.0), carFlake(carLocal.xz, 1420.0), carFlake(carLocal.xy, 1530.0)));
           vec3 orangePeel = carGrain(vec3(3.35), weights);
           float footprint = length(fwidth(carLocal)) * 1550.0;
           float nearWeight = 1.0 - smoothstep(0.7, 2.6, footprint);
-          float kick = smoothstep(0.78, 0.98, flakeGrain.r) * nearWeight;
+          float kick = flakeGrain * nearWeight;
           diffuseColor.rgb *= 0.985 + 0.038 * orangePeel.r;
           diffuseColor.rgb = mix(diffuseColor.rgb, mix(carBaseTint, carFlakeTint, 0.36), kick * 0.14);
         `)

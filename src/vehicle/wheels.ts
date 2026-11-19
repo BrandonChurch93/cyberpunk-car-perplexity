@@ -49,7 +49,15 @@ function tireGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
 function rotor(w: WheelSize, full: boolean, axis: number): T.BufferGeometry {
   const face = new T.Shape()
   const dia = w.disc
-  face.absarc(0, 0, dia, 0, tau, false)
+  if (full) {
+    const segments = 144
+    face.moveTo(dia, 0)
+    for (let i = 1; i < segments; i++) {
+      const theta = tau * i / segments
+      face.lineTo(dia * Math.cos(theta), dia * Math.sin(theta))
+    }
+    face.closePath()
+  } else face.absarc(0, 0, dia, 0, tau, false)
   const center = new T.Path()
   center.absarc(0, 0, .081, 0, tau, true)
   face.holes.push(center)
