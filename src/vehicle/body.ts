@@ -45,7 +45,9 @@ const hoodTipX = .472
 const hoodInner = (s: number) => hoodTipX - 1.425 * (s - hoodTipS)
 const hoodOuter = (s: number) => hoodTipX + 1.955 * (s - hoodTipS)
 const lampFold = curve([[.043, .460], [.091, .657], [.136, .834], [.158, .895], [.182, .958]])
-const cabFront = (v: number) => .189 + .075 * v ** 2.1
+const hoodShut = (v: number) => .166 + .098 * v ** 2.18
+const cowlStep = (v: number) => .191 + .073 * v ** 2.35
+const cabFront = (v: number) => .206 + .058 * v ** 2.50
 const wingRadius = (s: number) => .004 * smooth(s, .071, .099) * (1 - smooth(s, .295, .331))
 const sideDent = curve([[.29, 0], [.36, .020], [.53, .099], [.625, .123], [.746, 0]])
 const rockerY = curve([[0, .155], [.04, .136], [.25, .136], [.69, .136], [.86, .137], [.90, .153], [.95, .187], [1, .40]])
@@ -55,6 +57,8 @@ const diagonalS = (y: number) => .529 + .119 * (y - .331)
 const doorBelt = curve([[.295, .568], [.380, .608], [.460, .650], [.538, .688], [.593, .722], [.650, .783], [.701, .854], [.760, .896], [.812, .924], [.855, .920], [.899, .890]])
 const heelFold = curve([[.382, .272], [.530, .338], [.597, .375], [.712, .432]])
 const haunchFold = (s: number) => .899 - 2.80 * (s - .682)
+const deckIn = curve([[.610, .608], [.670, .641], [.750, .686], [.820, .729], [.856, .762]])
+const deckOut = curve([[.697, .942], [.741, .899], [.789, .849], [.828, .798], [.856, .762]])
 const foldRadius = .004
 const foldAngle = T.MathUtils.degToRad(20)
 const foldSlope = Math.tan(foldAngle)
@@ -209,11 +213,12 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const { rows, at } = foldRows(surface, traces, full ? 6 : 3)
     paint.push(patch(surface, length, rows, out, thickness, at))
   }
-  const hoodTraces = [hoodInner, hoodOuter, lampFold].map((line) => (p: Point) => Math.abs(p[0]) - line(sAt(p[2])))
+  const lateralTrace = (line: (s: number) => number) => (p: Point) => Math.abs(p[0]) - line(sAt(p[2]))
+  const hoodTraces = [hoodInner, hoodOuter, lampFold].map(lateralTrace)
   const sideTrace = (line: (s: number) => number) => (p: Point) => p[1] - line(sAt(p[2]))
   const beltLine = sideTrace(doorBelt), heelLine = sideTrace(heelFold), haunchLine = sideTrace(haunchFold)
   const gap = .00055
-  const frontEnd = (v: number) => v <= .818 ? cabFront(v / .818) : mix(cabFront(1), .295, (v - .818) / .182)
+  const frontEnd = (v: number) => v <= .818 ? hoodShut(v / .818) : mix(hoodShut(1), .295, (v - .818) / .182)
   for (const side of [1, -1]) {
     const mirror = (p: Point): Point => [p[0] * side, p[1], p[2]]
     const sided = (f: Surface): Surface => (u, v) => mirror(f(u, v))
@@ -230,7 +235,14 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const w = wingEdge(s)
       const cabin: Point = [mix(inside[0], w.x - shoulderInset(s), v), mix(inside[1], w.y, v), zAt(s)]
       return blend(front, cabin, smooth(s, .272, .335))
-    }), [0, 1, 0], hoodTraces.slice(1))
+    }), [0, 1, 0], [hoodTraces[1]])
+    const cowlFace = (s: number, v: number, drop: number): Point => {
+      const p = bonnet(s, v * .818)
+      return [side * p[0], p[1] - drop * (1 - v * v), p[2]]
+    }
+    part(paint, (u, v) => cowlFace(mix(hoodShut(v) + gap, cowlStep(v), u), v, .0025), [0, 1, 0], 6, n)
+    part(black, (u, v) => cowlFace(mix(cowlStep(v), cabFront(v) + gap, u), v, mix(.006, .0016, u)), [0, 1, 0], 7, n, .003)
+    part(black, (u, v) => cowlFace(mix(hoodShut(v) - .004, cabFront(v) + .003, u), v, .012), [0, 1, 0], 4, n, .003)
     for (const [a, b] of [[.071, frontEnd(1) - gap], [frontEnd(1) + gap, .331]]) {
       part(paint, sided((u, v) => {
         const s = mix(a, b, u)
@@ -241,7 +253,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     }
     part(black, (u, v) => {
       const s = mix(.276, .331, u)
-      return [side * (plan(s) - .095), mix(shoulder(s) - .022, .776 - .020 * u, v), zAt(s)]
+      return [side * (plan(s) - .17), mix(shoulder(s) - .047, Math.max(shoulder(s) - .014, .756), v), zAt(s)]
     }, uSide, 18, 3, .004)
 
     folded(sided((u, v) => {
@@ -252,12 +264,16 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const t = smooth(s, .6, .68)
       const inX = mix(forward[0], inside[0], t)
       const inY = mix(forward[1], inside[1], t)
+      const x = mix(inX, outside[0], v)
+      const section = (at: number) => hinge(at - deckIn(s), foldHalf) - hinge(at - deckOut(s), foldHalf)
+      const vane = section(x) - mix(section(inX), section(outside[0]), v)
       const y = mix(inY, outside[1], v)
       const line = haunchFold(s)
       const tBend = y - line
       const flatten = mix(hinge(inY - line, foldHalf), hinge(outside[1] - line, foldHalf), v)
-      return [mix(inX, outside[0], v), y + .58 * smooth(s, .604, .630) * (hinge(tBend, foldHalf) - flatten), zAt(s)]
-    }), [0, 1, 0], [haunchLine])
+      const deckFold = .21 * smooth(s, .610, .665) * (1 - smooth(s, .846, .857)) * vane
+      return [x, y + deckFold + .58 * smooth(s, .604, .630) * (hinge(tBend, foldHalf) - flatten), zAt(s)]
+    }), [0, 1, 0], [haunchLine, lateralTrace(deckIn), lateralTrace(deckOut)])
     part(paint, sided((u, v) => {
       const s = mix(.594, .676, u)
       const q = edgeGlass(s, 0)
@@ -457,22 +473,33 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const q = blend(center, p, scale)
       return mirror([q[0] + dx, q[1] + dy, q[2] + dz])
     }), 3, .13)
-    const rings = [section(.97, 0, 0, 0), section(1, .003, 0, .018), section(.61, -.027, .012, .119), section(.23, -.044, .008, .145)]
-    for (let r = 1; r < rings.length; r++) {
-      const a = rings[r - 1], b = rings[r]
-      const at = (loop: Point[], u: number) => {
-        const i = Math.floor(u * loop.length)
-        return blend(loop[i % loop.length], loop[(i + 1) % loop.length], u * loop.length - i)
-      }
-      const rim = (u: number, v: number) => blend(at(a, u), at(b, u), v)
-      for (let i = 0; i < a.length; i++) {
-        const middle = rim((i + .5) / a.length, .5)
-        const normal: Point = [middle[0] - side * (center[0] - .020 * r), middle[1] - center[1], 0]
-        part(mirrorShells, (u, v) => rim((i + u) / a.length, v), normal, 1, 1)
-      }
+    const aperture = new T.CatmullRomCurve3(mirrorFace.map(vec), true, 'centripetal')
+    const apertureMax = Math.max(...aperture.getPoints(192).map((p) => p.x))
+    const apertureScale = (far - .003 - center[0]) / (apertureMax - center[0])
+    const shellWidth = curve([[0, .97], [.13, 1], [.68, .72], [.88, .47], [.97, .19], [1, 0]])
+    const shellDepth = curve([[0, 0], [.13, .018], [.68, .107], [.88, .133], [.97, .144], [1, .147]])
+    const shellX = curve([[0, 0], [.13, .003], [.68, -.024], [.94, -.046]])
+    const shellY = curve([[0, 0], [.13, 0], [.68, .010], [.94, .004]])
+    const shell: Surface = (u, v) => {
+      const p = aperture.getPoint(u)
+      const x = (p.x - center[0]) * apertureScale, y = p.y - center[1]
+      const radius = Math.hypot(x / .106, y / .046)
+      const width = shellWidth(v)
+      const shoulder = mix(1, 1 / radius, smooth(v, .24, .88)) * width
+      const depth = mix(shellDepth(v), .147 - .0634 * width * width, smooth(v, .78, .90))
+      return mirror([
+        center[0] + x * shoulder + shellX(v),
+        center[1] + y * shoulder + shellY(v),
+        mix(center[2], p.z, (1 - v) ** 2) + depth,
+      ])
     }
-    mirrorShells.push(polygon(rings[3], [0, 0, 1]))
-    mirrorMounts.push(polygon(rings[0], [0, 0, -1], .010))
+    const divisions = full ? 64 : 36
+    const loop = (v: number) => Array.from({ length: divisions }, (_, i) => shell(i / divisions, v))
+    const shellGeo = patch(shell, divisions, full ? 28 : 16, [side, 0, 0])
+    const shellNormals = shellGeo.getAttribute('normal')
+    for (let i = shellNormals.count - divisions - 1; i < shellNormals.count; i++) shellNormals.setXYZ(i, 0, 0, 1)
+    mirrorShells.push(shellGeo)
+    mirrorMounts.push(polygon(loop(0), [0, 0, -1], .010))
     steel.push(polygon(section(.79, .006, 0, -.004), [0, 0, -1], .002))
     const foot: Point[] = [[.805, .756, zAt(.337)], [.826, .749, zAt(.357)],
       [1.015, .823, zAt(.361)], [.968, .840, zAt(.347)]].map((p) => mirror(p as unknown as Point))
