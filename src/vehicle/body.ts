@@ -25,7 +25,7 @@ const frontWidth = curve([
   [0, .0008], [.090, .0058], [.173, .0108], [.337, .0178], [.448, .0238], [.607, .04], [.739, .06], [.836, .08], [.875, .10], [.914, .12], [.941, .14], [.973, .16], [.982, .18],
 ])
 const tailWidth = curve([
-  [0, .9875], [.39, .985], [.535, .979], [.69, .959], [.824, .939], [.896, .919], [.945, .895], [.975, .877], [1.012, .855],
+  [0, .9875], [.39, .985], [.535, .979], [.69, .958], [.824, .939], [.875, .929], [.918, .920], [.947, .902], [.980, .876], [1.012, .855],
 ])
 const shoulder = curve([
   [0, .407], [.016, .431], [.024, .450], [.044, .545], [.08, .618], [.10, .649], [.15, .724], [.20, .779], [.25, .772],
@@ -114,6 +114,7 @@ const edgeGlass = (s: number, v: number): Point => {
 
 const bayWidth = curve([[.60, .36], [.641, .431], [.68, .477], [.75, .452], [.82, .389], [.873, .326], [.901, .218], [.918, .04]])
 export const bayEdge = (s: number, side: number): Point => [side * bayWidth(s), spine(s) - .009, zAt(s)]
+export const tailLipY = (x: number): number => .882 - .011 * x - .022 * (1 - smooth(x, .038, .131))
 
 export function fascia(front: boolean, side: number, x: number, y: number, recess = 0): Point {
   if (front) {
@@ -121,7 +122,8 @@ export function fascia(front: boolean, side: number, x: number, y: number, reces
     return [x * side, y, Math.min(zAt(0), zAt(s) - recess)]
   }
   const s = tailWidth(x) + (.010 * smooth(y, .58, .81)) - .009 * smooth(y, .84, .94)
-  return [x * side, y, Math.max(zAt(1), zAt(s) + recess)]
+  const inset = .070 * smooth(y, .47, .70)
+  return [x * side, y, Math.max(zAt(1), zAt(s) + recess + inset)]
 }
 
 export function createBody(parent: T.Group, m: Palette, full: boolean): { paintPoint: Point; paintNormal: Point } {
@@ -181,12 +183,12 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     }), [0, 1, 0])
     part(paint, sided((u, v) => {
       const x = v * .935
-      const s0 = .90 + .025 * smooth(v, .45, .9)
-      const end = fascia(false, 1, x, .89)
-      const s1 = sAt(end[2]) - .003
-      const s = mix(Math.min(s0, s1 - .004), s1, u)
-      const top = mix(spine(s), shoulder(s), smooth(v, .13, 1))
-      return [x, top - .020 * Math.exp(-((x - .015) ** 2) / .011) * smooth(u, .1, .94), zAt(s)]
+      const s0 = .896 + .009 * v
+      const y = tailLipY(x)
+      const end = fascia(false, 1, x, y)
+      const s1 = sAt(end[2]) - .004 * (1 - smooth(x, .038, .131))
+      const s = mix(Math.min(s0, s1 - .014), s1, u)
+      return [x, y + .027 * (1 - u), zAt(s)]
     }), [0, 1, 0])
 
     const archEnds = (w: WheelSize) => {
@@ -260,7 +262,9 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const s = mix(mix(intakeRight(1), cutTrailing(1), v) + gap, last.before, u)
       return sillPoint(s, mix(intakeTop, shoulder(s), v))
     }, uSide, n, 12)
-    part(paint, (u, v) => cap(mix(last.after, .926, u), v), uSide, n, k)
+    const rearCorner = (u: number) => mix(.19, .64, u)
+    part(paint, (u, v) => cap(mix(last.after, .926, u), mix(rearCorner(u), 1, v)), uSide, n, k)
+    part(black, (u, v) => cap(mix(last.after, .926, u), rearCorner(u) * v), uSide, n, 6)
     const intake = (u: number, v: number, inset: number): Point => {
       const s = mix(intakeLeft(v), intakeRight(v), u)
       const p = sillPoint(s, mix(intakeBottom, intakeTop, v))
