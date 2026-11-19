@@ -58,7 +58,7 @@ export function createStandInWorld(): WorldModule {
   const palette = [new THREE.Color(0.25, 0.75, 1), new THREE.Color(0.55, 0.9, 1), new THREE.Color(0.35, 0.5, 1), new THREE.Color(0.8, 0.95, 1)]
   const billboardColor = (t: number, out: THREE.Color): void => {
     const phase = (t / duration) * palette.length
-    const i = Math.floor(phase) % palette.length
+    const i = ((Math.floor(phase) % palette.length) + palette.length) % palette.length
     const u = phase - Math.floor(phase)
     const s = u * u * (3 - 2 * u)
     out.copy(palette[i]).lerp(palette[(i + 1) % palette.length], s)

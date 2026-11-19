@@ -4,13 +4,13 @@ import { events } from '../director/timeline'
 import { createBody } from './body'
 import { anchor, createEnds } from './ends'
 import { createEngineBay } from './engine-bay'
-import { tau } from './geometry'
+import { smooth, tau } from './geometry'
 import { palette } from './materials'
 import { createWheels } from './wheels'
 import type { VehicleModule, VehicleOptions, VehicleState } from './contract'
 
 export async function createBlockout(options: VehicleOptions): Promise<VehicleModule> {
-  const full = false
+  const full = options.detail === 'full'
   const m = palette(options.paint, full)
   const root = new T.Group()
   root.name = 'vehicle'
@@ -31,13 +31,14 @@ export async function createBlockout(options: VehicleOptions): Promise<VehicleMo
   const update = (state: VehicleState): void => {
     const seconds = state.timeSeconds
     const elapsed = seconds - events.engineStart
-    const rise = state.engine * Math.exp(-Math.pow((elapsed - .59) / .24, 2))
+    const rise = smooth(state.engine, .02, .20) * Math.exp(-Math.pow((elapsed - .31) / .23, 2))
     ends.update(state.lampStage, rise)
-    const phase = (seconds / config.film.durationSeconds) * tau
+    const cycle = seconds / config.film.durationSeconds
+    const wave = (count: number) => Math.sin(cycle * (tau * count)) - cycle * Math.sin(tau * count)
     const shake = state.vibration * .002
-    sprung.position.y = shake * (.78 * Math.sin(phase * 923) + .22 * Math.sin(phase * 611))
-    sprung.rotation.x = shake * .21 * Math.sin(phase * 419)
-    sprung.rotation.z = shake * .29 * Math.sin(phase * 581)
+    sprung.position.y = shake * (.78 * wave(923) + .22 * wave(611))
+    sprung.rotation.x = shake * .21 * wave(419)
+    sprung.rotation.z = shake * .29 * wave(581)
   }
   await m.load()
   return { root, anchors, surfaces: m.surfaces, lamps: ends.lamps, heatSources: ends.heatSources, update, setPaint: m.setPaint }

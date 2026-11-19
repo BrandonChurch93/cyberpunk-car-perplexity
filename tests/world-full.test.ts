@@ -1,0 +1,101 @@
+import * as THREE from 'three'
+import { describe, expect, it } from 'vitest'
+import { config } from '../src/config'
+import type { FrameContext, SampleContext } from '../src/core/contract'
+import { createWorld } from '../src/world'
+import { billboardState } from '../src/world/fixtures'
+import { deckHeight } from '../src/world/roof-look'
+
+const world = await createWorld({ detail: 'full' })
+
+function radiance(t: number): { position: number; color: THREE.Color } {
+  const color = new THREE.Color()
+  const { center } = billboardState(t, color, new THREE.Color(), new THREE.Color())
+  return { position: center, color }
+}
+
+describe('full roof world', () => {
+  it('exposes metric relief for the front puddle and an unchanged reflective plane', () => {
+    const { deck } = world
+    expect(deck.heightMap).toBeInstanceOf(THREE.DataTexture)
+    const map = deck.heightMap as THREE.DataTexture
+    expect(map.format).toBe(THREE.RedFormat)
+    expect(map.type).toBe(THREE.FloatType)
+    expect(deckHeight(.92, 3.13)).toBeLessThan(0)
+    expect(deckHeight(.18, -3.71)).toBeLessThan(0)
+    expect(deckHeight(0, 0)).toBeGreaterThan(0)
+    const samples = map.image.data as Float32Array
+    const w = map.image.width
+    const h = map.image.height
+    const ix = Math.floor((.92 - deck.bounds.min.x) / (deck.bounds.max.x - deck.bounds.min.x) * w)
+    const iz = Math.floor((3.13 - deck.bounds.min.y) / (deck.bounds.max.y - deck.bounds.min.y) * h)
+    expect(samples[iz * w + ix]).toBeLessThan(0)
+    expect(deck.meshes.every(m => m.material === deck.material)).toBe(true)
+    expect(world.surfaces.some(s => s.material === deck.material && s.wetness === 'porous')).toBe(true)
+  })
+
+  it('has rooted vent and drain origins, approved text, and a bounded light rig', () => {
+    world.root.updateMatrixWorld(true)
+    expect(world.steamSources?.map(s => s.kind)).toEqual(['vent', 'drain'])
+    const [vent, drain] = world.steamSources!.map(s => s.object.getWorldPosition(new THREE.Vector3()))
+    expect(vent.y).toBeGreaterThan(1)
+    expect(drain.y).toBeLessThan(.024)
+    expect(world.signs.includes('STAIRS')).toBe(true)
+    expect(new Set(world.signs).size).toEqual(world.signs.length)
+    expect(world.signs.every(s => [...config.signage.generic, ...config.signage.invented].includes(s))).toBe(true)
+    expect(world.lights.length).toBeLessThanOrEqual(8)
+    expect(world.lights.filter(l => l.shadow).length).toBeLessThanOrEqual(4)
+  })
+
+  it('sets the billboard for both capture times and supplies a periodic mean to the rig', () => {
+    const { durationSeconds } = config.film
+    const emitter = world.lights.find(l => l.id === 'billboard')!
+    const start = radiance(0)
+    const end = radiance(durationSeconds)
+    expect(end.position).toBeCloseTo(start.position, 12)
+    expect(end.color.b).toBeCloseTo(start.color.b, 12)
+    const expected = radiance(2)
+    world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
+    const face = world.root.getObjectByName('animated cabinet LED face') as THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>
+    expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
+    world.beginSample({ timeSeconds: 2 } as SampleContext)
+    expect(face.material.uniforms.centerX.value).toBeCloseTo(expected.position, 12)
+    expect(Math.abs(expected.position - start.position)).toBeGreaterThan(.025)
+    const color = new THREE.Color()
+    emitter.colorAt!(2, color)
+    expect(color.clone().multiplyScalar(4.5 * emitter.level(2)).b).toBeCloseTo(expected.color.b, 10)
+    world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
+    expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
+  })
+
+  it('uses batched geometry for room depths and utility silhouettes within the city budget', () => {
+    const rooms: THREE.InstancedMesh[] = []
+    let triangles = 0
+    world.root.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return
+      if (object instanceof THREE.InstancedMesh && object.name.startsWith('recessed room walls')) rooms.push(object)
+      triangles += (object.geometry.index?.count ?? object.geometry.getAttribute('position').count) / 3 *
+        (object instanceof THREE.InstancedMesh ? object.count : 1)
+    })
+    expect(rooms.length).toBeGreaterThan(10)
+    expect(rooms.reduce((sum, m) => sum + m.count, 0)).toBeGreaterThan(1_500)
+    expect(world.root.getObjectByName('zoned middle-distance fire stairs, gutters and condenser racks')).toBeDefined()
+    expect(triangles).toBeGreaterThan(120_000)
+    expect(triangles).toBeLessThan(500_000)
+    expect(world.signs.filter(s => config.signage.invented.includes(s)).sort()).toEqual(['BRINESCALE SUSHI', 'SHUTTER HUSH CLUB', 'VAPOR SILL HOTEL'])
+  })
+
+  it('keeps supported traffic, navigation lights and roof beacons periodic in both hooks', () => {
+    const train = world.root.getObjectByName('tracked eight-axle electric train')!
+    const aircraft = world.root.getObjectByName('small aircraft')!
+    const beacon = world.root.getObjectByName('aviation warning bulb') as THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>
+    const state = () => [...train.position.toArray(), ...aircraft.position.toArray(), aircraft.rotation.y, ...beacon.material.color.toArray()]
+    world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
+    const first = state()
+    world.beginSample({ timeSeconds: config.film.durationSeconds*.7 } as SampleContext)
+    expect(state()).not.toEqual(first)
+    world.beginSample({ timeSeconds: config.film.durationSeconds } as SampleContext)
+    state().forEach((v, i) => expect(v).toBeCloseTo(first[i], 9))
+    expect(train.parent?.name).toBe('elevated railway')
+  })
+})

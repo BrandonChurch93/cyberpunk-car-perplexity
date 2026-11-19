@@ -5,7 +5,7 @@ import { stateAt } from '../director/timeline'
 import { createVehicle, type VehicleModule } from '../vehicle'
 import { createWeather } from '../weather'
 import { createWorld, type WorldModule } from '../world'
-import type { FilmLight, SamplePass, SampleContext, SceneSystem } from './contract'
+import { layers, type FilmLight, type SamplePass, type SampleContext, type SceneSystem } from './contract'
 import { stageDetail, type StageDetail } from './detail'
 import type { FrameInfo, SampleInfo, Stage } from './engine'
 import { applyLens, type CameraState } from './lens'
@@ -51,6 +51,7 @@ type Lamp = VehicleModule['lamps'][number]
 
 const maxWorldLights = 8
 const maxBeams = 4
+const glowStandOff = 0.35
 
 function beamLight(lamp: Lamp, i: number): FilmLight {
   return {
@@ -69,7 +70,7 @@ function beamLight(lamp: Lamp, i: number): FilmLight {
   }
 }
 
-/** Lamps that are not beams light the ground near them. They are merged into one point light per corner of the vehicle. */
+/** Lamps that are not beams light the ground near them. They are merged into one light per corner, set just outside the body and aimed out and down, so it never lights the parts around the lamp itself. */
 function glowLights(vehicle: VehicleModule, lamps: Lamp[]): FilmLight[] {
   vehicle.root.updateWorldMatrix(true, true)
   const toVehicle = vehicle.root.matrixWorld.clone().invert()
@@ -95,14 +96,19 @@ function glowLights(vehicle: VehicleModule, lamps: Lamp[]): FilmLight[] {
       color.g += c.g * w
       color.b += c.b * w
     })
+    const outward = Math.sign(anchor.position.z) || 1
+    anchor.position.z += outward * glowStandOff
+    anchor.lookAt(anchor.position.x, anchor.position.y - 0.7, anchor.position.z + outward)
     vehicle.root.add(anchor)
     return {
       id: `vehicle-glow-${key}`,
-      kind: 'point',
+      kind: 'spot',
       object: anchor,
       color,
       intensity: total,
       size: [0.3, 0.1],
+      angle: THREE.MathUtils.degToRad(80),
+      penumbra: 1,
       range: 14,
       shadow: false,
       beam: false,
@@ -150,6 +156,7 @@ export class FilmStage implements Stage {
     rig: LightRig,
   ) {
     this.rig = rig
+    this.camera.layers.enable(layers.cameraOnly)
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFShadowMap
     this.scene.add(world.root, vehicle.root, rig.group)
@@ -219,6 +226,58 @@ export class FilmStage implements Stage {
 
   cameraState(timeSeconds: number): CameraState {
     return this.cameraOverride ?? cameraAt(timeSeconds, this.format, this.vehicle.anchors, this.frameSeconds)
+  }
+
+  /** Distance from the lens to the nearest surface through a point of the frame (-1 to 1 on both axes). For tools and tests only. */
+  surfaceAlong(timeSeconds: number, screen: [number, number]): number | null {
+    const state = this.cameraState(timeSeconds)
+    applyLens(this.camera, state, this.format.width, this.format.height, { pixel: [0.5, 0.5], aperture: [0, 0] }, 1)
+    this.camera.updateMatrixWorld(true)
+    this.scene.updateMatrixWorld(true)
+    const ray = new THREE.Raycaster()
+    ray.setFromCamera(new THREE.Vector2(screen[0], screen[1]), this.camera)
+    ray.near = 0
+    const hit = ray.intersectObjects([this.vehicle.root, this.world.root], true)[0]
+    return hit ? hit.distance : null
+  }
+
+  /** Distance from the lens to the nearest surface of the vehicle or the world in any direction. For tools and tests only. */
+  lensClearance(timeSeconds: number): number {
+    const point = this.cameraState(timeSeconds).position
+    this.scene.updateMatrixWorld(true)
+    const box = new THREE.Box3()
+    const triangle = new THREE.Triangle()
+    const closest = new THREE.Vector3()
+    const matrix = new THREE.Matrix4()
+    let best = Infinity
+    const visit = (mesh: THREE.Mesh, world: THREE.Matrix4): void => {
+      const geometry = mesh.geometry
+      if (!geometry.boundingBox) geometry.computeBoundingBox()
+      if (box.copy(geometry.boundingBox!).applyMatrix4(world).distanceToPoint(point) >= best) return
+      const positions = geometry.getAttribute('position')
+      const index = geometry.getIndex()
+      const count = index ? index.count : positions.count
+      for (let i = 0; i < count; i += 3) {
+        const [a, b, c] = index ? [index.getX(i), index.getX(i + 1), index.getX(i + 2)] : [i, i + 1, i + 2]
+        triangle.a.fromBufferAttribute(positions, a).applyMatrix4(world)
+        triangle.b.fromBufferAttribute(positions, b).applyMatrix4(world)
+        triangle.c.fromBufferAttribute(positions, c).applyMatrix4(world)
+        best = Math.min(best, triangle.closestPointToPoint(point, closest).distanceTo(point))
+      }
+    }
+    for (const root of [this.vehicle.root, this.world.root]) {
+      root.traverse((object) => {
+        if (!(object as THREE.Mesh).isMesh) return
+        const mesh = object as THREE.Mesh
+        const instanced = mesh as THREE.InstancedMesh
+        if (!instanced.isInstancedMesh) return visit(mesh, mesh.matrixWorld)
+        for (let i = 0; i < instanced.count; i++) {
+          instanced.getMatrixAt(i, matrix)
+          visit(mesh, matrix.premultiply(mesh.matrixWorld))
+        }
+      })
+    }
+    return best
   }
 
   private setVehicle(timeSeconds: number): void {
