@@ -210,6 +210,10 @@ export class FilmStage implements Stage {
     return this.world.signs
   }
 
+  anchors(): Record<string, { position: number[]; normal: number[]; radius: number }> {
+    return Object.fromEntries(Object.entries(this.vehicle.anchors).map(([id, a]) => [id, { position: a.position.toArray(), normal: a.normal.toArray(), radius: a.radius }]))
+  }
+
   setPaint(id: string): void {
     this.vehicle.setPaint(paintById(id))
   }

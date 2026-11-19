@@ -17,6 +17,8 @@ export interface Showcase {
   finishFrame(): Promise<void>
   /** Every string on every sign in the scene, for the gate. */
   signs(): string[]
+  /** The vehicle's anchors as plain numbers, for the tools that place crops. */
+  anchors(): Record<string, { position: number[]; normal: number[]; radius: number }>
 }
 
 declare global {
@@ -88,6 +90,7 @@ export function createShowcase(engine: FrameEngine, ready: Promise<void>, initia
       engine.finishFrame()
     },
     signs: () => engine.stage.signs(),
+    anchors: () => engine.stage.anchors(),
   }
   return showcase
 }
