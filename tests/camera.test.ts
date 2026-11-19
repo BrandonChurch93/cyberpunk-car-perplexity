@@ -32,15 +32,17 @@ describe('camera', () => {
     }
   })
 
-  it('keeps one pose for every sample of the frames at the seam', () => {
+  it('keeps one pose across the exposure of every frame', () => {
     const step = 1 / config.film.fps
     for (const format of formats) {
-      const first = cameraAt(0, format, anchors)
-      const early = cameraAt(duration - step / 4, format, anchors, 0)
-      expect(early.position.distanceTo(first.position)).toBeLessThan(0.001)
-      const last = cameraAt(duration - step, format, anchors)
-      const late = cameraAt(duration + step / 4, format, anchors, duration - step)
-      expect(late.position.distanceTo(last.position)).toBeLessThan(0.001)
+      for (let f = 0; f < frameCount; f++) {
+        const at = cameraAt(f * step, format, anchors)
+        for (const d of [-step / 4, step / 4]) {
+          const sample = cameraAt(f * step + d, format, anchors, f * step)
+          expect(sample.position.distanceTo(at.position)).toBeLessThan(0.01)
+          expect(THREE.MathUtils.radToDeg(sample.quaternion.angleTo(at.quaternion))).toBeLessThan(0.3)
+        }
+      }
     }
   })
 
