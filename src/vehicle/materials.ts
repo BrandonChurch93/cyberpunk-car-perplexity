@@ -141,7 +141,7 @@ export function palette(spec: PaintSpec, full: boolean) {
   ventCarbon.specularIntensity = .50
   ventCarbon.clearcoat = .14
   ventCarbon.clearcoatRoughness = .34
-  const mirror = new T.MeshPhysicalMaterial({ color: 0x89969e, metalness: .94, roughness: .145, clearcoat: .78 })
+  const mirror = new T.MeshPhysicalMaterial({ color: 0x57636b, metalness: .94, roughness: .096, clearcoat: .72 })
   const hot = new T.MeshPhysicalMaterial({ color: full ? 0x494241 : 0x626367, metalness: .72, roughness: .4, anisotropy: full ? .38 : 0 })
   const engine = new T.MeshStandardMaterial({ color: full ? 0x2b2d31 : 0x55595f, metalness: .38, roughness: .59 })
   const cabin = new T.MeshStandardMaterial({ color: 0x2e2b2a, metalness: 0, roughness: .84 })

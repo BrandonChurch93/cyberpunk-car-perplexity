@@ -1,6 +1,7 @@
 import * as T from 'three'
-import { add, blend, contour, curve, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
+import { add, blend, contour, curve, joined, mix, patch, polygon, smooth, tau, vec, type Point, type Surface } from './geometry'
 import type { Palette } from './materials'
+import { addMirrors } from './mirror'
 
 export const dimensions = {
   length: 4.947, bodyWidth: 2.033, mirrorWidth: 2.266, height: 1.16, wheelbase: 2.779,
@@ -214,8 +215,7 @@ export function fascia(front: boolean, side: number, x: number, y: number, reces
 export function createBody(parent: T.Group, m: Palette, full: boolean): { paintPoint: Point; paintNormal: Point } {
   const n = full ? 64 : 31, k = full ? 26 : 13
   const paint: T.BufferGeometry[] = [], black: T.BufferGeometry[] = []
-  const steel: T.BufferGeometry[] = [], cabin: T.BufferGeometry[] = []
-  const mirrorShells: T.BufferGeometry[] = [], mirrorMounts: T.BufferGeometry[] = []
+  const cabin: T.BufferGeometry[] = []
   const part = (to: T.BufferGeometry[], surface: Surface, out: Point, length = n, width = k, thickness = .002) => {
     to.push(patch(surface, length, width, out, thickness))
   }
@@ -489,56 +489,6 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       Array.from({ length: 8 }, (_, i) => windowGlass(mix(a, c, i / 8), mix(b, d, i / 8))))
     black.push(contour(outline, .0035, true))
 
-    const far = dimensions.mirrorWidth / 2
-    const mirrorFace: Point[] = [[.910, .815, zAt(.365)], [.936, .801, zAt(.367)],
-      [far - .026, .807, zAt(.374)], [far - .003, .830, zAt(.373)], [far - .003, .870, zAt(.368)],
-      [far - .040, .892, zAt(.364)], [.949, .880, zAt(.358)], [.912, .851, zAt(.359)]]
-    const center: Point = [1.024, .848, zAt(.368)]
-    const section = (scale: number, dx: number, dy: number, dz: number) => roundedPath(mirrorFace.map((p) => {
-      const q = blend(center, p, scale)
-      return mirror([q[0] + dx, q[1] + dy, q[2] + dz])
-    }), 3, .13)
-    const aperture = new T.CatmullRomCurve3(mirrorFace.map(vec), true, 'centripetal')
-    const apertureMax = Math.max(...aperture.getPoints(192).map((p) => p.x))
-    const apertureScale = (far - .003 - center[0]) / (apertureMax - center[0])
-    const shellWidth = curve([[0, .97], [.13, 1], [.68, .72], [.88, .47], [.97, .19], [1, 0]])
-    const shellDepth = curve([[0, 0], [.13, .018], [.68, .107], [.88, .133], [.97, .144], [1, .147]])
-    const shellX = curve([[0, 0], [.13, .003], [.68, -.024], [.94, -.046]])
-    const shellY = curve([[0, 0], [.13, 0], [.68, .010], [.94, .004]])
-    const shell: Surface = (u, v) => {
-      const p = aperture.getPoint(u)
-      const x = (p.x - center[0]) * apertureScale, y = p.y - center[1]
-      const radius = Math.hypot(x / .106, y / .046)
-      const width = shellWidth(v)
-      const shoulder = mix(1, 1 / radius, smooth(v, .24, .88)) * width
-      const depth = mix(shellDepth(v), .147 - .0634 * width * width, smooth(v, .78, .90))
-      return mirror([
-        center[0] + x * shoulder + shellX(v),
-        center[1] + y * shoulder + shellY(v),
-        mix(center[2], p.z, (1 - v) ** 2) + depth,
-      ])
-    }
-    const divisions = full ? 64 : 36
-    const loop = (v: number) => Array.from({ length: divisions }, (_, i) => shell(i / divisions, v))
-    const shellGeo = patch(shell, divisions, full ? 28 : 16, [side, 0, 0])
-    const shellNormals = shellGeo.getAttribute('normal')
-    for (let i = shellNormals.count - divisions - 1; i < shellNormals.count; i++) shellNormals.setXYZ(i, 0, 0, 1)
-    mirrorShells.push(shellGeo)
-    mirrorMounts.push(polygon(loop(0), [0, 0, -1], .010))
-    steel.push(polygon(section(.79, .006, 0, -.004), [0, 0, -1], .002))
-    const stem = new T.CatmullRomCurve3([
-      [.799, .750, zAt(.346)], [.850, .762, zAt(.346)], [.924, .792, zAt(.350)],
-      [.991, .824, zAt(.354)], [1.029, .844, zAt(.355)],
-    ].map(([x, y, z]) => new T.Vector3(x, y, z)), false, 'centripetal')
-    const stalkDepth = curve([[0, .035], [.25, .033], [.66, .024], [1, .031]])
-    const stalkHeight = curve([[0, .014], [.25, .013], [.68, .010], [1, .017]])
-    part(mirrorMounts, (u, v) => {
-      const p = stem.getPoint(u), t = stem.getTangent(u)
-      const width = stalkDepth(u) * Math.cos(tau * v)
-      const rise = stalkHeight(u) * Math.sin(tau * v)
-      return mirror([p.x - t.y * rise, p.y + t.x * rise, p.z + width])
-    }, [0, 0, -1], full ? 25 : 14, full ? 24 : 12, 0)
-
     const doorHandle = (u: number, v: number): Point => {
       const s = mix(.601, .626, u)
       const p = sidePoint(s, shoulder(s) - .033 + .016 * v + .010 * u, side)
@@ -621,12 +571,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   }
   const skin = add(parent, 'closed body panels and returns', joined(paint), m.paint)
   add(parent, 'stowage, seals and wheelhouse liners', joined(black), m.matte)
-  const mirrors = new T.Group()
-  mirrors.name = 'door mirrors'
-  add(mirrors, 'painted mirror shells', joined(mirrorShells), m.paint)
-  add(mirrors, 'mirror mounting blades', joined(mirrorMounts), m.matte)
-  add(mirrors, 'mirror glass', joined(steel), m.mirror)
-  parent.add(mirrors)
+  addMirrors(parent, m, full, dimensions.mirrorWidth * .5, edgeGlass(.353, 0), zAt)
   if (cabin.length) add(parent, 'covered cockpit upholstery', joined(cabin), m.cabin)
   const s = .236, v = .883
   const paintPoint = bonnet(s, v)

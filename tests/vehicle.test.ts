@@ -141,6 +141,25 @@ describe('vehicle geometry and state', () => {
     }
   }, 30_000)
 
+  it('keeps a closed mirror seam and an unobstructed glass face on both sides', () => {
+    for (const car of [blockout, full]) {
+      const mirrors = car.root.getObjectByName('door mirrors')!
+      mirrors.updateWorldMatrix(true, true)
+      for (const side of [-1, 1]) {
+        const sideHit = (y: number) => new T.Raycaster(
+          new T.Vector3(side * 1.45, y, .718), new T.Vector3(-side, 0, 0),
+        ).intersectObject(mirrors, true)[0].object.name
+        expect(sideHit(.865)).toBe('painted upper mirror wings')
+        expect(sideHit(.851)).toBe('mirror shell seam and rear gaskets')
+        expect(sideHit(.827)).toBe('lower mirror shells')
+        for (const x of [.96, 1.015, 1.07]) for (const y of [.821, .846, .868]) {
+          const hit = new T.Raycaster(new T.Vector3(side * x, y, .4), new T.Vector3(0, 0, 1)).intersectObject(mirrors, true)[0]
+          expect(hit.object.name).toBe('mirror glass')
+        }
+      }
+    }
+  })
+
   it('registers every render material, shadow and light at both levels of detail', () => {
     for (const [vehicle, budget] of [[blockout, 400_000], [full, 2_000_000]] as const) {
       const trackedMaterials = new Set(vehicle.surfaces.map((surface) => surface.material))
