@@ -107,7 +107,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
 
   const drops = new DropGeometry(vehicleMeshes(vehicle.root, beadMaterials), uniforms)
   root.add(drops.group)
-  const runners = new Runners(vehicle, drops.material)
+  const runners = new Runners(vehicle, drops.material, drops.plain)
   root.add(runners.group)
 
   const shutter = config.film.shutterDegrees / 360 / config.film.fps

@@ -63,41 +63,21 @@ export function capTemplate(contactDegrees: number, rings: number, segments: num
 /** Water drops near the lens as real refracting geometry, placed from the same cells as the shader field. */
 export class DropGeometry {
   readonly group = new THREE.Group()
+  /** Lens material for 100 degree caps, shared with the runner. */
   readonly material: THREE.MeshPhysicalMaterial
+  /** Water without a cap shape: ribbons and falling drips. */
+  readonly plain: THREE.MeshPhysicalMaterial
+  private readonly lenses = new Map<number, THREE.MeshPhysicalMaterial>()
+  private readonly uniforms: Record<string, THREE.IUniform>
   private readonly sources: Source[] = []
   private readonly pools = new Map<string, THREE.InstancedMesh[]>()
   count = 0
 
   constructor(meshes: Array<{ mesh: THREE.Mesh; bead: BeadClass }>, uniforms: Record<string, THREE.IUniform>) {
     this.group.name = 'surface water drops'
-    this.material = new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, metalness: 0, roughness: 0.02, transmission: 1, ior: 1.333, thickness: 0.002, specularIntensity: 1, envMapIntensity: 1,
-    })
-    patchMaterial(this.material, {
-      id: 'surface water drop lens',
-      uniforms,
-      apply(shader) {
-        shader.vertexShader = 'varying float surfDropH;\nvarying float surfDropScale;\n' + insertAfter(shader.vertexShader, '#include <project_vertex>', `
-          #ifdef USE_INSTANCING
-            surfDropScale = length(instanceMatrix[1].xyz);
-          #else
-            surfDropScale = 0.001;
-          #endif
-          surfDropH = position.y;`)
-        const chunkText = THREE.ShaderChunk.transmission_fragment
-        const lens = replaceOnce(
-          replaceOnce(chunkText, 'material.thickness = thickness;', 'material.thickness = surfDropScale * (0.6 + 2.4 * surfDropH);'),
-          'totalDiffuse = mix( totalDiffuse, transmitted.rgb, material.transmission );',
-          `float surfFacing = clamp(dot(n, v), 0.0, 1.0);
-          float surfRim = mix(0.12, 1.0, smoothstep(0.08, 0.55, surfFacing));
-          totalDiffuse = mix( totalDiffuse, transmitted.rgb * surfRim, material.transmission );`,
-        )
-        let f = 'varying float surfDropH;\nvarying float surfDropScale;\nuniform float surfDiag;\n' + shader.fragmentShader
-        f = replaceOnce(f, '#include <transmission_fragment>', lens)
-        f = insertAfter(f, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(1.0, 0.1, 0.9, 1.0); }')
-        shader.fragmentShader = f
-      },
-    })
+    this.uniforms = uniforms
+    this.material = dropMaterial(uniforms, 100)
+    this.plain = dropMaterial(uniforms, null)
     for (const { mesh, bead } of meshes) {
       const geometry = mesh.geometry
       const pos = geometry.getAttribute('position')
@@ -142,6 +122,16 @@ export class DropGeometry {
       this.pools.set(key, list)
     }
     return list
+  }
+
+  private lens(contact: number): THREE.MeshPhysicalMaterial {
+    if (contact === 100) return this.material
+    let m = this.lenses.get(contact)
+    if (!m) {
+      m = dropMaterial(this.uniforms, contact)
+      this.lenses.set(contact, m)
+    }
+    return m
   }
 
   private templates = new Map<string, THREE.BufferGeometry>()
@@ -275,7 +265,7 @@ export class DropGeometry {
     const list = this.pool(contact, small)
     const slot = Math.floor(k / chunk)
     while (list.length <= slot) {
-      const m = new THREE.InstancedMesh(this.template(contact, small), this.material, chunk)
+      const m = new THREE.InstancedMesh(this.template(contact, small), this.lens(contact), chunk)
       m.frustumCulled = false
       m.layers.set(layers.cameraOnly)
       m.castShadow = false
@@ -287,6 +277,108 @@ export class DropGeometry {
     }
     list[slot].setMatrixAt(k % chunk, matrix)
   }
+}
+
+/**
+ * The refraction of a cap is traced exactly against its sphere, in the cap's own frame with the height restored to the
+ * spherical cap, so the drop shows the inverted world behind it and the panel under its foot, as a ball lens does.
+ */
+const lensVertex = /* glsl */ `
+#ifdef USE_INSTANCING
+  mat4 surfM = modelMatrix * instanceMatrix;
+#else
+  mat4 surfM = modelMatrix;
+#endif
+vec3 surfCamL = (inverse(surfM) * vec4(cameraPosition, 1.0)).xyz;
+surfLensCam = vec3(surfCamL.x, surfCamL.y * SURF_CAP_HS, surfCamL.z);
+surfLensPos = vec3(position.x, position.y * SURF_CAP_HS, position.z);
+surfLensM0 = surfM[0].xyz;
+surfLensM1 = surfM[1].xyz / SURF_CAP_HS;
+surfLensM2 = surfM[2].xyz;
+surfLensT = surfM[3].xyz;
+`
+
+const lensPars = /* glsl */ `
+varying vec3 surfLensCam;
+varying vec3 surfLensPos;
+varying vec3 surfLensM0;
+varying vec3 surfLensM1;
+varying vec3 surfLensM2;
+varying vec3 surfLensT;
+`
+
+const lensFragment = /* glsl */ `
+{
+  mat3 surfLin = mat3(surfLensM0, surfLensM1, surfLensM2);
+  vec3 c = vec3(0.0, SURF_CAP_CY, 0.0);
+  vec3 o = surfLensPos;
+  vec3 d = normalize(o - surfLensCam);
+  vec3 sn = normalize(o - c);
+  if (dot(sn, d) > 0.0) sn = -sn;
+  vec3 t = refract(d, sn, 1.0 / 1.333);
+  float exitAt = max(-2.0 * dot(t, o - c), 0.0);
+  float baseAt = t.y < -1e-5 ? -o.y / t.y : 1e9;
+  vec3 seen = vec3(0.0);
+  vec3 e = t;
+  vec3 q = o + t * exitAt;
+  float through = 1.0;
+  if (baseAt < exitAt) {
+    vec3 f = o + t * baseAt;
+    vec3 w = surfLin * f + surfLensT;
+    vec4 clip = projectionMatrix * viewMatrix * vec4(w, 1.0);
+    // Water on clearcoat: a weak interface that turns into a mirror at grazing incidence.
+    float graze = pow(1.0 - clamp(-t.y, 0.0, 1.0), 5.0);
+    float mirror = 0.0035 + 0.9965 * graze;
+    seen = (1.0 - mirror) * getTransmissionSample(clip.xy / clip.w * 0.5 + 0.5, 0.0, 1.333).rgb;
+    through = mirror;
+    e = vec3(t.x, -t.y, t.z);
+    vec3 fc = f - c;
+    float b = dot(e, fc);
+    float s2 = -b + sqrt(max(b * b - dot(fc, fc) + SURF_CAP_R * SURF_CAP_R, 0.0));
+    q = f + e * s2;
+  }
+  vec3 n2 = normalize(q - c);
+  vec3 out2 = refract(e, -n2, 1.333);
+  if (dot(out2, out2) < 0.5) {
+    out2 = reflect(e, -n2);
+    through *= 0.6;
+  }
+  vec3 dirW = normalize(surfLin * out2);
+  #ifdef USE_ENVMAP
+    vec3 dirV = normalize((viewMatrix * vec4(dirW, 0.0)).xyz);
+    vec3 side = normalize(abs(dirV.y) < 0.9 ? cross(dirV, vec3(0.0, 1.0, 0.0)) : cross(dirV, vec3(1.0, 0.0, 0.0)));
+    seen += through * getIBLRadiance(-dirV, side, 0.0);
+  #endif
+  float cosIn = clamp(dot(-d, sn), 0.0, 1.0);
+  float fresnel = 0.02 + 0.98 * pow(1.0 - cosIn, 5.0);
+  float meniscus = smoothstep(0.0, 0.08, surfLensPos.y / SURF_CAP_HS);
+  totalDiffuse = seen * (1.0 - fresnel) * mix(0.25, 1.0, meniscus);
+}
+`
+
+function dropMaterial(uniforms: Record<string, THREE.IUniform>, contact: number | null): THREE.MeshPhysicalMaterial {
+  const material = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, metalness: 0, roughness: 0.02, transmission: 1, ior: 1.333, thickness: 0.002, specularIntensity: 1, envMapIntensity: 1,
+  })
+  const theta = THREE.MathUtils.degToRad(contact ?? 90)
+  const radius = 1 / Math.sin(theta)
+  patchMaterial(material, {
+    id: contact === null ? 'surface water drop' : `surface water drop lens ${contact}`,
+    uniforms,
+    defines: contact === null ? {} : { SURF_CAP_LENS: 1, SURF_CAP_HS: (radius * (1 - Math.cos(theta))).toFixed(6), SURF_CAP_CY: (-radius * Math.cos(theta)).toFixed(6), SURF_CAP_R: radius.toFixed(6) },
+    apply(shader) {
+      if (contact !== null) {
+        shader.vertexShader = lensPars + insertAfter(shader.vertexShader, '#include <project_vertex>', lensVertex)
+        let f = lensPars + 'uniform float surfDiag;\n' + shader.fragmentShader
+        f = insertAfter(f, '#include <transmission_fragment>', lensFragment)
+        f = insertAfter(f, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(1.0, 0.1, 0.9, 1.0); }')
+        shader.fragmentShader = f
+      } else {
+        shader.fragmentShader = insertAfter('uniform float surfDiag;\n' + shader.fragmentShader, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(1.0, 0.1, 0.9, 1.0); }')
+      }
+    },
+  })
+  return material
 }
 
 function liftOffset(du: number, dv: number, axis: number, n: THREE.Vector3): THREE.Vector3 {

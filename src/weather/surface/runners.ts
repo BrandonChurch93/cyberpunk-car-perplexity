@@ -53,7 +53,7 @@ export class Runners {
   private readonly dripMesh: THREE.InstancedMesh
   private active = false
 
-  constructor(vehicle: VehicleModule, private readonly material: THREE.Material) {
+  constructor(vehicle: VehicleModule, private readonly material: THREE.Material, plain: THREE.Material) {
     this.group.name = 'surface water runners'
     vehicle.root.updateMatrixWorld(true)
     const beadMats = new Set(vehicle.surfaces.filter((s) => s.wetness === 'beads' && !s.material.transparent).map((s) => s.material))
@@ -98,7 +98,7 @@ export class Runners {
     this.runner.layers.set(layers.cameraOnly)
     this.runner.matrixAutoUpdate = false
     this.runner.frustumCulled = false
-    this.trail = new THREE.Mesh(this.trailGeometry(), this.material)
+    this.trail = new THREE.Mesh(this.trailGeometry(), plain)
     this.trail.layers.set(layers.cameraOnly)
     this.trail.frustumCulled = false
     const random = stream('surface trail beads')
@@ -123,7 +123,7 @@ export class Runners {
     }
     this.group.add(this.runner, this.trail, this.trailBeads)
     this.findDrips(lower, vehicle)
-    this.dripMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 18, 12), this.material, this.drips.length)
+    this.dripMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 18, 12), plain, this.drips.length)
     this.dripMesh.layers.set(layers.cameraOnly)
     this.dripMesh.frustumCulled = false
     this.group.add(this.dripMesh)

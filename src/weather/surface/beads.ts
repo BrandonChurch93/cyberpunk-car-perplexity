@@ -24,7 +24,7 @@ export const beadLayers: BeadLayer[] = [
   { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.55, steep: 0.35, lobes: 1 },
   { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.72, steep: 0.45, lobes: 1 },
   { cellMm: 10, minMm: 1.6, maxMm: 4.8, flat: 0.62, steep: 0.28, lobes: 1 },
-  { cellMm: 36, minMm: 6, maxMm: 13, flat: 0.3, steep: 0.04, lobes: 2 },
+  { cellMm: 36, minMm: 5, maxMm: 9, flat: 0.14, steep: 0.03, lobes: 2 },
 ]
 
 /** Drops at or above this diameter are real geometry near the lens. Smaller ones stay in the shader at every distance. */
