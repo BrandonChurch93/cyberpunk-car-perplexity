@@ -74,8 +74,12 @@ export function patch(point: Surface, uSteps: number, vSteps: number, outward: P
       const depth = vec([p[(a + count) * 3], p[(a + count) * 3 + 1], p[(a + count) * 3 + 2]]).sub(aPoint)
       const normal = e.cross(depth).normalize().multiplyScalar(flip ? -1 : 1)
       const k = p.length / 3
+      const du = uv[b * 2] - uv[a * 2], dv = uv[b * 2 + 1] - uv[a * 2 + 1]
+      const scale = thickness / Math.max(1e-6, Math.hypot(du, dv))
       for (const source of [a, b, b + count, a + count]) {
-        p.push(p[source * 3], p[source * 3 + 1], p[source * 3 + 2]); n.push(...normal.toArray()); uv.push(uv[source * 2], uv[source * 2 + 1])
+        const offset = source >= count ? scale : 0
+        p.push(p[source * 3], p[source * 3 + 1], p[source * 3 + 2]); n.push(...normal.toArray())
+        uv.push(uv[source * 2] - dv * offset, uv[source * 2 + 1] + du * offset)
       }
       triangle(k, k + 1, k + 2); triangle(k, k + 2, k + 3)
     }
