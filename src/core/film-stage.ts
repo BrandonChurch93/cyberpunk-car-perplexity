@@ -210,6 +210,10 @@ export class FilmStage implements Stage {
     return this.world.signs
   }
 
+  anchors(): Record<string, { position: number[]; normal: number[]; radius: number }> {
+    return Object.fromEntries(Object.entries(this.vehicle.anchors).map(([id, a]) => [id, { position: a.position.toArray(), normal: a.normal.toArray(), radius: a.radius }]))
+  }
+
   setPaint(id: string): void {
     this.vehicle.setPaint(paintById(id))
   }
@@ -226,6 +230,58 @@ export class FilmStage implements Stage {
 
   cameraState(timeSeconds: number): CameraState {
     return this.cameraOverride ?? cameraAt(timeSeconds, this.format, this.vehicle.anchors, this.frameSeconds)
+  }
+
+  /** Distance from the lens to the nearest surface through a point of the frame (-1 to 1 on both axes). For tools and tests only. */
+  surfaceAlong(timeSeconds: number, screen: [number, number]): number | null {
+    const state = this.cameraState(timeSeconds)
+    applyLens(this.camera, state, this.format.width, this.format.height, { pixel: [0.5, 0.5], aperture: [0, 0] }, 1)
+    this.camera.updateMatrixWorld(true)
+    this.scene.updateMatrixWorld(true)
+    const ray = new THREE.Raycaster()
+    ray.setFromCamera(new THREE.Vector2(screen[0], screen[1]), this.camera)
+    ray.near = 0
+    const hit = ray.intersectObjects([this.vehicle.root, this.world.root], true)[0]
+    return hit ? hit.distance : null
+  }
+
+  /** Distance from the lens to the nearest surface of the vehicle or the world in any direction. For tools and tests only. */
+  lensClearance(timeSeconds: number): number {
+    const point = this.cameraState(timeSeconds).position
+    this.scene.updateMatrixWorld(true)
+    const box = new THREE.Box3()
+    const triangle = new THREE.Triangle()
+    const closest = new THREE.Vector3()
+    const matrix = new THREE.Matrix4()
+    let best = Infinity
+    const visit = (mesh: THREE.Mesh, world: THREE.Matrix4): void => {
+      const geometry = mesh.geometry
+      if (!geometry.boundingBox) geometry.computeBoundingBox()
+      if (box.copy(geometry.boundingBox!).applyMatrix4(world).distanceToPoint(point) >= best) return
+      const positions = geometry.getAttribute('position')
+      const index = geometry.getIndex()
+      const count = index ? index.count : positions.count
+      for (let i = 0; i < count; i += 3) {
+        const [a, b, c] = index ? [index.getX(i), index.getX(i + 1), index.getX(i + 2)] : [i, i + 1, i + 2]
+        triangle.a.fromBufferAttribute(positions, a).applyMatrix4(world)
+        triangle.b.fromBufferAttribute(positions, b).applyMatrix4(world)
+        triangle.c.fromBufferAttribute(positions, c).applyMatrix4(world)
+        best = Math.min(best, triangle.closestPointToPoint(point, closest).distanceTo(point))
+      }
+    }
+    for (const root of [this.vehicle.root, this.world.root]) {
+      root.traverse((object) => {
+        if (!(object as THREE.Mesh).isMesh) return
+        const mesh = object as THREE.Mesh
+        const instanced = mesh as THREE.InstancedMesh
+        if (!instanced.isInstancedMesh) return visit(mesh, mesh.matrixWorld)
+        for (let i = 0; i < instanced.count; i++) {
+          instanced.getMatrixAt(i, matrix)
+          visit(mesh, matrix.premultiply(mesh.matrixWorld))
+        }
+      })
+    }
+    return best
   }
 
   private setVehicle(timeSeconds: number): void {

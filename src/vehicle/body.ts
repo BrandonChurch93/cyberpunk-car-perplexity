@@ -1,5 +1,5 @@
 import * as T from 'three'
-import { add, blend, contour, curve, joined, mix, patch, polygon, roundedPath, smooth, type Point, type Surface } from './geometry'
+import { add, blend, contour, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
 import type { Palette } from './materials'
 
 export const dimensions = {
@@ -67,11 +67,22 @@ const glassLowerX = curve([[.261, .803], [.32, .839], [.39, .827], [.46, .807], 
 const glassLowerY = curve([[.261, cowl(1)[1]], [.32, .77], [.37, .763], [.49, .808], [.56, .862], [.60, .932], [.65, .959]])
 const glassUpperY = curve([[.261, cowl(1)[1]], [.30, .94], [.35, 1.01], [.40, 1.064], [.417, roof(.417, 1)[1]], [.46, roof(.46, 1)[1]], [.51, roof(.51, 1)[1]], [.565, roof(.565, 1)[1]], [.595, roof(.595, 1)[1]], [.625, 1.048], [.65, .959]])
 const glassUpperX = curve([[.261, .803], [.30, .756], [.35, .697], [.40, .625], [.417, .617], [.46, .625], [.51, .632], [.565, .595], [.595, .542], [.625, .542], [.65, .576]])
-const edgeGlass = (s: number, v: number): Point => [
-  mix(glassLowerX(s), glassUpperX(s), v) + .009 * Math.sin(Math.PI * v) * smooth(s, .27, .38) * (1 - smooth(s, .58, .65)),
-  mix(glassLowerY(s), glassUpperY(s), v),
-  zAt(s),
-]
+const forwardWind = (u: number, q: number): Point => {
+  const p = cowl(Math.abs(q))
+  const low: Point = [Math.sign(q) * p[0], p[1] + .0013, p[2]]
+  const high = roof(.4175, q)
+  const p1 = blend(low, high, u)
+  return [p1[0], p1[1] + .022 * Math.sin(Math.PI * u) * (1 - .36 * Math.abs(q)), p1[2]]
+}
+const edgeGlass = (s: number, v: number): Point => {
+  const q = T.MathUtils.clamp((s - cabFront(1)) / (.4175 - cabFront(1)), 0, 1)
+  const upper = s < .4175 ? forwardWind(q, 1) : s < .5965 ? roof(s, 1) : [glassUpperX(s), glassUpperY(s), zAt(s)]
+  return [
+    mix(glassLowerX(s), upper[0], v) + .009 * Math.sin(Math.PI * v) * smooth(s, .27, .38) * (1 - smooth(s, .58, .65)),
+    mix(glassLowerY(s), upper[1], v),
+    zAt(s),
+  ]
+}
 
 const bayWidth = curve([[.60, .36], [.641, .431], [.68, .477], [.75, .452], [.82, .389], [.873, .326], [.901, .218], [.918, .04]])
 export const bayEdge = (s: number, side: number): Point => [side * bayWidth(s), spine(s) - .009, zAt(s)]
@@ -88,7 +99,8 @@ export function fascia(front: boolean, side: number, x: number, y: number, reces
 export function createBody(parent: T.Group, m: Palette, full: boolean): { paintPoint: Point; paintNormal: Point } {
   const n = full ? 64 : 31, k = full ? 26 : 13
   const paint: T.BufferGeometry[] = [], black: T.BufferGeometry[] = [], carbon: T.BufferGeometry[] = []
-  const steel: T.BufferGeometry[] = []
+  const steel: T.BufferGeometry[] = [], cabin: T.BufferGeometry[] = []
+  const mirrorShells: T.BufferGeometry[] = [], mirrorMounts: T.BufferGeometry[] = []
   const part = (to: T.BufferGeometry[], surface: Surface, out: Point, length = n, width = k, thickness = .002) => {
     to.push(patch(surface, length, width, out, thickness))
   }
@@ -217,13 +229,21 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const p = sillPoint(s, mix(intakeBottom, intakeTop, v))
       return [p[0] - side * inset, p[1], p[2]]
     }
-    part(black, (u, v) => intake(u, v, .079 + .035 * u), uSide, 18, 20)
+    part(black, (u, v) => intake(u, v, full ? .134 + .045 * u : .079 + .035 * u), uSide, 18, 20)
     for (const wall of [
       (u: number, v: number) => intake(0, u, .11 * v),
       (u: number, v: number) => intake(1, u, .114 * v),
       (u: number, v: number) => intake(u, 0, .114 * v),
       (u: number, v: number) => intake(u, 1, .114 * v),
     ]) part(carbon, wall, uSide, 20, 6)
+    if (full) {
+      const grille = (u: number, v: number): Point => intake(.04 + .93 * u, .04 + .90 * v, .116 + .040 * u)
+      carbon.push(hexMesh(grille, .21, .34, .013, .00135))
+      for (let i = 0; i < 3; i++) {
+        const h = .18 + .29 * i
+        part(carbon, (u, v) => intake(mix(.016, .983, u), h + .022 * v, .075 + .042 * v), uSide, 20, 4, .003)
+      }
+    }
 
     part(black, (u, v) => {
       const s = mix(first.after, last.before, u)
@@ -238,7 +258,17 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const s = mix(.263 + .002 * v, .649 - .004 * v, u)
       return mirror(edgeGlass(s, v))
     }
-    part(paint, window, uSide, n, k, .002)
+    if (full) {
+      const ledge = (u: number, v: number) => window(u, v)
+      part(paint, (u, v) => ledge(u, mix(0, .103, v)), uSide, n, 7, .0075)
+      part(paint, (u, v) => ledge(u, mix(.914, 1, v)), uSide, n, 7, .0075)
+      part(paint, (u, v) => ledge(mix(0, .059, u), mix(.096, .922, v)), uSide, 9, k, .006)
+      part(paint, (u, v) => ledge(mix(.955, 1, u), mix(.096, .922, v)), uSide, 9, k, .006)
+      part(black, (u, v) => {
+        const p = ledge(u, mix(0, .16, v))
+        return [p[0] - side * .018, p[1] - .008, p[2]]
+      }, uSide, n, 9, .025)
+    } else part(paint, window, uSide, n, k, .002)
     const windowGlass: Surface = (u, v) => {
       const s = mix(.278 + .008 * v, .637 - .005 * v, u)
       const p = mirror(edgeGlass(s, mix(.09, .92, v)))
@@ -253,11 +283,12 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const x = mix(.886, dimensions.mirrorWidth / 2, u)
       const theta = v * Math.PI * 2
       const radial = Math.sin(Math.PI * (u * .94 + .03)) ** .57
-      return [side * x, mix(.861, .849, u) + radial * (.058 * Math.cos(theta) + .009 * Math.sin(theta)), zAt(mix(.326, .381, u)) + radial * .137 * Math.sin(theta)]
+      const sharpen = (a: number) => Math.sign(a) * Math.pow(Math.abs(a), full ? .55 : 1)
+      return [side * x, mix(.861, .849, u) + radial * (.058 * sharpen(Math.cos(theta)) + .009 * Math.sin(theta)), zAt(mix(.326, .381, u)) + radial * .137 * sharpen(Math.sin(theta))]
     }
-    part(paint, mirrorSection, uSide, k, n, .002)
+    part(mirrorShells, mirrorSection, uSide, k, n, .002)
     const foot: Point[] = [[.827, .785, zAt(.333)], [.877, .760, zAt(.351)], [.966, .833, zAt(.355)], [.931, .864, zAt(.342)]].map((p) => mirror(p as unknown as Point))
-    black.push(polygon(roundedPath(foot), uSide, .032))
+    mirrorMounts.push(polygon(roundedPath(foot), uSide, .032))
     const mirrorBack = (u: number, v: number): Point => {
       const p = mirrorSection(mix(.13, .975, u), mix(.56, .90, v))
       return [p[0], p[1], p[2] - .003]
@@ -272,19 +303,17 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     part(black, doorHandle, uSide, 8, 4)
   }
 
-  const windshield: Surface = (u, v) => {
-    const q = -1 + 2 * v
-    const p = cowl(Math.abs(q))
-    const low: Point = [Math.sign(q) * p[0], p[1] + .0013, p[2]]
-    const high = roof(.4175, q)
-    const p1 = blend(low, high, u)
-    return [p1[0], p1[1] + .022 * Math.sin(Math.PI * u) * (1 - .36 * Math.abs(q)), p1[2]]
-  }
+  const windshield: Surface = (u, v) => forwardWind(u, 2 * v - 1)
   add(parent, 'windscreen', patch(windshield, n, k * 2, [0, 1, 1], .0048), m.glass)
   part(paint, (u, v) => roof(mix(.4165, .5965, u), 2 * v - 1), [0, 1, 0], n, k * 2, .004)
   for (const v of [0, 1]) {
     const p = (u: number) => windshield(u, v)
-    paint.push(contour(Array.from({ length: 17 }, (_, i) => p(i / 16)), .014))
+    if (full) {
+      part(paint, (u, w) => {
+        const a = p(u)
+        return blend(windshield(u, mix(v, .5, .017)), [a[0] + (2 * v - 1) * .010, a[1] - .0035, a[2]], w)
+      }, [0, 1, 1], n, 7, .009)
+    } else paint.push(contour(Array.from({ length: 17 }, (_, i) => p(i / 16)), .014))
     black.push(contour(Array.from({ length: 17 }, (_, i) => windshield(i / 16, mix(v, .5, .029))), .004))
   }
   black.push(contour(Array.from({ length: 21 }, (_, i) => windshield(.008, i / 20)), .0061))
@@ -295,16 +324,69 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   part(black, (u, v) => [mix(-.71, .71, v), .159, zAt(mix(.057, .947, u))], [0, -1, 0], 12, 9, .011)
   part(black, (u, v) => [mix(-.64, .64, v) * (1 - .2 * u), mix(.61, .819, u) + .017 * Math.sin(Math.PI * v), zAt(mix(.198, .304, u))], [0, 1, 0], 16, 12, .025)
   for (const side of [1, -1]) {
-    const seat = (u: number, v: number): Point => [side * .337 + (v - .5) * (.38 - .16 * u), mix(.478, 1.012, u) - .035 * Math.abs(v - .5), zAt(mix(.44, .57, u)) + .045 * Math.sin(Math.PI * v)]
-    part(black, seat, [0, 0, 1], 20, 14, .069)
+    const seatProfile = curve([[0, .36], [.29, .414], [.55, .404], [.68, .32], [.80, .209], [.95, .178], [1, .127]])
+    const seat = (u: number, v: number): Point => {
+      const wing = Math.cos(tau * v) * .032 + .018 * Math.sin(Math.PI * v)
+      const x = side * .338 + (v - .5) * seatProfile(u)
+      return [x, mix(.48, 1.018, u) - .032 * Math.abs(v - .5) ** 2.6, zAt(mix(.442, .567, u)) + wing]
+    }
+    part(full ? cabin : black, seat, [0, 0, 1], full ? 56 : 20, full ? 24 : 14, .055)
+    if (full) {
+      const cushion = (u: number, v: number): Point => {
+        const x = side * .338 + (v - .5) * (.382 + .042 * Math.sin(Math.PI * u))
+        return [x, .47 + .022 * (2 * v - 1) ** 4 + .025 * Math.sin(Math.PI * u), zAt(mix(.360, .467, u))]
+      }
+      part(cabin, cushion, [0, 1, 0], 32, 22, .035)
+      for (const p of [.13, .87]) {
+        const seam = Array.from({ length: 25 }, (_, i) => {
+          const q = seat(i / 24, p)
+          return [q[0], q[1], q[2] + .0016] as Point
+        })
+        black.push(contour(seam, .0016))
+      }
+    }
   }
-  add(parent, 'closed body panels and returns', joined(paint), m.paint)
+  if (full) {
+    const dash = (u: number, v: number): Point => {
+      const x = (v - .5) * (1.40 - .16 * u)
+      return [x, mix(.775, .729, u) - .085 * Math.abs(v - .5) ** 1.45 + .011 * Math.sin(u * Math.PI), zAt(mix(.281, .342, u)) + .020 * Math.cos(v * tau)]
+    }
+    part(cabin, dash, [0, 1, 0], n, k, .025)
+    const console = (u: number, v: number): Point => [mix(-.116, .116, v), mix(.629, .510, u) + .024 * Math.sin(v * Math.PI), zAt(mix(.343, .542, u))]
+    part(cabin, console, [0, 1, 0], n, 14, .028)
+    const instrument = (u: number, v: number): Point => [mix(.200, .469, u), .781 + .052 * Math.sin(u * Math.PI) - .024 * v, zAt(mix(.314, .348, v))]
+    part(cabin, instrument, [0, 1, 0], n, 12, .018)
+    const steeringWheel = (u: number, v: number): Point => {
+      const t = u * tau, phi = v * tau
+      const rad = .124 + .016 * Math.cos(phi)
+      const y = (Math.min(.102, Math.max(-.095, rad * Math.cos(t)))) * .86
+      return [.342 + rad * Math.sin(t), .753 + y - .007 * Math.sin(phi), zAt(.365) + .44 * y + .014 * Math.sin(phi)]
+    }
+    part(cabin, steeringWheel, [0, 0, -1], 100, 16, 0)
+    const plate = (u: number, v: number): Point => [.342 + mix(-.043, .043, u), mix(.727, .775, v), zAt(.372) + .013 * Math.sin(Math.PI * u)]
+    part(cabin, plate, [0, 0, -1], 16, 12, .022)
+    for (const end of [-1, 1]) {
+      const spoke = (u: number, v: number): Point => [.342 + end * mix(.037, .116, u), .740 + .021 * u + (v - .5) * .024, zAt(.369) + .014 * u]
+      part(cabin, spoke, [0, 0, -1], 11, 5, .009)
+    }
+  }
+  const skin = add(parent, 'closed body panels and returns', joined(paint), m.paint)
   add(parent, 'stowage, seals and wheelhouse liners', joined(black), m.matte)
   add(parent, 'intake returns', joined(carbon), m.carbon)
-  add(parent, 'mirror glass', joined(steel), m.mirror)
+  const mirrors = new T.Group()
+  mirrors.name = 'door mirrors'
+  add(mirrors, 'painted mirror shells', joined(mirrorShells), m.paint)
+  add(mirrors, 'mirror mounting blades', joined(mirrorMounts), m.matte)
+  add(mirrors, 'mirror glass', joined(steel), m.mirror)
+  parent.add(mirrors)
+  if (cabin.length) add(parent, 'covered cockpit upholstery', joined(cabin), m.cabin)
   const s = .236, v = .883
   const paintPoint = bonnet(s, v)
   const paintNormal = new T.Vector3(...bonnet(s, v + .001)).sub(new T.Vector3(...bonnet(s, v - .001)))
     .cross(new T.Vector3(...bonnet(s + .001, v)).sub(new T.Vector3(...bonnet(s - .001, v)))).normalize().toArray()
+  const normal = vec(paintNormal)
+  const hit = new T.Raycaster(vec(paintPoint).addScaledVector(normal, .03), normal.clone().negate(), 0, .060)
+    .intersectObject(skin, false)[0]
+  if (hit) return { paintPoint: hit.point.toArray(), paintNormal: hit.normal?.normalize().toArray() ?? paintNormal }
   return { paintPoint, paintNormal }
 }

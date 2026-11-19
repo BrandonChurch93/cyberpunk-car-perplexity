@@ -27,6 +27,7 @@ export interface Stage {
   beginFrame(frame: FrameInfo): void
   renderSample(sample: SampleInfo, target: THREE.WebGLRenderTarget): void
   signs(): string[]
+  anchors(): Record<string, { position: number[]; normal: number[]; radius: number }>
 }
 
 export interface Resolver {

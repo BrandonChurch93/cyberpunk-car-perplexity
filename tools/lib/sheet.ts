@@ -50,15 +50,34 @@ function label(text: string, width: number, height: number): Buffer {
   )
 }
 
-export async function buildSheet(session: RenderSession, spec: SheetSpec): Promise<{ file: string; record: SheetRecord; reused: boolean }> {
-  const dir = ensureDir(join(workDir, 'sheets'))
-  const file = join(dir, `${sheetName(spec)}.png`)
+export interface FrameSheetSpec {
+  name: string
+  frames: number[]
+  tier: TierId
+  format: FormatSpec
+  paint: string
+  diag: string
+}
+
+export interface FrameSheetRecord extends Omit<SheetRecord, 'beat'> {
+  name: string
+}
+
+/** A sheet of any list of frames, used for runs of consecutive frames around an event. */
+export async function buildFrameSheet(session: RenderSession, spec: FrameSheetSpec): Promise<{ file: string; record: FrameSheetRecord; reused: boolean }> {
+  const file = join(ensureDir(join(workDir, 'sheets')), `run-${spec.name}-${spec.format.id}-${spec.tier}-${spec.diag}-${spec.paint}.png`)
   const recordPath = file.replace(/\.png$/, '.json')
-  const frames = sheetFrames(spec.beat)
-  const existing = readJson<SheetRecord>(recordPath)
-  if (existing && existing.buildHash === session.buildHash && existing.format === spec.format.id && existing.tier === spec.tier && existing.paint === spec.paint && existing.diagnostic === spec.diag && existing.beat === spec.beat) {
+  const existing = readJson<FrameSheetRecord>(recordPath)
+  if (existing && existing.buildHash === session.buildHash && existing.format === spec.format.id && existing.tier === spec.tier && existing.paint === spec.paint && existing.diagnostic === spec.diag && existing.frames.join(',') === spec.frames.join(',')) {
     return { file, record: existing, reused: true }
   }
+  const { width, height } = await composeSheet(session, spec.frames, spec, file)
+  const record: FrameSheetRecord = { buildHash: session.buildHash, format: spec.format.id, tier: spec.tier, paint: spec.paint, diagnostic: spec.diag, name: spec.name, frames: spec.frames, width, height }
+  writeJson(recordPath, record)
+  return { file, record, reused: false }
+}
+
+async function composeSheet(session: RenderSession, frames: number[], spec: Omit<SheetSpec, 'beat'>, file: string): Promise<{ width: number; height: number }> {
   const landscape = spec.format.width >= spec.format.height
   const limit = config.critics.maxImageLongEdgePx
   const columns = landscape ? Math.ceil(Math.sqrt((frames.length * 4) / 3)) : Math.ceil(frames.length / 2)
@@ -83,6 +102,19 @@ export async function buildSheet(session: RenderSession, spec: SheetSpec): Promi
     layers.push({ input: label(`${i + 1}  ${(frames[i] / config.film.fps).toFixed(2)} s`, tileW, strip), left, top })
   }
   await sharp({ create: { width, height, channels: 3, background: '#16181c' } }).composite(layers).png({ compressionLevel: 6 }).toFile(file)
+  return { width, height }
+}
+
+export async function buildSheet(session: RenderSession, spec: SheetSpec): Promise<{ file: string; record: SheetRecord; reused: boolean }> {
+  const dir = ensureDir(join(workDir, 'sheets'))
+  const file = join(dir, `${sheetName(spec)}.png`)
+  const recordPath = file.replace(/\.png$/, '.json')
+  const frames = sheetFrames(spec.beat)
+  const existing = readJson<SheetRecord>(recordPath)
+  if (existing && existing.buildHash === session.buildHash && existing.format === spec.format.id && existing.tier === spec.tier && existing.paint === spec.paint && existing.diagnostic === spec.diag && existing.beat === spec.beat) {
+    return { file, record: existing, reused: true }
+  }
+  const { width, height } = await composeSheet(session, frames, spec, file)
   const record: SheetRecord = { buildHash: session.buildHash, format: spec.format.id, tier: spec.tier, paint: spec.paint, diagnostic: spec.diag, beat: spec.beat, frames, width, height }
   writeJson(recordPath, record)
   return { file, record, reused: false }

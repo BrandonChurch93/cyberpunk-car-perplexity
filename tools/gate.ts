@@ -5,6 +5,7 @@ import { frameCount, formatById } from '../src/config.ts'
 import { requiredExtensions, requiredLimits } from '../src/core/requirements.ts'
 import { args, buildHash, config, readJson, repoRoot, workDir } from './lib/env.ts'
 import { RenderSession, type StillRecord } from './lib/render.ts'
+import { g5, g6, g7, g8, g9, g11 } from './lib/gates.ts'
 
 interface Result {
   ok: boolean
@@ -17,6 +18,9 @@ function run(cmd: string, argv: string[]): { ok: boolean; tail: string } {
   const text = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim().split('\n')
   return { ok: r.status === 0, tail: text.slice(-3).join(' / ') }
 }
+
+const a = args()
+const phaseArg = a.phase ?? '0'
 
 const checks: Record<string, Check> = {
   G1: () => {
@@ -59,6 +63,12 @@ const checks: Record<string, Check> = {
     }
     return { ok: problems.length === 0, detail: problems.length ? problems.join('; ') : `${count} current stills match their format, frameCount ${frameCount}` }
   },
+  G5: () => g5(Number(phaseArg), a.paint),
+  G6: () => g6(),
+  G7: () => g7(),
+  G8: () => g8(),
+  G9: () => g9(),
+  G11: () => g11(),
   R1: () => {
     const r = run('npx', ['tsx', 'tools/board.ts', 'check'])
     return { ok: r.ok, detail: r.ok ? `every board element has at least ${config.reference.minSourcesPerElement} sources with at least ${config.reference.minObservationsPerSource} observations each` : r.tail }
@@ -179,8 +189,7 @@ const phases: Record<string, string[]> = {
 }
 
 async function main(): Promise<void> {
-  const a = args()
-  const phase = a.phase ?? '0'
+  const phase = phaseArg
   const only = a.only ? a.only.split(',') : null
   const skip = a.skip ? a.skip.split(',') : []
   const ids = (phases[phase] ?? []).filter((id) => (!only || only.includes(id)) && !skip.includes(id))
