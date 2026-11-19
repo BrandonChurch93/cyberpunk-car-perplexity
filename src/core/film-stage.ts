@@ -151,7 +151,7 @@ export class FilmStage implements Stage {
   ) {
     this.rig = rig
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.shadowMap.type = THREE.PCFShadowMap
     this.scene.add(world.root, vehicle.root, rig.group)
     if (weather) {
       this.scene.add(weather.root)
