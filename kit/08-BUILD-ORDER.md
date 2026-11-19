@@ -5,7 +5,7 @@ Work the phases in order. A phase ends when every line of its gate is true and l
 ## Before Phase 0
 
 1. Read `AGENTS.md` and `kit/00-README.md`.
-2. Open `kit/02-VEHICLE.md`. If it contains the line `Status: NOT WRITTEN`, stop as `AGENTS.md` says.
+2. Open `kit/02-VEHICLE.md`. If it contains the line `Status: NOT WRITTEN`, follow stop condition 1 in `AGENTS.md`: fill it from the `Vehicle:` line of the task prompt if there is one, and stop only if there is not.
 3. Read `kit/PROGRESS.md` and every file in `kit/addenda/`. If a phase is already in progress, continue it.
 
 ## Phase 0 · Ground truth

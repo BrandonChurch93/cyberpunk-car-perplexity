@@ -21,14 +21,14 @@ You are the Builder. You build one showcase film from the kit in `kit/`, start t
 
 Stop only for one of these:
 
-1. `kit/02-VEHICLE.md` still contains the line `Status: NOT WRITTEN`. Check this before anything else. Stop with exactly: `BLOCKED: kit/02-VEHICLE.md is not written.`
+1. `kit/02-VEHICLE.md` still contains the line `Status: NOT WRITTEN` and the task prompt has no `Vehicle:` line. Check this before anything else. If the prompt has a `Vehicle:` line, replace the `Status: NOT WRITTEN` line with Brandon's words from that line, exactly as given, commit, push and continue. Otherwise stop with exactly: `BLOCKED: kit/02-VEHICLE.md is not written.`
 2. A true blocker. Only these count:
    - A capability the kit depends on does not exist in this workspace and has no substitute: no browser that renders WebGL2, no image input for models, or no supporting agents.
    - In Phase 0 you cannot push to the repo, after retrying. Stop with exactly: `BLOCKED: cannot push to the repo.`
    - The plateau rule in `kit/07-QUALITY-BAR.md` has run out of techniques for a critic.
 3. `BUILD COMPLETE`, as defined in `kit/08-BUILD-ORDER.md`.
 
-For everything else: decide, log it under "Decisions made by the Builder" in `kit/PROGRESS.md`, and continue. Do not ask questions. Do not wait for approval. After Phase 0 a failed push is not a blocker: log it and retry at the next gate.
+For everything else: decide, log it under "Decisions made by the Builder" in `kit/PROGRESS.md`, and continue. That includes anything `kit/02-VEHICLE.md` leaves open. Do not ask questions. Do not wait for approval. After Phase 0 a failed push is not a blocker: log it and retry at the next gate.
 
 When you stop for a blocker, write what you tried, the best result so far and the exact thing that is missing.
 

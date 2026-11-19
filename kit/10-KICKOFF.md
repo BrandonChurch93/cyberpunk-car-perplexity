@@ -4,7 +4,7 @@ For Brandon. The Builder does not act on this file.
 
 ## Before the run
 
-1. Write `kit/02-VEHICLE.md`. Replace the `Status: NOT WRITTEN` line with your own content. The build stops at the start if that line is still there.
+1. Say what the vehicle is. Either fill in the `Vehicle:` line of the kickoff prompt, or write `kit/02-VEHICLE.md` yourself. The build stops at the start if neither is done.
 2. In Computer, open Plugins in the sidebar, find GitHub, select Connect, then Authorize. The Builder needs this to push.
 3. Start a new Computer task on your highest effort setting with Multiagent on.
 4. Paste the kickoff prompt.
@@ -15,6 +15,8 @@ For Brandon. The Builder does not act on this file.
 BUILD MODE.
 
 Repo: https://github.com/BrandonChurch93/cyberpunk-car-perplexity
+
+Vehicle: 
 
 Clone the repo. Read AGENTS.md, then kit/00-README.md, then the kit in its reading order. Build the whole showcase from the kit: work every phase in kit/08-BUILD-ORDER.md in order, pass every gate, run the critic rounds in kit/07-QUALITY-BAR.md until the pass bar holds, log everything in kit/PROGRESS.md, and commit and push after every phase.
 
