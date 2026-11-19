@@ -1,71 +1,132 @@
 import * as THREE from 'three'
-import type { FormatSpec } from '../config'
+import { config, type FormatSpec } from '../config'
 import type { FrameInfo, Resolver } from '../core/engine'
 import { FullscreenPass, passMaterial } from '../core/fullscreen'
 import { hashInts, streamSeed } from '../core/random'
+import { Scatter, BLOOM_WEIGHT, HALATION_WEIGHT } from './scatter'
+import { FILM_CURVE, toneMapGlsl } from './tone'
+
+export const FILM_EXPOSURE = 0.78
+const GRAIN_SIZE_PX = 1.8
+const GRAIN_LUMA = 0.010
+const GRAIN_CHROMA = 0.0025
+const grainStream = streamSeed('film-grain')
+const ditherStream = streamSeed('film-dither')
 
 const fragment = /* glsl */ `
 precision highp float;
+precision highp int;
 uniform sampler2D sum;
+uniform sampler2D bloom;
+uniform sampler2D halation;
+uniform float exposurePerSample;
 uniform float inverseCount;
-uniform float exposure;
-uniform float ditherSeed;
-uniform int passthrough;
+uniform float grainSize;
+uniform uint grainSeed;
+uniform uint ditherSeed;
+uniform int treatment;
 in vec2 vUv;
 out vec4 outColor;
 
-vec3 filmic(vec3 x) {
-  x = max(x, 0.0);
-  return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
+${toneMapGlsl}
+
+uint scramble(uint x) {
+  x = (x ^ (x >> 16u)) * 0x7feb352du;
+  x = (x ^ (x >> 15u)) * 0x846ca68bu;
+  return x ^ (x >> 16u);
 }
 
-vec3 encode(vec3 c) {
-  return mix(c * 12.92, 1.055 * pow(max(c, 0.0), vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
+uint pixelHash(ivec2 p, uint seed) {
+  return scramble(uint(p.x) * 0x9e3779b1u ^ uint(p.y) * 0x85ebca77u ^ seed);
 }
 
-float hash(vec2 p, float s) {
-  vec3 q = fract(vec3(p.xyx) * 0.1031 + s);
-  q += dot(q, q.yzx + 33.33);
-  return fract((q.x + q.y) * q.z);
+vec3 grainCell(ivec2 p) {
+  uint h = pixelHash(p, grainSeed);
+  return vec3(uvec3(h, h >> 8u, h >> 16u) & 255u) / 255.0 - 0.5;
+}
+
+vec3 grainAt(vec2 p) {
+  ivec2 cell = ivec2(floor(p));
+  vec2 f = fract(p);
+  vec3 a = mix(grainCell(cell), grainCell(cell + ivec2(1, 0)), f.x);
+  vec3 b = mix(grainCell(cell + ivec2(0, 1)), grainCell(cell + ivec2(1, 1)), f.x);
+  return mix(a, b, f.y);
 }
 
 void main() {
-  vec3 hdr = texelFetch(sum, ivec2(gl_FragCoord.xy), 0).rgb * inverseCount;
-  vec3 mapped = passthrough == 1 ? clamp(hdr, 0.0, 1.0) : filmic(hdr * exposure);
-  vec3 display = encode(mapped);
-  float n = hash(gl_FragCoord.xy, ditherSeed) + hash(gl_FragCoord.xy + 17.0, ditherSeed + 0.37) - 1.0;
-  outColor = vec4(display + n / 255.0, 1.0);
+  ivec2 pixel = ivec2(gl_FragCoord.xy);
+  vec3 hdr = texelFetch(sum, pixel, 0).rgb;
+  if (treatment == 2) {
+    outColor = vec4(hdr * inverseCount, 1.0);
+    return;
+  }
+  vec3 display;
+  if (treatment == 3) {
+    display = encodeDisplay(clamp(hdr * inverseCount, 0.0, 1.0));
+  } else {
+    hdr *= exposurePerSample;
+    if (treatment == 0) {
+      hdr += ${BLOOM_WEIGHT} * texture(bloom, vUv).rgb;
+      hdr += vec3(${HALATION_WEIGHT.join(', ')}) * texture(halation, vUv).rgb;
+    }
+    display = encodeDisplay(toneMap(hdr, ${FILM_CURVE}));
+    if (treatment == 0) {
+      float y = dot(display, LUMA);
+      float response = mix(0.22, 1.0, smoothstep(0.0, 0.10, y))
+        * (1.0 - 0.88 * smoothstep(0.40, 0.96, y));
+      vec3 grain = grainAt(gl_FragCoord.xy / grainSize);
+      vec3 chroma = vec3(grain.y, -0.26 * grain.y - 0.10 * grain.z, grain.z);
+      display += response * (${GRAIN_LUMA} * grain.x + ${GRAIN_CHROMA} * chroma);
+    }
+  }
+  uint h = pixelHash(pixel, ditherSeed);
+  float tpdf = (float(h & 65535u) + float(h >> 16u)) / 65535.0 - 1.0;
+  outColor = vec4(floor(clamp(display * 255.0 + tpdf, 0.0, 255.0) + 0.5) / 255.0, 1.0);
 }
 `
 
-const ditherStream = streamSeed('dither')
-
 export class BasicResolver implements Resolver {
   private readonly pass: FullscreenPass
-  private passthrough = false
+  private readonly scatter = new Scatter()
+  private treatment = 0
 
   constructor(private readonly renderer: THREE.WebGLRenderer) {
     this.pass = new FullscreenPass(passMaterial(fragment, {
       sum: { value: null },
+      bloom: { value: null },
+      halation: { value: null },
+      exposurePerSample: { value: 1 },
       inverseCount: { value: 1 },
-      exposure: { value: 1 },
+      grainSize: { value: GRAIN_SIZE_PX },
+      grainSeed: { value: 0 },
       ditherSeed: { value: 0 },
-      passthrough: { value: 0 },
+      treatment: { value: 0 },
     }))
   }
 
-  resize(_format: FormatSpec): void {}
+  resize(format: FormatSpec): void {
+    const scale = format.height / config.formats.master.height
+    this.scatter.resize(format, scale)
+    this.pass.material.uniforms.grainSize.value = GRAIN_SIZE_PX * scale
+  }
 
   setDiagnostic(view: string): void {
-    this.passthrough = view !== 'beauty'
+    this.treatment = view === 'beauty' ? 0 : view === 'normals' ? 2 : view === 'caps' ? 3 : 1
   }
 
   resolve(sum: THREE.Texture, count: number, frame: FrameInfo, target: THREE.WebGLRenderTarget | null): void {
     const u = this.pass.material.uniforms
     u.sum.value = sum
     u.inverseCount.value = 1 / count
-    u.ditherSeed.value = (hashInts(ditherStream, frame.frameKey) % 4096) / 4096
-    u.passthrough.value = this.passthrough ? 1 : 0
+    u.exposurePerSample.value = FILM_EXPOSURE / count
+    if (this.treatment === 0) {
+      this.scatter.render(this.renderer, sum, u.exposurePerSample.value)
+      u.bloom.value = this.scatter.bloom
+      u.halation.value = this.scatter.halation
+    }
+    u.grainSeed.value = hashInts(grainStream, frame.frameKey)
+    u.ditherSeed.value = hashInts(ditherStream, frame.frameKey)
+    u.treatment.value = this.treatment
     this.pass.render(this.renderer, target)
   }
 }
