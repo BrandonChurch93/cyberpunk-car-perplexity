@@ -318,6 +318,17 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('keeps all four diffuser blade edges exposed to the ignition camera', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const { position } = cameraAt(950 / config.film.fps, config.formats.preview, vehicle.anchors)
+      for (const side of [-1, 1]) for (const [x, y, z] of [[.420, .536, -2.444], [.659, .523, -2.320]]) {
+        const ray = new T.Raycaster(position, new T.Vector3(side * x, y, z).sub(position).normalize())
+        expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('thin graphite diffuser blades')
+      }
+    }
+  })
+
   it('keeps the painted rear fascia in front of the internal liner', () => {
     for (const vehicle of [full, blockout]) {
       vehicle.root.updateMatrixWorld(true)

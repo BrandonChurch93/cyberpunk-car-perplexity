@@ -10,7 +10,6 @@ type Face = (x: number, y: number, recess?: number) => Point
 export const anchor = (position: Point, normal: Point, radius: number): Anchor => ({ position: vec(position), normal: vec(normal).normalize(), radius })
 
 const diffuserProfile = [[.908, .159], [.929, .191], [.940, .203], [.960, .233], [.970, .265], [.975, .295], [.980, .325], [.990, .399], [.995, .430], [1, .470]] as const
-const diffuserRise = curve(diffuserProfile)
 const diffuserRun = curve(diffuserProfile.map(([s, y]) => [y, s]))
 const diffuserZ = (x: number, y: number, z: number): number => limitTailZ(x, Math.max(z, zAt(diffuserRun(y))))
 
@@ -329,22 +328,19 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const y = mix(.421, tailLower(x) - .007, v)
       return r(x, y, .079 + .021 * smooth(y, .54, .63))
     }, 16, 12, outRear, .008))
-    for (const fin of [.416, .645]) {
+    for (const fin of [.423, .650]) {
+      const inner = fin < .5
+      const tip = tailLower(fin) + (inner ? .073 : .064)
       diffuserFins.push(patch((u, v) => {
-        const depth = .007 + .142 * smooth(u, .08, .94)
-        if (fin < .5) {
-          const s = mix(.857, .9994, u)
-          const bottom = Math.max(diffuserRise(s) + .003, .171 + .041 * smooth(u, .22, .62))
-          const height = Math.min(depth, tailLower(fin) - .008 - bottom)
-          return [side * fin, bottom + (1 - v) * height, zAt(s)]
-        }
-        const x = fin + .021 * smooth(u, .62, 1) * v
-        const tip = tailLower(x) - .008
-        const y = mix(.176, tip, u ** 1.45) - v * depth
-        const aft = sAt(r(x, tip, -.023 + .018 * v ** 1.45)[2])
-        const s = mix(.857, aft, u)
-        return [side * x, y, diffuserZ(x, y, zAt(s))]
-      }, 37, 10, [side, 0, 0], .010))
+        const x = fin + (inner ? .004 : .025) * smooth(u, .38, 1) * v
+        const trailingY = tip - .145 * v
+        const y = mix(.213 - .054 * v, trailingY, u ** 1.44)
+        const tipIn = .049 * (1 - smooth(v, 0, .18))
+        const recess = -.048 - (inner ? .013 * Math.sin(Math.PI * v) ** 2 : 0) + tipIn + .027 * smooth(v, .72, 1)
+        const trailingZ = r(x, trailingY, recess)[2]
+        const z = mix(zAt(.853), trailingZ, u)
+        return [side * x, y, diffuserZ(x, y - .016, z)]
+      }, 41, 12, [side, 0, 0], .010))
     }
     rearOptical.push(ribbon(r, [[.545, .434], [.654, .430]], .022, .012, 18))
   }
@@ -371,8 +367,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   add(parent, 'hexagonal outlet cavities', joined(outletCavities), m.dark)
   add(parent, 'channeled graphite rear diffuser', joined(diffuserShell), m.diffuser)
   const bladeFinish = m.tag(m.diffuser.clone(), 'sheet')
-  bladeFinish.color.setHex(full ? 0x474b50 : 0x4b4e52)
-  bladeFinish.roughness = .41
+  bladeFinish.color.setHex(full ? 0x55595c : 0x5a5b5e)
+  bladeFinish.roughness = .44
   add(parent, 'thin graphite diffuser blades', joined(diffuserFins), bladeFinish)
   add(parent, 'machined projector collars', joined(projectorCollars), m.brushed)
   add(parent, 'smooth dark projector bowls', joined(projectorBowls), m.dark)
