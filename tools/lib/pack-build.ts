@@ -122,7 +122,7 @@ async function framesWithCrops(ctx: PackContext, frames: JudgedFrame[], set: str
   return out
 }
 
-const viewName = (diag: string): string => ({ clay: 'plain gray view', zebra: 'stripe reflection view' } as Record<string, string>)[diag] ?? `${diag} view`
+const viewName = (diag: string): string => ({ clay: 'plain gray view', zebra: 'black and white stripe view' } as Record<string, string>)[diag] ?? `${diag} view`
 
 async function verticalFrames(ctx: PackContext, frames: JudgedFrame[], set: string): Promise<PackItem[]> {
   const out: PackItem[] = []

@@ -59,7 +59,10 @@ void runTool(async () => {
 
   const missing = missingFrames(spec, first, last, hash)
   if (missing.length > 0) {
-    if (assemble) throw new Error(`cannot assemble: ${missing.length} frames are missing or do not match build ${hash}, first ${missing.slice(0, 10).join(', ')}`)
+    if (assemble) {
+      console.error(`cannot assemble: ${missing.length} frames are missing or do not match build ${hash}, first ${missing.slice(0, 10).join(', ')}`)
+      return 1
+    }
     console.log(`slice ${slice[0]} to ${slice[1]} is done. ${missing.length} frames of ${first} to ${last} are still missing here, first ${missing.slice(0, 10).join(', ')}`)
     console.log(`copy the f*.png and f*.json files of every part into ${dir}, then run again with --assemble`)
     return 0
