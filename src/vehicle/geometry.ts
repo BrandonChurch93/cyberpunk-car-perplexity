@@ -37,12 +37,20 @@ export function patch(point: Surface, uSteps: number, vSteps: number, outward: P
   const toNormal = (u: number, v: number) => vec(point(Math.min(1, u + d), v)).sub(vec(point(Math.max(0, u - d), v)))
     .cross(vec(point(u, Math.min(1, v + d))).sub(vec(point(u, Math.max(0, v - d)))))
   const flip = toNormal(0.5, 0.5).dot(vec(outward)) < 0
+  const distance = (alongU: boolean, cross: number) => {
+    const path = (n: number) => vec(alongU ? point(n / 8, cross) : point(cross, n / 8))
+    let length = 0
+    for (let i = 0; i < 8; i++) length += path(i).distanceTo(path(i + 1))
+    return length
+  }
+  const uMeters = (distance(true, .25) + distance(true, .75)) * .5
+  const vMeters = (distance(false, .25) + distance(false, .75)) * .5
   for (let j = 0; j <= vSteps; j++) for (let i = 0; i <= uSteps; i++) {
     const u = i / uSteps, v = j / vSteps
     p.push(...point(u, v))
     const normal = toNormal(u, v).normalize().multiplyScalar(flip ? -1 : 1)
     n.push(...(normal.lengthSq() > 0 ? normal.toArray() : outward))
-    uv.push(u, v)
+    uv.push(u * uMeters, v * vMeters)
   }
   const triangle = (a: number, b: number, c: number, reversed = false) => id.push(a, flip === reversed ? b : c, flip === reversed ? c : b)
   const stride = uSteps + 1
@@ -86,7 +94,7 @@ export function contour(points: readonly Point[], radius: number, closed = false
   return new T.TubeGeometry(new T.CatmullRomCurve3(points.map(vec), closed, 'centripetal'), Math.max(10, points.length * 5), radius, segments, closed)
 }
 
-export function polygon(points: readonly Point[], outward: Point, thickness = 0, project?: (x: number, y: number) => Point): T.BufferGeometry {
+export function polygon(points: readonly Point[], outward: Point, thickness = 0): T.BufferGeometry {
   const normal = vec(outward).normalize()
   const primary = Math.abs(normal.z) > 0.6 ? [0, 1] : Math.abs(normal.x) > 0.6 ? [2, 1] : [0, 2]
   const outline = points.map((p) => new T.Vector2(p[primary[0]], p[primary[1]]))
@@ -108,7 +116,7 @@ export function polygon(points: readonly Point[], outward: Point, thickness = 0,
     }
   }
   const geometry = new T.BufferGeometry()
-  geometry.setAttribute('position', new T.Float32BufferAttribute(packed.flatMap((p, i) => project && i < points.length ? project(outline[i].x, outline[i].y) : p.toArray()), 3))
+  geometry.setAttribute('position', new T.Float32BufferAttribute(packed.flatMap((p) => p.toArray()), 3))
   geometry.setAttribute('uv', new T.Float32BufferAttribute(uv, 2))
   geometry.setIndex(index)
   if (thickness > 0) {

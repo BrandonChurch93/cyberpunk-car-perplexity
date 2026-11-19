@@ -22,7 +22,15 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
       const p = scoop(u, 1)
       return [p[0] - side * .062 * v, p[1] - v * (.13 - .044 * u), p[2]]
     }
-    carbon.push(patch(lining, sections, 8, [0, 1, 0], .007))
+    if (full) {
+      const border = (u0: number, u1: number, v0: number, v1: number) =>
+        patch((u, v) => lining(mix(u0, u1, u), mix(v0, v1, v)), sections, 7, [0, 1, 0], .006)
+      carbon.push(border(0, .072, 0, 1), border(.721, 1, 0, 1), border(.072, .721, 0, .18), border(.072, .721, .91, 1))
+      black.push(patch((u, v) => {
+        const p = lining(mix(.052, .742, u), mix(.14, .94, v))
+        return [p[0] + side * .029, p[1] - .041, p[2]]
+      }, sections, 13, [0, 1, 0], .009))
+    } else carbon.push(patch(lining, sections, 8, [0, 1, 0], .007))
     const cover = (u: number, v: number): Point => {
       const s = mix(.685, .832, u)
       const end = .73 + .27 * smooth(u, .025, .15) - .22 * smooth(u, .80, .98)
