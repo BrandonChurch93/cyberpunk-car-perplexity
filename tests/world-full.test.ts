@@ -67,4 +67,35 @@ describe('full roof world', () => {
     world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
     expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
   })
+
+  it('uses batched geometry for room depths and utility silhouettes within the city budget', () => {
+    const rooms: THREE.InstancedMesh[] = []
+    let triangles = 0
+    world.root.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return
+      if (object instanceof THREE.InstancedMesh && object.name.startsWith('recessed room walls')) rooms.push(object)
+      triangles += (object.geometry.index?.count ?? object.geometry.getAttribute('position').count) / 3 *
+        (object instanceof THREE.InstancedMesh ? object.count : 1)
+    })
+    expect(rooms.length).toBeGreaterThan(10)
+    expect(rooms.reduce((sum, m) => sum + m.count, 0)).toBeGreaterThan(1_500)
+    expect(world.root.getObjectByName('zoned middle-distance fire stairs, gutters and condenser racks')).toBeDefined()
+    expect(triangles).toBeGreaterThan(120_000)
+    expect(triangles).toBeLessThan(500_000)
+    expect(world.signs.filter(s => config.signage.invented.includes(s)).sort()).toEqual(['BRINESCALE SUSHI', 'SHUTTER HUSH CLUB', 'VAPOR SILL HOTEL'])
+  })
+
+  it('keeps supported traffic, navigation lights and roof beacons periodic in both hooks', () => {
+    const train = world.root.getObjectByName('tracked eight-axle electric train')!
+    const aircraft = world.root.getObjectByName('small aircraft')!
+    const beacon = world.root.getObjectByName('aviation warning bulb') as THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>
+    const state = () => [...train.position.toArray(), ...aircraft.position.toArray(), aircraft.rotation.y, ...beacon.material.color.toArray()]
+    world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
+    const first = state()
+    world.beginSample({ timeSeconds: config.film.durationSeconds*.7 } as SampleContext)
+    expect(state()).not.toEqual(first)
+    world.beginSample({ timeSeconds: config.film.durationSeconds } as SampleContext)
+    state().forEach((v, i) => expect(v).toBeCloseTo(first[i], 9))
+    expect(train.parent?.name).toBe('elevated railway')
+  })
 })

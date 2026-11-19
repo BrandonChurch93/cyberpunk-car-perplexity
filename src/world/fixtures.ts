@@ -1,12 +1,13 @@
 import * as THREE from 'three'
 import { config } from '../config'
 import type { FilmLight, WetSurface } from '../core/contract'
+import { stream } from '../core/random'
 import { type Tuple } from './forms'
 
 const tau = Math.PI * 2
 const duration = config.film.durationSeconds
 
-export type Label = (text: string, face?: string, rows?: readonly string[]) => THREE.Texture | null
+export type Label = (text: string, face?: string, rows?: readonly string[], ratio?: number) => THREE.Texture | null
 
 export async function loadLabels(): Promise<Label> {
   if (typeof document === 'undefined') return () => null
@@ -20,13 +21,13 @@ export async function loadLabels(): Promise<Label> {
     document.fonts.add(await face.load())
   }
   const cache = new Map<string, THREE.Texture>()
-  return (label, face = 'World Condensed', rows = [label]) => {
-    const key = `${face}/${rows.join('/')}`
+  return (label, face = 'World Condensed', rows = [label], ratio = 4) => {
+    const key = `${face}/${rows.join('/')}/${ratio.toFixed(2)}`
     const hit = cache.get(key)
     if (hit) return hit
     const canvas = document.createElement('canvas')
-    canvas.width = 512
-    canvas.height = rows.length === 1 ? 128 : 256
+    canvas.width = ratio >= 1 ? 512 : Math.max(40, Math.round(512 * ratio))
+    canvas.height = ratio >= 1 ? Math.max(40, Math.round(512 / ratio)) : 512
     const cx = canvas.getContext('2d')
     if (!cx) return null
     cx.fillStyle = '#fff'
@@ -38,7 +39,7 @@ export async function loadLabels(): Promise<Label> {
     set()
     const max = Math.max(...rows.map(row => cx.measureText(row).width))
     if (max > canvas.width * .87) { px *= canvas.width * .87 / max; set() }
-    rows.forEach((row, i) => cx.fillText(row, 256, line * (i + .52)))
+    rows.forEach((row, i) => cx.fillText(row, canvas.width/2, line * (i + .52)))
     const texture = new THREE.CanvasTexture(canvas)
     texture.colorSpace = THREE.SRGBColorSpace
     cache.set(key, texture)
@@ -63,10 +64,10 @@ export function block(parent: THREE.Object3D, name: string, material: THREE.Mate
   return mesh(parent, new THREE.Mesh(new THREE.BoxGeometry(...size), material), name, at)
 }
 
-export function labelFace(parent: THREE.Object3D, name: string, at: Tuple, size: readonly [number, number], label: Label, color: THREE.Color, face?: string, rows?: readonly string[]): void {
-  const tx = label(name, face, rows)
+export function labelFace(parent: THREE.Object3D, name: string, at: Tuple, size: readonly [number, number], label: Label, color: THREE.Color, face?: string, rows?: readonly string[], rotation = 0): void {
+  const tx = label(name, face, rows, size[0]/size[1])
   if (!tx) return
-  plate(parent, `lettering ${name}`, new THREE.MeshBasicMaterial({ color, map: tx, toneMapped: false, alphaTest: .22 }), at, ...size)
+  plate(parent, `lettering ${name}`, new THREE.MeshBasicMaterial({ color, map: tx, toneMapped: false, alphaTest: .22 }), at, ...size).rotation.z = rotation
 }
 
 export function addSky(root: THREE.Group): void {
@@ -227,7 +228,11 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   }
 
   const cool = new THREE.Color(.60, .79, 1)
-  let mild = 1
+  const flicker = stream('world/roof/pole/south/flicker')
+  const phase = flicker.range(0, tau)
+  const slow = flicker.int(4) + 5
+  const fast = flicker.int(11) + 26
+  const mild = (t: number) => 1 - .105 * Math.max(0, Math.sin(tau * fast * t / duration)) * Math.max(0, Math.sin(tau * slow * t / duration + phase))
   const poleMats = new Map<string, THREE.MeshBasicMaterial>()
   const poles = roof.children.filter(o => o.name === 'deck light pole')
   for (const [i, pole] of poles.entries()) {
@@ -245,7 +250,7 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
       anchor.rotation.x = Math.PI / 2
       pole.add(anchor)
       lights.push({ id: key, kind: 'spot', object: anchor, color: cool, intensity: 10.8, size: [1.26, .16], angle: 1.04,
-        penumbra: .71, range: 22, shadow: true, beam: true, level: key === 'south deck pole' ? () => mild : () => 1 })
+        penumbra: .71, range: 22, shadow: true, beam: true, level: key === 'south deck pole' ? mild : () => 1 })
     }
   }
 
@@ -262,8 +267,7 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
     lights, signs, steamSources: [{ object: vent, kind: 'vent', strength: .7 }, { object: drain, kind: 'drain', strength: .38 }],
     set(t) {
       primary.set(t)
-      mild = 1 - .105 * Math.max(0, Math.sin(tau * 29 * t / duration)) * Math.max(0, Math.sin(tau * 7 * t / duration + .88))
-      poleMats.get('south deck pole')?.color.copy(cool).multiplyScalar(19 * mild)
+      poleMats.get('south deck pole')?.color.copy(cool).multiplyScalar(19 * mild(t))
     },
   }
 }

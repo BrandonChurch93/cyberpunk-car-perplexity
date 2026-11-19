@@ -1,7 +1,9 @@
 import * as THREE from 'three'
 import { buildCity } from './city'
+import { cityPracticals } from './city-practicals'
 import type { WorldModule } from './contract'
 import { buildDeck } from './deck'
+import { detailFacades } from './facades'
 import { loadLabels, roofFixtures } from './fixtures'
 import { Forms, group } from './forms'
 import { finishRoof } from './roof-look'
@@ -30,6 +32,12 @@ export async function createFullWorld(): Promise<WorldModule> {
     o.receiveShadow = false
   })
   const fixtures = roofFixtures(root, roof, city, labels, surfaces)
+  const updateCity = cityPracticals(city, labels, fixtures.signs)
+  detailFacades(city)
+  const set = (timeSeconds: number) => {
+    fixtures.set(timeSeconds)
+    updateCity(timeSeconds)
+  }
   const { min, max } = deck.bounds
   return {
     root,
@@ -39,7 +47,7 @@ export async function createFullWorld(): Promise<WorldModule> {
     reflectionBox: new THREE.Box3(new THREE.Vector3(min.x, 0, min.y), new THREE.Vector3(max.x, 81, max.y)),
     surfaces,
     steamSources: fixtures.steamSources,
-    beginFrame: ({ frame }) => fixtures.set(frame.timeSeconds),
-    beginSample: ({ timeSeconds }) => fixtures.set(timeSeconds),
+    beginFrame: ({ frame }) => set(frame.timeSeconds),
+    beginSample: ({ timeSeconds }) => set(timeSeconds),
   }
 }
