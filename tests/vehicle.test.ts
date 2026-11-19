@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { config, defaultPaint, paintById } from '../src/config'
 import { events, lampThresholds, stateAt } from '../src/director/timeline'
 import { createVehicle, type VehicleModule, type VehicleState } from '../src/vehicle'
+import { zAt } from '../src/vehicle/body'
 
 const paint = paintById(defaultPaint)
 let blockout: VehicleModule
@@ -76,6 +77,22 @@ function instantaneous(car: VehicleModule, state: VehicleState) {
 }
 
 describe('vehicle geometry and state', () => {
+  it('turns the hood normal at each fold while retaining fair panels on either side', () => {
+    full.root.updateMatrixWorld(true)
+    const normalAt = (x: number, s: number): T.Vector3 => {
+      const ray = new T.Raycaster(new T.Vector3(x, 2, zAt(s)), new T.Vector3(0, -1, 0))
+      const hit = ray.intersectObject(full.root, true)[0]
+      return hit.normal!.clone().applyNormalMatrix(new T.Matrix3().getNormalMatrix(hit.object.matrixWorld))
+    }
+    for (const [x, s] of [[.410, .104], [.557, .104], [.359, .140], [.627, .140]]) {
+      const a = normalAt(x - .002, s), b = normalAt(x + .002, s)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(8)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(15)
+      expect(T.MathUtils.radToDeg(a.angleTo(normalAt(x - .010, s)))).toBeLessThan(3)
+      expect(T.MathUtils.radToDeg(b.angleTo(normalAt(x + .010, s)))).toBeLessThan(3)
+    }
+  })
+
   it.each(['blockout', 'full'] as const)('rests at the origin and meets factory dimensions in %s', (detail) => {
     const vehicle = detail === 'full' ? full : blockout
     const whole = setFrom(vehicle.root)

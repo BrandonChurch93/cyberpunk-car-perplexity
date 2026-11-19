@@ -31,7 +31,7 @@ export function curve(knots: readonly Knot[]): (x: number) => number {
   }
 }
 
-export function patch(point: Surface, uSteps: number, vSteps: number, outward: Point, thickness = 0): T.BufferGeometry {
+export function patch(point: Surface, uSteps: number, vSteps: number, outward: Point, thickness = 0, row?: (u: number, j: number) => number): T.BufferGeometry {
   const p: number[] = [], n: number[] = [], uv: number[] = [], id: number[] = []
   const d = 0.0001
   const toNormal = (u: number, v: number) => vec(point(Math.min(1, u + d), v)).sub(vec(point(Math.max(0, u - d), v)))
@@ -46,7 +46,7 @@ export function patch(point: Surface, uSteps: number, vSteps: number, outward: P
   const uMeters = (distance(true, .25) + distance(true, .75)) * .5
   const vMeters = (distance(false, .25) + distance(false, .75)) * .5
   for (let j = 0; j <= vSteps; j++) for (let i = 0; i <= uSteps; i++) {
-    const u = i / uSteps, v = j / vSteps
+    const u = i / uSteps, v = row ? row(u, j) : j / vSteps
     p.push(...point(u, v))
     const normal = toNormal(u, v).normalize().multiplyScalar(flip ? -1 : 1)
     n.push(...(normal.lengthSq() > 0 ? normal.toArray() : outward))
