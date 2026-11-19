@@ -11,7 +11,11 @@ void runTool(async () => {
   const frames = (a.frames ?? '195,360,520,690,800,950').split(',').map(Number)
   const diagnostics = (a.diags ?? 'beauty,clay').split(',')
   const studio = a.studio === 'true'
-  const dir = ensureDir(join(workDir, 'vehicle', studio ? 'studio' : detail))
+  const matched = a.match?.split(',').map(Number)
+  if (matched && (!studio || matched.length !== 7 || matched.some((n) => !Number.isFinite(n)) || matched[6] <= 0 || matched[6] >= 180)) {
+    throw new Error('Use --studio true --match with eye X,Y,Z, target X,Y,Z, vertical FOV.')
+  }
+  const dir = ensureDir(join(workDir, 'vehicle', studio ? matched ? 'studio-matched' : 'studio' : detail))
   const root = studio ? join(dir, 'dist') : undefined
   if (studio) {
     await build({
@@ -25,7 +29,20 @@ void runTool(async () => {
           const key = 'this.scene.add(world.root, vehicle.root, rig.group)'
           const effects = "const weather = detail === 'full' ? await createWeather({ world, vehicle, lights: rig.uniforms }) : null"
           if (!code.includes(key) || !code.includes(effects)) throw new Error('The stage setup changed. Update the studio inspection hook.')
-          return "import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';\n" + code.replace(effects, 'const weather = null').replace(key, `
+          const camera = 'return this.cameraOverride ?? cameraAt(timeSeconds, this.format, this.vehicle.anchors, this.frameSeconds)'
+          const pose = matched ? `
+            const state = cameraAt(timeSeconds, this.format, this.vehicle.anchors, this.frameSeconds);
+            const eye = new THREE.Vector3(${matched.slice(0, 3).join(',')});
+            const target = new THREE.Vector3(${matched.slice(3, 6).join(',')});
+            const view = new THREE.PerspectiveCamera();
+            view.position.copy(eye);
+            view.lookAt(target);
+            const aspect = this.format.width / this.format.height;
+            return { ...state, position: eye, quaternion: view.quaternion,
+              focalMm: state.sensorWidthMm / (2 * aspect * Math.tan(THREE.MathUtils.degToRad(${matched[6]}) / 2)),
+              focusDistance: eye.distanceTo(target), fNumber: 16 };
+          ` : camera
+          return "import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';\n" + code.replace(effects, 'const weather = null').replace(camera, pose).replace(key, `
             this.scene.add(vehicle.root);
             this.scene.background = new THREE.Color(0x303745);
             const inspectionRoom = new RoomEnvironment();
