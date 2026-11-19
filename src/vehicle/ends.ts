@@ -1,6 +1,6 @@
 import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
-import { fascia, frontHoodEdge, sAt, tailLipY, zAt } from './body'
+import { fascia, frontHoodEdge, limitTailZ, sAt, tailLipY, zAt } from './body'
 import { add, blend, contour, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point } from './geometry'
 import type { Palette } from './materials'
 import type { Anchor, VehicleModule } from './contract'
@@ -250,10 +250,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     dark.push(mapped(outlet, hex, outRear, .126, .011, outletRound))
     const diffuser = (u: number, v: number): Point => {
       const x = mix(0, .969 - .054 * v, u)
-      const edge = r(x, .27, -.012)
+      const edge = r(x, .27, .009)
       const s = mix(.842, sAt(edge[2]) + .015 * (1 - u), v)
       const low = .181 + .021 * smooth(u, .69, 1)
-      return [side * x, low + .258 * v, zAt(Math.min(1, s))]
+      return [side * x, low + .258 * v, limitTailZ(x, zAt(s))]
     }
     dark.push(patch(diffuser, 50, 18, [0, -1, 0], .016))
     dark.push(patch((u, v) => {
@@ -264,7 +264,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     dark.push(patch((u, v) => {
       const x = mix(0, .969, u)
       const diff = diffuser(u, 1)
-      return r(x, mix(diff[1] - .011, tailLower(x), v), mix(-.006, .022, v))
+      return r(x, mix(diff[1] - .011, tailLower(x), v), mix(.027, .036, v))
     }, 48, 18, outRear, .010))
     dark.push(patch((u, v) => {
       const x = mix(.39, .62, u)
@@ -281,7 +281,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
         const x = fin - .029 * smooth(u, .76, 1) * v * (fin > .5 ? 1 : 0)
         const s = mix(.843, sAt(r(x, .39, -.019)[2]) + .009, u)
         const y = mix(.225, tailLower(x) + .031, u) - v * depth
-        return [side * x, y, zAt(Math.min(1, s))]
+        return [side * x, y, limitTailZ(x, zAt(s))]
       }, 37, 11, [side, 0, 0], .012))
     }
     const vent = (u: number, v: number): Point => r(mix(.019, .395, u), mix(.420, .533, v) - .027 * u ** 4, -.023)

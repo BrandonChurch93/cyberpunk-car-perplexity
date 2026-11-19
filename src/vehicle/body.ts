@@ -16,17 +16,20 @@ export type WheelSize = typeof frontWheel
 export const floorY = .132
 
 const plan = curve([
-  [0, .008], [.005, .113], [.010, .197], [.017, .337], [.023, .448], [.04, .607], [.06, .739], [.08, .836], [.10, .875], [.12, .914],
+  [0, .008], [.005, .090], [.010, .173], [.017, .337], [.023, .448], [.04, .607], [.06, .739], [.08, .836], [.10, .875], [.12, .914],
   [.14, .941], [.16, .973], [.18, .980], [.26, .981], [.285, .98], [.31, .961], [.34, .969], [.4, .980], [.48, .988],
   [.55, .992], [.62, .994], [.70, .998], [.747, 1.009], [.766, dimensions.bodyWidth / 2], [.825, dimensions.bodyWidth / 2],
   [.857, 1.009], [.88, .973], [.90, .933], [.92, .896], [.94, .824], [.96, .691], [.98, .535], [.995, .39], [1, .23],
 ])
 const frontWidth = curve([
-  [0, .0008], [.113, .0058], [.197, .0108], [.337, .0178], [.448, .0238], [.607, .04], [.739, .06], [.836, .08], [.875, .10], [.914, .12], [.941, .14], [.973, .16], [.982, .18],
+  [0, .0008], [.090, .0058], [.173, .0108], [.337, .0178], [.448, .0238], [.607, .04], [.739, .06], [.836, .08], [.875, .10], [.914, .12], [.941, .14], [.973, .16], [.982, .18],
 ])
+const nosePlan = curve([[0, 0], [.155, .005], [.239, .01], [.318, .015], [.427, .02], [.543, .03], [.682, .05], [.739, .06], [.836, .08], [.916, .12], [.982, .18]])
 const tailWidth = curve([
-  [0, .995], [.39, .994], [.555, .990], [.716, .969], [.824, .945], [.875, .932], [.918, .920], [.947, .902], [.980, .876], [1.012, .855],
+  [0, .9875], [.39, .985], [.535, .979], [.69, .958], [.824, .939], [.875, .929], [.918, .920], [.947, .902], [.980, .876], [1.012, .855],
 ])
+const tailPlan = curve([[0, 1], [.426, 1], [.437, .995], [.451, .99], [.543, .98], [.657, .97], [.701, .96], [.771, .95], [.837, .94], [.909, .92], [.946, .90], [.986, .88], [1.0165, .825]])
+export const limitTailZ = (x: number, z: number) => Math.max(zAt(tailPlan(Math.abs(x))), z)
 const shoulder = curve([
   [0, .421], [.016, .447], [.024, .465], [.044, .552], [.08, .623], [.10, .658], [.15, .735], [.20, .779], [.25, .772],
   [.30, .738], [.34, .729], [.40, .725], [.51, .759], [.59, .821], [.67, .881], [.736, .936],
@@ -102,6 +105,7 @@ function bonnet(s: number, v: number): Point {
   const across = -.81 * foldSlope * (section(x) - mix(section(0), section(w.x), v))
   const base = mix(w.center, w.y, v * v * (2 - v) + .05 * v ** 6 * (1 - v))
   const cowlDrop = .021 * smooth(s, .127, .236) * (1 - v ** 3)
+    - .015 * smooth(s, .122, .189) * (1 - smooth(s, .260, .317)) * (1 - smooth(v, .819, 1))
   return [x, base + across - cowlDrop, zAt(s)]
 }
 
@@ -153,14 +157,14 @@ export function frontHoodEdge(x: number): Point {
 }
 
 const cowl = (v: number): Point => bonnet(cabFront(v), v * .818)
-const roofWidth = curve([[.417, .617], [.46, .625], [.51, .632], [.56, .60], [.595, .542], [.625, .49]])
+const roofWidth = curve([[.417, .637], [.46, .645], [.51, .652], [.56, .620], [.595, .552], [.625, .49]])
 const roofHeight = curve([[.417, 1.122], [.445, 1.14], [.472, 1.157], [.5, 1.16], [.545, 1.16], [.578, 1.153], [.595, 1.15]])
 const roofCross = curve([[0, -.019], [.25, -.019], [.37, -.016], [.48, 0], [.66, -.006], [.84, -.018], [1, -.042]])
 const roof = (s: number, v: number): Point => [roofWidth(s) * v, roofHeight(s) + roofCross(Math.abs(v)), zAt(s)]
-const glassLowerX = curve([[.264, cowl(1)[0]], [.35, .824], [.46, .802], [.55, .77], [.60, .710], [.65, .576]])
+const glassLowerX = curve([[.264, cowl(1)[0]], [.35, .844], [.46, .822], [.55, .790], [.60, .723], [.65, .576]])
 const glassLowerY = curve([[.264, cowl(1)[1]], [.35, .750], [.45, .785], [.55, .851], [.60, .918], [.65, .959]])
 const glassUpperY = curve([[.261, cowl(1)[1]], [.30, .94], [.35, 1.01], [.40, 1.064], [.417, roof(.417, 1)[1]], [.46, roof(.46, 1)[1]], [.51, roof(.51, 1)[1]], [.565, roof(.565, 1)[1]], [.595, roof(.595, 1)[1]], [.625, 1.048], [.65, .959]])
-const glassUpperX = curve([[.261, .803], [.30, .756], [.35, .697], [.40, .625], [.417, .617], [.46, .625], [.51, .632], [.565, .595], [.595, .542], [.625, .542], [.65, .576]])
+const glassUpperX = curve([[.261, .803], [.30, .756], [.35, .697], [.40, .645], [.417, .637], [.46, .645], [.51, .652], [.565, .615], [.595, .552], [.625, .552], [.65, .576]])
 const forwardWind = (u: number, q: number): Point => {
   const p = cowl(Math.abs(q))
   const low: Point = [Math.sign(q) * p[0], p[1] + .0013, p[2]]
@@ -185,11 +189,11 @@ export const tailLipY = (x: number): number => .882 - .011 * x - .022 * (1 - smo
 export function fascia(front: boolean, side: number, x: number, y: number, recess = 0): Point {
   if (front) {
     const s = frontWidth(x) + .002 * smooth(y, .2, .48) - .0008
-    return [x * side, y, Math.min(zAt(0), zAt(s) - recess)]
+    return [x * side, y, Math.min(zAt(nosePlan(Math.abs(x))), zAt(s) - recess)]
   }
   const s = tailWidth(x) + (.010 * smooth(y, .58, .81)) - .009 * smooth(y, .84, .94)
   const inset = .070 * smooth(y, .47, .70) * (1 - .78 * smooth(x, .32, .70))
-  return [x * side, y, Math.max(zAt(1), zAt(s) + recess + inset)]
+  return [x * side, y, limitTailZ(x, zAt(s) + recess + inset)]
 }
 
 export function createBody(parent: T.Group, m: Palette, full: boolean): { paintPoint: Point; paintNormal: Point } {
@@ -388,7 +392,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const low = mix(.173, .397, u ** 1.55)
       const high = mix(cap(.926, rearCorner(1))[1], .587, u)
       const x = mix(cap(.926, rearCorner(1))[0] * side, .512, u) - .035 * (1 - v)
-      return [side * x, mix(low, high, v), zAt(s)]
+      return [side * x, mix(low, high, v), limitTailZ(x, zAt(s))]
     }, uSide, n, 5, .007)
     const intake = (u: number, v: number, inset: number): Point => {
       const s = mix(intakeLeft(v), intakeRight(v), u)
