@@ -112,8 +112,8 @@ const master: Record<string, ShotMaker> = {
     const p = glide(t, detail.start, detail.end, 1, 1)
     const d = a.detail.position
     return {
-      position: v(d.x + mix(0.32, -0.18, p), d.y + 0.8, d.z - 1.4),
-      target: v(d.x, d.y, d.z - 0.3),
+      position: v(d.x + mix(1.25, 0.7, p), d.y + mix(1.108, 1.408, p), d.z - mix(1.395, 0.845, p)),
+      target: v(d.x + mix(0.05, -0.03, p), d.y, d.z + mix(-0.095, 0.105, p)),
       focalMm: normalMm,
       focus: d,
       tStop: 2.8,
@@ -209,8 +209,8 @@ const vertical: Record<string, ShotMaker> = {
     const p = glide(t, detail.start, detail.end, 1, 1)
     const d = a.detail.position
     return {
-      position: v(d.x, d.y + 1.5, d.z - mix(0.95, 0.6, p)),
-      target: v(d.x, d.y, d.z - mix(0.35, 0.15, p)),
+      position: v(d.x + mix(0.45, 0.15, p), d.y + mix(1.558, 1.758, p), d.z - mix(1.345, 0.845, p)),
+      target: v(d.x, d.y, d.z + mix(-0.095, 0.105, p)),
       focalMm: normalMm,
       focus: d,
       tStop: 2.8,

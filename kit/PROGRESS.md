@@ -187,6 +187,9 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | Critics C5 and C8 receive the beat lines of `kit/01-FILM.md` and the rule on cuts with the brief, and every sheet caption states whether its beat begins with a cut or continues a move, computed from the camera data | The rubric refers to the beats and to cuts. In round 1 the motion critic could not tell a planned cut from a jump | `tools/pack.ts`, `tools/lib/scene.ts` |
 | 2026-11-19 | The `return` beat cuts to a high crane view of the lit car, then comes down and back into the opening frame. The wake push travels 2.6 m. The paint beat looks along the left wing crest toward the door mirror. The wheel beat is a 35 mm low three-quarter arc. The detail beat holds the crossed braces from its first frame. The tall shots are each set up again | Critic round 1: C5 6, C8 5. See `scorecards/round-001/SUMMARY.md` | `src/director/shots.ts`, `cut/SHOTS.md` |
 | 2026-11-19 | Phase 2 contact sheets are rendered in the preview format | The sheets are downsized to `critics.longEdgePx` anyway. The round 1 pack took an hour on two cores | `tools/pack.ts` |
+| 2026-11-19 | The engine bay is rebuilt after the factory photograph: two ribbed carbon cam covers, stepped carbon side panels, a carbon surround and mesh airboxes, with no bracing over the engine. The detail shot is a crane move from the rear left that copies that photograph. This replaces the earlier decision that named bracing | The real car has no braces over the engine. The first bay was built from a wrong reading of the reference | `src/vehicle/`, `anchors.detail`, the detail rows in `cut/SHOTS.md` |
+| 2026-11-19 | The paint beat is a 0.30 m sideways slide with a locked head | Along the lens axis the frames of the beat were nearly the same. A sideways slide gives parallax between the crest, the pillar, the mirror and the city | `src/director/shots.ts`, `cut/SHOTS.md` |
+| 2026-11-19 | Every frame of the film is tested for one camera pose across its exposure. The first round 2 pack was discarded | That pack showed a double exposure at 36.00 s: samples of the first crane frame that fall before the cut took the end pose of the move. The first fix covered only frame 0 | `push()` and `pull()` in `src/director/shots.ts`, `tests/camera.test.ts` |
 
 ## Config changes
 
@@ -229,6 +232,7 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | 2a71642 | pushed to main. Merges of the tools detail flag, world lighting, reflections, surface water, vehicle B step 8, bokeh |
 | 2026-11-19 | 6ee5cc7 | pushed to main. Merge of the post stage |
 | 2026-11-19 | the commit titled "Round 1 scorecards and the round 2 shot plan" | pushed to main. Round 1 scorecards, new shots, vehicle B pass 2 steps 1 to 3, tools for split packs and film parts |
+| 2026-11-19 | the commit titled "Detail shot on the rebuilt engine bay" | pushed to main. Exposure test on every frame, paint slide, vehicle B through the bay rebuild, split packs and film parts tools |
 
 ## Session log
 
