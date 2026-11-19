@@ -68,7 +68,7 @@ void main() {
   vec2 tangent = vec2(-radial.y, radial.x);
   vec2 anamorphic = vec2(1.0 / squeeze, 1.0);
   float tapRadius = cellRadius * inversesqrt(float(${pupilTapCount}));
-  float lod = clamp(log2(0.85 * tapRadius), 0.0, float(${pyramidLevels}));
+  float lod = clamp(log2(1.2 * tapRadius), 0.0, float(${pyramidLevels}));
   vec4 sum = vec4(0.0);
   for (int j = 0; j < ${pupilTapCount}; j++) {
     vec2 p = apertureTaps[j] * anamorphic;
