@@ -15,7 +15,7 @@ The Builder's memory. Read this first in every task. Update it before every comm
 | --- | --- | --- | --- |
 | 0 · Ground truth | done | Push c74357a and 97ddecb succeeded. `npm run gate -- --phase 0` on build 33fa88298cbaea4f: G1 PASS (build clean), G2 PASS (29 tests), G3 PASS (5 frames identical across fresh loads and reverse order, frame 195 identical when chunked across 3 page loads), G4 PASS (3 stills match their formats, frameCount 1350). Workspace record, pinned versions and render budget are below | see push log |
 | 1 · Reference and key frames | done | `npm run gate -- --phase 1`: G1 PASS, G2 PASS, R1 PASS (`reference/BOARD.md`: 13 elements, 150 sources, every element at or above `reference.minSourcesPerElement` and every source at or above `reference.minObservationsPerSource`), R2 PASS (55 vetted controls kept, the pool needs 30, every kept id is on the board), R3 PASS (3 directions, 8 beat key frames, K1 scores logged below), R4 PASS (`cut/SHOTS.md` has a row for every beat in both formats), G12 PASS, G13 PASS | see push log |
-| 2 · Blockout in motion | not started | | |
+| 2 · Blockout in motion | in progress | | |
 | 3 · Look lock | not started | | |
 | 4 · Full build | not started | | |
 | 5 · Capture and cut | not started | | |
@@ -88,7 +88,7 @@ Chunking strategy:
 
 Vetted 2026-11-19. The ledger is `reference/controls.json` (URLs, licenses and scores, no images). The images stay in `reference/cache/controls/`, which git ignores. `npx tsx tools/controls.ts restore` downloads again any image the cache has lost.
 
-- Size: 55 kept of 60 candidates. 1 dropped. 4 candidates still wait on a late juror and stay out of the pool until their third vote arrives.
+- Size: 57 kept of 60 candidates. 1 dropped. 2 candidates still wait on a late juror and stay out of the pool until their third vote arrives.
 - Mean vetting score: 92.5 (the mean of the kept medians). A control is kept when the median of its three juror likelihoods is at least `quality.blind.minControlMean`.
 - How it was vetted: each candidate was prepared the way a judged frame is (centre crop to the master aspect, critic size, PNG, no metadata) and sent alone, with the C1 text, to three fresh jurors on three model families. Two families are fixed and the third rotates among four more.
 - Kept by kind: paint with water 8, front wheel 6, lit lamp 6, fine detail 5, rear and exhaust 5, wet supercar at night 9, empty deck at night 5, low wide single car in rain 6, rear with taillights in the wet 5.
@@ -137,6 +137,10 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | Jurors are spawned in bulk from a script, one fresh agent per image. The third juror family rotates. Tickets, answers and the family of each juror are kept in a ledger under `out/work/jury/` | 180 one-image calls cannot be made by hand, and rotation keeps one slow family from holding the pool | `tools/lib/jury.ts`, `tools/controls.ts` |
 | 2026-11-19 | Only the third-party files the blockout and look lock need are copied in now (3 texture sets, 3 fonts). The rest are a shortlist in `ASSETS.md` | Keeps the repo small until a file is used | `public/assets/third-party/`, `ASSETS.md` |
 | 2026-11-19 | The Phase 1 gate is checked by the harness as R1 to R4 | The build order lists four Phase 1 conditions that had no G number | `tools/gate.ts` |
+| 2026-11-19 | The shot is chosen by the frame's own time, and the camera is then evaluated at each sample's time | With a centered shutter the first frame of a beat mixed two shots in one exposure. A real camera never exposes across a cut | `src/director/shots.ts`, `src/core/film-stage.ts` |
+| 2026-11-19 | The vehicle and world factories are async, and the page's `ready` resolves after both | Either may load a file. No frame may depend on what has loaded so far | `src/vehicle/index.ts`, `src/world/index.ts`, `src/main.ts` |
+| 2026-11-19 | Two development agents on two model families build the vehicle module on separate branches. The Builder merges the one that matches the design grant drawings best | The procedural car is the largest risk in the build. Both are measured the same way: silhouette overlap with the drawings in four views | `src/vehicle/`, Phase 2 and Phase 3 |
+| 2026-11-19 | Camera speed is eased with `glide`: progress is the integral of a speed that ramps up, holds and ramps down. Lamp and engine ramps use GSAP eases | A dolly holds a steady speed between its ramps. A single S curve over a long move never holds a speed | `src/director/rig.ts` |
 | 2026-11-19 | Animation is closed form wherever possible. The running sum is saved as raw Float32 through the harness endpoint | Determinism and resumable chunks | `src/core/`, `tools/lib/` |
 
 ## Config changes
@@ -174,6 +178,12 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-19, session 4
+
+- Done so far: the Phase 2 seams. Vehicle and world contracts with placeholder modules, the camera rig (`glide`, operator motion, `resolveShot`), a shot per beat in both formats, the event times, `FilmStage`, the `sheet` command, a camera test (loop closes, rest at the seam, no jump inside a beat, listed focal lengths only). Two late jurors recorded: the pool is 57 kept.
+- Seen on the first draft sheets: the macro beats are flat gray on the placeholder car, so the blockout vehicle needs real forms before the framing can be judged. The wheel shot was too tight for its key frame and moved back to 3.4 m.
+- Next: development agents for the vehicle, the gray-box world, the modes and the remaining harness commands. Then the judged frame list, C5 blockout and C8 blockout.
 
 ### 2026-11-19, session 3
 

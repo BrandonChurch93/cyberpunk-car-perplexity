@@ -3,8 +3,9 @@ import { createShowcase } from './capture/frame-interface'
 import { FrameEngine } from './core/engine'
 import { createRenderer } from './core/renderer'
 import { parseLaunch } from './director/modes'
+import { runMode } from './director/run'
 import { BasicResolver } from './post/resolve'
-import { SpikeStage } from './world/spike'
+import { FilmStage } from './core/film-stage'
 
 function notice(message: string): void {
   const box = document.createElement('div')
@@ -13,26 +14,23 @@ function notice(message: string): void {
   document.body.append(box)
 }
 
-function start(): void {
+async function start(): Promise<void> {
   document.body.className = styles.page
   const launch = parseLaunch(location.search)
   const canvas = document.getElementById('stage') as HTMLCanvasElement
   canvas.className = launch.mode === 'live' ? styles.fit : styles.native
   const renderer = createRenderer(canvas)
-  const stage = new SpikeStage(renderer)
+  const stage = await FilmStage.create(renderer, launch.paint)
   const resolver = new BasicResolver(renderer)
   const engine = new FrameEngine(renderer, stage, resolver, launch.format)
   stage.setDiagnostic(launch.diagnostic)
   resolver.setDiagnostic(launch.diagnostic)
-  stage.setPaint(launch.paint)
   const showcase = createShowcase(engine, Promise.resolve(), { tier: launch.tier, paint: launch.paint })
   window.showcase = showcase
-  if (launch.mode !== 'capture') void showcase.renderFrame(launch.frame, launch.tier)
+  runMode({ launch, canvas, engine, stage, showcase })
 }
 
-try {
-  start()
-} catch (error) {
+start().catch((error: unknown) => {
   notice(error instanceof Error ? error.message : String(error))
   throw error
-}
+})

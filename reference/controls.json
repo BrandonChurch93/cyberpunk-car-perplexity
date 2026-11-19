@@ -962,8 +962,23 @@
     "category": "supercar-wet-night",
     "description": "McLaren 570S rear three-quarter in a dark parking garage with tail lamps lit, dry floor",
     "cacheFile": "scout-a/scout-a-05.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          88,
+          97,
+          97
+        ],
+        "median": 97
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k57dce1a7",
@@ -1156,8 +1171,23 @@
     "category": "empty-deck-night",
     "description": "Dark parking garage deck with one parked car and a Spanish sign",
     "cacheFile": "scout-a/scout-a-13.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          85,
+          94,
+          96
+        ],
+        "median": 94
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k80dee6ec",

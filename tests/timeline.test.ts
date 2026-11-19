@@ -73,6 +73,6 @@ describe('timeline', () => {
     expect(events.engineStart).toBeGreaterThan(ignition.start)
     expect(events.engineRunning).toBeLessThan(ignition.end)
     expect(events.engineStopped).toBeLessThanOrEqual(events.lampsOffStart)
-    expect(vibration(events.engineRunning)).toBeGreaterThan(0.9)
+    expect(vibration(events.engineStart + 0.15)).toBeGreaterThan(0.9)
   })
 })

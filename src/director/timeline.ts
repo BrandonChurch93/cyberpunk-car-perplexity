@@ -40,18 +40,30 @@ const ignition = beatById('ignition')
 const finale = beatById('return')
 
 export const events = {
-  lampsOnStart: wake.start + 0.1 * (wake.end - wake.start),
-  lampsOnEnd: wake.start + 0.75 * (wake.end - wake.start),
-  engineStart: ignition.start + 0.12 * (ignition.end - ignition.start),
-  engineRunning: ignition.start + 0.3 * (ignition.end - ignition.start),
-  engineStop: finale.start + 0.08 * (finale.end - finale.start),
-  engineStopped: finale.start + 0.3 * (finale.end - finale.start),
-  lampsOffStart: finale.start + 0.3 * (finale.end - finale.start),
-  lampsOffEnd: finale.start + 0.6 * (finale.end - finale.start),
+  lampStageOne: wake.start + 0.6,
+  lampStageTwo: wake.start + 1.6,
+  lampStageThree: wake.start + 3,
+  pushSettled: wake.start + 3.5,
+  engineStart: ignition.start + 1,
+  engineRunning: ignition.start + 2,
+  engineStop: finale.start + 1,
+  engineStopped: finale.start + 1.8,
+  lampsOffStart: finale.start + 2,
+  lampsOffEnd: finale.start + 4,
+  pullStart: finale.start + 1.5,
+  pullEnd: finale.start + 7.5,
+}
+
+/** Lamp thresholds on the 0 to 1 lamp stage, placed so each stage lands on its time in the wake beat. */
+const lampRamp = { start: events.lampStageOne - 0.2, end: events.lampStageThree + 0.2 }
+export const lampThresholds = {
+  running: (events.lampStageOne - lampRamp.start) / (lampRamp.end - lampRamp.start),
+  beamStart: (events.lampStageTwo - lampRamp.start) / (lampRamp.end - lampRamp.start),
+  beamFull: (events.lampStageThree - lampRamp.start) / (lampRamp.end - lampRamp.start),
 }
 
 export function lampStage(t: number): number {
-  return ramp(t, events.lampsOnStart, events.lampsOnEnd) - ramp(t, events.lampsOffStart, events.lampsOffEnd)
+  return ramp(t, lampRamp.start, lampRamp.end) - ramp(t, events.lampsOffStart, events.lampsOffEnd)
 }
 
 export function engine(t: number): number {
@@ -59,9 +71,10 @@ export function engine(t: number): number {
 }
 
 export function vibration(t: number): number {
-  const catchKick = Math.exp(-Math.pow((t - events.engineRunning) / 0.35, 2))
-  const stopKick = 0.5 * Math.exp(-Math.pow((t - events.engineStop) / 0.3, 2))
-  return Math.min(1, 0.35 * engine(t) + catchKick + stopKick)
+  const catchKick = Math.exp(-Math.pow((t - events.engineStart - 0.15) / 0.3, 2))
+  const stopKick = 0.5 * Math.exp(-Math.pow((t - events.engineStop - 0.2) / 0.3, 2))
+  const v = 0.35 * engine(t) + catchKick + stopKick
+  return v < 1e-6 ? 0 : Math.min(1, v)
 }
 
 export interface TimelineState {
