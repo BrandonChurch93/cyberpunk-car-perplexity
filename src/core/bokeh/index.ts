@@ -38,7 +38,6 @@ void main() {
 `
 
 const reconstructFragment = depthCode + /* glsl */ `
-uniform sampler2D sceneColor;
 uniform sampler2D farMip;
 uniform vec2 inverseSize;
 uniform vec2 apertureCenter;
@@ -49,10 +48,10 @@ in vec2 vUv;
 out vec4 color;
 
 void main() {
-  ivec2 texel = ivec2(gl_FragCoord.xy);
+  ivec2 last = textureSize(sceneDepth, 0) - 1;
+  ivec2 texel = min(ivec2(gl_FragCoord.xy) * 2 + 1, last);
   float z = sceneDistance(texel);
-  vec4 sharp = texelFetch(sceneColor, texel, 0);
-  color = sharp;
+  color = vec4(0.0);
   if (!isDistant(z)) return;
   float coc = coScale * (1.0 / focusDistance - 1.0 / z);
   float cellRadius = coc / rootSamples;
@@ -75,7 +74,22 @@ void main() {
   }
   if (sum.a < 1e-5) return;
   float strength = smoothstep(0.8, 2.0, cellRadius) * smoothstep(0.1, 0.8, sum.a);
-  color.rgb = mix(sharp.rgb, sum.rgb / sum.a, strength);
+  color = vec4(sum.rgb / sum.a, 1.0) * strength;
+}
+`
+
+const compositeFragment = depthCode + /* glsl */ `
+uniform sampler2D sceneColor;
+uniform sampler2D farFill;
+in vec2 vUv;
+out vec4 color;
+
+void main() {
+  ivec2 texel = ivec2(gl_FragCoord.xy);
+  color = texelFetch(sceneColor, texel, 0);
+  if (!isDistant(sceneDistance(texel))) return;
+  vec4 fill = texture(farFill, vUv);
+  color.rgb = color.rgb * (1.0 - fill.a) + fill.rgb;
 }
 `
 
@@ -92,6 +106,11 @@ export function createBokeh(squeeze: number): BokehPass {
     generateMipmaps: true,
     depthBuffer: false,
   })
+  const fill = new THREE.WebGLRenderTarget(1, 1, {
+    type: THREE.HalfFloatType,
+    format: THREE.RGBAFormat,
+    depthBuffer: false,
+  })
   const uniforms = {
     sceneColor: { value: null as THREE.Texture | null },
     sceneDepth: { value: null as THREE.Texture | null },
@@ -99,6 +118,7 @@ export function createBokeh(squeeze: number): BokehPass {
     focusDistance: { value: 0 },
     coScale: { value: 0 },
     farMip: { value: far.texture },
+    farFill: { value: fill.texture },
     inverseSize: { value: new THREE.Vector2() },
     apertureCenter: { value: new THREE.Vector2() },
     apertureTaps: { value: Array.from({ length: pupilTapCount }, () => new THREE.Vector2()) },
@@ -107,6 +127,7 @@ export function createBokeh(squeeze: number): BokehPass {
   }
   const prefilter = new FullscreenPass(passMaterial(prefilterFragment, uniforms, { blending: THREE.NoBlending }))
   const reconstruct = new FullscreenPass(passMaterial(reconstructFragment, uniforms, { blending: THREE.NoBlending }))
+  const composite = new FullscreenPass(passMaterial(compositeFragment, uniforms, { blending: THREE.NoBlending }))
 
   return {
     id: 'bokeh',
@@ -126,8 +147,10 @@ export function createBokeh(squeeze: number): BokehPass {
       uniforms.rootSamples.value = Math.sqrt(sample.frame.samples)
       taps.forEach((tap, index) => uniforms.apertureTaps.value[index].set(...tap))
       far.setSize(Math.ceil(width / 2), Math.ceil(height / 2))
+      fill.setSize(far.width, far.height)
       prefilter.render(renderer, far)
-      reconstruct.render(renderer, output)
+      reconstruct.render(renderer, fill)
+      composite.render(renderer, output)
     },
   }
 }
