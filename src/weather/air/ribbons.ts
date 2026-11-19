@@ -93,6 +93,7 @@ void main() {
       float border = max(max(abs(p.x - origin.x) / span.x, abs(p.y - origin.y) / span.y), abs(p.z - origin.z) / span.z);
       amount = low * smoothstep(0.42, 0.84, distanceToEye) * (1.0 - smoothstep(2.65, 4.25, distanceToEye));
       amount *= 1.0 - smoothstep(0.42, 0.5, border);
+      amount *= mix(0.54, 1.0, smoothstep(0.88, 2.65, distanceToEye));
     } else if (uLayer < 1.5) {
       amount = low * smoothstep(0.01, 0.10, min(cycle, 1.0 - cycle));
       amount *= smoothstep(1.9, uFilmView > 0.5 ? 4.4 : 3.1, distanceToEye);
@@ -131,7 +132,7 @@ void main() {
   float sigmaEnd = sqrt(pow(length(axis * coc) * 0.5, 2.0) + physical * physical * 0.5 + 0.17);
   vec3 eye = uFilmView > 0.5 ? uOpticalEye : cameraPosition;
   vec3 radiance = scatterRain(p, normalize(eye - p));
-  float gain = uLayer < 0.0 ? 0.64 : 4.2;
+  float gain = uLayer < 0.0 ? 0.64 : uLayer < 0.5 ? 1.30 : 4.2;
   vHead = ap;
   vTail = bp;
   vSigma = vec2(sigmaSide, sigmaEnd);
