@@ -39,10 +39,24 @@ function joinRim(loop: readonly XY[], scale1: number, scale2: number, face: Face
   }, curve.length, 5, out, .003)
 }
 
-function squareProjector(face: Face, x: number, y: number, r: number, depth: number, direction: T.Vector3): T.BufferGeometry {
+function projectorLens(face: Face, x: number, y: number, r: number, depth: number, direction: T.Vector3): T.BufferGeometry {
   const fn = (rr: number, n: number) => new T.SphereGeometry(rr, 32, 10).scale(1.06, .83, n)
   const start = face(x, y, depth)
   return fn(r, .25).applyQuaternion(new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), direction)).translate(...start)
+}
+
+function lightGuide(face: Face, hub: XY, tips: readonly XY[], width: number, depth: number, out: Point): T.BufferGeometry {
+  const origin = new T.Vector2(...hub)
+  const rays = tips.map((p) => new T.Vector2(...p).sub(origin))
+  const tangents = rays.map((ray) => ray.clone().normalize())
+  const offsets = tangents.map(({ x, y }) => new T.Vector2(-y, x).multiplyScalar(width / 2))
+  const outline = rays.flatMap((ray, i) => {
+    const next = (i + 1) % rays.length
+    const a = tangents[i], b = tangents[next], left = offsets[i], right = offsets[next].clone().negate()
+    const corner = left.clone().addScaledVector(a, right.clone().sub(left).cross(b) / a.cross(b))
+    return [ray.clone().sub(left), ray.clone().add(left), corner]
+  })
+  return polygon(outline.map((v) => face(v.x + hub[0], v.y + hub[1], depth)), out, .0025)
 }
 
 export function createEnds(parent: T.Group, m: Palette, full: boolean) {
@@ -144,26 +158,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const p = f(x, y, mix(-.013, .119, v))
       return [p[0], p[1], p[2]]
     }, 42, 10, [0, 1, 0], .018))
-    const yPaths: XY[][] = [
-      [[.467, .425], [.531, .425], [.647, .439], [.753, .453], [.819, .459]],
-      [[.819, .459], [.829, .493], [.856, .576], [.896, .655]],
-      [[.819, .459], [.830, .416], [.859, .307], [.876, .272]],
-    ]
-    const bezel = yPaths.map((path) => ribbon(f, path, .035, -.004))
-    black.push(...bezel)
-    for (const arm of yPaths) emit('front running guide', ribbon(f, arm, .013, -.0105), false, false)
-    if (full) {
-      for (const path of yPaths) {
-        optical.push(ribbon(f, path, .0195, -.014, 48))
-        const spline = new T.CatmullRomCurve3(path.map(([x, y]) => new T.Vector3(x, y, 0)))
-        for (let i = 2; i < 31; i++) {
-          const p = spline.getPoint(i / 33)
-          const n = spline.getTangent(i / 33)
-          const d = .0066
-          rings.push(ribbon(f, [[p.x - n.y * d, p.y + n.x * d], [p.x + n.y * d, p.y - n.x * d]], .00058, -.011, 2))
-        }
-      }
-    }
+    const hub: XY = [.834, .429]
+    const tips: XY[] = [[.877, .285], [.879, .644], [.470, .421]]
+    black.push(lightGuide(f, hub, tips, .040, .002, outFront))
+    emit('front running guide', lightGuide(f, hub, tips, .015, -.007, outFront), false, false, f(...hub, -.008), 3.99)
     const eyeStart = .495, eyeEnd = .919
     const window = (u: number, v: number, d: number): Point => {
       const x = mix(eyeStart + .022 * (v - .5) ** 2, eyeEnd - .009 * v, u)
@@ -178,19 +176,14 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     for (const [x, y, radius, intensity] of [[.743, .526, .029, 170], [.827, .560, .023, 80]]) {
       const normal = new T.Vector3(side * .51, .12, .851).normalize()
       const transform = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), normal)
-      const p = f(x, y, .038)
-      const torus = new T.TorusGeometry(radius, .0039, 10, 38).applyQuaternion(transform).translate(...p)
-      rings.push(torus)
-      black.push(new T.CylinderGeometry(radius + .005, radius * .97, .04, 32).rotateX(Math.PI / 2)
-        .applyQuaternion(transform).translate(...f(x, y, .059)))
-      optical.push(squareProjector(f, x, y, radius * .87, .035, normal))
-      emit('main beam projector', squareProjector(f, x, y, radius * .49, .020, normal), false, true, f(x, y, -.025), intensity)
-      if (full) {
-        for (let j = 0; j < 5; j++) {
-          const x0 = x - radius + .0017 * j
-          rings.push(ribbon(f, [[x0, y - radius * .52], [x0 + .001, y + radius * .51]], .0011, .045, 3))
-        }
-      }
+      const p = f(x, y, .026)
+      black.push(patch((u, v) => {
+        const a = u * tau, rr = radius * mix(1.14, .80, v)
+        return new T.Vector3(rr * Math.cos(a), rr * .85 * Math.sin(a), -.020 * v)
+          .applyQuaternion(transform).add(vec(p)).toArray()
+      }, full ? 40 : 22, 3, outFront, .003))
+      optical.push(projectorLens(f, x, y, radius * .79, .043, normal))
+      emit('main beam projector', projectorLens(f, x, y, radius * .54, .037, normal), false, true, f(x, y, -.025), intensity)
     }
     if (side === 1) {
       const u = .61, v = .52

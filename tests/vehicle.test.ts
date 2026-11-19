@@ -116,7 +116,8 @@ describe('vehicle geometry and state', () => {
         expect(o.receiveShadow).toBe(true)
       })
       expect(triangles(vehicle)).toBeLessThan(budget)
-      expect(vehicle.lamps).toHaveLength(16)
+      expect(vehicle.lamps).toHaveLength(12)
+      expect(vehicle.lamps.filter((lamp) => !lamp.beam && lamp.object.position.z > 0)).toHaveLength(2)
       expect(vehicle.lamps.filter((lamp) => lamp.beam)).toHaveLength(4)
       expect(vehicle.heatSources).toHaveLength(2)
       for (const lamp of vehicle.lamps) {
