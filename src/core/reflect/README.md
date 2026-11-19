@@ -38,7 +38,7 @@ A world point `x` is found in the mirror image at `(reflectViewProjection * vec4
 
 | Tier | Per sample | Per frame, once |
 | --- | --- | --- |
-| draft | +3 s (1 sample) | capture 256, about 7 s |
+| draft | 1 sample, 22 s against 12 s | capture 256 and one planar draw at quarter size |
 | review | +3.2 s | capture 512 and one planar draw, about 10 s |
 | final | +8 s | capture 1024 with bounce, about 17 s |
 
