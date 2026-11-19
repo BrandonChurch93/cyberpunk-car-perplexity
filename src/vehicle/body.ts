@@ -31,7 +31,7 @@ const tailWidth = curve([
 const tailPlan = curve([[0, 1], [.426, 1], [.437, .995], [.451, .99], [.543, .98], [.657, .97], [.701, .96], [.771, .95], [.837, .94], [.909, .92], [.946, .90], [.986, .88], [1.0165, .825]])
 export const limitTailZ = (x: number, z: number) => Math.max(zAt(tailPlan(Math.abs(x))), z)
 const shoulder = curve([
-  [0, .421], [.016, .447], [.024, .465], [.044, .552], [.08, .623], [.10, .658], [.15, .735], [.20, .779], [.25, .772],
+  [0, .431], [.016, .447], [.024, .465], [.044, .552], [.08, .623], [.10, .658], [.15, .735], [.20, .779], [.25, .772],
   [.30, .738], [.34, .729], [.40, .725], [.51, .759], [.59, .821], [.67, .881], [.736, .936],
   [.793, .943], [.85, .918], [.89, .888], [.92, .865], [.96, .848], [1, .833],
 ])
@@ -219,8 +219,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const part = (to: T.BufferGeometry[], surface: Surface, out: Point, length = n, width = k, thickness = .002) => {
     to.push(patch(surface, length, width, out, thickness))
   }
-  const folded = (surface: Surface, out: Point, traces: ((p: Point) => number)[], length = n, thickness = .002) => {
-    const { rows, at } = foldRows(surface, traces, full ? 6 : 3)
+  const folded = (surface: Surface, out: Point, traces: ((p: Point) => number)[], length = n, thickness = .002, broad = full ? 6 : 3) => {
+    const { rows, at } = foldRows(surface, traces, broad)
     paint.push(patch(surface, length, rows, out, thickness, at))
   }
   const lateralTrace = (line: (s: number) => number) => (p: Point) => Math.abs(p[0]) - line(sAt(p[2]))
@@ -234,9 +234,9 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const sided = (f: Surface): Surface => (u, v) => mirror(f(u, v))
     const uSide: Point = [side, 0, 0]
     folded(sided((u, v) => {
-      const s = mix(0, frontEnd(v) - gap, u)
+      const s = mix(0, frontEnd(v) - gap, u * (.51 + .49 * u))
       return bonnet(s, v)
-    }), [0, 1, 0], hoodTraces)
+    }), [0, 1, 0], hoodTraces, full ? 112 : n, .002, full ? 12 : 3)
     folded(sided((u, v) => {
       const s = mix(frontEnd(mix(.817, 1, v)) + gap, .599, u)
       const q = mix(.817, 1, v)
