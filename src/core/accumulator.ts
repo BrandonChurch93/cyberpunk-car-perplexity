@@ -16,6 +16,7 @@ export class Accumulator {
   readonly sample: THREE.WebGLRenderTarget
   readonly sum: THREE.WebGLRenderTarget
   count = 0
+  private readonly probe = new Float32Array(4)
   private readonly add: FullscreenPass
   private readonly copy: FullscreenPass
 
@@ -58,6 +59,10 @@ export class Accumulator {
   addSample(): void {
     this.add.render(this.renderer, this.sum)
     this.count += 1
+  }
+
+  settle(): void {
+    this.renderer.readRenderTargetPixels(this.sum, 0, 0, 1, 1, this.probe)
   }
 
   read(): Float32Array {

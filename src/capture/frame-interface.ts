@@ -62,7 +62,9 @@ export function createShowcase(engine: FrameEngine, ready: Promise<void>, initia
       engine.beginFrame(frameIndex, requireTier(tierId))
     },
     async addSamples(count) {
-      return engine.addSamples(count)
+      const held = engine.addSamples(count)
+      engine.accumulator.settle()
+      return held
     },
     async saveSum() {
       const data = engine.accumulator.read()

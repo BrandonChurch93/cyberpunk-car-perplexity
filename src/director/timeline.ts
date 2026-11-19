@@ -50,21 +50,18 @@ export const events = {
   lampsOffEnd: finale.start + 0.6 * (finale.end - finale.start),
 }
 
-export function lampStage(timeSeconds: number): number {
-  const t = loopPhase(timeSeconds)
+export function lampStage(t: number): number {
   return ramp(t, events.lampsOnStart, events.lampsOnEnd) - ramp(t, events.lampsOffStart, events.lampsOffEnd)
 }
 
-export function engine(timeSeconds: number): number {
-  const t = loopPhase(timeSeconds)
+export function engine(t: number): number {
   return inOut(ramp(t, events.engineStart, events.engineRunning)) - inOut(ramp(t, events.engineStop, events.engineStopped))
 }
 
-export function vibration(timeSeconds: number): number {
-  const t = loopPhase(timeSeconds)
+export function vibration(t: number): number {
   const catchKick = Math.exp(-Math.pow((t - events.engineRunning) / 0.35, 2))
   const stopKick = 0.5 * Math.exp(-Math.pow((t - events.engineStop) / 0.3, 2))
-  return Math.min(1, 0.35 * engine(timeSeconds) + catchKick + stopKick)
+  return Math.min(1, 0.35 * engine(t) + catchKick + stopKick)
 }
 
 export interface TimelineState {

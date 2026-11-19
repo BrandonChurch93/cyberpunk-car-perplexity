@@ -73,6 +73,7 @@ export async function startHarness(root: string, prefix = '/'): Promise<Harness>
       if (rel === '' || rel === '.' || rel.endsWith('/')) rel = join(rel, 'index.html')
       const file = join(root, rel)
       if (!file.startsWith(root) || !existsSync(file) || statSync(file).isDirectory()) {
+        console.error(`harness: 404 for ${path}`)
         res.writeHead(404).end()
         return
       }
