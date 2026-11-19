@@ -199,7 +199,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const { theta0, theta1, before, after } = archEnds(w)
       const lower = (u: number): Point => {
         const theta = mix(theta0, theta1, u)
-        const faceted = w.arch * (1 + .012 * Math.cos(6 * theta))
+        const faceted = w.arch * (1 + .012 * Math.cos(6 * theta) * Math.sin(Math.PI * u) ** 2)
         const s = sAt(w.z + Math.cos(theta) * faceted)
         return sidePoint(s, w.loaded + Math.sin(theta) * faceted, side)
       }
@@ -213,10 +213,18 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const p = archPanel(u, mix(0, .028, v))
         return [p[0] + side * .0025 * Math.sin(Math.PI * v), p[1], p[2]]
       }, uSide, n * 2, 6, .006)
-      part(black, (u, v) => {
+      const wellX = w.x - w.width / 2 - .025
+      const well = (u: number, v: number): Point => {
         const p = lower(u)
-        return [p[0] - side * mix(.004, .159, v), p[1] - .005 * v, p[2]]
-      }, [0, -1, 0], n * 2, 8, .005)
+        const angle = mix(theta0, theta1, u)
+        const depth = .012 * Math.sin(Math.PI * v)
+        return [side * mix(Math.abs(p[0]) - .002, wellX, v), p[1] + depth * Math.sin(angle), p[2] + depth * Math.cos(angle)]
+      }
+      part(black, well, [0, -1, 0], n * 2, 10, .006)
+      part(black, (u, v) => {
+        const p = well(u, 1)
+        return [p[0], mix(.126, p[1], v), p[2]]
+      }, uSide, n * 2, 3, .005)
     }
     arch(frontWheel)
     arch(rearWheel)
@@ -230,6 +238,29 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const intakeRight = curve([[0, .623], [.25, .649], [.55, .621], [1, .590]])
     const intakeBottom = .331, intakeTop = .69
     const cap = (s: number, v: number): Point => sillPoint(s, mix(rockerY(s), shoulder(s), v))
+    part(black, (u, v) => {
+      const s = mix(.130, .149, u)
+      return [side * (plan(s) - .083), mix(shoulder(s) - .086, shoulder(s) + .008, v), zAt(s)]
+    }, uSide, 8, 5, .006)
+    part(black, (u, v) => {
+      const s = cutLeading(v) + mix(-.009, .011, u)
+      const p = cap(s, v)
+      return [p[0] - side * .052, p[1], p[2]]
+    }, uSide, 5, n, .006)
+    part(black, (u, v) => {
+      const s = mix(.510, .686, u)
+      const p = sillPoint(s, mix(.314, shoulder(s) + .003, v))
+      return [p[0] - side * .202, p[1], p[2]]
+    }, uSide, 25, 8, .006)
+    part(black, (u, v) => {
+      const s = mix(.594, .610, u)
+      return [side * .550, mix(.818, .926, v), zAt(s)]
+    }, uSide, 5, 5, .006)
+    part(black, (u, v) => {
+      const s = mix(.887, .989, u)
+      const p = sillPoint(s, mix(.542, shoulder(s) - .006, v))
+      return [side * (Math.abs(p[0]) * .62), p[1], p[2]]
+    }, uSide, 24, 7, .008)
     part(paint, (u, v) => cap(mix(.141, first.before, u), v), uSide, n, k)
     part(paint, (u, v) => {
       const s = mix(first.after, cutLeading(v) - gap, u)

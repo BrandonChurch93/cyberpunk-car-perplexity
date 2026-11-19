@@ -159,6 +159,20 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const p = f(x, y, mix(-.013, .119, v))
       return [p[0], p[1], p[2]]
     }, 42, 10, [0, 1, 0], .018))
+    dark.push(patch((u, v) => {
+      const x = .969 * u
+      return f(x, lipY(x) - .012 + .095 * v, mix(.019, .154, v))
+    }, 38, 7, [0, 1, 0], .005))
+    dark.push(patch((u, v) => {
+      const x = mix(.012, .925, u)
+      const outer = frontHoodEdge(x)
+      const height = Math.min(outer[1] - .008, .484)
+      return [side * x * .48, mix(lipY(x) + .009, height, v), outer[2] - .002]
+    }, 44, 9, [side, 0, 1], .008))
+    dark.push(patch((u, v) => {
+      const y = mix(.171, .446, u)
+      return f(mix(.873, .727, v), y, mix(.012, .170, v))
+    }, 18, 9, [side, 0, 1], .009))
     const hub: XY = [.834, .429]
     const tips: XY[] = [[.877, .285], [.879, .644], [.470, .421]]
     black.push(lightGuide(f, hub, tips, .040, .002, outFront))
@@ -242,6 +256,11 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }
     dark.push(patch(diffuser, 50, 18, [0, -1, 0], .016))
     dark.push(patch((u, v) => {
+      const x = .885 * u
+      const s = mix(.844, .943 - .039 * u, v)
+      return [side * x, .153 + .067 * v, zAt(s)]
+    }, 25, 9, [0, -1, 0], .016))
+    dark.push(patch((u, v) => {
       const x = mix(0, .969, u)
       const diff = diffuser(u, 1)
       return r(x, mix(diff[1] - .011, tailLower(x), v), mix(.027, .036, v))
@@ -260,6 +279,11 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     carbon.push(hexMesh(vent, .32, .15, full ? .010 : .024, full ? .00083 : .00165))
     rearOptical.push(ribbon(r, [[.545, .434], [.654, .430]], .022, .012, 18))
   }
+  black.push(patch((u, v) => {
+    const x = mix(-.912, .912, u)
+    const y = mix(.713, tailLipY(Math.abs(x)) - .004, v)
+    return [x, y, fascia(false, 1, Math.abs(x), y, .121)[2]]
+  }, 49, 9, outRear, .013))
   black.push(patch(rearBridge, 16, 18, outRear, .009))
   add(parent, 'nose blades, shield and lower lip', joined(frontPaint), m.paint)
   add(parent, 'rear bumper paint surfaces', joined(rearPaint), m.paint)
