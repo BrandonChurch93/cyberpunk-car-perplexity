@@ -5,7 +5,7 @@ import { config, defaultPaint, paintById } from '../src/config'
 import { cameraAt } from '../src/director/shots'
 import { events, lampThresholds, stateAt } from '../src/director/timeline'
 import { createVehicle, type VehicleModule, type VehicleState } from '../src/vehicle'
-import { zAt } from '../src/vehicle/body'
+import { frontWheel, rearWheel, sAt, zAt } from '../src/vehicle/body'
 
 const paint = paintById(defaultPaint)
 let blockout: VehicleModule
@@ -95,6 +95,12 @@ describe('vehicle geometry and state', () => {
     }
     for (const [y, s] of [[.338, .530], [.650, .460], [.896, .760], [.924, .812], [.7814, .724]]) {
       const a = normalAt(y - .002, s, true), b = normalAt(y + .002, s, true)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
+    }
+    for (const [wheel, offset] of [[frontWheel, .023], [rearWheel, .032]] as const) {
+      const crown = wheel.loaded + wheel.arch + offset, s = sAt(wheel.z)
+      const a = normalAt(crown - .002, s, true), b = normalAt(crown + .002, s, true)
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
     }
@@ -269,11 +275,11 @@ describe('vehicle geometry and state', () => {
 
   it('keeps the diffuser inside the lower side profile at the tail', () => {
     for (const vehicle of [full, blockout]) {
-      const diffuser = vehicle.root.getObjectByName('channeled graphite rear diffuser') as T.Mesh
-      const points = diffuser.geometry.getAttribute('position')
+      const surfaces = ['channeled graphite rear diffuser', 'thin graphite diffuser blades'].map((name) =>
+        (vehicle.root.getObjectByName(name) as T.Mesh).geometry.getAttribute('position'))
       for (const [station, minY] of [[.98, .309], [.995, .407]]) {
         let bottom = Number.POSITIVE_INFINITY
-        for (let i = 0; i < points.count; i++) {
+        for (const points of surfaces) for (let i = 0; i < points.count; i++) {
           if (Math.abs(points.getZ(i) - zAt(station)) < .008) bottom = Math.min(bottom, points.getY(i))
         }
         expect(bottom).toBeLessThan(.54)
@@ -286,7 +292,10 @@ describe('vehicle geometry and state', () => {
     for (const vehicle of [full, blockout]) {
       vehicle.root.updateMatrixWorld(true)
       const { position } = cameraAt(950 / config.film.fps, config.formats.preview, vehicle.anchors)
-      for (const [x, y, z] of [[.390, .648, -2.310], [.374, .637, -2.307], [.354, .609, -2.314], [.287, .656, -2.294]]) {
+      for (const [x, y, z] of [
+        [.390, .648, -2.310], [.374, .637, -2.307], [.354, .609, -2.314], [.287, .656, -2.294],
+        [.725, .574, -2.226], [.617, .548, -2.302], [.536, .557, -2.348], [-.62, .589, -2.3],
+      ]) {
         const ray = new T.Raycaster(position, new T.Vector3(x, y, z).sub(position).normalize())
         expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('rear bumper paint surfaces')
       }

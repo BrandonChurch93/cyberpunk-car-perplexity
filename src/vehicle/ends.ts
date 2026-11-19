@@ -61,7 +61,7 @@ function lightGuide(face: Face, hub: XY, tips: readonly XY[], width: number, dep
 export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const frontPaint: T.BufferGeometry[] = [], rearPaint: T.BufferGeometry[] = []
   const carbon: T.BufferGeometry[] = [], black: T.BufferGeometry[] = [], dark: T.BufferGeometry[] = []
-  const outletCavities: T.BufferGeometry[] = [], diffuserShell: T.BufferGeometry[] = []
+  const outletCavities: T.BufferGeometry[] = [], diffuserShell: T.BufferGeometry[] = [], diffuserFins: T.BufferGeometry[] = []
   const optical: T.BufferGeometry[] = [], rearOptical: T.BufferGeometry[] = []
   const projectorGlass: T.BufferGeometry[] = [], projectorCups: T.BufferGeometry[] = []
   const lamps: VehicleModule['lamps'] = []
@@ -239,7 +239,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       lens = anchor(p, normal.toArray(), .20)
     }
 
-    const tailLower = curve([[0, .594], [.275, .595], [.424, .548], [.78, .535], [.914, .513], [.974, .468]])
+    const tailLower = curve([[0, .561], [.275, .564], [.424, .541], [.78, .535], [.914, .513], [.974, .468]])
     const tailSlot: XY[] = [[.345, .802], [.449, .817], [.698, .820], [.857, .865], [.889, .854], [.897, .809], [.895, .755], [.867, .718], [.743, .758], [.450, .763], [.353, .778]]
     const tailTopOfSlot = curve([[0, .844], [.12, .873], [.23, .873], [.32, .855], [.46, .820], [.70, .821], [.86, .864], [.90, .851], [.935, .814]])
     const tailUnderSlot = curve([[0, .714], [.27, .712], [.34, .722], [.43, .758], [.70, .752], [.87, .713], [.90, .735], [.979, .697]])
@@ -249,8 +249,11 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 48, 5, outRear, .006))
     rearPaint.push(patch((u, v) => {
       const x = mix(0, .979 - .021 * v, u)
-      const scallop = .038 * Math.sin(v * Math.PI) * smooth(x, .10, .37) * (1 - smooth(x, .58, .91))
-      const depth = mix(.017, -.008, v) + scallop + .027 * (1 - smooth(x, .27, .40))
+      const ridge = mix(.34, .53, v)
+      const bevel = Math.max(0, 1 - Math.hypot(x - ridge, .003) / .225)
+      const dart = .044 * bevel * Math.sin(v * Math.PI) ** .75
+      const wedge = .069 * (1 - smooth(x, .235, .451)) * (1 - smooth(v, .15, .88))
+      const depth = mix(.014, -.010, v) + .020 * (1 - smooth(x, .22, .47)) - dart - wedge
       return r(x, mix(tailLower(x), tailUnderSlot(x), v), depth)
     }, 50, 12, outRear, .008))
     rearPaint.push(mapped(r, [[.891, .854], [.935, .872], [.972, .843], [1.006, .788], [.980, .468], [.914, .523], [.897, .735]], outRear, -.002, .008, .025))
@@ -320,23 +323,20 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     black.push(hexMesh(meshFace, .355, .114, full ? .012 : .027, full ? .0008 : .0011))
     dark.push(patch((u, v) => {
       const x = mix(.39, .62, u)
-      const y = mix(.421, .638 + .040 * Math.sin(Math.PI * u), v)
+      const y = mix(.421, tailLower(x) - .007, v)
       return r(x, y, .079 + .021 * smooth(y, .54, .63))
     }, 16, 12, outRear, .008))
-    dark.push(patch((u, v) => {
-      const s = mix(.987, .999, u)
-      return [side * mix(.37, .23, u), mix(.436, .481, v), zAt(s)]
-    }, 5, 2, [side, 0, 0], .004))
     for (const fin of [.416, .645]) {
-      diffuserShell.push(patch((u, v) => {
+      diffuserFins.push(patch((u, v) => {
         const depth = .007 + .142 * smooth(u, .08, .94)
         if (fin < .5) {
           const s = mix(.857, .9994, u)
           const bottom = Math.max(diffuserRise(s) + .003, .171 + .041 * smooth(u, .22, .62))
-          return [side * fin, bottom + (1 - v) * depth, zAt(s)]
+          const height = Math.min(depth, tailLower(fin) - .008 - bottom)
+          return [side * fin, bottom + (1 - v) * height, zAt(s)]
         }
         const x = fin + .021 * smooth(u, .62, 1) * v
-        const tip = tailLower(x) + .041
+        const tip = tailLower(x) - .008
         const y = mix(.176, tip, u ** 1.45) - v * depth
         const aft = sAt(r(x, tip, -.023 + .018 * v ** 1.45)[2])
         const s = mix(.857, aft, u)
@@ -367,6 +367,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   add(parent, 'recessed backing', joined(dark), m.dark)
   add(parent, 'hexagonal outlet cavities', joined(outletCavities), m.dark)
   add(parent, 'channeled graphite rear diffuser', joined(diffuserShell), m.diffuser)
+  const bladeFinish = m.tag(m.diffuser.clone(), 'sheet')
+  bladeFinish.color.setHex(full ? 0x474b50 : 0x4b4e52)
+  bladeFinish.roughness = .41
+  add(parent, 'thin graphite diffuser blades', joined(diffuserFins), bladeFinish)
   add(parent, 'projector cups and machined collars', joined(projectorCups), m.brushed)
   add(parent, 'convex projector lenses', joined(projectorGlass), m.projector)
   add(parent, 'front optical lens shells', joined(optical), m.optics)
