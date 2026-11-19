@@ -188,6 +188,22 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('recesses the flat cap behind the machined rim and seats the lugs above the hub plate', () => {
+    for (const vehicle of [full, blockout]) {
+      const wheel = vehicle.root.getObjectByName('front wheel')!
+      const outerX = (name: string) => {
+        const mesh = wheel.getObjectByName(name) as T.Mesh
+        mesh.geometry.computeBoundingBox()
+        return mesh.geometry.boundingBox!.max.x
+      }
+      const plate = outerX('flat recessed hub plate')
+      const cap = outerX('flat center cap')
+      expect(cap - plate).toBeCloseTo(.0018, 5)
+      expect(outerX('machined flange') - cap).toBeGreaterThan(.025)
+      expect(outerX('five lug nuts')).toBeGreaterThan(cap)
+    }
+  })
+
   it('holds both outlet centers and their rear-facing heat origins across LODs', () => {
     for (const vehicle of [full, blockout]) {
       const ports = vehicle.root.getObjectsByProperty('name', 'formed hexagonal outlet')
