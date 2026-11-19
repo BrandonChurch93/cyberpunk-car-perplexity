@@ -4,7 +4,7 @@ import sharp from 'sharp'
 import type { FormatSpec } from '../../src/config.ts'
 import type { CameraState } from '../../src/core/lens.ts'
 import { config, ensureDir, readJson, workDir, writeJson } from './env.ts'
-import { stillName, type RenderSession, type StillSpec } from './render.ts'
+import { detailOf, stillName, type RenderSession, type StillSpec } from './render.ts'
 import { anchorIds, beatOfFrame, cameraForFrame, describeRegion, frameSeconds, project, sceneAnchors, type Anchors } from './scene.ts'
 
 export interface Rect {
@@ -30,6 +30,7 @@ export interface CropManifest {
   tier: string
   paint: string
   diagnostic: string
+  detail: string
   frame: number
   timeSeconds: number
   beat: string
@@ -112,7 +113,7 @@ export async function buildCrops(session: RenderSession, spec: StillSpec): Promi
   const dir = cropsDir(spec)
   const manifestPath = join(dir, 'manifest.json')
   const old = readJson<CropManifest>(manifestPath)
-  if (old && old.planVersion === cropPlanVersion && old.buildHash === session.buildHash && old.format === spec.format.id && old.tier === spec.tier && old.paint === spec.paint && old.diagnostic === spec.diag && old.frame === spec.frame && old.crops.every((c) => existsSync(join(dir, c.file)))) {
+  if (old && old.planVersion === cropPlanVersion && old.buildHash === session.buildHash && old.format === spec.format.id && old.tier === spec.tier && old.paint === spec.paint && old.diagnostic === spec.diag && old.detail === detailOf(spec) && old.frame === spec.frame && old.crops.every((c) => existsSync(join(dir, c.file)))) {
     return { dir, manifest: old, reused: true }
   }
   const { file: still } = await session.still(spec)
@@ -128,7 +129,7 @@ export async function buildCrops(session: RenderSession, spec: StillSpec): Promi
     plan.note = plan.note ? `${plan.note}. Shows ${shows}` : `Shows ${shows}`
     const file = `${plan.id}.png`
     await sharp(still).extract(plan.rect).png({ compressionLevel: 6 }).toFile(join(dir, file))
-    writeJson(join(dir, `${plan.id}.json`), { buildHash: session.buildHash, format: spec.format.id, tier: spec.tier, paint: spec.paint, diagnostic: spec.diag, frame: spec.frame, source: still, ...plan })
+    writeJson(join(dir, `${plan.id}.json`), { buildHash: session.buildHash, format: spec.format.id, tier: spec.tier, paint: spec.paint, diagnostic: spec.diag, detail: detailOf(spec), frame: spec.frame, source: still, ...plan })
     crops.push({ ...plan, file })
   }
   const manifest: CropManifest = {
@@ -138,6 +139,7 @@ export async function buildCrops(session: RenderSession, spec: StillSpec): Promi
     tier: spec.tier,
     paint: spec.paint,
     diagnostic: spec.diag,
+    detail: detailOf(spec),
     frame: spec.frame,
     timeSeconds: frameSeconds(spec.frame),
     beat: beatOfFrame(spec.frame),
