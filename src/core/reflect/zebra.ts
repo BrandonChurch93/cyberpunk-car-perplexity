@@ -4,7 +4,7 @@ const width = 2048
 const height = 1024
 const bands = 18
 
-/** Bands of equal angle around the vertical axis and in elevation would hide breaks along one of them, so the stripes run diagonally. */
+/** Diagonal stripes, so a break in a surface shows whichever way it runs. */
 export function stripeEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
   const data = new Float32Array(width * height * 4)
   for (let y = 0; y < height; y++) {

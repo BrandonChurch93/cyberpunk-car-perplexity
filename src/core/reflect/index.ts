@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { FormatSpec } from '../../config'
+import type { FormatSpec, TierId } from '../../config'
 import { config } from '../../config'
 import { patchMaterial } from '../../materials/patch'
 import { layers, type FrameContext, type SampleContext } from '../contract'
@@ -10,15 +10,27 @@ import { Probe } from './probe'
 import { boxPatch, planarPatch, type BoxUniforms, type PlanarUniforms } from './shaders'
 import { stripeEnvironment, zebraMirror } from './zebra'
 
-/** Edge of one cube face of the environment capture, in pixels. */
-export const captureSize = 1024
+export interface Quality {
+  /** Edge of one cube face of the environment capture, in pixels. */
+  captureSize: number
+  /** Whether the deck inside the capture carries its own first bounce. */
+  bounce: boolean
+  /** Fraction of the frame the planar target is drawn at. Sub-render jitter fills in the detail over the samples. */
+  planarScale: number
+  /** Redraw the planar reflection for every sub-render, or only for the first of the frame. */
+  planarEverySample: boolean
+}
+
+export const quality: Record<TierId, Quality> = {
+  draft: { captureSize: 256, bounce: false, planarScale: 0.25, planarEverySample: false },
+  review: { captureSize: 512, bounce: false, planarScale: 0.5, planarEverySample: false },
+  final: { captureSize: 1024, bounce: true, planarScale: 0.5, planarEverySample: true },
+}
 /** The first bounce that lights the deck inside the capture only needs the broad shapes of the sky and signs. */
 const bounceSize = 128
 const probeHeight = 0.6
 const captureNear = 0.05
 const captureFar = 1500
-/** The planar target is drawn at this fraction of the frame. Sub-render jitter fills in the rest over the samples. */
-const planarScale = 0.5
 const planarTuning = { taps: 4, filter: 0.7, roughStart: 0.55, roughEnd: 0.9, far: 4000, tail: 0.2 }
 
 export interface ReflectionsPart extends StagePart {
@@ -27,12 +39,11 @@ export interface ReflectionsPart extends StagePart {
   box: BoxUniforms
 }
 
-function planarSize(format: FormatSpec): THREE.Vector2 {
+function planarSize(format: FormatSpec, planarScale: number): THREE.Vector2 {
   return new THREE.Vector2(Math.round(format.width * planarScale), Math.round(format.height * planarScale))
 }
 
-function planarTarget(format: FormatSpec): THREE.WebGLRenderTarget {
-  const size = planarSize(format)
+function planarTarget(size: THREE.Vector2): THREE.WebGLRenderTarget {
   const target = new THREE.WebGLRenderTarget(size.x, size.y, {
     type: THREE.HalfFloatType,
     format: THREE.RGBAFormat,
@@ -48,8 +59,7 @@ function planarTarget(format: FormatSpec): THREE.WebGLRenderTarget {
   return target
 }
 
-function lodMax(format: FormatSpec): number {
-  const size = planarSize(format)
+function lodMax(size: THREE.Vector2): number {
   return Math.floor(Math.log2(Math.max(size.x, size.y)))
 }
 
@@ -71,7 +81,9 @@ export function createReflections(deps: StageDeps): ReflectionsPart {
   const { renderer, scene, world, vehicle } = deps
   const seed = streamSeed('reflect')
   let format = config.formats.master
-  let target = planarTarget(format)
+  let tier: TierId = 'final'
+  let size = planarSize(format, quality[tier].planarScale)
+  let target = planarTarget(size)
   let diagnostic = 'beauty'
   const mirror = new THREE.PerspectiveCamera()
   mirror.layers.set(layers.scene)
@@ -81,8 +93,8 @@ export function createReflections(deps: StageDeps): ReflectionsPart {
     reflectDepth: { value: target.depthTexture },
     reflectViewProjection: { value: new THREE.Matrix4() },
     reflectInverseViewProjection: { value: new THREE.Matrix4() },
-    reflectSize: { value: planarSize(format) },
-    reflectLodMax: { value: lodMax(format) },
+    reflectSize: { value: size.clone() },
+    reflectLodMax: { value: lodMax(size) },
     reflectSeed: { value: 0 },
     reflectOn: { value: 0 },
   }
@@ -99,7 +111,23 @@ export function createReflections(deps: StageDeps): ReflectionsPart {
   patchAll()
   patchMaterial(world.deck.material, planarPatch(planar, planarTuning))
 
-  const probe = new Probe(renderer, captureSize, captureNear, captureFar)
+  const probes = new Map<number, Probe>()
+  const probeOf = (edge: number): Probe => {
+    let probe = probes.get(edge)
+    if (!probe) probes.set(edge, (probe = new Probe(renderer, edge, captureNear, captureFar)))
+    return probe
+  }
+  const fitTarget = (): void => {
+    const next = planarSize(format, quality[tier].planarScale)
+    if (next.equals(size)) return
+    size = next
+    target.dispose()
+    target = planarTarget(size)
+    planar.reflectMap.value = target.texture
+    planar.reflectDepth.value = target.depthTexture
+    planar.reflectSize.value.copy(size)
+    planar.reflectLodMax.value = lodMax(size)
+  }
   const bounce = new Probe(renderer, bounceSize, captureNear, captureFar)
   const probePosition = new THREE.Vector3()
   let stripes: THREE.Texture | null = null
@@ -124,9 +152,9 @@ export function createReflections(deps: StageDeps): ReflectionsPart {
     const showVehicle = hide([vehicle.root])
     const showDeck = hide(world.deck.meshes)
     scene.environment = null
-    scene.environment = bounce.capture(scene, probePosition)
+    if (quality[tier].bounce) scene.environment = bounce.capture(scene, probePosition)
     showDeck()
-    scene.environment = probe.capture(scene, probePosition)
+    scene.environment = probeOf(quality[tier].captureSize).capture(scene, probePosition)
     showVehicle()
   }
 
@@ -150,18 +178,15 @@ export function createReflections(deps: StageDeps): ReflectionsPart {
     box,
     resize(next) {
       format = next
-      target.dispose()
-      target = planarTarget(format)
-      planar.reflectMap.value = target.texture
-      planar.reflectDepth.value = target.depthTexture
-      planar.reflectSize.value.copy(planarSize(format))
-      planar.reflectLodMax.value = lodMax(format)
+      fitTarget()
     },
     setDiagnostic(view) {
       diagnostic = view
       setZebra(view === 'zebra')
     },
-    beginFrame(_frame: FrameContext) {
+    beginFrame(frame: FrameContext) {
+      tier = frame.frame.tier
+      fitTarget()
       patchAll()
       if (diagnostic === 'normals') return
       if (diagnostic === 'zebra') {
@@ -175,10 +200,14 @@ export function createReflections(deps: StageDeps): ReflectionsPart {
     beforeSample(sample: SampleContext) {
       planar.reflectOn.value = 0
       if (diagnostic !== 'beauty' && diagnostic !== 'wetness') return
+      planar.reflectSeed.value = hash01(seed, sample.sample.frame.frameKey, sample.sample.sampleIndex)
+      if (sample.sample.sampleIndex > 0 && !quality[tier].planarEverySample) {
+        planar.reflectOn.value = 1
+        return
+      }
       mirrorCamera(sample.camera, mirror)
       planar.reflectViewProjection.value.multiplyMatrices(mirror.projectionMatrix, mirror.matrixWorldInverse)
       planar.reflectInverseViewProjection.value.copy(planar.reflectViewProjection.value).invert()
-      planar.reflectSeed.value = hash01(seed, sample.sample.frame.frameKey, sample.sample.sampleIndex)
       const previous = renderer.getRenderTarget()
       const color = renderer.getClearColor(new THREE.Color())
       const alpha = renderer.getClearAlpha()
