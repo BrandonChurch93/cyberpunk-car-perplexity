@@ -14,6 +14,7 @@ const traces: Trace[] = [
   { view: 'left', name: 'door lower fold', points: [[526, 255], [640, 246], [738, 237], [844, 227]] },
   { view: 'left', name: 'upper shoulder below side glass', points: [[510, 117], [585, 111], [654, 104], [725, 94], [791, 80], [862, 64], [906, 54]] },
   { view: 'left', name: 'shoulder fold', points: [[830, 131], [909, 108], [981, 88], [1064, 76], [1135, 68], [1199, 69], [1255, 77]] },
+  { view: 'left', name: 'upper haunch to tail lamp', points: [[896, 28], [975, 33], [1050, 42], [1130, 54], [1190, 65], [1290, 77]] },
   { view: 'left', name: 'haunch fold', points: [[904, 53], [955, 76], [983, 93], [1014, 111], [1058, 134]] },
 ]
 
