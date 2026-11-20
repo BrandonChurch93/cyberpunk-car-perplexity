@@ -100,11 +100,12 @@ export function palette(spec: PaintSpec, full: boolean) {
   const optics = new T.MeshPhysicalMaterial({
     color: full ? 0xedf0f3 : 0x858e99, metalness: full ? 0 : .1, roughness: full ? .071 : .105,
     opacity: full ? 1 : .36, transparent: !full, depthWrite: full, ior: 1.59, clearcoat: .95, clearcoatRoughness: .09,
-    transmission: full ? .93 : 0, thickness: full ? .0038 : 0, attenuationColor: new T.Color(0xaabcc7), attenuationDistance: .016,
+    transmission: full ? .93 : 0, thickness: full ? .0018 : 0, attenuationColor: new T.Color(0xaabcc7), attenuationDistance: .016,
   })
   const rearOptics = optics.clone()
   rearOptics.color.setHex(full ? 0xe6a4a4 : 0x51373a)
   rearOptics.opacity = full ? 1 : .30
+  rearOptics.thickness = full ? .0038 : 0
   rearOptics.attenuationColor.setHex(0xad2828)
   rearOptics.attenuationDistance = .013
   const projector = new T.MeshPhysicalMaterial({
