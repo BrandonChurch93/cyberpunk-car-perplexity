@@ -59,7 +59,10 @@ const hoodTipX = .472
 const hoodInner = (s: number) => hoodTipX - 1.425 * (s - hoodTipS)
 const hoodOuter = curve([[hoodTipS, hoodTipX], [.104, .557], [.140, .627], [.171, .688], [.211, .766], [.237, .758], [.290, .748]])
 const hoodFoldStrength = .90
-const lampFold = curve([[.044, .470], [.0875, .647], [.102, .7022], [.1292, .797], [.1709, .942], [.182, .963], [.205, .963]])
+const wingVentFront = .1285, wingVentBack = .1497
+const lampFoldBase = curve([[.044, .470], [.0875, .647], [.102, .7022], [.1292, .797], [.1709, .942], [.182, .963], [.205, .963]])
+const ventFoldInset = lampFoldBase(wingVentBack) - (plan(wingVentBack) - .0048 - .094)
+const lampFold = (s: number) => lampFoldBase(s) - ventFoldInset * fairStep(s, .104, .148) * (1 - fairStep(s, .153, .194))
 const hoodShut = (v: number) => .166 + .089 * v ** 2.10
 const cabFront = (v: number) => .194 + .067 * v ** 2.40
 const cowlStep = (v: number) => mix(hoodShut(v), cabFront(v), .62)
@@ -91,7 +94,6 @@ const foldAngle = T.MathUtils.degToRad(20)
 const foldSlope = Math.tan(foldAngle)
 const foldHalf = foldRadius * Math.sin(foldAngle / 2)
 const foldTangent = Math.tan(foldAngle / 2)
-const wingVentFront = .1285, wingVentBack = .1497
 const crossOffset = (s: number, y: number) => dimensions.length * (s - diagonalS(y))
 const crossStepRun = .032
 
@@ -377,7 +379,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       part(paint, (u, v) => lip(u, v, .0025 * v ** 1.45), out, strips, full ? 5 : 3, 0)
       part(ventLiners, (u, v) => lip(u, 1 + .19 * v, mix(.0025, .015, v)), out, strips, 3, 0)
     }
-    part(ventLiners, (u, v) => vent(u, mix(sampleGrid(capRows[0], v), sampleGrid(capRows[1], v), u), 1.19, .015),
+    part(ventLiners, (u, v) => vent(u, v, 1.08, .015),
       [0, 1, 0], mouthSteps, capRows[0].length - 1, 0)
     folded(sided((u, v) => {
       const s = mix(frontEnd(mix(.817, 1, v)) + bonnetGap, .599, u * (.43 + .57 * u))
