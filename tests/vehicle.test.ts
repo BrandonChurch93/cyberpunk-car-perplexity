@@ -440,8 +440,8 @@ describe('vehicle geometry and state', () => {
         expect(new T.Vector3(0, 0, 1).applyQuaternion(origin.quaternion).z).toBeLessThan(-.999)
         outlet.geometry.computeBoundingBox()
         const size = outlet.geometry.boundingBox!.getSize(new T.Vector3())
-        expect(size.x / size.y).toBeGreaterThan(2.53)
-        expect(size.x / size.y).toBeLessThan(2.63)
+        expect(size.x / size.y).toBeGreaterThan(2.87)
+        expect(size.x / size.y).toBeLessThan(2.97)
       }
     }
   })
@@ -457,6 +457,31 @@ describe('vehicle geometry and state', () => {
           const ray = new T.Raycaster(position, target.sub(position).normalize())
           expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('hexagonal outlet cavities')
         }
+      }
+    }
+  })
+
+  it('joins the rear outlet mask to the lamps and keeps the painted crest and high bar clear', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      for (const x of [-.42, -.36, -.15, 0, .15, .36, .42]) {
+        const y = Math.abs(x) === .15 ? .864 : .800
+        const ray = new T.Raycaster(new T.Vector3(x, y, -4), new T.Vector3(0, 0, 1))
+        expect(ray.intersectObject(vehicle.root)[0]?.object.name).toBe('lamp bezels and air ducts')
+      }
+      for (const x of [-.22, 0, .22]) {
+        const top = (s: number) => new T.Raycaster(new T.Vector3(x, 1.8, zAt(s)), new T.Vector3(0, -1, 0))
+          .intersectObject(vehicle.root)[0].point.y
+        expect(top(.985)).toBeGreaterThan(.889)
+        expect(top(.995)).toBeGreaterThan(.570)
+        expect(top(.995)).toBeLessThan(.630)
+      }
+      const eye = cameraAt(800 / config.film.fps, config.formats.preview, vehicle.anchors).position
+      for (const x of [-.143, -.076, 0, .076, .143]) {
+        const edge = Math.abs(x) / .169
+        const target = new T.Vector3(x, .914 + .005 * edge ** 2, zAt(.893 - .005 * edge) + .0025)
+        const hit = new T.Raycaster(eye, target.sub(eye).normalize()).intersectObject(vehicle.root)[0]
+        expect(hit.object.name).toBe('high rear brake lamp bar')
       }
     }
   })
