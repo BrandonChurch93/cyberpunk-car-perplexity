@@ -15,11 +15,11 @@ export const atmosphere = {
   outerCityStart: 630.0,
   outerCityExtinction: 0.00125,
   distantHaloStart: 80.0,
+  cityHaloRange: 0.135,
+  cityHaloScatter: [36.0, 52.0],
+  cloudStart: 565.0,
   airlight: [0.028, 0.028, 0.033],
-  cityAirlight: [0.112, 0.087, 0.126],
-  cityUnderlight: [0.174, 0.103, 0.157],
-  cloudUnderlight: [0.243, 0.073, 0.136],
-  cityUnderlightAxis: [-0.55, -0.84],
+  cityAirlight: [0.072, 0.074, 0.082],
   anisotropy: 0.58,
   scatterFraction: 0.56,
   projectorAnisotropy: 0.76,
@@ -43,7 +43,7 @@ uniform ivec2 coarseResolution;
 uniform mat4 inverseProjection;
 uniform mat4 cameraWorld;
 uniform vec4 deckBounds;
-uniform vec2 cloudLightAxis;
+uniform int cloudLightIndex;
 uniform vec2 sampleJitter;
 uniform float focusDistance;
 in vec2 vUv;
@@ -62,11 +62,11 @@ const float cityLayerHeight = ${atmosphere.cityLayerHeight.toFixed(1)};
 const float outerCityStart = ${atmosphere.outerCityStart.toFixed(1)};
 const float outerCityDensity = ${atmosphere.outerCityExtinction};
 const float distantHaloStart = ${atmosphere.distantHaloStart.toFixed(1)};
+const float cityHaloRange = ${atmosphere.cityHaloRange};
+const vec2 cityHaloScatter = vec2(${atmosphere.cityHaloScatter.map((gain) => gain.toFixed(1)).join(', ')});
+const float cloudStart = ${atmosphere.cloudStart.toFixed(1)};
 const vec3 nearAirlight = vec3(${atmosphere.airlight.join(', ')});
 const vec3 cityAirlight = vec3(${atmosphere.cityAirlight.join(', ')});
-const vec3 cityUnderlight = vec3(${atmosphere.cityUnderlight.join(', ')});
-const vec3 cloudUnderlight = vec3(${atmosphere.cloudUnderlight.join(', ')});
-const vec2 cityUnderlightAxis = vec2(${atmosphere.cityUnderlightAxis.join(', ')});
 const float anisotropy = ${atmosphere.anisotropy};
 const float scatterFraction = ${atmosphere.scatterFraction};
 const int steps = 8;
@@ -84,22 +84,23 @@ float bankNoise(vec2 p) {
     mix(bankCell(i + vec2(0, 1)), bankCell(i + 1.0), f.x), f.y);
 }
 
-vec3 cityGlow(vec3 ray) {
-  vec2 axis = normalize(cityUnderlightAxis);
-  float side = smoothstep(0.15, 0.88, dot(ray.xz, axis));
-  float elevation = 1.0 - 0.65 * smoothstep(0.06, 0.37, ray.y);
-  vec3 glow = mix(cityAirlight, cityUnderlight, side * elevation);
-  if (ray.y > -0.045 && side > 0.0) {
-    float across = dot(ray.xz, vec2(-cloudLightAxis.y, cloudLightAxis.x));
-    vec2 p = vec2(across * 17.1, ray.y * 22.6);
-    float coarse = bankNoise(p * 0.73);
-    float rolls = bankNoise(p * 2.43 + vec2(coarse * 1.6, -coarse));
-    float detail = bankNoise(p * 5.8 + rolls);
-    float cover = smoothstep(0.32, 0.70, 0.49 * coarse + 0.35 * rolls + 0.16 * detail);
-    vec2 band = vec2((across + 0.04) / 0.32, (ray.y - 0.098 - (rolls - 0.5) * 0.052) / 0.121);
-    glow += cloudUnderlight * side * cover * exp(-dot(band, band)) * smoothstep(-0.045, 0.055, ray.y);
-  }
-  return glow;
+vec3 cloudGlow(vec3 origin, vec3 ray) {
+  if (cloudLightIndex < 0 || ray.y < -0.045) return vec3(0.0);
+  vec4 source = filmLightColor[cloudLightIndex];
+  vec2 axis = normalize((filmLightPosition[cloudLightIndex] - origin).xz);
+  float side = smoothstep(0.57, 0.98, dot(ray.xz, axis));
+  if (side <= 0.0) return vec3(0.0);
+  float across = dot(ray.xz, vec2(-axis.y, axis.x));
+  vec2 p = vec2(across * 17.1, ray.y * 22.6);
+  float coarse = bankNoise(p * 0.73);
+  float rolls = bankNoise(p * 2.43 + vec2(coarse * 1.6, -coarse));
+  float detail = bankNoise(p * 5.8 + rolls);
+  float cover = smoothstep(0.32, 0.70, 0.49 * coarse + 0.35 * rolls + 0.16 * detail);
+  vec2 band = vec2((across + 0.04) / 0.32, (ray.y - 0.098 - (rolls - 0.5) * 0.052) / 0.121);
+  float bank = cover * exp(-dot(band, band)) * smoothstep(-0.045, 0.055, ray.y);
+  float loft = 1.0 - smoothstep(0.055, 0.37, ray.y);
+  vec3 irradiance = source.rgb / max(source.a * source.a, 1.0);
+  return irradiance * side * (8.0 * loft + 28.0 * bank);
 }
 
 float phase(float cosine, float g) {
@@ -184,6 +185,24 @@ float cityOpticalDepth(vec3 origin, vec3 ray, float start, float end) {
   return depth;
 }
 
+vec3 distantSourceScatter(vec3 origin, vec3 ray, float far, float cityStart, float nearDepth, vec4 source, float radius, float along, float perp2) {
+  float reach = cityHaloRange * source.a + radius;
+  float reach2 = reach * reach;
+  if (perp2 >= reach2) return vec3(0.0);
+  float interval = sqrt(reach2 - perp2);
+  float entry = max(cityStart, along - interval);
+  float exit = min(far, along + 0.35 * interval);
+  if (exit <= entry) return vec3(0.0);
+  float envelope = 1.0 - smoothstep(0.07, 1.0, perp2 / reach2);
+  float before = nearDepth + cityOpticalDepth(origin, ray, cityStart, entry);
+  float depth = cityOpticalDepth(origin, ray, entry, exit);
+  vec3 irradiance = source.rgb / max(source.a * source.a, 1.0);
+  float peak = max(irradiance.r, max(irradiance.g, irradiance.b));
+  float warm = smoothstep(0.12, 0.68, (irradiance.r - irradiance.b) / max(peak, 1e-6));
+  vec3 diffuse = mix(irradiance, vec3(peak), mix(0.12, 0.24, warm));
+  return diffuse * mix(cityHaloScatter.x, cityHaloScatter.y, warm) * envelope * exp(-before) * (1.0 - exp(-depth));
+}
+
 float densityAt(float t, float y, vec2 layer, float cityStart) {
   float h = max(y, 0.0);
   float density = t < localAirRange ? airDensity * exp(-h / airHeight) : 0.0;
@@ -239,7 +258,14 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   float cityDepth = cityOpticalDepth(origin, ray, cityStart, far);
   float transmission = exp(-airDepth - layerDepth - cityDepth);
   vec3 airlight = nearAirlight * (1.0 - exp(-airDepth));
-  if (cityDepth > 1e-6) airlight += exp(-airDepth - layerDepth) * cityGlow(ray) * (1.0 - exp(-cityDepth));
+  if (cityDepth > 1e-6) {
+    airlight += exp(-airDepth - layerDepth) * cityAirlight * (1.0 - exp(-cityDepth));
+    if (far > cloudStart) {
+      float entry = max(cityStart, cloudStart);
+      float cloudDepth = cityOpticalDepth(origin, ray, entry, far);
+      airlight += exp(-airDepth - layerDepth - cityDepth + cloudDepth) * cloudGlow(origin, ray) * (1.0 - exp(-cloudDepth));
+    }
+  }
   vec3 radiance = airlight * foregroundScatter(far * 0.5);
   vec2 pixel = floor(uv * vec2(textureSize(sceneDepth, 0)));
   float pixelNoise = fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
@@ -267,6 +293,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
       bool distantArea = shape.x < 0.0 && axis.w > -0.5 && dot(toSource, toSource) > distantHaloStart * distantHaloStart;
       float haloEnvelope = 1.0;
       if (distantArea) {
+        radiance += distantSourceScatter(origin, ray, far, cityStart, airDepth + layerDepth, color, shape.y, along, perp2);
         const float haloEdge = 4.2;
         float haloReach = haloEdge * shape.y;
         float haloReach2 = haloReach * haloReach - perp2;
@@ -394,8 +421,6 @@ void main() {
 `
 
 export function createHaze({ rig, world }: StageDeps): StagePart {
-  const screen = world.lights?.find((light) => light.id === 'magenta violet tower screen')?.object
-  const screenPosition = new THREE.Vector3()
   const coarse = new THREE.WebGLRenderTarget(1, 1, {
     type: THREE.HalfFloatType,
     minFilter: THREE.NearestFilter,
@@ -413,7 +438,7 @@ export function createHaze({ rig, world }: StageDeps): StagePart {
     inverseProjection: { value: new THREE.Matrix4() },
     cameraWorld: { value: new THREE.Matrix4() },
     deckBounds: { value: new THREE.Vector4() },
-    cloudLightAxis: { value: new THREE.Vector2(...atmosphere.cityUnderlightAxis).normalize() },
+    cloudLightIndex: { value: world.lights?.findIndex((light) => light.id === 'magenta violet tower screen') ?? -1 },
     sampleJitter: { value: new THREE.Vector2() },
     focusDistance: { value: 1 },
   }
@@ -432,11 +457,6 @@ export function createHaze({ rig, world }: StageDeps): StagePart {
         uniforms.sceneDepth.value = input.depth
         uniforms.inverseProjection.value.copy(camera.projectionMatrixInverse)
         uniforms.cameraWorld.value.copy(camera.matrixWorld)
-        if (screen) {
-          screen.getWorldPosition(screenPosition)
-          const eye = camera.matrixWorld.elements
-          uniforms.cloudLightAxis.value.set(screenPosition.x - eye[12], screenPosition.z - eye[14]).normalize()
-        }
         const { min, max } = world.deck.bounds
         uniforms.deckBounds.value.set(min.x, min.y, max.x, max.y)
         uniforms.sampleJitter.value.set(...sample.misc)
