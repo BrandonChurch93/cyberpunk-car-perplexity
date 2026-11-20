@@ -409,11 +409,11 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   }, 49, 9, outRear, .013))
   const stopBar = (u: number, v: number): Point => {
     const x = mix(-.169, .169, u), edge = Math.abs(x) / .169
-    return [x, .911 + .005 * edge ** 2 + .006 * v, zAt(.893 - .005 * edge) + .005 * v]
+    return [x, .919 + .005 * edge ** 2 + .007 * v, zAt(.898 - .005 * edge) + .008 * v]
   }
   black.push(patch((u, v) => {
-    const p = stopBar(u, mix(-.38, 1.38, v))
-    return [p[0], p[1], p[2] + .002]
+    const p = stopBar(u, mix(-1.24, 1.26, v))
+    return [p[0], p[1], p[2] + .005]
   }, 26, 3, outRear, .006))
   emit('high rear brake lamp bar', patch(stopBar, 32, 3, outRear, .002), true, false, undefined, .13, 23)
   add(parent, 'nose blades, shield and lower lip', joined(frontPaint), m.paint)

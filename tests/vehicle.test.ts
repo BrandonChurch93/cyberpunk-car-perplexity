@@ -461,7 +461,7 @@ describe('vehicle geometry and state', () => {
     }
   })
 
-  it('joins the rear outlet mask to the lamps and keeps the painted crest and high bar clear', () => {
+  it('joins the rear outlet mask to the lamps and preserves the painted crest', () => {
     for (const vehicle of [full, blockout]) {
       vehicle.root.updateMatrixWorld(true)
       for (const x of [-.42, -.36, -.15, 0, .15, .36, .42]) {
@@ -476,12 +476,33 @@ describe('vehicle geometry and state', () => {
         expect(top(.995)).toBeGreaterThan(.570)
         expect(top(.995)).toBeLessThan(.630)
       }
-      const eye = cameraAt(800 / config.film.fps, config.formats.preview, vehicle.anchors).position
-      for (const x of [-.143, -.076, 0, .076, .143]) {
-        const edge = Math.abs(x) / .169
-        const target = new T.Vector3(x, .914 + .005 * edge ** 2, zAt(.893 - .005 * edge) + .0025)
-        const hit = new T.Raycaster(eye, target.sub(eye).normalize()).intersectObject(vehicle.root)[0]
-        expect(hit.object.name).toBe('high rear brake lamp bar')
+    }
+  })
+
+  it('keeps the high brake lamp clear of the bay louvers in both detail cameras', () => {
+    for (const vehicle of [full, blockout]) {
+      const name = 'high rear brake lamp bar'
+      const bar = vehicle.root.getObjectByName(name) as T.Mesh
+      vehicle.root.updateMatrixWorld(true)
+      const position = bar.geometry.getAttribute('position')
+      const index = bar.geometry.getIndex()!
+      const face = new T.Triangle(), normal = new T.Vector3(), points: T.Vector3[] = []
+      for (let i = 0; i < index.count; i += 3) {
+        face.a.fromBufferAttribute(position, index.getX(i))
+        face.b.fromBufferAttribute(position, index.getX(i + 1))
+        face.c.fromBufferAttribute(position, index.getX(i + 2))
+        face.getNormal(normal)
+        if (normal.y > .4 && normal.z < -.4) points.push(bar.localToWorld(face.getMidpoint(new T.Vector3())))
+      }
+      expect(points.length).toBeGreaterThan(5)
+      points.sort((a, b) => a.x - b.x)
+      for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [775, 800, 849]) {
+        const eye = cameraAt(frame / config.film.fps, format, vehicle.anchors).position
+        for (const fraction of [.1, .3, .5, .7, .9]) {
+          const point = points[Math.floor(fraction * points.length)]
+          const hit = new T.Raycaster(eye, point.clone().sub(eye).normalize()).intersectObject(vehicle.root)[0]
+          expect(hit?.object.name).toBe(name)
+        }
       }
     }
   })
