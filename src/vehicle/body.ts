@@ -30,7 +30,12 @@ const noseWidth = fairCurve(planTrace.slice(0, 17), {
 const doorWidth = fairCurve(planTrace.slice(13, 25), {
   interior: [.318, .395, .54, .66], penalty: 4e-8,
 })
-const plan = (s: number) => mix(mix(noseWidth(s), doorWidth(s), fairStep(s, .27, .34)), restPlan(s), fairStep(s, .718, .747))
+const haunchWidth = fairCurve([[.62, doorWidth(.62)], [.66, doorWidth(.66)], [.70, doorWidth(.70)], [.73, 1.0108], [.76, 1.0140],
+  [.79, 1.0163], [.82, 1.0163], [.85, 1.0118], [.88, .973], [.90, .933], [.92, .896], [.94, .824]], {
+  interior: [.70, .77, .83, .87, .905], pins: [[.80, 1.0165], [.82, 1.0163]], penalty: 1e-8,
+})
+const plan = (s: number) => mix(mix(mix(noseWidth(s), doorWidth(s), fairStep(s, .27, .34)), haunchWidth(s), fairStep(s, .64, .72)),
+  restPlan(s), fairStep(s, .928, .94))
 const frontWidth = fairCurve([
   [0, .0008], [.090, .0058], [.173, .0108], [.337, .0178], [.448, .0238], [.607, .04], [.739, .06], [.836, .08], [.875, .10], [.914, .12], [.941, .14], [.973, .16], [.982, .18],
 ], { interior: [.173, .49, .747, .898], penalty: 1.5e-9 })
@@ -57,7 +62,9 @@ const frontShoulder = fairCurve(shoulderTrace.slice(0, 12), {
 const doorShoulder = fairCurve(shoulderTrace.slice(9, 20), {
   interior: [.365, .465, .563, .644], penalty: 6e-8,
 })
-const shoulderBase = (s: number) => mix(mix(frontShoulder(s), doorShoulder(s), fairStep(s, .305, .40)), restShoulder(s), fairStep(s, .711, .781))
+const haunchShoulder = fairCurve([[.66, doorShoulder(.66)], [.70, doorShoulder(.70)], [.74, .9247], [.781, .929], [.816, .930], [.85, .927],
+  [.89, .906], [.92, .878], [.96, .848], [1, .833]], { interior: [.75, .83, .90], penalty: 2e-8 })
+const shoulderBase = (s: number) => mix(mix(frontShoulder(s), doorShoulder(s), fairStep(s, .305, .40)), haunchShoulder(s), fairStep(s, .68, .75))
 const haunchShoulderFall = fairCurve([[.596, 0], [.609, 0], [.650, .030], [.675, .045], [.695, .047],
   [.708, .043], [.727, .034], [.746, .024], [.765, .012], [.780, 0], [.792, 0]], {
   interior: [.62, .665, .698, .743, .773], flatStart: true, flatEnd: true, penalty: 1e-8,
@@ -173,8 +180,8 @@ export function sidePoint(s: number, y: number, side: number): Point {
     return direction * first * foldSlope * (interior + edge)
   }
   const belt = fold(doorBelt(s), fairStep(s, .237, .332) * (1 - fairStep(s, .895, .928)), -.88 - .05 * fairStep(s, .60, .73))
-  const heel = fold(heelFold(s), fairStep(s, .321, .415) * (1 - fairStep(s, .700, .747)), .84)
-  const haunch = fold(haunchFold(s), fairStep(s, .631, .681) * (1 - fairStep(s, .735, .765)), -.88)
+  const heel = fold(heelFold(s), fairStep(s, .321, .415) * (1 - fairStep(s, .725, .765)), .84)
+  const haunch = fold(haunchFold(s), fairStep(s, .631, .681) * (1 - fairStep(s, .770, .805)), -.88)
   const ordinary = sill + thickness * q + dent + face + belt + heel
   const rise = y - doorBelt(s)
   const run = shoulder(s) - doorBelt(s)
@@ -182,7 +189,7 @@ export function sidePoint(s: number, y: number, side: number): Point {
   const crest = (t: number) => peak - .137 * t + .378 * hinge(t, foldHalf)
   const close = (thickness - crest(run)) * fairStep(rise, .003, .0031 + fairPositive(run - .003, .012))
   const flank = fairStep(s, .572, .644) * (1 - fairStep(s, .898, .926))
-    * (1 - fairStep(-rise, .048, .152))
+    * (1 - fairStep(-rise, .02, .32))
   const diagonal = crossOffset(s, y)
   const diagonalFade = fairStep(y, .135, .188) * (1 - fairStep(y, .508, .682)) * (1 - fairStep(diagonal, .057, .205))
   const cross = .333 * diagonalFade * (hinge(diagonal, foldHalf) - hinge(diagonal - crossStepRun, foldHalf))
@@ -641,9 +648,14 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const s = sAt(a[2])
         const p = sidePoint(s, mix(a[1], shoulder(s), v), side)
         const high = sidePoint(s, shoulder(s), side)
-        const section = hinge(trace(p), foldHalf) - mix(hinge(trace(a), foldHalf), hinge(trace(high), foldHalf), v)
+        const [offset, bottom, top] = [trace(p), trace(a), trace(high)]
+        const section = hinge(offset, foldHalf) - mix(hinge(bottom, foldHalf), hinge(top, foldHalf), v)
         const span = (s - before) / (after - before)
-        const crown = (rear ? .35 : .32) * section * smooth(span, 0, .10) * (1 - smooth(span, .90, 1))
+        const arc = section * smooth(span, 0, .10) * (1 - smooth(span, .90, 1))
+        const runIn = rear ? 0 : (1 - fairStep(span, .26, .43)) * (1 - fairStep(p[1], .680, .732))
+        const round = runIn ? (fairPositive(offset, .016) - mix(fairPositive(bottom, .016), fairPositive(top, .016), v))
+          * fairStep(span, 0, .16) : arc
+        const crown = (rear ? .35 : .32) * mix(arc, round, runIn)
         const drop = high[1] - p[1]
         return [p[0] + side * (crown + (rear ? 0 : wingDraft(s, drop))), p[1], p[2]]
       }
