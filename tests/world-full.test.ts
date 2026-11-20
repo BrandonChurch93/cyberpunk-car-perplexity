@@ -36,10 +36,15 @@ describe('full roof world', () => {
       expect(size.every(n => n > 0)).toBe(true)
       for (const format of [config.formats.master, config.formats.vertical]) {
         const eye = cameraAt(config.film.heroFrameSeconds,format,anchors).position
-        const delta = local.set(...at).sub(eye)
-        const distance = delta.length()
-        const ray = new THREE.Raycaster(eye,delta.normalize(),.01,distance+.10)
-        expect(ray.intersectObject(world.root,true)[0]?.object.parent?.name,id).toBe(id)
+        const frame = ['hotel rooftop cabinet', 'white parking blade', 'far cyan bar cabinet', 'violet mid distance blade', 'magenta violet tower screen',
+          'amber upper tower cabinet', 'amber lower tower cabinet', 'amber parapet exit'].includes(id)
+        const marks = frame ? [[0,0],[-.45,-.40],[.45,-.40],[-.45,.40],[.45,.40]] : [[0,0]]
+        for (const [u,v] of marks) {
+          const delta = fixture.localToWorld(local.set(u*size[0],v*size[1],.012)).sub(eye)
+          const distance = delta.length()
+          const ray = new THREE.Raycaster(eye,delta.normalize(),.01,distance+.10)
+          expect(ray.intersectObject(world.root,true)[0]?.object.parent?.name,id).toBe(id)
+        }
       }
     }
     hero.traverse(object => {
@@ -123,6 +128,13 @@ describe('full roof world', () => {
     expect(drain.children.filter(o=>o.name==='iron drainage bar')).toHaveLength(21)
     const bayLine = world.root.getObjectByName('hero near bay line') as THREE.Mesh
     expect(world.surfaces.find(s=>s.material===bayLine.material)?.wetness).toBe('porous')
+    const lens = new THREE.PerspectiveCamera()
+    const { master } = config.formats
+    applyLens(lens,cameraAt(config.film.heroFrameSeconds,master,anchors),master.width,master.height,{ pixel:[0,0],aperture:[0,0] },1)
+    for (const u of [.18,.22,.25]) {
+      const ray = new THREE.Raycaster(lens.position,new THREE.Vector3(2*u-1,-.82,.5).unproject(lens).sub(lens.position).normalize())
+      expect(world.deck.meshes).toContain(ray.intersectObject(world.root,true)[0]?.object)
+    }
   })
 
   it('retains the lit sign mount and distinguishes city cladding from wet parapet', () => {
@@ -246,10 +258,16 @@ describe('full roof world', () => {
       expect(toScreen(position('hero full span steel top rail')).y).toBeLessThan(.20)
     }
     cameraAtTime(master, heroFrameSeconds)
-    const skyRay = (x: number) => new THREE.Raycaster(camera.position,
-      new THREE.Vector3(x, .8, .5).unproject(camera).sub(camera.position).normalize(), 0, camera.far)
-    for (const x of [-.40, -.24, -.16]) {
-      expect(skyRay(x).intersectObject(world.root, true)[0]?.object.name).toBe('city-lit cloud base')
+    const skyRay = (x: number, y: number) => new THREE.Raycaster(camera.position,
+      new THREE.Vector3(x, y, .5).unproject(camera).sub(camera.position).normalize(), 0, camera.far)
+    for (const x of [-.50, -.40, -.32, -.24, -.16]) {
+      expect(skyRay(x,.92).intersectObject(world.root, true)[0]?.object.name).toBe('city-lit cloud base')
+    }
+    for (const [x,y] of [[-.44,.75],[-.32,.86],[-.20,.70]]) {
+      const hit = skyRay(x,y).intersectObject(world.root, true)[0]
+      expect(hit?.distance).toBeGreaterThan(300)
+      expect(hit?.distance).toBeLessThan(410)
+      expect(patchesOf((hit?.object as THREE.Mesh).material as THREE.Material)).toContain('hero tower cladding and window rooms')
     }
     cameraAtTime(vertical, heroFrameSeconds)
     const tallScreen = toScreen(position(billboard))
