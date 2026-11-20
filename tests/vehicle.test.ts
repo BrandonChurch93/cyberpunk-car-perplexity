@@ -111,6 +111,43 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('keeps the haunch crown inside the front projection envelope', () => {
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      for (const side of [-1, 1]) for (const [x, y] of [[.82, .964], [.86, .952], [.94, .936]]) {
+        const ray = new T.Raycaster(new T.Vector3(side * x, y, 3), new T.Vector3(0, 0, -1))
+        expect(ray.intersectObject(vehicle.root, true)).toHaveLength(0)
+      }
+    }
+  })
+
+  it('carries the upper haunch fold across the deck and clears the quarter at the rear arch', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const body = vehicle.root.getObjectByName('closed body panels and returns')!
+      const hit = (y: number, z: number) => new T.Raycaster(new T.Vector3(2, y, z), new T.Vector3(-1, 0, 0))
+        .intersectObject(body)[0]
+      for (const [s, y] of [[.697, 1.047], [.750, 1.015], [.808, .975]]) {
+        const a = hit(y - .004, zAt(s)), b = hit(y + .004, zAt(s))
+        const turn = T.MathUtils.radToDeg(a.normal!.angleTo(b.normal!))
+        expect(turn).toBeGreaterThan(15)
+        expect(turn).toBeLessThan(25)
+      }
+      const tangent = rearWheel.z + rearWheel.arch
+      expect(hit(rearWheel.loaded, tangent - .012)).toBeUndefined()
+      expect(hit(rearWheel.loaded, tangent + .006).point.x).toBeGreaterThan(rearWheel.x)
+      const inside = hit(.622, tangent - .002), outside = hit(.622, tangent + .002)
+      expect(T.MathUtils.radToDeg(inside.normal!.angleTo(outside.normal!))).toBeLessThan(8)
+      for (const [s, y] of [[.629, .766], [.646, .790], [.670, .824]]) {
+        const ray = new T.Raycaster(new T.Vector3(2, y, zAt(s)), new T.Vector3(-1, 0, 0))
+        const throat = ray.intersectObject(vehicle.root, true)[0]
+        expect(throat.object.name).toBe('stowage, seals and wheelhouse liners')
+        expect(hit(y - .032, zAt(s)).point.x - throat.point.x).toBeGreaterThan(.045)
+        expect(hit(y + .040, zAt(s)).point.x - throat.point.x).toBeGreaterThan(.045)
+      }
+    }
+  })
+
   it.each(['blockout', 'full'] as const)('rests at the origin and meets factory dimensions in %s', (detail) => {
     const vehicle = detail === 'full' ? full : blockout
     const whole = setFrom(vehicle.root)
@@ -266,6 +303,65 @@ describe('vehicle geometry and state', () => {
       expect(cap - plate).toBeCloseTo(.0018, 5)
       expect(outerX('machined flange') - cap).toBeGreaterThan(.025)
       expect(outerX('five lug nuts')).toBeGreaterThan(cap)
+    }
+  })
+
+  it('keeps a full-size upper brake caliper and an open drilled ring in both LODs', () => {
+    for (const vehicle of [full, blockout]) {
+      const wheel = vehicle.root.getObjectByName('front wheel')!
+      const part = (name: string) => wheel.getObjectByName(name) as T.Mesh<T.BufferGeometry>
+      const caliper = part('fixed brake caliper')
+      const shell = caliper.geometry.getAttribute('position')
+      const angles: number[] = [], radii: number[] = []
+      for (let i = 0; i < shell.count; i++) {
+        angles.push(Math.atan2(shell.getZ(i), shell.getY(i)))
+        radii.push(Math.hypot(shell.getY(i), shell.getZ(i)))
+      }
+      const radial = Math.max(...radii) - Math.min(...radii)
+      const arcLength = (Math.max(...angles) - Math.min(...angles)) * (Math.max(...radii) + Math.min(...radii)) / 2
+      expect(radial).toBeGreaterThan(.080)
+      expect(radial).toBeLessThan(.100)
+      expect(arcLength).toBeGreaterThan(.365)
+      expect(arcLength).toBeLessThan(.420)
+      caliper.geometry.computeBoundingBox()
+      expect(caliper.geometry.boundingBox!.max.y).toBeGreaterThan(.20)
+      expect(caliper.geometry.boundingBox!.min.z).toBeLessThan(-.21)
+
+      const disc = part('drilled ceramic rotor').clone()
+      const cast = part('fixed brake caliper').clone()
+      disc.updateMatrixWorld(true)
+      cast.updateMatrixWorld(true)
+      disc.geometry.computeBoundingBox()
+      const box = disc.geometry.boundingBox!
+      const face = box.max.x
+      expect(box.max.x - box.min.x).toBeCloseTo(frontWheel.discDepth, 3)
+      const ring = (y: number, z: number) => new T.Raycaster(new T.Vector3(1, y, z), new T.Vector3(-1, 0, 0))
+      const drill = ring(0, -(frontWheel.disc - .018)).intersectObject(disc)[0]
+      expect(!drill || drill.point.x < face - .015).toBe(true)
+      expect(ring(.010, -(frontWheel.disc - .018)).intersectObject(disc)[0].point.x).toBeCloseTo(face, 4)
+      expect(ring(.152 * Math.cos(-.86), .152 * Math.sin(-.86)).intersectObject(cast)[0].point.x).toBeGreaterThan(face)
+      for (let i = 0; i < 24; i++) {
+        const a = (i + .314) * Math.PI / 12
+        expect(ring(.202 * Math.cos(a), .202 * Math.sin(a)).intersectObject(disc).length).toBeGreaterThan(0)
+        expect(ring(.206 * Math.cos(a), .206 * Math.sin(a)).intersectObject(disc)).toHaveLength(0)
+      }
+      expect(part('floating rotor hat')).toBeDefined()
+      expect(part('recessed drill wells and rotor vents')).toBeDefined()
+      expect(part('molded sidewall relief')).toBeDefined()
+      const localWheel = new T.Group().add(...wheel.children.map((child) => child.clone()))
+      localWheel.updateMatrixWorld(true)
+      for (const [angle, reach] of [[48, 1.7], [58, 1.6], [68, 1.5]]) {
+        const a = T.MathUtils.degToRad(angle)
+        const eye = new T.Vector3(reach * Math.sin(a) + .0963, -.18, reach * Math.cos(a))
+        let visible = 0
+        for (let i = 0; i < 18; i++) {
+          const b = -1.7 + .10 * i
+          const target = new T.Vector3(face, .183 * Math.cos(b), .183 * Math.sin(b))
+          const hit = new T.Raycaster(eye, target.sub(eye).normalize()).intersectObject(localWheel, true)[0]
+          if (hit?.object.name.startsWith('fixed brake caliper') || hit?.object.name.startsWith('caliper pin')) visible++
+        }
+        expect(visible).toBeGreaterThanOrEqual(5)
+      }
     }
   })
 

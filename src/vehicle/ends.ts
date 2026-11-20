@@ -252,11 +252,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 48, 5, outRear, .006))
     rearPaint.push(patch((u, v) => {
       const x = mix(0, .979 - .021 * v, u)
-      const center = mix(-.055, -.008, v), side = mix(.013, -.018, v)
-      const ridge = mix(.345, .479, v)
-      const radius = Math.hypot(x - ridge, .005) - .005
-      const shoulder = .031 * Math.max(0, 1 - radius / .183) * smooth(v, 0, .31) * (1 - smooth(v, .72, 1))
-      const depth = mix(center, side, smooth(x, ridge - .097, ridge + .062)) - shoulder
+      const center = mix(-.043, -.008, v), flank = mix(.011, -.017, v)
+      const ridge = mix(.360, .401, v)
+      const depth = mix(center, flank, smooth(x, ridge - .186, ridge + .162))
       return r(x, mix(tailLower(x), tailUnderSlot(x), v), depth)
     }, 70, 16, outRear, .008))
     rearPaint.push(mapped(r, [[.891, .854], [.935, .872], [.972, .843], [1.006, .788], [.980, .468], [.914, .523], [.897, .735]], outRear, -.002, .008, .025))
@@ -345,14 +343,15 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }
     rearOptical.push(ribbon(r, [[.545, .434], [.654, .430]], .022, .012, 18))
   }
-  dark.push(patch((u, v) => {
-    const s = mix(.955, .99935, u)
-    const lateral = 2 * v - 1
-    const x = mix(.129, .047, smooth(u, .32, 1)) * lateral
+  diffuserShell.push(patch((u, v) => {
+    const lateral = 2 * v - 1, side = Math.abs(lateral)
+    const channel = smooth(side, .425, .755) * (1 - smooth(side, .855, 1))
+    const s = mix(.949, .977 + .02235 * channel, u)
+    const x = mix(.455, .398, smooth(u, 0, 1)) * lateral
     const lower = diffuserRise(s) + .001
-    const y = mix(lower, Math.max(lower + .024, .545), lateral ** 2)
-    return [x, y, zAt(s)]
-  }, 30, 12, [0, -1, 0], .009))
+    const wall = .153 * smooth(side, .76, 1) * smooth(u, .1, .80)
+    return [x, lower + wall, zAt(s)]
+  }, 31, 32, [0, -1, 0], .012))
   black.push(patch((u, v) => {
     const x = mix(-.912, .912, u)
     const y = mix(.713, tailLipY(Math.abs(x)) - .004, v)
@@ -376,8 +375,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   add(parent, 'hexagonal outlet cavities', joined(outletCavities), m.dark)
   add(parent, 'channeled graphite rear diffuser', joined(diffuserShell), m.diffuser)
   const bladeFinish = m.tag(m.diffuser.clone(), 'sheet')
-  bladeFinish.color.setHex(full ? 0x55595c : 0x5a5b5e)
-  bladeFinish.roughness = .44
+  bladeFinish.color.setHex(full ? 0x46494e : 0x55575b)
+  bladeFinish.roughness = .55
   add(parent, 'thin graphite diffuser blades', joined(diffuserFins), bladeFinish)
   add(parent, 'machined projector collars', joined(projectorCollars), m.brushed)
   add(parent, 'smooth dark projector bowls', joined(projectorBowls), m.dark)
