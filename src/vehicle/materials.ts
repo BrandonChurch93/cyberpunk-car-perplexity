@@ -1,7 +1,7 @@
 import * as T from 'three'
 import type { PaintSpec } from '../config'
 import { stream } from '../core/random'
-import { patchMaterial } from '../materials/patch'
+import { insertAfter, patchMaterial, replaceOnce } from '../materials/patch'
 import type { VehicleModule } from './contract'
 import type { Material } from './geometry'
 
@@ -11,81 +11,295 @@ const carbonPaths = {
   roughnessMap: '/assets/third-party/textures/carbon-weave/Fabric004_2K-PNG_Roughness.png',
 }
 
-export function palette(spec: PaintSpec, full: boolean) {
-  const flake = { value: new T.Color(spec.flake) }
-  const tint = { value: new T.Color(spec.base) }
-  const paint = new T.MeshPhysicalMaterial({
-    color: full ? spec.base : 0x93989f, metalness: full ? .39 : .13,
-    roughness: full ? .265 : .36, clearcoat: full ? 1 : .48, clearcoatRoughness: full ? .11 : .22,
-    ior: 1.53, specularIntensity: .7, envMapIntensity: 1.15,
-  })
-  if (full) {
-    const random = stream('vehicle paint flakes')
-    const data = new Uint8Array(64 * 64 * 4)
-    for (let i = 0; i < data.length; i += 4) {
-      data[i] = random.int(256)
-      data[i + 1] = random.int(256)
-      data[i + 2] = random.int(256)
-      data[i + 3] = 255
-    }
-    const microtexture = new T.DataTexture(data, 64, 64, T.RGBAFormat)
-    microtexture.wrapS = microtexture.wrapT = T.RepeatWrapping
-    microtexture.magFilter = T.LinearFilter
-    microtexture.minFilter = T.LinearMipmapLinearFilter
-    microtexture.generateMipmaps = true
-    microtexture.needsUpdate = true
-    patchMaterial(paint, {
-      id: 'vehicle paint stack',
-      uniforms: { carFlakeTint: flake, carBaseTint: tint, carMicrostructure: { value: microtexture } },
-      apply(shader) {
-        shader.vertexShader = 'varying vec3 carLocal;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ncarLocal = position;')
-        shader.fragmentShader = `varying vec3 carLocal;
-        uniform vec3 carFlakeTint;
-        uniform vec3 carBaseTint;
-        uniform sampler2D carMicrostructure;
-        vec3 carGrain(vec3 frequency, vec3 weights) {
-          return weights.x * texture2D(carMicrostructure, carLocal.yz * frequency.x).rgb
-            + weights.y * texture2D(carMicrostructure, carLocal.xz * frequency.y).rgb
-            + weights.z * texture2D(carMicrostructure, carLocal.xy * frequency.z).rgb;
-        }
-        float carFlake(vec2 surface, float scale) {
-          vec2 cells = surface * scale;
-          ivec2 tileSize = textureSize(carMicrostructure, 0);
-          vec3 grain = texelFetch(carMicrostructure, ivec2(mod(floor(cells), vec2(tileSize))), 0).rgb;
-          vec2 delta = fract(cells) - (0.32 + grain.gb * 0.36);
-          float theta = 6.2831853 * grain.g;
-          float c = cos(theta), s = sin(theta);
-          delta = mat2(c, -s, s, c) * delta;
-          float edge = length(delta * vec2(1.0, 1.6 + grain.b * 0.6));
-          float footprint = min(0.24, 0.42 * length(fwidth(cells)));
-          float radius = 0.13 + 0.15 * grain.b;
-          return smoothstep(0.64, 0.98, grain.r) * (1.0 - smoothstep(radius - footprint, radius + footprint, edge));
-        }
-      ` + shader.fragmentShader
-        .replace('#include <color_fragment>', `#include <color_fragment>
-          vec3 basis = normalize(abs(cross(dFdx(carLocal), dFdy(carLocal))) + vec3(0.000000001));
-          vec3 weights = pow(basis, vec3(8.0));
-          weights /= max(0.00001, weights.x + weights.y + weights.z);
-          float flakeGrain = dot(weights, vec3(carFlake(carLocal.yz, 1460.0), carFlake(carLocal.xz, 1420.0), carFlake(carLocal.xy, 1530.0)));
-          vec3 orangePeel = carGrain(vec3(3.35), weights);
-          float footprint = length(fwidth(carLocal)) * 1550.0;
-          float nearWeight = 1.0 - smoothstep(0.7, 2.6, footprint);
-          float kick = flakeGrain * nearWeight;
-          diffuseColor.rgb *= 0.985 + 0.038 * orangePeel.r;
-          diffuseColor.rgb = mix(diffuseColor.rgb, mix(carBaseTint, carFlakeTint, 0.36), kick * 0.14);
-        `)
-        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-          roughnessFactor += (orangePeel.b - 0.5) * 0.015 - kick * 0.19;
-        `)
-        .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
-          material.specularColor = mix(material.specularColor, max(material.specularColor, carFlakeTint), kick * 0.36);
-          #ifdef USE_CLEARCOAT
-            material.clearcoatRoughness += (orangePeel.g - 0.5) * 0.025;
-          #endif
-        `)
-      },
-    })
+interface FlakeSpec {
+  /** Mean flake diameter in micrometres. */
+  sizeUm: number
+  /** Fraction of the base area the flakes cover, seen from above. */
+  coverage: number
+  /** Standard deviation of each flake's tilt from the panel, in degrees, inside the clear. */
+  tiltDeg: number
+  /** Reflectance of one flake. Aluminium near 0.9, a mica pearl lower. */
+  reflectance: number
+  /** Half width of one flake's own reflection lobe, in degrees inside the clear. */
+  lobeDeg: number
+  /** How strongly the pigmented binder around the flakes tints them, at normal incidence. */
+  binder: number
+}
+
+const flakeSpecs: Record<string, FlakeSpec> = {
+  'black-pearl': { sizeUm: 22, coverage: .035, tiltDeg: 5, reflectance: .45, lobeDeg: 1, binder: .25 },
+  'ember-orange': { sizeUm: 30, coverage: .42, tiltDeg: 7, reflectance: .82, lobeDeg: 1, binder: .85 },
+  'liquid-silver': { sizeUm: 34, coverage: .55, tiltDeg: 6.5, reflectance: .9, lobeDeg: 1, binder: .35 },
+}
+const fallbackFlake: FlakeSpec = { sizeUm: 26, coverage: .4, tiltDeg: 7.5, reflectance: .8, lobeDeg: 1, binder: .5 }
+
+/** Clear coat: about 45 micrometres of clear over the base, a slight long wave in its surface, a lobe floor for compact lights. */
+const coat = { ior: 1.5, thicknessUm: 45, peelWaveMm: 2.2, peelSlopeDeg: .022, roughness: .045, directRoughness: .14, flakeRoughness: .19 }
+
+/** Flakes are dealt per cell of at most six and at most 90 micrometres, explicit up to a few cells per pixel, then a matched smooth lobe. */
+const cellFlakes = 6
+const cellLimit = 90e-6
+const explicitUntil = [3, 6]
+
+function flakeUniforms(spec: PaintSpec) {
+  const f = flakeSpecs[spec.id] ?? fallbackFlake
+  const radius = f.sizeUm * 5e-7
+  const density = f.coverage / (Math.PI * radius * radius)
+  const base = new T.Color(spec.base)
+  const peak = Math.max(base.r, base.g, base.b, 1e-4)
+  return {
+    color: new T.Color(spec.flake).multiplyScalar(f.reflectance),
+    binder: new T.Vector4(base.r / peak, base.g / peak, base.b / peak, f.binder),
+    shape: new T.Vector4(density, T.MathUtils.degToRad(f.tiltDeg), T.MathUtils.degToRad(f.lobeDeg), radius),
+    cell: new T.Vector4(Math.min(cellLimit, Math.sqrt(cellFlakes / density)), explicitUntil[0], explicitUntil[1], f.coverage),
+    albedo: f.reflectance * f.coverage,
   }
+}
+
+const paintPars = /* glsl */ `
+varying vec3 carLocal;
+varying vec3 carNormal;
+uniform mat3 normalMatrix;
+uniform vec3 carFlakeColor;
+uniform vec4 carBinder;
+uniform vec4 carFlakeShape;
+uniform vec4 carFlakeCell;
+uniform vec4 carCoat;
+uniform float carFlakeSeed;
+vec3 paintT;
+vec3 paintB;
+vec3 paintCoatNormal;
+vec2 paintUv;
+float paintFootprint;
+float paintCosAxis;
+uint paintAxis;
+vec2 paintSlope[PAINT_MAX_FLAKES];
+int paintFlakes;
+float paintFlakeArea;
+bool paintExplicit;
+
+uvec4 paintHash(uvec4 v) {
+  v = v * 1664525u + 1013904223u;
+  v.x += v.y * v.w; v.y += v.z * v.x; v.z += v.x * v.y; v.w += v.y * v.z;
+  v ^= v >> 16u;
+  v.x += v.y * v.w; v.y += v.z * v.x; v.z += v.x * v.y; v.w += v.y * v.z;
+  return v;
+}
+
+vec3 paintNoise(vec2 p, uint salt) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  vec2 du = 30.0 * f * f * (f * (f - 2.0) + 1.0);
+  uvec2 c = uvec2(ivec2(i));
+  uint s = salt ^ floatBitsToUint(carFlakeSeed);
+  float a = float(paintHash(uvec4(c, s, 7u)).x) / 4294967295.0;
+  float b = float(paintHash(uvec4(c + uvec2(1u, 0u), s, 7u)).x) / 4294967295.0;
+  float d = float(paintHash(uvec4(c + uvec2(0u, 1u), s, 7u)).x) / 4294967295.0;
+  float e = float(paintHash(uvec4(c + uvec2(1u, 1u), s, 7u)).x) / 4294967295.0;
+  float k = a - b - d + e;
+  return vec3(a + (b - a) * u.x + (d - a) * u.y + k * u.x * u.y, du * (vec2(b - a, d - a) + k * u.yx));
+}
+
+void paintSurface(vec3 viewNormal) {
+  vec3 n = normalize(carNormal);
+  vec3 an = abs(n);
+  vec3 axisU;
+  if (an.x >= an.y && an.x >= an.z) { paintAxis = 0u; paintUv = carLocal.yz; axisU = vec3(0.0, 1.0, 0.0); paintCosAxis = an.x; }
+  else if (an.y >= an.z) { paintAxis = 1u; paintUv = carLocal.zx; axisU = vec3(0.0, 0.0, 1.0); paintCosAxis = an.y; }
+  else { paintAxis = 2u; paintUv = carLocal.xy; axisU = vec3(1.0, 0.0, 0.0); paintCosAxis = an.z; }
+  vec3 t = normalize(normalMatrix * (axisU - n * dot(n, axisU)));
+  paintT = normalize(t - viewNormal * dot(viewNormal, t));
+  paintB = cross(viewNormal, paintT);
+  paintFootprint = sqrt(max(length(cross(dFdx(carLocal), dFdy(carLocal))), 1e-16));
+}
+
+vec3 paintPeel(vec3 coatNormal) {
+  float wave = carCoat.y;
+  float fade = 1.0 - smoothstep(0.2 * wave, 0.7 * wave, paintFootprint);
+  if (fade <= 0.0) return coatNormal;
+  vec2 q = paintUv / wave;
+  vec3 a = paintNoise(q, 11u);
+  vec3 b = paintNoise(q * 2.03 + 17.1, 12u);
+  vec2 slope = (a.yz + 0.45 * b.yz * 2.03) * (carCoat.x * fade / 1.25);
+  return normalize(coatNormal - slope.x * paintT - slope.y * paintB);
+}
+
+void paintCells(vec3 viewDir, vec3 viewNormal) {
+  float nv = max(dot(viewNormal, viewDir), 1e-3);
+  vec3 vi = (viewDir - viewNormal * nv) / carCoat.w;
+  float ci = sqrt(max(1.0 - dot(vi, vi), 1e-3));
+  vec2 uv = paintUv - carCoat.z * vec2(dot(vi, paintT), dot(vi, paintB)) / ci;
+  float side = carFlakeCell.x;
+  float area = side * side / paintCosAxis;
+  float lambda = carFlakeShape.x * area;
+  paintFlakeArea = 3.14159265 * carFlakeShape.w * carFlakeShape.w / area;
+  paintFlakes = 0;
+  float keep = 1.0 - smoothstep(carFlakeCell.y, carFlakeCell.z, paintFootprint / side);
+  uint seed = floatBitsToUint(carFlakeSeed);
+  float pick = float(paintHash(uvec4(floatBitsToUint(carLocal), seed)).x) / 4294967295.0;
+  paintExplicit = pick < keep;
+  if (!paintExplicit) return;
+  uvec2 cid = uvec2(ivec2(floor(uv / side)) + 1048576);
+  float u = float(paintHash(uvec4(cid, paintAxis, seed ^ 0x9e3779b9u)).x) / 4294967295.0;
+  float p = exp(-lambda);
+  float F = p;
+  int count = 0;
+  for (int i = 1; i <= PAINT_MAX_FLAKES; i++) {
+    if (u <= F) break;
+    count = i;
+    p *= lambda / float(i);
+    F += p;
+  }
+  paintFlakes = count;
+  for (int i = 0; i < PAINT_MAX_FLAKES; i++) {
+    if (i >= count) break;
+    uvec4 h = paintHash(uvec4(cid, paintAxis | (uint(i + 1) << 4u), seed));
+    float r = sqrt(-2.0 * log(max(float(h.x) / 4294967295.0, 1e-7)));
+    float t = 6.2831853 * float(h.y) / 4294967295.0;
+    paintSlope[i] = carFlakeShape.y * r * vec2(cos(t), sin(t));
+  }
+}
+
+vec3 paintBinder(float cosIn, float cosOut) {
+  float path = 0.5 * (1.0 / max(cosIn, 0.05) + 1.0 / max(cosOut, 0.05));
+  return pow(carBinder.rgb, vec3(carBinder.w * path));
+}
+
+vec3 paintInside(vec3 d, vec3 n) {
+  vec3 t = (d - n * dot(n, d)) / carCoat.w;
+  return t + n * sqrt(max(1.0 - dot(t, t), 0.0));
+}
+
+void paintFlakeDirect(const in IncidentLight light, const in vec3 n, const in vec3 v, inout ReflectedLight reflected) {
+  float nl = dot(n, light.direction);
+  if (nl <= 0.0) return;
+  vec3 li = paintInside(light.direction, n);
+  vec3 vi = paintInside(v, n);
+  vec3 h = normalize(li + vi);
+  float hn = dot(h, n);
+  vec2 s = vec2(dot(h, paintT), dot(h, paintB)) / hn;
+  float sigma = carFlakeShape.y;
+  float w = carFlakeShape.z;
+  float spread = sigma * sigma + w * w;
+  if (dot(s, s) > 16.0 * spread) return;
+  float lobe = 0.0;
+  if (paintExplicit) {
+    float k = 0.5 / (w * w);
+    for (int i = 0; i < PAINT_MAX_FLAKES; i++) {
+      if (i >= paintFlakes) break;
+      vec2 d = s - paintSlope[i];
+      lobe += exp(-dot(d, d) * k);
+    }
+    lobe *= paintFlakeArea / (6.2831853 * w * w);
+  } else {
+    lobe = carFlakeCell.w * exp(-0.5 * dot(s, s) / spread) / (6.2831853 * spread);
+  }
+  if (lobe <= 0.0) return;
+  float cl = max(dot(li, n), 1e-3);
+  float cv = max(dot(vi, n), 1e-3);
+  float through = (1.0 - F_Schlick(vec3(0.04), 1.0, nl).x) * (1.0 - F_Schlick(vec3(0.04), 1.0, dot(n, v)).x);
+  float hn2 = hn * hn;
+  reflected.directSpecular += light.color * nl * carFlakeColor * paintBinder(cl, cv) * (through * lobe / (hn2 * hn2 * 4.0 * cl * cv * carCoat.w * carCoat.w));
+}
+
+vec3 paintFlakeEnv(vec3 n, vec3 v) {
+  float nv = saturate(dot(n, v));
+  vec3 vi = paintInside(v, n);
+  float cv = max(dot(vi, n), 1e-3);
+  vec3 sum = vec3(0.0);
+  if (paintExplicit) {
+    for (int i = 0; i < PAINT_MAX_FLAKES; i++) {
+      if (i >= paintFlakes) break;
+      vec3 m = normalize(n + paintSlope[i].x * paintT + paintSlope[i].y * paintB);
+      vec3 ri = 2.0 * dot(vi, m) * m - vi;
+      float cr = dot(ri, n);
+      if (cr <= 0.0) continue;
+      vec3 t = (ri - n * cr) * carCoat.w;
+      float tt = dot(t, t);
+      if (tt >= 1.0) continue;
+      float co = sqrt(1.0 - tt);
+      vec3 ro = t + n * co;
+      vec3 mo = normalize(v + ro);
+      sum += getIBLRadiance(v, mo, PAINT_FLAKE_ROUGHNESS) * paintBinder(cr, cv) * (1.0 - F_Schlick(vec3(0.04), 1.0, co).x);
+    }
+    sum *= paintFlakeArea;
+  } else {
+    float sigma = sqrt(carFlakeShape.y * carFlakeShape.y + carFlakeShape.z * carFlakeShape.z);
+    float alpha = min(1.0, carCoat.w * 1.4142 * sigma * (1.0 + 0.6 * (1.0 - nv)));
+    sum = carFlakeCell.w * getIBLRadiance(v, n, sqrt(alpha)) * paintBinder(cv, cv) * (1.0 - F_Schlick(vec3(0.04), 1.0, nv).x);
+  }
+  return sum * carFlakeColor * (1.0 - F_Schlick(vec3(0.04), 1.0, nv).x);
+}
+
+void RE_Direct_Paint(const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
+  PhysicalMaterial coated = material;
+  #ifdef USE_CLEARCOAT
+    float film = smoothstep(0.996, 0.9999, dot(geometryClearcoatNormal, paintCoatNormal));
+    coated.clearcoatRoughness = mix(coated.clearcoatRoughness, max(coated.clearcoatRoughness, PAINT_DIRECT_COAT), film);
+  #endif
+  RE_Direct_Physical(directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, coated, reflectedLight);
+  paintFlakeDirect(directLight, geometryNormal, geometryViewDir, reflectedLight);
+}
+#undef RE_Direct
+#define RE_Direct RE_Direct_Paint
+`
+
+function paintStack(paint: T.MeshPhysicalMaterial, spec: PaintSpec) {
+  const start = flakeUniforms(spec)
+  const uniforms = {
+    carFlakeColor: { value: start.color },
+    carBinder: { value: start.binder },
+    carFlakeShape: { value: start.shape },
+    carFlakeCell: { value: start.cell },
+    carCoat: { value: new T.Vector4(T.MathUtils.degToRad(coat.peelSlopeDeg), coat.peelWaveMm * 1e-3, coat.thicknessUm * 1e-6, coat.ior) },
+    carFlakeSeed: { value: stream('vehicle paint flakes').range(1, 1000) },
+  }
+  patchMaterial(paint, {
+    id: 'vehicle paint stack',
+    uniforms,
+    defines: { PAINT_DIRECT_COAT: coat.directRoughness.toFixed(3), PAINT_MAX_FLAKES: 16, PAINT_FLAKE_ROUGHNESS: coat.flakeRoughness.toFixed(3) },
+    apply(shader) {
+      shader.vertexShader = 'varying vec3 carLocal;\nvarying vec3 carNormal;\n' + insertAfter(shader.vertexShader, '#include <begin_vertex>', 'carLocal = position;\ncarNormal = objectNormal;')
+      let f = insertAfter(shader.fragmentShader, '#include <lights_physical_pars_fragment>', paintPars)
+      f = insertAfter(f, '#include <clearcoat_normal_fragment_begin>', `
+        paintSurface(normal);
+        #ifdef USE_CLEARCOAT
+          clearcoatNormal = paintPeel(clearcoatNormal);
+          paintCoatNormal = clearcoatNormal;
+        #endif
+      `)
+      f = replaceOnce(f, '#include <lights_fragment_begin>', `
+        paintT = normalize(paintT - normal * dot(normal, paintT));
+        paintB = cross(normal, paintT);
+        paintCells(normalize(vViewPosition), normal);
+        #include <lights_fragment_begin>
+      `)
+      shader.fragmentShader = insertAfter(f, '#include <lights_fragment_maps>', `
+        #ifdef USE_ENVMAP
+          reflectedLight.indirectSpecular += paintFlakeEnv(geometryNormal, geometryViewDir);
+        #endif
+      `)
+    },
+  })
+  return (next: PaintSpec): void => {
+    const u = flakeUniforms(next)
+    uniforms.carFlakeColor.value.copy(u.color)
+    uniforms.carBinder.value.copy(u.binder)
+    uniforms.carFlakeShape.value.copy(u.shape)
+    uniforms.carFlakeCell.value.copy(u.cell)
+    paint.color.set(next.base).multiplyScalar(1 - u.albedo)
+  }
+}
+
+export function palette(spec: PaintSpec, full: boolean) {
+  const paint = new T.MeshPhysicalMaterial({
+    color: full ? spec.base : 0x93989f, metalness: full ? 0 : .13,
+    roughness: full ? .5 : .36, clearcoat: full ? 1 : .48, clearcoatRoughness: full ? coat.roughness : .22,
+    ior: coat.ior, specularIntensity: full ? 0 : .7, envMapIntensity: 1.15,
+  })
+  const repaint = full ? paintStack(paint, spec) : null
+  repaint?.(spec)
   const glass = new T.MeshPhysicalMaterial({
     color: full ? 0xb6c2c7 : 0x30383f, metalness: full ? 0 : .1, roughness: full ? .084 : .17,
     ior: 1.51, clearcoat: .8, clearcoatRoughness: .07, transmission: full ? .92 : 0,
@@ -211,11 +425,7 @@ export function palette(spec: PaintSpec, full: boolean) {
   for (const m of [projector, brushed, forged, spoke, brake, caliper, dark, hot, engine]) tag(m, 'none')
   if (full) tag(cabin, 'none')
   const setPaint = (next: PaintSpec): void => {
-    if (full) {
-      paint.color.set(next.base)
-      tint.value.set(next.base)
-      flake.value.set(next.flake)
-    }
+    repaint?.(next)
   }
   const load = async (): Promise<void> => {
     if (!full || typeof document === 'undefined') return
