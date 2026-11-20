@@ -2,6 +2,7 @@ import * as T from 'three'
 import { add, blend, contour, curve, fairCurve, joined, mix, patch, polygon, smooth, tau, vec, type Point, type Surface } from './geometry'
 import type { Palette } from './materials'
 import { addMirrors } from './mirror'
+import { lampWindow, trimmedFrontSkin, type UV } from './front-domain'
 
 export const dimensions = {
   length: 4.947, bodyWidth: 2.033, mirrorWidth: 2.266, height: 1.16, wheelbase: 2.779,
@@ -320,17 +321,66 @@ function noseReturn([x, y, z]: Point, v: number): Point {
   return [x, mix(skin[1], y, fairStep(v, 0, .26)) - drop, aft]
 }
 
-export function frontBezelSeat(edge: Point): Point {
-  const [x, , z] = edge
-  const apron = noseReturn(edge, .45)
-  let lo = Math.max(0, sAt(z) - .014), hi = sAt(z)
-  for (let i = 0; i < 18; i++) {
-    const s = (lo + hi) / 2
-    if (plan(s) < x) lo = s
-    else hi = s
+const cheekStart = frontHoodStation(.405)
+const cheekBreadth = fairCurve([
+  [0, 0], [.027, -.004], [.043, .001], [.065, .012], [.086, .025], [.098, .024],
+  [.116, .013], [.137, .002], [.161, 0], [.19, 0],
+], { controls: 8, flatStart: true, flatEnd: true, penalty: 1.6e-8 })
+
+export function frontCheek(s: number, y: number, side: number): Point {
+  const top = noseShoulder(s), drop = top - y
+  const q = (y - floorY) / (top - floorY)
+  const arch = Math.hypot(y - frontWheel.loaded, zAt(s) - frontWheel.z) - frontWheel.arch
+  const archFade = fairStep(s, .150, .194) * (1 - fairStep(s, .286, .313))
+    * (1 - fairStep(y, .694, .756))
+  const archForm = .0047 * archFade * (1 - fairStep(arch, .003, .081))
+  const sill = .053 * (1 - q) ** 5 * fairStep(s, .096, .153)
+  const x = plan(s) + cheekBreadth(s) * fairStep(drop, 0, .099) - sill + archForm + wingDraft(s, drop)
+  return [side * mix(x, sidePoint(s, y, 1)[0], fairStep(s, .252, .307)), y, zAt(s)]
+}
+
+function cheekTrims(full: boolean, arch: (u: number) => UV) {
+  const project = ([x, y, z]: Point, lateral: number): UV => {
+    let lo = 0, hi = .161
+    for (let i = 0; i < 21; i++) {
+      const u = (lo + hi) / 2, delta = zAt(u) - z
+      if (frontCheek(u, y, 1)[0] < x + lateral * delta) lo = u
+      else hi = u
+    }
+    return [(lo + hi) / 2, y]
   }
-  const s = (lo + hi) / 2
-  return blend(apron, [x, noseShoulder(s), zAt(s)], fairStep(x, .809, .874))
+  const face = (x: number, y: number, depth: number) => frontFascia(1, x, y, depth, .006)
+  const faceTrim = (u: number, v: number) => {
+    const p = lampWindow(face, u, v, -.008)
+    const y = p[1] + mix(-.004, .005, v)
+    const [s] = project([p[0] + mix(-.005, .007, u), y, p[2]], .34)
+    return [s, Math.min(y, noseShoulder(s) - .0025)] as const
+  }
+  const n = full ? 35 : 21
+  const lamp = [
+    ...Array.from({ length: n + 1 }, (_, i) => faceTrim(i / n, 0)),
+    ...Array.from({ length: 6 }, (_, i) => faceTrim(1, (i + 1) / 6)),
+    ...Array.from({ length: n }, (_, i) => faceTrim(1 - (i + 1) / n, 1)),
+    ...Array.from({ length: 5 }, (_, i) => faceTrim(0, 1 - (i + 1) / 6)),
+  ]
+  const mouth = [
+    [.402, .164], [.806, .159], [.877, .213], [.898, .274], [.880, .327],
+    [.865, .373], [.855, .430], [.800, .456], [.694, .439], [.512, .427], [.401, .415],
+  ] as const
+  const duct = contourUV(mouth, full ? 5 : 3, (x, y) => project(frontFascia(1, x, y, -.007), .10))
+  const apron = [[.29, .095], [.86, .095], [.872, .164], [.760, .171], [.480, .171], [.30, .189]] as const
+  const bottom = contourUV(apron, full ? 4 : 2, (x, y) => project(frontFascia(1, x, y, .012), .1))
+  const circle: UV[] = Array.from({ length: (full ? 116 : 78) + 1 }, (_, i) => arch(i / (full ? 116 : 78)))
+  circle.push([circle.at(-1)![0], floorY - .01], [circle[0][0], floorY - .01])
+  return [lamp, duct, bottom, circle]
+}
+
+function contourUV(points: readonly UV[], samples: number, transform: (x: number, y: number) => UV): UV[] {
+  const path = new T.CatmullRomCurve3(points.map(([x, y]) => new T.Vector3(x, y, 0)), true, 'centripetal')
+  return Array.from({ length: points.length * samples }, (_, i) => {
+    const p = path.getPoint(i / (points.length * samples))
+    return transform(p.x, p.y)
+  })
 }
 
 const cowl = (v: number): Point => bonnet(cabFront(v), v * .818)
@@ -427,9 +477,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     return (a + b) / 2
   }
   const mouthStart = gridU(wingVentFront), mouthEnd = gridU(wingVentBack), rollStart = gridU(.071)
-  const noseReturnEnd = gridU(frontHoodStation(.86)), noseTipEnd = gridU(.035)
-  const upperNoseStart = .114, noseStart = gridU(upperNoseStart)
-  const frontArchStart = sAt(frontWheel.z + frontWheel.arch), archStart = gridU(frontArchStart)
+  const noseReturnEnd = gridU(cheekStart), noseTipEnd = gridU(.035)
   const outerS = (u: number, q: number) => bonnetGrid(u) + (frontEnd(q) - bonnetGap - splitEnd) * fairStep(u, .81, 1)
   const ventQ = (s: number, v: number) => {
     const t = T.MathUtils.clamp(s, wingVentFront, wingVentBack)
@@ -460,7 +508,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     }
   }
   const baseStations = [...Array.from({ length: bonnetLengthSteps + 1 }, (_, i) => i / bonnetLengthSteps),
-    noseReturnEnd, rollStart, noseStart, archStart, ...crossings].sort((a, b) => a - b)
+    noseReturnEnd, rollStart, ...crossings].sort((a, b) => a - b)
   const stations = baseStations.flatMap((u, i) => {
     const next = baseStations[i + 1]
     const segments = full && next <= noseReturnEnd ? (next <= noseTipEnd ? 3 : 2) : 1
@@ -547,7 +595,9 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const wingRoll = (s: number, v: number): Point => {
       const w = wingEdge(s)
       const angle = w.angle * (1 - v)
-      return [w.width - w.radius + w.radius * Math.cos(angle), w.outer + w.radius * Math.sin(angle), zAt(s)]
+      const h = Math.sin(angle)
+      const fair = .5 * h * h * (1 - fairStep(h, 0, .62)) * (1 - fairStep(s, .252, .307))
+      return [w.width - w.radius + w.radius * (Math.cos(angle) + fair), w.outer + w.radius * h, zAt(s)]
     }
     const rollStations = bonnetStations.filter(u => u >= rollStart)
     part(paint, sided((u, v) => wingRoll(outerS(sampleGrid(rollStations, u), 1), v)), [side, 1, 0], rollStations.length - 1, 5, 0)
@@ -675,28 +725,22 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const columns = full ? n * 2 : n + 12
       if (rear) folded(face, uSide, [beltLine, haunchLine, trace], columns)
       else {
-        const { rows, at } = foldRows(face, [beltLine, trace, wingDraftLine], full ? 6 : 3)
-        const lipRows = 6
-        const skin = (u: number, v: number): Point => {
-          const p = archPanel(u, v), bead = v < .028 ? .0016 * Math.sin(Math.PI * v / .028) ** 4 : 0
-          return [p[0] + side * bead, p[1], p[2]]
-        }
-        paint.push(patch(skin, columns, rows + lipRows, uSide, .002, (u, j) => j < lipRows
-          ? .028 * j / lipRows : mix(.028, 1, at(u, j - lipRows))))
-        const height = shoulder(before) - floorY
-        const topRows = Array.from({ length: rows + 1 }, (_, j) => (face(0, at(0, j))[1] - floorY) / height)
-        const bottomRows = Array.from({ length: 5 }, (_, j) => topRows[0] * j / 5)
-        const stations = [...new Set([...bottomRows, ...topRows])]
-        const run = bonnetStations.filter(u => u >= noseStart && u <= archStart)
-        paint.push(patch((u, v) => {
-          const t = (bonnetGrid(sampleGrid(run, u)) - upperNoseStart) / (before - upperNoseStart)
-          const s = mix(mix(.141, upperNoseStart, smooth(v, .825, 1)), before, t)
-          const y = mix(floorY, shoulder(s), v)
-          const p = sidePoint(s, y, side)
-          return [p[0] + side * wingDraft(s, shoulder(s) - y), y, p[2]]
-        }, run.length - 1, stations.length - 1, uSide, .002, (_, j) => stations[j]))
+        const stations = [cheekStart, ...bonnetStations.map(u => outerS(u, 1)).filter(s => s > cheekStart && s < after), after]
+        const lowerY = fairCurve([[cheekStart, .425], [.031, .466], [.053, .460], [.075, .404], [.089, .189],
+          [.099, .172], [.123, .155], [.154, .133], [.179, floorY], [after, floorY]],
+        { interior: [.028, .052, .075, .088, .102, .147, .165, .19], flatEnd: true, penalty: 1e-11 })
+        const bounds: UV[] = stations.map(s => [s, noseShoulder(s)])
+        bounds.push(...stations.map(s => [s, lowerY(s)] as const).reverse())
+        const cut = cheekTrims(full, u => {
+          const a = mix(theta0, theta1, u)
+          return [sAt(w.z + w.arch * Math.cos(a)), w.loaded + w.arch * Math.sin(a)]
+        })
+        const step = full ? .011 : .023
+        const span = Math.ceil((after - cheekStart) * dimensions.length / step)
+        const samples = Array.from({ length: span + 1 }, (_, i) => mix(cheekStart, after, i / span))
+        paint.push(trimmedFrontSkin((s, y) => frontCheek(s, y, side), bounds, cut, samples, step, side))
       }
-      for (const [start, end] of [[theta0, 0], [Math.PI, theta1]]) part(paint, (u, v) => {
+      if (rear) for (const [start, end] of [[theta0, 0], [Math.PI, theta1]]) part(paint, (u, v) => {
         const p = lower(mix(start, end, u))
         const y = mix(floorY, p[1], v)
         const skin = sidePoint(sAt(p[2]), y, side)
@@ -713,7 +757,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const angle = mix(theta0, theta1, u)
         const p = lower(angle)
         const depth = .012 * Math.sin(Math.PI * v)
-        const x = mix(Math.abs(p[0]) - (rear ? .002 : .005), wellX, v), z = p[2] + depth * Math.cos(angle)
+        const edgeX = rear ? Math.abs(p[0]) : frontCheek(sAt(p[2]), p[1], 1)[0]
+        const x = mix(edgeX - (rear ? .002 : .001), wellX, v), z = p[2] + depth * Math.cos(angle)
         const y = p[1] + depth * Math.sin(angle)
         const s = sAt(z)
         const ceiling = rear ? y + .01 : bonnet(s, Math.min(1, x / wingEdge(s).x))[1] - .010

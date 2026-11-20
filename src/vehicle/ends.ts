@@ -1,7 +1,8 @@
 import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
 import { insertAfter, patchMaterial } from '../materials/patch'
-import { fascia, frontBezelSeat, frontFascia, frontHoodEdge, limitTailZ, sAt, tailCrestZ, tailLipY, zAt } from './body'
+import { fascia, frontFascia, frontHoodEdge, limitTailZ, sAt, tailCrestZ, tailLipY, zAt } from './body'
+import { lampWindow, lampWindowLow } from './front-domain'
 import { add, blend, curve, fairCurve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
 import type { Palette } from './materials'
 import type { Anchor, VehicleModule } from './contract'
@@ -215,11 +216,6 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const lipY = fairCurve([[0, .168], [.27, .151], [.71, .146], [.91, .155], [.967, .174]], { controls: 5 })
   const fasciaTop = fairCurve([[0, .417], [.29, .419], [.36, .430], [.48, .468], [.60, .509], [.72, .552], [.84, .620], [.928, .695], [.974, .754]])
   const noseTop = (x: number) => mix(frontHoodEdge(x)[1], fasciaTop(x), fair(x, .70, .85))
-  const chin = (x: number) => lipY(x) + .025
-  const eyeCrest = curve([[.48, .474], [.58, .512], [.68, .552], [.79, .600], [.889, .649], [.918, .658]])
-  const eyeTop = (x: number) => eyeCrest(x) - .015 * (1 - smooth(x, .535, .601))
-    - .0055 * smooth(x, .784, .821) * (1 - smooth(x, .828, .859))
-  const eyeLow = curve([[.48, .459], [.58, .462], [.69, .474], [.797, .497], [.865, .564], [.918, .635]])
   const outletZ = zAt(.995) + .006
   const outletCenter = .18, outletHeight = .8, halfOutletHeight = .0545
   const outletRound = .055, outletPoint = .57
@@ -234,18 +230,6 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const r: Face = (x, y, d = 0) => fascia(false, side, x, y, d)
     const points: XY[] = [[.448, .398], [.519, .427], [.674, .436], [.804, .460], [.875, .421], [.915, .299], [.820, .190], [.541, .195]]
     const outline: XY[] = [[.474, .455], [.568, .501], [.685, .554], [.797, .609], [.884, .667], [.923, .675], [.931, .599], [.883, .471], [.912, .354], [.930, .283], [.858, .198], [.819, .179], [.520, .180], [.429, .245], [.405, .360]]
-    const frontEdge = fairCurve([[0, .981], [.40, .972], [.67, .939], [1, .953]])
-    const outerY = fairCurve([[0, .191], [.42, .37], [.70, .534], [1, .716]])
-    const outerX = fairCurve([[0, .835], [.25, .904], [.51, .872], [.79, .906], [1, .929]], { controls: 4 })
-    const fPanel = (u: number, v: number): Point => {
-      const apron = fair(v, .10, .27) * (1 - fair(v, .52, .75)) * (1 - fair(u, 0, .42))
-      const x = mix(outerX(v), frontEdge(v), u) - .045 * apron
-      const y = mix(outerY(v), mix(chin(x), noseTop(x), v), u)
-      const tuck = fair(x, .912, .927) * fair(y, .655, .711)
-      const recess = mix(-.007, .011, u) - .005 * Math.sin(Math.PI * u) + .008 * apron
-      return f(x - .006 * tuck, y - .024 * tuck, recess)
-    }
-    frontPaint.push(patch(fPanel, 22, 28, outFront, .003))
     black.push(patch((u, v) => {
       const x = .487 * u
       const y = mix(lipY(x) + .020, noseTop(x) - .004, v)
@@ -330,26 +314,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const guide = emit('front running guide', lightGuide(guideFace, hub, tips, guideWidth, guideDepth, outFront),
       false, false, f(...hub, -.008), 3.99)
     profileGuide(guide, hub, tips, guideWidth)
-    const eyeStart = .495, eyeEnd = .919
     const lensTuck = (x: number, y: number) => .021 * smooth(x, .895, .912) * smooth(y, .589, .625)
-    const window = (u: number, v: number, d: number): Point => {
-      const x = mix(eyeStart + .022 * (v - .5) ** 2, eyeEnd - .009 * v, u)
-      const y = mix(eyeLow(x), eyeTop(x), v)
-      return frontFascia(side, x, y, d - .013 * Math.sin(Math.PI * v) * Math.sin(Math.PI * u), .006)
-    }
-    black.push(patch((u, v) => {
-      const lower = window(u, 1, -.002)
-      const x = Math.abs(lower[0])
-      const edge = frontHoodEdge(x), seat = frontBezelSeat(edge)
-      const rise = edge[1] - lower[1]
-      const outer = lower[1] + .5 * (rise + Math.hypot(rise, .008))
-      const low = lower[1] - .005, clearance = seat[1] - .0015 - low
-      const seatedY = low + .5 * (clearance + Math.hypot(clearance, .005))
-      const cover = fair(x, .797, .873)
-      const upperY = mix(seatedY, outer - .0008, cover)
-      const upperZ = mix(seat[2] - .0015, edge[2] - .009, cover)
-      return [lower[0], mix(low, upperY, v), mix(lower[2], upperZ, v)]
-    }, 100, 8, outFront))
+    const window = (u: number, v: number, d: number) => lampWindow((x, y, depth) => frontFascia(side, x, y, depth, .006), u, v, d)
     black.push(patch((u, v) => window(u, v, .071), full ? 44 : 32, full ? 17 : 12, outFront, .009))
     optical.push(patch((u, v) => {
       const p = window(u, v, -.008)
@@ -357,7 +323,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 100, 20, outFront))
     black.push(patch((u, v) => {
       const x = mix(.462, .936, u)
-      const edge = eyeLow(x)
+      const edge = lampWindowLow(x)
       const low = .404 - .128 * smooth(x, .828, .866)
       const y = mix(low, edge + .004, v)
       const d = .0005 + .039 * smooth(edge - y, -.004, .085)
