@@ -32,7 +32,10 @@ const bounceSize = 128
 const probeHeight = 0.6
 const captureNear = 0.05
 const captureFar = 1500
-const planarTuning = { taps: 4, filter: 0.7, roughStart: 0.55, roughEnd: 0.9, far: 4000, tail: 0.2 }
+const planarTuning = {
+  taps: 4, filter: 0.7, roughStart: 0.55, roughEnd: 0.9, far: 4000, tail: 0.2,
+  fireflyStart: 0.12, fireflyEnd: 0.18, fireflyRatio: 4, fireflyFloor: 0.35,
+}
 
 export interface ReflectionsPart extends StagePart {
   /** For other parts: the planar reflection of the deck and how to look it up. See `src/core/reflect/README.md`. */
@@ -85,6 +88,22 @@ function materialsOf(root: THREE.Object3D): THREE.MeshStandardMaterial[] {
   return [...found]
 }
 
+function deckDetails(root: THREE.Object3D) {
+  const meshes: THREE.Mesh[] = []
+  const materials = new Set<THREE.MeshStandardMaterial>()
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh
+    if (!mesh.isMesh) return
+    const stripe = /^(parking bay stripes|hero near bay line)$/.test(mesh.name)
+    const grate = mesh.parent?.name.endsWith('drain grate')
+    if (!stripe && !grate) return
+    meshes.push(mesh)
+    if (grate && mesh.name.endsWith('slot bed')) return
+    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) if (isLit(m)) materials.add(m)
+  })
+  return { meshes, materials }
+}
+
 export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const { renderer, scene, world, vehicle } = deps
   const seed = streamSeed('reflect')
@@ -118,6 +137,12 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   }
   patchAll()
   patchMaterial(world.deck.material, planarPatch(planar, planarTuning))
+  const details = deckDetails(world.root)
+  const detailPlanar = planarPatch(planar, planarTuning, true)
+  for (const material of details.materials) {
+    if (material !== world.deck.material) patchMaterial(material, detailPlanar)
+  }
+  const planarMeshes = [...world.deck.meshes, ...details.meshes]
 
   const probes = new Map<number, Probe>()
   const probeOf = (edge: number): Probe => {
@@ -251,7 +276,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       const previous = renderer.getRenderTarget()
       const color = renderer.getClearColor(new THREE.Color())
       const alpha = renderer.getClearAlpha()
-      const showDeck = hide(world.deck.meshes)
+      const showDeck = hide(planarMeshes)
       renderer.setRenderTarget(target)
       renderer.setClearColor(0x000000, 1)
       renderer.clear(true, true, false)
