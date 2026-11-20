@@ -7,7 +7,7 @@ import { cameraAt } from '../src/director/shots'
 import { events, lampThresholds, stateAt } from '../src/director/timeline'
 import { patchesOf } from '../src/materials/patch'
 import { createVehicle, type VehicleModule, type VehicleState } from '../src/vehicle'
-import { frontWheel, rearWheel, sAt, zAt } from '../src/vehicle/body'
+import { fascia, frontHoodEdge, frontWheel, rearWheel, sAt, zAt } from '../src/vehicle/body'
 
 const paint = paintById(defaultPaint)
 let blockout: VehicleModule
@@ -138,6 +138,49 @@ describe('vehicle geometry and state', () => {
         const shield = sight(.362), opening = sight(.256)
         expect(shield?.object.name).toBe('nose blades, shield and lower lip')
         expect(shield.point.z - opening.point.z).toBeGreaterThan(.065)
+      }
+    }
+  })
+
+  it('turns the bonnet skin under its leading edge without an open seam', () => {
+    const ray = new T.Raycaster(new T.Vector3(), new T.Vector3(0, 0, -1), 0, .030)
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const skin = vehicle.root.getObjectByName('closed body panels and returns')!
+      for (const side of [-1, 1]) for (const x of [.016, .048, .09, .17, .31, .42, .55, .63, .71, .79]) {
+        const [, y, z] = frontHoodEdge(x)
+        ray.ray.origin.set(side * x, y - .003, z + .022)
+        const hit = ray.intersectObject(skin)[0]
+        expect(hit).toBeDefined()
+        expect(z - hit.point.z).toBeGreaterThan(.003)
+        expect(z - hit.point.z).toBeLessThan(.006)
+      }
+    }
+  })
+
+  it('opens the hero view through to the recessed front radiator', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const backing = vehicle.root.getObjectByName('recessed front radiator backing')!
+      const fins = vehicle.root.getObjectByName('recessed front radiator fins')!
+      for (const format of [config.formats.master, config.formats.vertical]) {
+        const { position } = cameraAt(config.film.heroFrameSeconds, format, vehicle.anchors)
+        const hitAt = (x: number, y: number) => {
+          const aim = new T.Vector3(...fascia(true, 1, x, y, .140))
+          return new T.Raycaster(position, aim.sub(position).normalize()).intersectObject(vehicle.root, true)[0]
+        }
+        for (const [x, y] of [[.58, .264], [.63, .335], [.69, .365]]) {
+          const hit = hitAt(x, y)
+          expect([backing, fins]).toContain(hit.object)
+          expect(fascia(true, 1, hit.point.x, hit.point.y)[2] - hit.point.z).toBeGreaterThan(.110)
+        }
+        if (vehicle === full) expect(hitAt(.63, .300).object).toBe(fins)
+      }
+      const { position } = cameraAt(config.film.heroFrameSeconds, config.formats.master, vehicle.anchors)
+      for (const y of [.275, .292]) {
+        const aim = new T.Vector3(-.735, y, 2.065)
+        const hit = new T.Raycaster(position, aim.sub(position).normalize()).intersectObject(vehicle.root, true)[0]
+        expect(hit?.object).toBe(backing)
       }
     }
   })
