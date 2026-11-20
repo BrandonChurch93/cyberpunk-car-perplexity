@@ -226,7 +226,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const y = lower[1] + .5 * ((upper[1] - lower[1]) + Math.hypot(upper[1] - lower[1], .008))
       return [lower[0], mix(lower[1] - .005, y - .0008, v), mix(lower[2], upper[2] - .009, v)]
     }, 100, 8, outFront))
-    black.push(patch((u, v) => window(u, v, .071), 44, 17, outFront, .009))
+    black.push(patch((u, v) => window(u, v, .071), full ? 44 : 32, full ? 17 : 12, outFront, .009))
     optical.push(patch((u, v) => window(u, v, -.008), 100, 20, outFront))
     black.push(patch((u, v) => {
       const x = mix(.462, .936, u)
