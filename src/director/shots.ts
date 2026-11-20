@@ -229,8 +229,8 @@ const vertical: Record<string, ShotMaker> = {
   crane: (t, a) => {
     const q = pull(t)
     return {
-      position: frontOf(mix(52, 40, q), mix(6.2, 7.2, q), mix(0.8, 0.2, q)),
-      target: mixV(v(0.05, 0.55, 0.9), v(0.2, 0.55, 0.8), q),
+      position: frontOf(mix(50, 40, q), mix(6.9, 7.2, q), mix(0.9, 0.2, q)),
+      target: mixV(v(0.15, 0.55, 0.35), v(0.2, 0.55, 0.8), q),
       screen: [0, mix(-0.42, -0.36, q)],
       focalMm: wideMm,
       focus: mixV(a.lamp.position, nose, q),
