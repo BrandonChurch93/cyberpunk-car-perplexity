@@ -304,8 +304,8 @@ async function c2(ctx: PackContext): Promise<CriticPack> {
   const keyDir = join(repoRoot, 'reference', 'keyframes')
   for (const beat of beats) {
     const prefix = `${String(beatIndex(beat) + 1).padStart(2, '0')}-${beat}.`
-    const file = ['jpg', 'jpeg', 'png', 'webp'].map((e) => join(keyDir, prefix + e)).find((f) => existsSync(f))
-    if (!file) throw new Error(`no key frame for ${beat} in reference/keyframes/`)
+    const file = beat === 'wake' ? join(repoRoot, 'reference', 'approved', 'hero.jpg') : ['jpg', 'jpeg', 'png', 'webp'].map((e) => join(keyDir, prefix + e)).find((f) => existsSync(f))
+    if (!file || !existsSync(file)) throw new Error(`no key frame for ${beat} in reference/keyframes/`)
     items.push({ set: 'C', source: file, fit: 'long', shows: `target look for ${beatLabel(beat)}`, what: `key frame ${file}`, meta: { beat } })
   }
   const elements = [...new Set(beats.flatMap(elementsForBeat))]
