@@ -11,6 +11,7 @@ const fore = .664, aft = .897
 export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   const surround: T.BufferGeometry[] = [], covers: T.BufferGeometry[] = [], steps: T.BufferGeometry[] = []
   const mesh: T.BufferGeometry[] = [], ribs: T.BufferGeometry[] = [], internals: T.BufferGeometry[] = [], black: T.BufferGeometry[] = []
+  const rearLouvers: T.BufferGeometry[] = []
   const n = full ? 40 : 18
   black.push(patch((u, v) => {
     const s = mix(.649, .913, u), [edge] = bayEdge(s, 1)
@@ -51,7 +52,7 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
     const airFace = (u: number, v: number): Point => {
       const s = mix(.673, .731, u)
       const [x, y, z] = bayEdge(s, side)
-      return [x - side * (.114 + .080 * v), y - .042 - .099 * v + .013 * u, z - .016 * v]
+      return [x - side * (.106 + .100 * v), y - .120 - .028 * v + .006 * u, z - .016 * v]
     }
     black.push(patch((u, v) => {
       const p = airFace(u, v)
@@ -66,15 +67,21 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
     for (let tile = 0; tile < 5; tile++) {
       const at = .263 + tile * .116
       for (const lane of [0, 1]) {
-        const centerU = at + .029 * lane, centerV = lane ? .638 : .340
-        const hex: Point[] = [[-.045, 0], [-.028, -.127], [.028, -.127], [.045, 0], [.028, .127], [-.028, .127]]
+        const centerU = at + .026 * lane, centerV = lane ? .705 : .295
+        const hex: Point[] = [[-.049, 0], [-.030, -.125], [.030, -.125], [.049, 0], [.030, .125], [-.030, .125]]
           .map(([du, dv]) => {
             const p = cover(side, centerU + du, centerV + dv)
-            return [p[0], p[1] + .0033, p[2]]
+            return [p[0], p[1] + .006, p[2]]
           })
-        covers.push(polygon(roundedPath(hex, 2, .15), [0, 1, 0], .004))
+        covers.push(polygon(roundedPath(hex, 2, .16), [0, 1, 0], .007))
       }
     }
+    const pad: Point[] = [[.325, .465], [.345, .435], [.614, .435], [.649, .469], [.649, .534], [.623, .569],
+      [.347, .569], [.325, .537]].map(([u, v]) => {
+      const p = cover(side, u, v)
+      return [p[0], p[1] + .005, p[2]]
+    })
+    ribs.push(polygon(roundedPath(pad, 3, .15), [0, 1, 0], .006))
     for (const end of [0, 1]) for (let i = 0; i < 3; i++) {
       ribs.push(patch((u, v) => {
         const f = end === 0 ? mix(.058 + .017 * i, .233 - .013 * i, u) : mix(.972 - .010 * i, .789 + .012 * i, u)
@@ -99,15 +106,28 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   internals.push(patch(plenum, n, full ? 14 : 8, [0, 1, 0], .028))
   const plate: Point[] = [[-.041, .925, zAt(.827)], [.041, .925, zAt(.827)], [.029, .918, zAt(.843)], [0, .914, zAt(.849)], [-.029, .918, zAt(.843)]]
   black.push(polygon(roundedPath(plate, 3, .17), [0, 1, 0], .006))
-  steps.push(patch((u, v) => {
-    const x = (2 * u - 1) * mix(.232, .151, v)
-    return [x, mix(.947, .866, v) + .010 * (2 * u - 1) ** 2, zAt(mix(.898, .851, v) - .011 * (2 * u - 1) ** 2)]
-  }, full ? 24 : 14, 8, [0, 1, 0], .012))
+  black.push(patch((u, v) => {
+    const x = (2 * u - 1) * mix(.163, .232, v)
+    return [x, mix(.799, .930, v) + .010 * (2 * u - 1) ** 2, zAt(mix(.842, .906, v) - .008 * (2 * u - 1) ** 2)]
+  }, full ? 24 : 14, 8, [0, 1, 0], .010))
+  for (let i = 0; i < 3; i++) {
+    const panel = patch((u, v) => {
+      const a = 2 * u - 1
+      const x = a * (.171 - .020 * i + .012 * v)
+      const s = .847 + .0172 * i + .0132 * v - .0049 * Math.abs(a)
+      const y = .851 + .027 * i + .022 * v + .006 * a ** 2 + .0042 * smooth(v, .78, 1)
+      return [x, y, zAt(s)]
+    }, full ? 24 : 14, 8, [0, 1, 0], .0045)
+    const position = panel.getAttribute('position'), uv = panel.getAttribute('uv')
+    for (let j = 0; j < uv.count; j++) uv.setXY(j, Math.abs(position.getX(j)), -position.getZ(j))
+    rearLouvers.push(panel)
+  }
+  add(parent, 'dark chevron rear bay louvers', joined(rearLouvers), m.ventCarbon)
   add(parent, 'thin carbon engine bay surround', joined(surround), m.carbon)
   add(parent, 'carbon cam covers with hex relief', joined(covers), m.bayCover)
-  add(parent, 'stepped carbon bay vents', joined(steps), m.carbon)
+  add(parent, 'stepped carbon bay vents', joined(steps), m.ventCarbon)
   add(parent, 'front airbox hex grilles', joined(mesh), m.carbon)
-  add(parent, 'paired cam cover rib groups', joined(ribs), m.diffuser)
+  add(parent, 'paired cam cover rib groups and blank pads', joined(ribs), m.diffuser)
   add(parent, 'dark intake plenum and engine hardware', joined(internals), m.engine)
   add(parent, 'recessed bay chamber and blank plate', joined(black), m.dark)
   return anchor(plenum(2 / 3, .5), [0, 1, 0], .42)
