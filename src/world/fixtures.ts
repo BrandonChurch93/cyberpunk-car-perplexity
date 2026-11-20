@@ -665,6 +665,13 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   core.add(doorAnchor)
   lights.push({ id: 'doorway', kind: 'area', object: doorAnchor, color: doorTint, intensity: 2.8, size: [.9, .36], range: 18, shadow: false, beam: false, level: () => 1 })
   const signMount = core.getObjectByName('blank wayfinding plate')
+  const stairSidelight = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.07,1.07,.22), toneMapped: false })
+  for (const x of [-.73,.49,1.71]) {
+    const head = block(core,'recessed stairwell sidelight casing',frame,[x,.83,2.41],[.97,.36,.15])
+    head.castShadow = false
+    plate(core,'warm stairwell sidelight opal',stairSidelight,[x,.83,2.488],.86,.245)
+    block(core,'sidelight storm cap',metal,[x,1.014,2.432],[1.01,.042,.19]).castShadow = false
+  }
   const stairs = generic('STAIRS')
   if (signMount instanceof THREE.Mesh) {
     signMount.material = frame
