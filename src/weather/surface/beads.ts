@@ -258,8 +258,8 @@ float surfMist = 0.0;
     vec3 worldCenter = surfWorldPos + (vec4(toView * d3, 0.0) * viewMatrix).xyz;
     if (nearTrack && surfTrackDistance(worldCenter) < ${trackClear} + radius) continue;
     float geometry = surfGeo.w > 0.5 && i > 0 && dMm >= ${geometryMinMm.toFixed(2)} && distance(worldCenter, surfGeo.xyz) < surfGeo.w && dMm * 0.001 >= surfGeoAngle * distance(worldCenter, surfGeo.xyz) ? 1.0 : 0.0;
-    // Drops under a couple of pixels alias into glitter: they join the mist sheen instead of drawing a sharp lens.
-    float resolved = smoothstep(0.9 * pix, 2.6 * pix, radius);
+    // Drops under a pixel across alias into glitter: they join the mist sheen instead of drawing a sharp lens.
+    float resolved = smoothstep(0.3 * pix, 0.9 * pix, radius);
     if (resolved < 1.0) surfMist += density * (1.0 - resolved) * 0.6 * (dMm / cellMm) * (dMm / cellMm);
     if (resolved <= 0.0) continue;
     surfCap(surfHit, d3, radius, height * resolved, n, down, slope, pix, geometry);
@@ -306,6 +306,8 @@ float surfMist = 0.0;
     totalEmissiveRadiance += caustic * w * (diffuseColor.rgb + 0.08);
   }
   surfBeadOut = shaded;
+  // A dome a few pixels across holds every normal inside one pixel: spread its highlight, as a prefiltered normal map would.
+  surfBeadRough = mix(0.26, 0.012, smoothstep(1.5 * pix, 9.0 * pix, surfHit.radius));
   surfDiagOut = vec4(vec3(1.0, 0.1, 0.9) * (0.15 + 0.85 * max(w, surfMist * 0.5)), 1.0);
 }
 `
@@ -313,10 +315,10 @@ float surfMist = 0.0;
 const beadsSpecular = /* glsl */ `
 #ifdef USE_CLEARCOAT
   material.clearcoat = mix(material.clearcoat, 1.0, surfBeadOut);
-  material.clearcoatRoughness = mix(material.clearcoatRoughness, 0.012, surfBeadOut);
+  material.clearcoatRoughness = mix(material.clearcoatRoughness, surfBeadRough, surfBeadOut);
   material.clearcoatRoughness = mix(material.clearcoatRoughness, max(material.clearcoatRoughness, 0.16), surfMist * 0.5);
 #else
-  material.roughness = mix(material.roughness, 0.03, surfBeadOut);
+  material.roughness = mix(material.roughness, max(0.03, surfBeadRough), surfBeadOut);
 #endif
 `
 
@@ -328,7 +330,7 @@ export function applyBeads(material: THREE.Material, uniforms: Uniforms, bead: B
       shader.vertexShader = surfaceVaryingsGlsl(true) + insertAfter(shader.vertexShader, '#include <project_vertex>', surfaceVertexGlsl(true))
       let f = shader.fragmentShader
       f = surfaceVaryingsGlsl(true) + surfaceCommonGlsl + beadsGlsl + f
-      f = insertBefore(f, '#include <map_fragment>', 'float surfBeadOut = 0.0;\nvec4 surfDiagOut = vec4(0.0);')
+      f = insertBefore(f, '#include <map_fragment>', 'float surfBeadOut = 0.0;\nfloat surfBeadRough = 0.012;\nvec4 surfDiagOut = vec4(0.0);')
       f = insertAfter(f, '#include <clearcoat_normal_fragment_maps>', beadsFragment)
       f = insertAfter(f, '#include <lights_physical_fragment>', beadsSpecular)
       f = insertBefore(f, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { outgoingLight = surfDiagOut.rgb; }')
