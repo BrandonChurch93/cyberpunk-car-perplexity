@@ -334,6 +334,7 @@ export class LightRig {
       else scratch.copy(film.color)
       light.color.copy(scratch)
       light.intensity = film.intensity * level
+      light.distance = film.range
       light.visible = light.intensity > 1e-5
       u.filmLightPosition.value[i].copy(world)
       const cutoff = light instanceof THREE.SpotLight ? Math.cos(light.angle) : -1
