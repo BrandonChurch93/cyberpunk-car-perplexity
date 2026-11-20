@@ -55,99 +55,62 @@ def tire_profile(w):
     return [(rim, hw * 0.95)] + pts + tail + [(rim, -hw * 0.95)]
 
 
-def wheel(w, side_sign, label):
+def _occ_obj(name, V, T, N, mat, parent=None):
+    me = bpy.data.meshes.new(name)
+    me.from_pydata(V.tolist(), [], T.tolist())
+    me.validate(clean_customdata=False)
+    me.materials.append(bl.material(mat))
+    me.polygons.foreach_set('use_smooth', [True] * len(me.polygons))
+    if len(me.polygons) == len(T):
+        me.normals_split_custom_set(N.reshape(-1, 3).tolist())
+    ob = bpy.data.objects.new(name, me)
+    bpy.context.scene.collection.objects.link(ob)
+    if parent:
+        ob.parent = parent
+    return ob
+
+
+_SOLIDS = {}
+
+
+def _solids(w, fine):
+    import wheel_occ
+    key = (w['rim'], fine)
+    if key not in _SOLIDS:
+        d = 0.00015 if fine else 0.0006
+        a = 0.12 if fine else 0.35
+        _SOLIDS[key] = {
+            'spokes': wheel_occ.mesh(wheel_occ.spoke_face(w), d, a),
+            'disc': wheel_occ.mesh(wheel_occ.disc(w, holes=True), d, a),
+            'caliper': wheel_occ.mesh(wheel_occ.caliper(w), d, a),
+        }
+    return _SOLIDS[key]
+
+
+def wheel(w, side_sign, label, fine=False):
     root = bpy.data.objects.new(label, None)
     bpy.context.scene.collection.objects.link(root)
-    tire = _lathe(tire_profile(w), 160, f'{label} tire', 'tire')
+    tire = _lathe(tire_profile(w), 160 if fine else 72, f'{label} tire', 'tire')
     rimw = w['rim_w'] / 2
-    barrel = [(w['rim'] - 0.004, rimw), (w['rim'] + 0.012, rimw), (w['rim'] + 0.012, rimw - 0.012), (w['rim'] - 0.006, rimw - 0.02),
-              (w['rim'] - 0.022, rimw - 0.05), (w['rim'] - 0.022, -rimw + 0.02), (w['rim'] + 0.01, -rimw)]
-    rim = _lathe(barrel, 128, f'{label} rim barrel', 'rim')
-    face = spokes(w, f'{label} spokes')
-    disc = _lathe([(0.075, w['disc_t'] / 2), (w['disc'], w['disc_t'] / 2), (w['disc'], -w['disc_t'] / 2), (0.075, -w['disc_t'] / 2)], 96, f'{label} disc', 'disc')
-    disc.location.x -= rimw - 0.09
-    cal = caliper(w, f'{label} caliper')
-    cal.location.x -= rimw - 0.09
-    for ob in (tire, rim, face, disc, cal):
+    fl = w['rim'] + 0.018
+    barrel = [(w['rim'] - 0.004, rimw - 0.004), (fl - 0.003, rimw), (fl, rimw - 0.004), (fl - 0.004, rimw - 0.010), (w['rim'] + 0.002, rimw - 0.016),
+              (w['rim'] - 0.006, rimw - 0.022), (w['rim'] - 0.022, rimw - 0.05), (w['rim'] - 0.022, -rimw + 0.02), (w['rim'] + 0.01, -rimw)]
+    rim = _lathe(barrel, 192 if fine else 96, f'{label} rim barrel', 'rim')
+    S = _solids(w, fine)
+    face = _occ_obj(f'{label} spokes', *S['spokes'], 'rim')
+    disc = _occ_obj(f'{label} disc', *S['disc'], 'disc')
+    cal = _occ_obj(f'{label} caliper', *S['caliper'], 'caliper')
+    fx = rimw - 0.010
+    dc = (fx - 0.095) - 0.002 - (w['disc_t'] / 2 + 0.045)
+    disc.location.x = dc
+    cal.location.x = dc
+    cap = _lathe([(0.0, fx - 0.026), (0.030, fx - 0.026), (0.038, fx - 0.028), (0.042, fx - 0.034), (0.042, fx - 0.05)], 64, f'{label} center cap', 'rim')
+    for ob in (tire, rim, face, disc, cal, cap):
         ob.parent = root
     root.matrix_world = Matrix.Translation(Vector(bl.b((side_sign * w['x'], w['hub'], w['z']))))
     if side_sign < 0:
         root.scale.x = -1
     return root
-
-
-def spokes(w, name):
-    bm = bmesh.new()
-    rim_in = w['rim'] - 0.022
-    face_x = w['rim_w'] / 2 - 0.012
-    hub_r = 0.085
-    n = 5
-    rings = 96
-    for k in range(n):
-        a0 = 2 * math.pi * k / n
-        for off in (-0.10, 0.10):
-            pts2 = []
-            for t in np.linspace(0, 1, 12):
-                r = hub_r + t * (rim_in - hub_r)
-                spread = off * t ** 1.2
-                width = 0.030 - 0.006 * t
-                pts2.append((r, a0 + spread, width / r))
-            left = [(r * math.cos(a + h), r * math.sin(a + h)) for r, a, h in pts2]
-            right = [(r * math.cos(a - h), r * math.sin(a - h)) for r, a, h in pts2]
-            poly = left + right[::-1]
-            depth = lambda r: face_x - 0.010 - 0.055 * max(0.0, (r - hub_r) / (rim_in - hub_r)) ** 1.5
-            top = [bm.verts.new((depth(math.hypot(*p)), p[0], p[1])) for p in poly]
-            bot = [bm.verts.new((depth(math.hypot(*p)) - 0.045, p[0], p[1])) for p in poly]
-            bm.faces.new(top)
-            bm.faces.new(bot[::-1])
-            m = len(poly)
-            for i in range(m):
-                j = (i + 1) % m
-                bm.faces.new((top[i], bot[i], bot[j], top[j]))
-    hub = []
-    for i in range(rings):
-        a = 2 * math.pi * i / rings
-        hub.append((hub_r * 1.05 * math.cos(a), hub_r * 1.05 * math.sin(a)))
-    top = [bm.verts.new((face_x - 0.004, p[0], p[1])) for p in hub]
-    bot = [bm.verts.new((face_x - 0.06, p[0], p[1])) for p in hub]
-    bm.faces.new(top)
-    bm.faces.new(bot[::-1])
-    for i in range(rings):
-        j = (i + 1) % rings
-        bm.faces.new((top[i], bot[i], bot[j], top[j]))
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    ob = _obj(name, bm, 'rim', smooth=False)
-    md = ob.modifiers.new('chamfer', 'BEVEL')
-    md.width = 0.003
-    md.segments = 2
-    md.limit_method = 'ANGLE'
-    return ob
-
-
-def caliper(w, name):
-    bm = bmesh.new()
-    r0, r1 = w['disc'] - 0.06, w['disc'] + 0.015
-    a0, a1 = math.radians(20), math.radians(80)
-    segs = 12
-    hw = w['disc_t'] / 2 + 0.03
-    vs = []
-    for i in range(segs + 1):
-        a = a0 + (a1 - a0) * i / segs
-        ring = []
-        for r, x in ((r0, hw), (r1, hw), (r1, -hw), (r0, -hw)):
-            ring.append(bm.verts.new((x, r * math.cos(a), r * math.sin(a))))
-        vs.append(ring)
-    for i in range(segs):
-        for k in range(4):
-            bm.faces.new((vs[i][k], vs[i][(k + 1) % 4], vs[i + 1][(k + 1) % 4], vs[i + 1][k]))
-    bm.faces.new(vs[0][::-1])
-    bm.faces.new(vs[-1])
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    ob = _obj(name, bm, 'caliper', smooth=False)
-    md = ob.modifiers.new('round', 'BEVEL')
-    md.width = 0.006
-    md.segments = 3
-    return ob
 
 
 def flatten_contact(objs):

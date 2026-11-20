@@ -137,7 +137,7 @@ def build(level):
             part.parent = sprung
     tire_segs = 160 if full else 48
     for w, label in ((parts.FRONT, 'front wheel'), (parts.REAR, 'rear wheel')):
-        root = parts.wheel(w, 1, label)
+        root = parts.wheel(w, 1, label, fine=full)
         root['part'] = label
         for c in root.children:
             c['part'] = c.name.replace(label, label.split()[0]).strip()
