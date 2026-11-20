@@ -2,14 +2,20 @@ import * as THREE from 'three'
 import { FullscreenPass, passMaterial } from '../fullscreen'
 import { filmLightsGlsl, filmLightsShadowGlsl } from '../lights'
 import type { StageDeps, StagePart } from '../parts'
+import { streamSeed } from '../random'
 
 export const atmosphere = {
   uniformExtinction: 0.0045,
+  airHeight: 16.0,
   deckExtinction: 0.052,
   layerHeight: 0.27,
   cityExtinction: 0.009,
   cityLayerHeight: 13.0,
-  cityAirlight: [0.050, 0.111, 0.158],
+  airlight: [0.028, 0.028, 0.033],
+  cityAirlight: [0.095, 0.074, 0.101],
+  cityUnderlight: [0.161, 0.092, 0.147],
+  cloudUnderlight: [0.305, 0.086, 0.142],
+  cityUnderlightAxis: [-0.55, -0.84],
   anisotropy: 0.58,
   scatterFraction: 0.56,
   projectorAnisotropy: 0.76,
@@ -17,11 +23,13 @@ export const atmosphere = {
   projectorWingFraction: 0.07,
   projectorScatterFraction: 0.24,
   projectorBodyAnisotropy: 0.38,
-  projectorBodyScatterFraction: 0.59,
+  projectorBodyScatterFraction: 0.28,
   projectorBodyDistance: [0.46, 1.38],
   projectorBodyClearance: [1.0, 2.3],
   projectorFocus: [1.28, 2.1],
 } as const
+
+const cloudSeed = (streamSeed('haze/cloud-underlight') / 4294967296 * 64).toFixed(8)
 
 const scattering = /* glsl */ `
 uniform sampler2D sceneColor;
@@ -31,6 +39,7 @@ uniform ivec2 coarseResolution;
 uniform mat4 inverseProjection;
 uniform mat4 cameraWorld;
 uniform vec4 deckBounds;
+uniform vec2 cloudLightAxis;
 uniform vec2 sampleJitter;
 uniform float focusDistance;
 in vec2 vUv;
@@ -40,14 +49,50 @@ ${filmLightsGlsl}
 ${filmLightsShadowGlsl}
 
 const float airDensity = ${atmosphere.uniformExtinction};
+const float airHeight = ${atmosphere.airHeight.toFixed(1)};
 const float deckDensity = ${atmosphere.deckExtinction};
 const float layerHeight = ${atmosphere.layerHeight};
 const float cityDensity = ${atmosphere.cityExtinction};
 const float cityLayerHeight = ${atmosphere.cityLayerHeight.toFixed(1)};
+const vec3 nearAirlight = vec3(${atmosphere.airlight.join(', ')});
 const vec3 cityAirlight = vec3(${atmosphere.cityAirlight.join(', ')});
+const vec3 cityUnderlight = vec3(${atmosphere.cityUnderlight.join(', ')});
+const vec3 cloudUnderlight = vec3(${atmosphere.cloudUnderlight.join(', ')});
+const vec2 cityUnderlightAxis = vec2(${atmosphere.cityUnderlightAxis.join(', ')});
 const float anisotropy = ${atmosphere.anisotropy};
 const float scatterFraction = ${atmosphere.scatterFraction};
 const int steps = 8;
+
+float bankCell(vec2 cell) {
+  vec3 p = fract(vec3(cell.xyx) * 0.1031 + ${cloudSeed});
+  p += dot(p, p.yzx + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+
+float bankNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = smoothstep(0.0, 1.0, fract(p));
+  return mix(mix(bankCell(i), bankCell(i + vec2(1, 0)), f.x),
+    mix(bankCell(i + vec2(0, 1)), bankCell(i + 1.0), f.x), f.y);
+}
+
+vec3 cityGlow(vec3 ray) {
+  vec2 axis = normalize(cityUnderlightAxis);
+  float side = smoothstep(0.15, 0.88, dot(ray.xz, axis));
+  float elevation = mix(0.25, 1.0, smoothstep(0.03, 0.28, ray.y));
+  vec3 glow = mix(cityAirlight, cityUnderlight, side * elevation);
+  if (ray.y > 0.035 && side > 0.0) {
+    float across = dot(ray.xz, vec2(-cloudLightAxis.y, cloudLightAxis.x));
+    vec2 p = vec2(across * 19.2, ray.y * 29.8);
+    float coarse = bankNoise(p * 0.73);
+    float rolls = bankNoise(p * 2.43 + vec2(coarse * 1.6, -coarse));
+    float detail = bankNoise(p * 5.8 + rolls);
+    float cover = smoothstep(0.32, 0.70, 0.49 * coarse + 0.35 * rolls + 0.16 * detail);
+    vec2 band = vec2((across + 0.045) / 0.27, (ray.y - 0.142 - (rolls - 0.5) * 0.066) / 0.084);
+    glow += cloudUnderlight * side * cover * exp(-dot(band, band)) * smoothstep(0.035, 0.10, ray.y);
+  }
+  return glow;
+}
 
 float phase(float cosine, float g) {
   float a = 1.0 + g * g - 2.0 * g * clamp(cosine, -1.0, 1.0);
@@ -112,19 +157,27 @@ float layerOpticalDepth(float y, float dy, vec2 layer, float t) {
   return deckDensity * layerHeight * (a - b) / dy;
 }
 
-float cityOpticalDepth(float y, float dy, float distance) {
+float heightOpticalDepth(float y, float dy, float distance, float density, float height) {
   float end = y + dy * distance;
   float lo = min(y, end);
   float hi = max(y, end);
-  if (hi <= 0.0) return cityDensity * distance;
-  if (hi - lo < 0.003) return cityDensity * distance * exp(-max(0.0, 0.5 * (lo + hi)) / cityLayerHeight);
-  float a = exp(-max(0.0, lo) / cityLayerHeight);
-  float b = exp(-hi / cityLayerHeight);
-  return cityDensity * (max(0.0, -lo) + cityLayerHeight * (a - b)) / abs(dy);
+  if (hi <= 0.0) return density * distance;
+  if (hi - lo < 0.003) return density * distance * exp(-max(0.0, 0.5 * (lo + hi)) / height);
+  float a = exp(-max(0.0, lo) / height);
+  float b = exp(-hi / height);
+  return density * (max(0.0, -lo) + height * (a - b)) / abs(dy);
 }
 
-float densityAt(float t, float y, vec2 layer) {
-  return airDensity + ((t > layer.x && t < layer.y) ? deckDensity * exp(-max(y, 0.0) / layerHeight) : 0.0);
+float cityOpticalDepth(vec3 origin, vec3 ray, float start, float end) {
+  return heightOpticalDepth(origin.y + ray.y * start, ray.y, max(0.0, end - start), cityDensity, cityLayerHeight);
+}
+
+float densityAt(float t, float y, vec2 layer, float cityStart) {
+  float h = max(y, 0.0);
+  float density = airDensity * exp(-h / airHeight);
+  if (t > layer.x && t < layer.y) density += deckDensity * exp(-h / layerHeight);
+  if (t > cityStart) density += cityDensity * exp(-h / cityLayerHeight);
+  return density;
 }
 
 vec2 clipCone(vec2 segment, vec3 eyeFromLight, vec3 ray, vec3 axis, float cutoff) {
@@ -169,19 +222,17 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   vec2 footprint = deckInterval(origin, ray);
   vec2 layer = layerInterval(origin, ray, footprint);
   float layerDepth = layerOpticalDepth(origin.y, ray.y, layer, far);
-  float airDepth = far * airDensity;
+  float airDepth = heightOpticalDepth(origin.y, ray.y, far, airDensity, airHeight);
   float cityStart = footprint.y >= footprint.x ? footprint.y : 0.0;
-  float cityDistance = max(0.0, far - cityStart);
-  float cityDepth = cityDistance > 0.0 ? cityOpticalDepth(origin.y + ray.y * cityStart, ray.y, cityDistance) : 0.0;
+  float cityDepth = cityOpticalDepth(origin, ray, cityStart, far);
   float transmission = exp(-airDepth - layerDepth - cityDepth);
-  vec3 skyGlow = mix(vec3(0.032, 0.076, 0.103), vec3(0.019, 0.036, 0.054), smoothstep(0.02, 0.48, ray.y));
-  vec3 airlight = skyGlow * (1.0 - exp(-airDepth));
+  float nearDepth = heightOpticalDepth(origin.y, ray.y, min(far, cityStart), airDensity, airHeight);
+  vec3 airlight = nearAirlight * (1.0 - exp(-nearDepth));
   if (cityDepth > 1e-6) {
-    float farAirDepth = cityDistance * airDensity;
-    float farDepth = farAirDepth + cityDepth;
-    vec3 farGlow = mix(skyGlow, cityAirlight, cityDepth / farDepth);
-    airlight += exp(-cityStart * airDensity - layerDepth)
-      * (farGlow * (1.0 - exp(-farDepth)) - skyGlow * (1.0 - exp(-farAirDepth)));
+    float farDepth = max(0.0, airDepth - nearDepth) + cityDepth;
+    airlight += exp(-nearDepth - layerDepth) * cityGlow(ray) * (1.0 - exp(-farDepth));
+  } else {
+    airlight += nearAirlight * (exp(-nearDepth) - exp(-airDepth));
   }
   vec3 radiance = airlight * foregroundScatter(far * 0.5);
   vec2 pixel = floor(uv * vec2(textureSize(sceneDepth, 0)));
@@ -215,16 +266,24 @@ vec4 scatterToDepth(vec2 uv, float depth) {
       vec3 glowDirection = toSource - tGlow * ray;
       float sourceDistance = length(glowDirection);
       float glowDistance = max(sourceDistance, shape.y);
+      vec3 glowRay = glowDirection / max(sourceDistance, 1e-4);
       vec3 glowPoint = origin + tGlow * ray;
       float r = glowDistance / color.a;
       float falloff = max(0.0, 1.0 - r * r * r * r);
-      float glowT = exp(-airDensity * (tGlow + glowDistance) - layerOpticalDepth(origin.y, ray.y, layer, tGlow));
-      float angular = spot ? filmAngularFalloff(i, glowDirection / max(sourceDistance, 1e-4)) * filmLightVisibility(i, glowPoint)
+      float glowDepth = heightOpticalDepth(origin.y, ray.y, tGlow, airDensity, airHeight)
+        + heightOpticalDepth(glowPoint.y, glowRay.y, glowDistance, airDensity, airHeight)
+        + layerOpticalDepth(origin.y, ray.y, layer, tGlow) + cityOpticalDepth(origin, ray, cityStart, tGlow);
+      float angular = spot ? filmAngularFalloff(i, glowRay) * filmLightVisibility(i, glowPoint)
         : (axis.w < -0.5 ? 1.0 : 0.28 + 0.72 * max(0.0, dot(-glowDirection / glowDistance, axis.xyz)));
       float glow = (glowEnd - glowStart) / glowRadius;
       float strength = spot ? 0.36 : 0.72;
-      radiance += color.rgb * glow * angular * glowT * falloff * falloff * strength
-        * densityAt(tGlow, glowPoint.y, layer) * phase(dot(ray, glowDirection) / glowDistance, anisotropy) * foregroundScatter(tGlow);
+      if (shape.x < 0.0 && axis.w > -0.5) {
+        float sourceChroma = 1.0 - min(color.r, min(color.g, color.b)) / max(color.r, max(color.g, color.b));
+        float close = 1.0 - smoothstep(1.0, 3.0, sourceDistance / shape.y);
+        strength *= 1.0 + 1.1 * sourceChroma * close;
+      }
+      radiance += color.rgb * glow * angular * exp(-glowDepth) * falloff * falloff * strength
+        * densityAt(tGlow, glowPoint.y, layer, cityStart) * phase(dot(ray, glowDirection) / glowDistance, anisotropy) * foregroundScatter(tGlow);
       continue;
     }
 
@@ -252,13 +311,20 @@ vec4 scatterToDepth(vec2 uv, float depth) {
       if (visible < 0.01) continue;
       float weight = beamRadius * (1.0 + tangent * tangent) * stepAngle;
       float distanceToLight = length(filmLightPosition[i] - p);
-      float opticalDepth = airDensity * (t + distanceToLight) + layerOpticalDepth(origin.y, ray.y, layer, t);
+      float opticalDepth = heightOpticalDepth(origin.y, ray.y, t, airDensity, airHeight)
+        + heightOpticalDepth(p.y, toLight.y, distanceToLight, airDensity, airHeight)
+        + layerOpticalDepth(origin.y, ray.y, layer, t) + cityOpticalDepth(origin, ray, cityStart, t);
       float cosine = dot(ray, toLight);
       float scatteringPhase = projector
         ? projectorPhase(cosine) * ${atmosphere.projectorScatterFraction} * smoothstep(0.1, 0.43, distanceToLight)
           + projectorBodyPhase(cosine, distanceToLight, dot(toLight, up), far - t)
         : phase(cosine, anisotropy) * scatterFraction;
-      radiance += light * (visible * weight * densityAt(t, p.y, layer) * scatteringPhase * exp(-opticalDepth) * foregroundScatter(t) * projectorGain);
+      float density = densityAt(t, p.y, layer, cityStart);
+      if (projector && t > layer.x && t < layer.y) {
+        float ground = 1.0 - smoothstep(0.055, 0.28, p.y);
+        density -= 0.85 * ground * deckDensity * exp(-max(p.y, 0.0) / layerHeight);
+      }
+      radiance += light * (visible * weight * density * scatteringPhase * exp(-opticalDepth) * foregroundScatter(t) * projectorGain);
     }
   }
   return vec4(radiance, transmission);
@@ -308,6 +374,8 @@ void main() {
 `
 
 export function createHaze({ rig, world }: StageDeps): StagePart {
+  const screen = world.lights?.find((light) => light.id === 'magenta violet tower screen')?.object
+  const screenPosition = new THREE.Vector3()
   const coarse = new THREE.WebGLRenderTarget(1, 1, {
     type: THREE.HalfFloatType,
     minFilter: THREE.NearestFilter,
@@ -325,6 +393,7 @@ export function createHaze({ rig, world }: StageDeps): StagePart {
     inverseProjection: { value: new THREE.Matrix4() },
     cameraWorld: { value: new THREE.Matrix4() },
     deckBounds: { value: new THREE.Vector4() },
+    cloudLightAxis: { value: new THREE.Vector2(...atmosphere.cityUnderlightAxis).normalize() },
     sampleJitter: { value: new THREE.Vector2() },
     focusDistance: { value: 1 },
   }
@@ -343,6 +412,11 @@ export function createHaze({ rig, world }: StageDeps): StagePart {
         uniforms.sceneDepth.value = input.depth
         uniforms.inverseProjection.value.copy(camera.projectionMatrixInverse)
         uniforms.cameraWorld.value.copy(camera.matrixWorld)
+        if (screen) {
+          screen.getWorldPosition(screenPosition)
+          const eye = camera.matrixWorld.elements
+          uniforms.cloudLightAxis.value.set(screenPosition.x - eye[12], screenPosition.z - eye[14]).normalize()
+        }
         const { min, max } = world.deck.bounds
         uniforms.deckBounds.value.set(min.x, min.y, max.x, max.y)
         uniforms.sampleJitter.value.set(...sample.misc)

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { config } from '../src/config'
 import { createReflections, quality } from '../src/core/reflect'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
+import { patchesOf } from '../src/materials/patch'
 import { launchBrowser } from '../tools/lib/browser'
 
 function camera(): THREE.PerspectiveCamera {
@@ -76,6 +77,61 @@ describe('quality', () => {
     expect(quality.review.captureSize).toBeLessThan(quality.final.captureSize)
     for (const q of Object.values(quality)) expect(Math.log2(q.captureSize) % 1).toBe(0)
   })
+})
+
+it('uses the deck mirror on bay paint and grate metal without rendering them into their own mirror', () => {
+  const scene = new THREE.Scene()
+  const world = new THREE.Group()
+  const body = new THREE.Group()
+  const dark = new THREE.MeshStandardMaterial()
+  const zinc = new THREE.MeshStandardMaterial()
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial())
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial())
+  stripe.name = 'hero near bay line'
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(), zinc)
+  rail.position.y = 1
+  const grate = new THREE.Group()
+  grate.name = 'hero near drain grate'
+  const rim = new THREE.Mesh(new THREE.BoxGeometry(), zinc)
+  rim.name = 'iron grate end rim'
+  const slot = new THREE.Mesh(new THREE.BoxGeometry(), dark)
+  slot.name = 'recessed slot bed'
+  grate.add(rim, slot)
+  world.add(floor, stripe, rail, grate)
+  scene.add(world, body)
+  const visibility: boolean[][] = []
+  const renderer = {
+    coordinateSystem: THREE.WebGLCoordinateSystem,
+    getRenderTarget: () => null,
+    getClearColor: (color: THREE.Color) => color,
+    getClearAlpha: () => 1,
+    setRenderTarget: () => undefined,
+    setClearColor: () => undefined,
+    clear: () => undefined,
+    render: () => visibility.push([floor.visible, stripe.visible, rim.visible, slot.visible, rail.visible]),
+  } as unknown as THREE.WebGLRenderer
+  const part = createReflections({
+    renderer, scene,
+    vehicle: { root: body, lamps: [] },
+    world: { root: world, deck: { material: floor.material, meshes: [floor] }, reflectionBox: new THREE.Box3() },
+  })
+  const fmt = config.formats.preview
+  const eye = camera()
+  const state = { position: eye.position, quaternion: eye.quaternion, focalMm: 35, sensorWidthMm: 36, focusDistance: 4, fNumber: 2, near: .1, far: 50 }
+  part.beforeSample!({
+    camera: eye, state, timeSeconds: 0,
+    sample: {
+      frame: { format: fmt, frameIndex: 195, frameKey: 195, tier: 'draft', samples: 1, timeSeconds: 0 },
+      sampleIndex: 0, timeSeconds: 0, shutter: .5, aperture: [0, 0], misc: [0, 0], pixel: [0, 0], light: [0, 0],
+    },
+  })
+  expect(visibility).toEqual([[false, false, false, false, true]])
+  expect([floor.visible, stripe.visible, rim.visible, slot.visible, rail.visible]).toEqual([true, true, true, true, true])
+  expect(patchesOf(floor.material)).toEqual(['reflect-box', 'reflect-planar'])
+  expect(patchesOf(stripe.material)).toEqual(['reflect-box', 'reflect-planar-deck-detail'])
+  expect(patchesOf(zinc)).toEqual(['reflect-box', 'reflect-planar-deck-detail'])
+  expect(patchesOf(dark)).toEqual(['reflect-box'])
+  expect(zinc.defines?.REFLECT_DECK_DETAIL).toBe(1)
 })
 
 function captureLamp(three: typeof THREE, reflections: typeof createReflections, fmt: typeof config.formats.preview) {
