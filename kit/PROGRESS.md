@@ -5,7 +5,7 @@ The Builder's memory. Read this first in every task. Update it before every comm
 ## Status
 
 - Current phase: 2 · Blockout in motion
-- Current round: 2 (Phase 2 blockout)
+- Current round: 3 (Phase 2 blockout)
 - Blocked: no
 - Last push: see the push log, 2026-11-19
 
@@ -243,6 +243,13 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-19, session 7
+
+- Done: the engine bay was rebuilt from the factory photograph and the detail shot copies that photograph. Critic round 2 on the gray box: C5 7, C8 6. Answered with a 50 mm wheel shot at hub height, a paint glide over the left wing crease, tall wides at 30 degrees off the nose, a tall rear shot off the centerline, a crane return spread over 36.3 to 44.0 s and a gray-box sun on the side the inserts are shot on. Round 3 pack rendered (build 2ce7d31f00d145ca) and sent to two fresh reviewers on two other families. Merged headlamp haze, surface water, the post curve with a lifted toe and a matched shoulder (no channel reaches 255 on the seven look frames), and vehicle B through pass 5 front and side. 145 unit tests pass.
+- Measured: the auditor scores vehicle B front three-quarter 6, side 6, rear three-quarter 6, wheel 5, lamp 7, bay 7 against a bar of 8. A Phase 2 pack takes 30 to 50 minutes on two cores.
+- Seen at full detail: lighting restaged by the world owner makes the body read but overshoots to pale silver. It is being pulled back so the black paint is described by reflections of sign shapes, not by fill. A review frame at 8.00 s showed a black square: one sample carries a value near 4.7 million that overflows the half-float bloom buffer. The post owner is finding the source and adding a count of non-finite pixels that a gate can read.
+- Next: round 3 answers, more rounds until C5 and C8 hold at 9 with no severe or major issue, then the Phase 2 gate. Phase 3 work continues behind the detail switch: lighting, bead shading, the wheel, the body form.
 
 ### 2026-11-19, session 6
 
