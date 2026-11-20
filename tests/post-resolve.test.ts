@@ -16,11 +16,11 @@ function exercise(
   const resolver = new Resolver(renderer)
   resolver.resize(fmt)
 
-  function field(fn: (x: number, y: number) => number) {
+  function field(fn: (x: number, y: number) => number | readonly [number, number, number]) {
     for (let i = 0; i < input.length; i += 4) {
       const p = i / 4
       const v = fn(p % width, Math.floor(p / width))
-      input.set([v, v, v, 3], i)
+      input.set(typeof v === 'number' ? [v, v, v, 3] : [...v, 3], i)
     }
     sum.needsUpdate = true
   }
@@ -46,9 +46,22 @@ function exercise(
 
   field(() => 1.5)
   const normals = render('normals', 0)
+  const px = (data: Uint8Array, x: number, y: number) => Array.from(data.slice(4 * (y * width + x), 4 * (y * width + x) + 3))
+  field((x) => {
+    if (x < 16) return 18
+    if (x < 32) return 90
+    if (x < 48) return 270
+    if (x < 64) return 720
+    if (x < 80) return [24, 0.9, 1.1]
+    return [1.3, 10.4, 18]
+  })
+  const practicals = render('clay', 0)
+  const steps = [8, 24, 40, 56].map(x => px(practicals, x, height >> 1)[0])
+  const red = px(practicals, 72, height >> 1)
+  const cyan = px(practicals, 88, height >> 1)
+
   field((x, y) => Math.abs(x - width / 2) <= 2 && Math.abs(y - height / 2) <= 2 ? 2500 : 0)
   const lamp = render('beauty', 0)
-  const px = (x: number, y: number) => Array.from(lamp.slice(4 * (y * width + x), 4 * (y * width + x) + 3))
   const middleX = width >> 1
   const middleY = height >> 1
   const result = {
@@ -56,9 +69,12 @@ function exercise(
     seamSame: first.every((v, i) => v === seam[i]),
     nextSame: first.every((v, i) => v === next[i]),
     normals: normals[0],
-    near: px(middleX, middleY + 5),
-    streak: px(middleX + 18, middleY),
-    far: px(middleX, middleY + 18),
+    steps,
+    red,
+    cyan,
+    near: px(lamp, middleX, middleY + 5),
+    streak: px(lamp, middleX + 18, middleY),
+    far: px(lamp, middleX, middleY + 18),
   }
   sum.dispose()
   target.dispose()
@@ -104,6 +120,10 @@ test('resolves on WebGL2 with dither, lens scatter, diagnostic passthrough and a
       expect(result.seamSame).toBe(true)
       expect(result.nextSame).toBe(false)
       expect(Math.abs(result.normals - 127.5)).toBeLessThanOrEqual(0.5)
+      expect(result.steps.every((code, i, steps) => i === 0 || code >= steps[i - 1] + 2)).toBe(true)
+      expect(result.steps[3]).toBeLessThan(254)
+      expect(result.red[0]).toBeGreaterThan(result.red[1] + 45)
+      expect(result.cyan[2]).toBeGreaterThan(result.cyan[0] + 35)
       expect(result.near[0]).toBeGreaterThan(result.near[2])
       expect(result.streak[2]).toBeGreaterThan(result.far[2] + 2)
     } finally {
