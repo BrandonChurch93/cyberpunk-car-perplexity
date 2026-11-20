@@ -1,7 +1,10 @@
 import * as THREE from 'three'
+import { createServer } from 'vite'
 import { describe, expect, it } from 'vitest'
-import { quality } from '../src/core/reflect'
+import { config } from '../src/config'
+import { createReflections, quality } from '../src/core/reflect'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
+import { launchBrowser } from '../tools/lib/browser'
 
 function camera(): THREE.PerspectiveCamera {
   const c = new THREE.PerspectiveCamera(40, 16 / 9, 0.1, 500)
@@ -74,3 +77,111 @@ describe('quality', () => {
     for (const q of Object.values(quality)) expect(Math.log2(q.captureSize) % 1).toBe(0)
   })
 })
+
+function captureLamp(three: typeof THREE, reflections: typeof createReflections, fmt: typeof config.formats.preview) {
+  const renderer = new three.WebGLRenderer()
+  const scene = new three.Scene()
+  const root = new three.Group()
+  const sprung = new three.Group()
+  const body = new three.Mesh(new three.PlaneGeometry(2, 2), new three.MeshBasicMaterial({
+    color: new three.Color(0, 1, 0), side: three.DoubleSide,
+  }))
+  body.position.set(0, .6, 1)
+  const source = new three.Mesh(new three.PlaneGeometry(.25, .25), new three.MeshStandardMaterial({
+    color: 0, emissive: new three.Color(1, 0, 0), emissiveIntensity: 0,
+  }))
+  source.name = 'test lamp'
+  source.position.set(0, .6, 2)
+  const origin = new three.Object3D()
+  origin.name = 'test lamp emission origin'
+  sprung.add(body, source, origin)
+  root.add(sprung)
+  scene.add(root)
+  const part = reflections({
+    renderer, scene,
+    vehicle: { root, lamps: [{ object: origin, stage: 0, beam: true }] },
+    world: {
+      root: new three.Group(),
+      deck: { material: new three.MeshStandardMaterial(), meshes: [] },
+      reflectionBox: new three.Box3(new three.Vector3(-4, 0, -4), new three.Vector3(4, 4, 4)),
+    },
+  })
+  part.resize(fmt)
+  const state = { position: new three.Vector3(0, 1, 4), quaternion: new three.Quaternion(), focalMm: 35, sensorWidthMm: 36, focusDistance: 4, fNumber: 2, near: .1, far: 50 }
+  const sampler = new three.Scene()
+  const output = new three.WebGLRenderTarget(1, 1)
+  const uniforms = { captured: { value: null as THREE.Texture | null }, direction: { value: new three.Vector3() } }
+  const material = new three.ShaderMaterial({
+    uniforms,
+    vertexShader: 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: 'uniform samplerCube captured; uniform vec3 direction; void main(){ gl_FragColor = vec4(textureCube(captured, direction).rgb * 0.125, 1.0); }',
+  })
+  sampler.add(new three.Mesh(new three.PlaneGeometry(2, 2), material))
+  const eye = new three.Camera()
+  const test = (frameIndex: number, intensity: number, x: number) => {
+    source.material.emissiveIntensity = intensity
+    sprung.position.x = x
+    part.beginFrame!({ camera: state, format: fmt, frame: { format: fmt, frameIndex, frameKey: frameIndex, tier: 'draft', samples: 1, timeSeconds: 0 } })
+    uniforms.captured.value = scene.environment
+    uniforms.direction.value.set(x, 0, 2).normalize()
+    renderer.setRenderTarget(output)
+    renderer.render(sampler, eye)
+    const pixel = new Uint8Array(4)
+    renderer.readRenderTargetPixels(output, 0, 0, 1, 1, pixel)
+    return Array.from(pixel.slice(0, 3))
+  }
+  const off = test(0, 0, 0)
+  const dim = test(1, 2, 0)
+  const bright = test(2, 6, .48)
+  let captureOnly = false
+  scene.traverse((node) => { if (node.name === 'cube lamp emitters') captureOnly = !node.visible })
+  const bodyRestored = root.visible && body.visible && source.visible && source.material.side === three.FrontSide
+  output.dispose()
+  renderer.dispose()
+  return { off, dim, bright, captureOnly, bodyRestored }
+}
+
+it('captures the moving lamp at its current output but keeps the car body out of the cube', async () => {
+  const id = '/reflect-test-entry.js'
+  const app = await createServer({
+    configFile: false,
+    server: { host: '127.0.0.1', port: 0, ws: false },
+    plugins: [{
+      name: 'reflect-test-entry',
+      resolveId: (entry) => entry === id ? id : null,
+      load: (entry) => entry === id ? `
+        import * as THREE from 'three'
+        import { createReflections } from '/src/core/reflect/index.ts'
+        import { config } from '/src/config.ts'
+        export const run = () => (${captureLamp.toString()})(THREE, createReflections, config.formats.preview)
+      ` : null,
+      configureServer(server) {
+        server.middlewares.use('/reflect-test', (_req, res) => {
+          res.setHeader('Content-Type', 'text/html')
+          res.end('<html><head><link rel="icon" href="data:,"></head><body></body></html>')
+        })
+      },
+    }],
+  })
+  try {
+    await app.listen()
+    const browser = await launchBrowser()
+    try {
+      const page = await browser.newPage()
+      const errors: string[] = []
+      page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
+      await page.goto(new URL('reflect-test', app.resolvedUrls!.local[0]).href)
+      const result: ReturnType<typeof captureLamp> = await page.evaluate(`import("${id}").then(module => module.run())`)
+      expect(errors).toEqual([])
+      expect(result.off).toEqual([0, 0, 0])
+      expect(result.dim[0]).toBeGreaterThan(50)
+      expect(result.bright[0]).toBeGreaterThan(result.dim[0] * 2)
+      expect(result.bright.slice(1)).toEqual([0, 0])
+      expect(result.captureOnly && result.bodyRestored).toBe(true)
+    } finally {
+      await browser.close()
+    }
+  } finally {
+    await app.close()
+  }
+}, 30_000)
