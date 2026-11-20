@@ -190,6 +190,10 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | The engine bay is rebuilt after the factory photograph: two ribbed carbon cam covers, stepped carbon side panels, a carbon surround and mesh airboxes, with no bracing over the engine. The detail shot is a crane move from the rear left that copies that photograph. This replaces the earlier decision that named bracing | The real car has no braces over the engine. The first bay was built from a wrong reading of the reference | `src/vehicle/`, `anchors.detail`, the detail rows in `cut/SHOTS.md` |
 | 2026-11-19 | The paint beat is a 0.30 m sideways slide with a locked head | Along the lens axis the frames of the beat were nearly the same. A sideways slide gives parallax between the crest, the pillar, the mirror and the city | `src/director/shots.ts`, `cut/SHOTS.md` |
 | 2026-11-19 | Every frame of the film is tested for one camera pose across its exposure. The first round 2 pack was discarded | That pack showed a double exposure at 36.00 s: samples of the first crane frame that fall before the cut took the end pose of the move. The first fix covered only frame 0 | `push()` and `pull()` in `src/director/shots.ts`, `tests/camera.test.ts` |
+| 2026-11-19 | The wheel beat is a 50 mm shot at hub height from 1.7 to 1.5 m that arcs from 48 to 68 degrees off the nose. The paint beat looks 12.5 degrees down along the crease of the left wing crest from 0.27 m above it. The crane return runs from 36.3 s to 44.0 s. The tall wides sit 30 degrees off the nose and the tall rear shot 32 to 22 degrees off the tail | Critic round 2: C5 7, C8 6. See `scorecards/round-002/SUMMARY.md` | `src/director/shots.ts`, `src/director/timeline.ts`, `cut/SHOTS.md` |
+| 2026-11-19 | The gray-box sun stands on the left of the car and lower, at (16, 13, 12) | Every insert is shot on the left side, which was in shadow. The critics could not read the wheel | `grayBoxLight()` in `src/core/film-stage.ts` |
+| 2026-11-19 | The tall wide shot does not have to hold the billboard in frame. The world test checks that only for the wide formats | At 30 degrees off the nose the car fills the narrow frame and the billboard lies outside it to the right. The kit asks for its light on the car and the deck, not for the panel in every frame | `tests/world.test.ts`, `cut/SHOTS.md` |
+| 2026-11-19 | `src/vehicle/wheels.ts` has its own owner on branch `dev/wheel`. The scripted-model car (D) also exports its wheel alone as a candidate. The one the auditor scores higher at the wheel camera is mounted | The wheel now fills a frame for five seconds and the auditor scores it 5. One builder cannot fix the body and the wheel at once | `src/vehicle/wheels.ts`, Phase 3 |
 
 ## Config changes
 
@@ -204,6 +208,7 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | Round | Phase | Gate | C1 render against control | C2 | C3 | C4 | C5 | C6 | C7 | C8 | Top issue | What changed next |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 2 | blockout | n/a | n/a | n/a | n/a | 6 | n/a | n/a | 5 | C8 severe: the paint beat is a bare hood curve with no line and no background | Every shot reframed, crane return, tall shots set up again, cut captions |
+| 2 | 2 | blockout | n/a | n/a | n/a | n/a | 7 | n/a | n/a | 6 | Both: the wheel beat is a dark low view of the front corner, not the wheel | Wheel at 50 mm and hub height, paint over the wing crease, tall wides and tall rear shot set oblique, slower crane, sun moved to the lit side |
 
 ## Plateau log
 
@@ -233,6 +238,7 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | 6ee5cc7 | pushed to main. Merge of the post stage |
 | 2026-11-19 | the commit titled "Round 1 scorecards and the round 2 shot plan" | pushed to main. Round 1 scorecards, new shots, vehicle B pass 2 steps 1 to 3, tools for split packs and film parts |
 | 2026-11-19 | the commit titled "Detail shot on the rebuilt engine bay" | pushed to main. Exposure test on every frame, paint slide, vehicle B through the bay rebuild, split packs and film parts tools |
+| 2026-11-19 | the commit titled "Round 2 scorecards and the round 3 shot plan" | pushed to main. Round 2 scorecards, new wheel, paint, tall and crane shots, haze, surface water, vehicle B pass 3 and pass 4 through the side |
 
 ## Session log
 
