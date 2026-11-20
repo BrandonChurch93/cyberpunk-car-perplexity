@@ -93,7 +93,7 @@ describe('vehicle geometry and state', () => {
       expect(T.MathUtils.radToDeg(a.angleTo(normalAt(x - .010, s)))).toBeLessThan(3)
       expect(T.MathUtils.radToDeg(b.angleTo(normalAt(x + .010, s)))).toBeLessThan(3)
     }
-    for (const [y, s] of [[.338, .530], [.650, .460], [.896, .760], [.924, .812], [.7814, .724]]) {
+    for (const [y, s] of [[.338, .530], [.650, .460], [.896, .760], [.924, .812], [.774, .724]]) {
       const a = normalAt(y - .002, s, true), b = normalAt(y + .002, s, true)
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)

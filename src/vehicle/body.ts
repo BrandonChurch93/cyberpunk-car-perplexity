@@ -69,7 +69,7 @@ const shoulderX = (s: number) => plan(s) - shoulderInset(s)
 const diagonalS = curve([[.13, .537], [.22, .548], [.33, .561], [.43, .573], [.58, .588], [.64, .596], [.73, .599], [.82, .593], [.90, .581]])
 const doorBelt = curve([[.295, .569], [.380, .610], [.460, .650], [.545, .689], [.600, .718], [.655, .793], [.705, .862], [.760, .896], [.812, .924], [.855, .920], [.899, .890]])
 const heelFold = curve([[.382, .272], [.530, .338], [.597, .375], [.712, .432]])
-const haunchFold = (s: number) => .899 - 2.80 * (s - .682)
+const haunchFold = curve([[.631, 1.009], [.646, .975], [.682, .895], [.702, .836], [.724, .774], [.756, .694]])
 const deckIn = curve([[.610, .608], [.670, .641], [.750, .686], [.820, .729], [.856, .762], [.882, .746], [.923, .704]])
 const deckOut = curve([[.697, .942], [.741, .899], [.789, .849], [.828, .798], [.856, .762]])
 const haunchRidgeY = curve([[.625, 1.066], [.650, 1.063], [.697, 1.047], [.750, 1.015],
@@ -353,9 +353,9 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const high = Math.max(haunchCeiling(x), outside[1] + .005)
       const base = y + turn * vane
       const tBend = base - haunchFold(s)
-      const fade = smooth(s, .642, .677) * (1 - smooth(s, .711, .749))
+      const fade = smooth(s, .631, .654) * (1 - smooth(s, .715, .752))
         * (1 - smooth(Math.abs(tBend), .014, .105)) * Math.sin(Math.PI * v)
-      const shape = base + .19 * fade * (hinge(tBend, .010) - .5 * tBend)
+      const shape = base + .22 * fade * (hinge(tBend, .006) - .5 * tBend)
       const capBlend = smooth(s, .735, .782)
       const cap = hinge(shape - high + mix(.008, .004, capBlend), mix(.014, .004, capBlend))
       return [x, shape - cap * smooth(x, .695, .765), zAt(s)]
@@ -376,10 +376,13 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const delta = outside[1] - roofEnd[1]
       const start = mix(delta, -.27 * span, smooth(s, .598, .640))
       const end = mix(delta, slope * span, smooth(span, .026, .116))
-      const y = mix(roofEnd[1], outside[1], v)
+      const fair = mix(roofEnd[1], outside[1], v)
         + v * (1 - v) * ((1 - v) * (start - delta) + v * (delta - end))
+      const tBend = fair - haunchRidgeY(s)
+      const fade = smooth(s, .621, .644) * (1 - smooth(s, .656, .674)) * Math.sin(Math.PI * v) ** 2
+      const y = fair - .39 * fade * (hinge(tBend, .004) - .5 * tBend)
       return [mix(roofEnd[0], outside[0], v), y, zAt(s)]
-    }), [0, 1, 0])
+    }), [0, 1, 0], n, full ? 37 : 16, 0)
     part(paint, sided((u, v) => {
       const x = v * .935
       const s0 = mix(.921, .905, smooth(x, .28, .63))
