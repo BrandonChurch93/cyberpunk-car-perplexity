@@ -1,5 +1,6 @@
 import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
+import { insertAfter, patchMaterial } from '../materials/patch'
 import { fascia, frontFascia, frontHoodEdge, limitTailZ, sAt, tailCrestZ, tailLipY, zAt } from './body'
 import { add, blend, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
 import type { Palette } from './materials'
@@ -63,6 +64,54 @@ function lightGuide(face: Face, hub: XY, tips: readonly XY[], width: number, dep
   }))
 }
 
+function profileGuide(mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>, hub: XY, tips: readonly XY[], width: number): void {
+  const positions = mesh.geometry.getAttribute('position')
+  const plane = new T.Float32BufferAttribute(new Float32Array(positions.count * 2), 2)
+  for (let i = 0; i < positions.count; i++) {
+    plane.setXY(i, Math.abs(positions.getX(i) + mesh.position.x) - hub[0], positions.getY(i) + mesh.position.y - hub[1])
+  }
+  mesh.geometry.setAttribute('guidePlane', plane)
+  const rays = tips.map(([x, y]) => new T.Vector2(x - hub[0], y - hub[1]))
+  patchMaterial(mesh.material, {
+    id: 'front-guide-optics',
+    uniforms: { guideRays: { value: rays }, guideHalfWidth: { value: width / 2 } },
+    apply(shader) {
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', `
+        attribute vec2 guidePlane;
+        varying vec2 vGuidePlane;`)
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', 'vGuidePlane = guidePlane;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', `
+      uniform vec2 guideRays[3];
+      uniform float guideHalfWidth;
+      varying vec2 vGuidePlane;
+      float guideRadiance() {
+        float nearest = 1.0;
+        float along = 0.0;
+        for (int i = 0; i < 3; ++i) {
+          vec2 axis = guideRays[i];
+          float t = clamp(dot(vGuidePlane, axis) / dot(axis, axis), 0.0, 1.0);
+          float dist = length(vGuidePlane - t * axis);
+          if (dist < nearest) {
+            nearest = dist;
+            along = t * length(axis);
+          }
+        }
+        float crossSection = nearest / guideHalfWidth;
+        float sleeve = 0.0015 + 0.043 * (1.0 - smoothstep(0.25, 0.99, crossSection));
+        float core = crossSection / 0.145;
+        float pocket = smoothstep(0.28, 0.44, crossSection) * (1.0 - smoothstep(0.67, 0.91, crossSection));
+        float pitch = along / 0.010;
+        float facets = 0.31 * pocket * cos(PI2 * pitch) * smoothstep(0.003, 0.014, along)
+          * (1.0 - smoothstep(0.12, 0.45, fwidth(pitch)));
+        float resolve = 1.0 - smoothstep(0.065, 0.20, length(fwidth(vGuidePlane)) / guideHalfWidth);
+        return mix(1.05, sleeve * (1.0 + facets) + 5.65 * exp(-0.5 * core * core), resolve);
+      }`)
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>',
+        'totalEmissiveRadiance *= guideRadiance();')
+    },
+  })
+}
+
 export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const frontPaint: T.BufferGeometry[] = [], rearPaint: T.BufferGeometry[] = []
   const carbon: T.BufferGeometry[] = [], black: T.BufferGeometry[] = [], dark: T.BufferGeometry[] = []
@@ -73,7 +122,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const heatSources: VehicleModule['heatSources'] = []
   const lumens: Array<{ mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>; lamp: VehicleModule['lamps'][number]; rear: boolean; luminance: number }> = []
   const emit = (objectName: string, geometry: T.BufferGeometry, rear: boolean, beam: boolean, outlet?: Point, candela?: number,
-    luminance = beam ? 260 : rear ? 60 : 144): void => {
+    luminance = beam ? 260 : rear ? 60 : 144) => {
     const material = m.tag(new T.MeshStandardMaterial({
       color: rear ? 0x571416 : 0x939ca1, roughness: .28, metalness: .05,
       emissive: rear ? 0xff1713 : beam ? 0xe4f3ff : 0xe5f3ff, emissiveIntensity: 0,
@@ -93,6 +142,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const lamp = { object, stage, beam, level: 0, color: material.emissive.clone(), intensity: candela ?? (rear ? .47 : 1.33) }
     lamps.push(lamp)
     lumens.push({ mesh, lamp, rear, luminance })
+    return mesh
   }
   const outFront: Point = [0, 0, 1], outRear: Point = [0, 0, -1]
   const lipY = curve([[0, .168], [.27, .151], [.71, .146], [.91, .155], [.967, .174]])
@@ -212,7 +262,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 18, 9, [side, 0, 1], .009))
     const hub: XY = [.834, .429]
     const tips: XY[] = [[.877, .285], [.879, .644], [.470, .421]]
-    emit('front running guide', lightGuide(f, hub, tips, .015, -.007, outFront), false, false, f(...hub, -.008), 3.99)
+    const guideWidth = .015
+    const guide = emit('front running guide', lightGuide(f, hub, tips, guideWidth, -.007, outFront), false, false, f(...hub, -.008), 3.99)
+    profileGuide(guide, hub, tips, guideWidth)
     const eyeStart = .495, eyeEnd = .919
     const window = (u: number, v: number, d: number): Point => {
       const x = mix(eyeStart + .022 * (v - .5) ** 2, eyeEnd - .009 * v, u)

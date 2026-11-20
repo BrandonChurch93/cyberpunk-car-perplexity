@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { config, defaultPaint, paintById } from '../src/config'
 import { cameraAt } from '../src/director/shots'
 import { events, lampThresholds, stateAt } from '../src/director/timeline'
+import { patchesOf } from '../src/materials/patch'
 import { createVehicle, type VehicleModule, type VehicleState } from '../src/vehicle'
 import { frontWheel, rearWheel, sAt, zAt } from '../src/vehicle/body'
 
@@ -723,6 +724,25 @@ describe('vehicle geometry and state', () => {
           expect(opaque?.object).toBe(guide)
         }
       }
+    }
+  })
+
+  it('uses the same running-guide optical coordinates and emitted intensity on each side', () => {
+    for (const vehicle of [blockout, full]) {
+      const guides = vehicle.root.getObjectsByProperty('name', 'front running guide')
+        .filter((node): node is T.Mesh => node instanceof T.Mesh)
+      expect(guides).toHaveLength(2)
+      const coords = guides.map(({ geometry, material }) => {
+        const plane = geometry.getAttribute('guidePlane')
+        expect(plane.itemSize).toBe(2)
+        expect(plane.count).toBe(geometry.getAttribute('position').count)
+        expect(patchesOf(material as T.Material)).toContain('front-guide-optics')
+        return plane.array
+      })
+      expect(coords[0]).toEqual(coords[1])
+      const lamps = vehicle.lamps.filter(({ object }) => object.name === 'front running guide emission origin')
+      expect(lamps.map(({ intensity }) => intensity)).toEqual([3.99, 3.99])
+      expect(lamps.every(({ stage, beam }) => stage === lampThresholds.running && !beam)).toBe(true)
     }
   })
 
