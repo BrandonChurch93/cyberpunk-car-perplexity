@@ -572,10 +572,12 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const y = leftY(u)
       return sillPoint(mix(doorLeadAt(y) + gap, intakeLeft(u), v), y)
     }, uSide, [beltLine, heelLine, crossLine, crossToe], n, .002, full ? 4 : 1)
-    folded((u, v) => {
+    const rightFlank: Surface = (u, v) => {
       const y = rightY(v)
       return sillPoint(mix(intakeRight(v), last.before, u), y)
-    }, uSide, [heelLine])
+    }
+    const rightRows = foldRows(rightFlank, [heelLine], full ? 22 : 7)
+    paint.push(patch(rightFlank, n, rightRows.rows, uSide, .002, rightRows.at))
     for (const [a, b] of [
       [doorLeadAt(intakeTopLeft) + gap, slotStart],
       [slotStart, slotJoin],
@@ -614,9 +616,13 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       return [p[0], p[1] - returnDepth * v, p[2] + returnDepth * u ** 2]
     }
     part(black, (u, v) => intake(u, v, throatDepth), uSide, 18, 20, 0)
-    part(black, (u, v) => roll(0, u, throatDepth * v), uSide, 20, 6, 0)
-    part(paint, (u, v) => roll(1, u, foldRadius * (1 - Math.cos(v * Math.PI / 2))), uSide, 20, 2, 0)
-    part(black, (u, v) => roll(1, u, mix(foldRadius, throatDepth, v)), uSide, 20, 6, 0)
+    const intakeDepth = (v: number) => v * (.60 + .40 * v)
+    part(black, (u, v) => roll(0, u, throatDepth * intakeDepth(v)), uSide, n, full ? 10 : 6, 0)
+    const intakeRows = (_: number, j: number) => rightRows.at(0, j)
+    paint.push(patch((u, v) => roll(1, v, foldRadius * (1 - Math.cos(u * Math.PI / 2))),
+      3, rightRows.rows, uSide, 0, intakeRows))
+    black.push(patch((u, v) => roll(1, v, mix(foldRadius, throatDepth, intakeDepth(u))),
+      full ? 9 : 7, rightRows.rows, uSide, 0, intakeRows))
     const slot = (s: number, v: number, d: number): Point => {
       const p = sillPoint(s, mix(slotLow(s), slotHigh(s), v))
       return [p[0] - side * d * mix(throatDepth, .054, smooth(s, slotJoin, slotEnd)), p[1], p[2]]
