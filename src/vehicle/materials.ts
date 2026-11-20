@@ -27,7 +27,7 @@ interface FlakeSpec {
 }
 
 const flakeSpecs: Record<string, FlakeSpec> = {
-  'black-pearl': { sizeUm: 22, coverage: .035, tiltDeg: 5, reflectance: .45, lobeDeg: 1, binder: .25 },
+  'black-pearl': { sizeUm: 22, coverage: .035, tiltDeg: 4, reflectance: .45, lobeDeg: 1, binder: .25 },
   'ember-orange': { sizeUm: 30, coverage: .42, tiltDeg: 7, reflectance: .82, lobeDeg: 1, binder: .85 },
   'liquid-silver': { sizeUm: 34, coverage: .55, tiltDeg: 6.5, reflectance: .9, lobeDeg: 1, binder: .35 },
 }
