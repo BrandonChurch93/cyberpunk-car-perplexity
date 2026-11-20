@@ -1,8 +1,9 @@
 import * as THREE from 'three'
-import { config } from '../../config'
+import { config, type FormatSpec } from '../../config'
 import type { CameraState } from '../../core/lens'
 import { layers } from '../../core/contract'
 import { hash01, stream } from '../../core/random'
+import { cameraAt } from '../../director/shots'
 import { beatById } from '../../director/timeline'
 import type { VehicleModule } from '../../vehicle'
 import { capHeight } from './beads'
@@ -13,10 +14,14 @@ const gravity = 9.81
 const paint = beatById('paint')
 const wheel = beatById('wheel')
 /** The hero rivulet lets go just before the macro frame, so it is already moving there with a short neck behind it. */
-const breakLoose = config.film.macroFrameSeconds - 0.5
+const breakLoose = config.film.macroFrameSeconds - 0.6
 /** Drips leave the wheel arch lip at these times, in the wheel beat. */
 export const archDrips = [wheel.start + 1.2, wheel.start + 2.9, wheel.start + 4.1]
 const pendantGrowSeconds = 1.4
+/** A drop leaving a lip carries the water that gathered along it, so it is larger than a drop hanging off a flat edge. */
+const dripRadius = 0.0038
+/** The arch drips hang, fall and ripple only inside this window, which the pendant growth and the wheel beat fit in. */
+const archWindow = { start: archDrips[0] - pendantGrowSeconds - 0.2, end: wheel.end + 1 }
 const pathStep = 0.002
 const pathSteps = 160
 const trailAcross = 9
@@ -53,16 +58,19 @@ export class Runners {
   private readonly trailBeads: THREE.InstancedMesh
   private readonly trailBeadAt: number[] = []
   readonly drips: Drip[] = []
+  private arch: Drip[] | null = null
+  private armed = false
+  private readonly lower: Array<{ p: THREE.Vector3; n: THREE.Vector3 }> = []
   private readonly dripMesh: THREE.InstancedMesh
   private active = false
 
   /** `start` is where the rivulet waits on the panel, the point the macro focus rests on. */
-  constructor(vehicle: VehicleModule, private readonly material: THREE.Material, plain: THREE.Material, start: THREE.Vector3) {
+  constructor(private readonly vehicle: VehicleModule, private readonly material: THREE.Material, plain: THREE.Material, start: THREE.Vector3, private readonly format: FormatSpec) {
     this.group.name = 'surface water runners'
     vehicle.root.updateMatrixWorld(true)
     const beadMats = new Set(vehicle.surfaces.filter((s) => s.wetness === 'beads' && !s.material.transparent).map((s) => s.material))
     const tris: Tri[] = []
-    const lower: Array<{ p: THREE.Vector3; n: THREE.Vector3 }> = []
+    const lower = this.lower
     const v = new THREE.Vector3()
     const nrm = new THREE.Vector3()
     vehicle.root.traverse((o) => {
@@ -76,7 +84,7 @@ export class Runners {
       for (let i = 0; i < pos.count; i += 3) {
         v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld)
         nrm.fromBufferAttribute(nor, i).applyMatrix3(normalMatrix).normalize()
-        if (nrm.y < -0.55 && v.y > 0.12) lower.push({ p: v.clone(), n: nrm.clone() })
+        if (nrm.y < -0.2 && v.y > 0.02) lower.push({ p: v.clone(), n: nrm.clone() })
       }
       if (!beadMats.has(mesh.material)) return
       const index = g.index
@@ -92,7 +100,7 @@ export class Runners {
         const n = new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a))
         if (n.lengthSq() < 1e-16) continue
         n.normalize()
-        if (n.y < 0.15) continue
+        if (n.y < -0.3) continue
         tris.push({ a, b, c, n })
       }
     })
@@ -127,8 +135,8 @@ export class Runners {
       this.trailBeadAt.push(s)
     }
     this.group.add(this.runner, this.trail, this.trailBeads)
-    this.findDrips(lower, vehicle)
-    this.dripMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 18, 12), plain, this.drips.length)
+    this.findEdgeDrips()
+    this.dripMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 18, 12), plain, this.drips.length + archDrips.length)
     this.dripMesh.layers.set(layers.cameraOnly)
     this.dripMesh.frustumCulled = false
     this.group.add(this.dripMesh)
@@ -253,29 +261,113 @@ export class Runners {
     return g
   }
 
-  private findDrips(lower: Array<{ p: THREE.Vector3; n: THREE.Vector3 }>, vehicle: VehicleModule): void {
-    const w = vehicle.anchors.wheel
-    const arch = lower.filter((c) => Math.abs(c.p.z - w.position.z) < 0.5 && c.p.y > w.position.y + 0.15 && c.p.x > w.position.x - 0.12)
-    const floorY = 0
-    for (const [i, release] of archDrips.entries()) {
-      const targetZ = w.position.z + [-0.34, 0.33, -0.27][i]
-      let best: THREE.Vector3 | null = null
-      let score = Infinity
-      for (const c of arch) {
-        const s = Math.abs(c.p.z - targetZ) * 3 - c.p.x
-        if (s < score) {
-          score = s
-          best = c.p
-        }
+  /**
+   * Each arch drip is placed for this format's wheel insert as it booms down: the first leaves the upper arch lip onto the tread,
+   * the second leaves the top of the outer rim flange and falls past the spokes and hub, the third lands on the deck in front of
+   * the contact patch. Placing them needs the full vehicle raycast, so it runs only for frames of the wheel beat.
+   */
+  private findArchDrips(): Drip[] {
+    const out: Drip[] = []
+    const w = this.vehicle.anchors.wheel.position
+    const tire = w.y
+    const reachOf = (p: THREE.Vector3) => Math.hypot(p.y - w.y, p.z - w.z)
+    const films = new Map<number, THREE.PerspectiveCamera>()
+    const film = (t: number) => {
+      const key = Math.round(t * 1000)
+      let f = films.get(key)
+      if (!f) {
+        const state = cameraAt(t, this.format, this.vehicle.anchors)
+        f = new THREE.PerspectiveCamera(THREE.MathUtils.radToDeg(2 * Math.atan(state.sensorWidthMm / (this.format.width / this.format.height) / 2 / state.focalMm)), this.format.width / this.format.height, 0.01, 30)
+        f.position.copy(state.position)
+        f.quaternion.copy(state.quaternion)
+        f.updateMatrixWorld(true)
+        films.set(key, f)
       }
-      if (best) this.drips.push({ at: best.clone().add(new THREE.Vector3(0, -0.0005, 0)), release, period: 0, floorY })
+      return f
     }
+    const ndc = new THREE.Vector3()
+    const project = (q: THREE.Vector3, t: number) => ndc.copy(q).project(film(t))
+    const inFrame = (q: THREE.Vector3, t: number, margin = 0.88) => {
+      project(q, t)
+      return Math.abs(ndc.x) < margin && Math.abs(ndc.y) < margin && ndc.z < 1
+    }
+    const ray = new THREE.Raycaster()
+    const seen = (q: THREE.Vector3, t: number) => {
+      const f = film(t)
+      const d = q.clone().sub(f.position)
+      const length = d.length()
+      ray.set(f.position, d.normalize())
+      ray.far = length + 0.01
+      const hit = ray.intersectObject(this.vehicle.root, true)[0]
+      return !hit || hit.distance > length - 0.006
+    }
+    const down = new THREE.Vector3(0, -1, 0)
+    const floorBelow = (p: THREE.Vector3) => {
+      ray.set(p.clone().setY(p.y - 0.006), down)
+      ray.far = p.y
+      const hit = ray.intersectObject(this.vehicle.root, true)[0]
+      return hit ? hit.point.y : 0
+    }
+    const fallTime = (height: number) => Math.sqrt((2 * Math.max(0, height)) / gravity)
+    type Row = { p: THREE.Vector3; score: number }
+    const pick = (release: number, rows: Row[], accept: (p: THREE.Vector3, floor: number) => boolean): Drip | null => {
+      rows.sort((x, y) => y.score - x.score)
+      for (const { p } of rows.slice(0, 24)) {
+        if (out.some((d) => d.at.distanceTo(p) < 0.02)) continue
+        const floor = floorBelow(p)
+        if (!accept(p, floor)) continue
+        return { at: p.clone().setY(p.y - 0.0005), release, period: 0, floorY: floor }
+      }
+      return null
+    }
+    const [first, second, third] = archDrips
+    const upper: Row[] = []
+    for (const c of this.lower) {
+      const reach = reachOf(c.p)
+      if (c.p.x < w.x - 0.01 || reach < tire + 0.02 || reach > tire + 0.3 || c.p.y < w.y + 0.15) continue
+      if (!inFrame(c.p, first - 0.4) || !inFrame(c.p, first)) continue
+      project(c.p, first)
+      upper.push({ p: c.p, score: -Math.abs(ndc.x) - 0.5 * Math.abs(ndc.y) + (c.p.z > w.z ? 0.5 : 0) })
+    }
+    const lip = pick(first, upper, (p, floor) => floor > 0.2 && p.y - floor > 0.03 && seen(p.clone().setY(p.y - 0.004), first))
+    if (lip) out.push(lip)
+    const flange: Row[] = []
+    for (const c of this.lower) {
+      const reach = reachOf(c.p)
+      if (c.p.x < w.x + 0.02 || reach < 0.2 || reach > tire - 0.02 || c.p.y < w.y + 0.1 || Math.abs(c.p.z - w.z) > 0.24) continue
+      const half = second + fallTime(c.p.y - w.y)
+      const mid = new THREE.Vector3(c.p.x, w.y, c.p.z)
+      if (!inFrame(mid, half, 0.8)) continue
+      project(mid, half)
+      flange.push({ p: c.p, score: -Math.abs(ndc.x) + (inFrame(c.p, second - 0.3) && inFrame(c.p, second) ? 1.5 : 0) + 4 * (c.p.x - w.x) })
+    }
+    const rim = pick(second, flange, (p, floor) => p.y - floor > 0.2 && seen(new THREE.Vector3(p.x, w.y, p.z), second + fallTime(p.y - w.y)))
+    if (rim) out.push(rim)
+    const deck: Row[] = []
+    for (const c of this.lower) {
+      if (c.p.z < w.z + 0.08 || c.p.z > w.z + 0.45 || c.p.y > w.y + 0.25 || Math.abs(c.p.x - w.x) > 0.25) continue
+      if (reachOf(c.p) < tire - 0.004 || (c.p.y > w.y - 0.05 && c.p.z - w.z < tire + 0.005)) continue
+      const land = new THREE.Vector3(c.p.x, 0.004, c.p.z)
+      const at = third + fallTime(c.p.y)
+      if (!inFrame(land, at + 0.15)) continue
+      project(land, at + 0.15)
+      deck.push({ p: c.p, score: -Math.abs(ndc.x) - Math.abs(ndc.y + 0.55) + 3 * Math.min(c.p.y, 0.25) + (inFrame(c.p, third) ? 0.5 : 0) })
+    }
+    const ring = pick(third, deck, (p, floor) => {
+      const at = third + fallTime(p.y)
+      return floor === 0 && seen(new THREE.Vector3(p.x, 0.004, p.z), at + 0.15) && (seen(p.clone().setY(p.y - 0.004), third) || !inFrame(p, third))
+    })
+    if (ring) out.push(ring)
+    return out
+  }
+
+  private findEdgeDrips(): void {
     const random = stream('surface edge drips')
-    const pool = lower.filter((c) => c.p.y < 0.75 && c.p.y > 0.2)
+    const pool = this.lower.filter((c) => c.n.y < -0.55 && c.p.y < 0.75 && c.p.y > 0.2)
     for (let i = 0; i < 14 && pool.length > 0; i++) {
       const c = pool[random.int(pool.length)]
       const period = config.film.durationSeconds / (5 + random.int(9))
-      this.drips.push({ at: c.p.clone(), release: random.range(0, period), period, floorY })
+      this.drips.push({ at: c.p.clone(), release: random.range(0, period), period, floorY: 0 })
     }
   }
 
@@ -288,7 +380,7 @@ export class Runners {
     } else {
       age = t - d.release
     }
-    const full = 0.0021
+    const full = dripRadius
     if (age < 0) {
       const grow = THREE.MathUtils.smoothstep(age, -pendantGrowSeconds, 0)
       return { radius: 0.0004 + (full - 0.0004) * grow, fall: 0, stretch: 1 + 0.35 * grow }
@@ -299,22 +391,29 @@ export class Runners {
     return { radius: full, fall, stretch: 1 + Math.min(0.25, age * 0.8) }
   }
 
+  private allDrips(): Drip[] {
+    return this.armed && this.arch ? this.drips.concat(this.arch) : this.drips
+  }
+
   impacts(t0: number, t1: number): ExtraImpact[] {
     const out: ExtraImpact[] = []
-    for (const d of this.drips) {
+    for (const d of this.allDrips()) {
+      if (d.floorY > 0) continue
       const height = d.at.y - d.floorY
       const fallTime = Math.sqrt((2 * height) / gravity)
       const first = d.period > 0 ? Math.floor((t0 - fallTime - d.release) / d.period) : 0
       const last = d.period > 0 ? Math.floor((t1 - fallTime - d.release) / d.period) : 0
       for (let k = first; k <= last; k++) {
         const hit = d.release + k * d.period + fallTime
-        if (hit >= t0 && hit <= t1) out.push({ x: d.at.x, z: d.at.z, timeSeconds: hit, diameter: 0.0042 })
+        if (hit >= t0 && hit <= t1) out.push({ x: d.at.x, z: d.at.z, timeSeconds: hit, diameter: 2 * dripRadius })
       }
     }
     return out
   }
 
-  beginFrame(camera: CameraState): void {
+  beginFrame(camera: CameraState, t: number): void {
+    this.armed = t > archWindow.start && t < archWindow.end
+    if (this.armed && !this.arch) this.arch = this.findArchDrips()
     const near = this.path.length > 0 && camera.position.distanceTo(this.path[0]) < 1.5
     this.active = near
     this.runner.visible = near
@@ -355,8 +454,13 @@ export class Runners {
       for (let i = 0; i < this.trailBeadAt.length; i++) if (this.trailBeadAt[i] < s - trailNeck) beads = i + 1
       this.trailBeads.count = beads
     }
-    for (let i = 0; i < this.drips.length; i++) {
-      const d = this.drips[i]
+    const drips = this.allDrips()
+    for (let i = 0; i < this.dripMesh.count; i++) {
+      const d = drips[i]
+      if (!d) {
+        this.dripMesh.setMatrixAt(i, m.makeScale(0, 0, 0))
+        continue
+      }
       const st = this.dripState(d, t)
       const center = d.at.clone()
       center.y -= st.radius * st.stretch + st.fall

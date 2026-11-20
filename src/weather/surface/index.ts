@@ -1,5 +1,6 @@
 import * as THREE from 'three'
-import { config } from '../../config'
+import { circleScale, pupilIsActive } from '../../core/bokeh/pupil'
+import { config, type FormatSpec } from '../../config'
 import type { FrameContext, SampleContext, SceneSystem, WetnessKind } from '../../core/contract'
 import { cameraAt } from '../../director/shots'
 import { beatById, events, stateAt } from '../../director/timeline'
@@ -43,63 +44,75 @@ function rearPuddle(anchors: Parameters<typeof cameraAt>[2]): Basin {
 }
 
 /**
- * The rivulet waits on the wing beside the paint anchor, where the focus pull lands as it lets go, in plain view of both
- * formats and with its downhill run crossing the frame rather than heading into it.
+ * The rivulet waits on the wing as near the crest crease as the macro focus allows in this format: its first centimeter of run
+ * blurs under a pixel at the macro frame, it faces the lens and it runs down the panel across the frame.
  */
-function rivuletStart(vehicle: WeatherDeps['vehicle']): THREE.Vector3 {
+export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec): THREE.Vector3 {
   const anchor = vehicle.anchors.paint.position
-  const views = [config.formats.master, config.formats.vertical].map((format) => {
-    const camera = cameraAt(config.film.macroFrameSeconds, format, vehicle.anchors)
-    const film = new THREE.PerspectiveCamera(THREE.MathUtils.radToDeg(2 * Math.atan(camera.sensorWidthMm / (format.width / format.height) / 2 / camera.focalMm)), format.width / format.height, 0.01, 10)
-    film.position.copy(camera.position)
-    film.quaternion.copy(camera.quaternion)
-    film.updateMatrixWorld(true)
-    return { camera, film, forward: new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion) }
-  })
+  const camera = cameraAt(config.film.macroFrameSeconds, format, vehicle.anchors)
+  const film = new THREE.PerspectiveCamera(THREE.MathUtils.radToDeg(2 * Math.atan(camera.sensorWidthMm / (format.width / format.height) / 2 / camera.focalMm)), format.width / format.height, 0.01, 10)
+  film.position.copy(camera.position)
+  film.quaternion.copy(camera.quaternion)
+  film.updateMatrixWorld(true)
+  const later = cameraAt(config.film.macroFrameSeconds + 0.6, format, vehicle.anchors)
+  const laterFilm = film.clone()
+  laterFilm.position.copy(later.position)
+  laterFilm.quaternion.copy(later.quaternion)
+  laterFilm.updateMatrixWorld(true)
+  const blurFor = (state: typeof camera) => {
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(state.quaternion)
+    const circle = circleScale(state, format.width)
+    return (q: THREE.Vector3) => circle * Math.abs(1 / state.focusDistance - 1 / new THREE.Vector3().subVectors(q, state.position).dot(forward))
+  }
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
+  const blurAt = blurFor(camera)
+  const laterBlurAt = blurFor(later)
   const paint = new Set(vehicle.surfaces.filter((s) => s.wetness === 'beads' && !s.material.transparent).map((s) => s.material))
   const ray = new THREE.Raycaster()
-  const toLens = new THREE.Vector3()
   const ndc = new THREE.Vector3()
-  let best = anchor.clone()
-  let score = -Infinity
+  const rows: Array<{ p: THREE.Vector3; score: number }> = []
+  const a = new THREE.Vector3()
+  const b = new THREE.Vector3()
+  const c = new THREE.Vector3()
   vehicle.root.updateMatrixWorld(true)
   vehicle.root.traverse((o) => {
     const mesh = o as THREE.Mesh
     if (!mesh.isMesh || Array.isArray(mesh.material) || !paint.has(mesh.material)) return
     const pos = mesh.geometry.getAttribute('position')
-    const nor = mesh.geometry.getAttribute('normal')
-    if (!pos || !nor) return
-    const normalMatrix = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld)
-    for (let i = 0; i < pos.count; i++) {
-      const p = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld)
-      if (p.distanceTo(anchor) > 0.1) continue
-      const n = new THREE.Vector3().fromBufferAttribute(nor, i).applyMatrix3(normalMatrix).normalize()
-      if (n.y < 0.3) continue
+    if (!pos) return
+    const index = mesh.geometry.index
+    const count = index ? index.count : pos.count
+    for (let k = 0; k < count; k += 3) {
+      a.fromBufferAttribute(pos, index ? index.getX(k) : k).applyMatrix4(mesh.matrixWorld)
+      if (a.distanceTo(anchor) > 0.25) continue
+      b.fromBufferAttribute(pos, index ? index.getX(k + 1) : k + 1).applyMatrix4(mesh.matrixWorld)
+      c.fromBufferAttribute(pos, index ? index.getX(k + 2) : k + 2).applyMatrix4(mesh.matrixWorld)
+      const n = new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a))
+      if (n.lengthSq() < 1e-14) continue
+      n.normalize()
+      const p = a.clone().add(b).add(c).divideScalar(3)
+      const toLens = camera.position.clone().sub(p).normalize()
+      if (n.dot(toLens) < 0) n.negate()
+      if (n.dot(toLens) < 0.2 || n.y < -0.3 || n.y > 0.985) continue
       const down = new THREE.Vector3(0, -1, 0).addScaledVector(n, n.y).normalize()
-      let s = -3 * p.distanceTo(anchor)
-      let seen = true
-      for (const { camera, film, forward } of views) {
-        const depth = toLens.subVectors(p, camera.position).dot(forward) - camera.focusDistance
-        ndc.copy(p).project(film)
-        if (Math.abs(depth) > 0.008 || Math.abs(ndc.x) > 0.7 || Math.abs(ndc.y) > 0.7) {
-          seen = false
-          break
-        }
-        toLens.subVectors(camera.position, p).normalize()
-        s += 0.5 * (1 - Math.abs(down.dot(forward))) + 0.3 * n.dot(toLens) - 20 * Math.abs(depth)
-        ray.set(camera.position, p.clone().sub(camera.position).normalize())
-        const hit = ray.intersectObject(vehicle.root, true)[0]
-        if (!hit || hit.point.distanceTo(p) > 0.003) {
-          seen = false
-          break
-        }
-      }
-      if (!seen || s <= score) continue
-      score = s
-      best = p
+      const blur = Math.max(blurAt(p), blurAt(p.clone().addScaledVector(down, 0.014)))
+      ndc.copy(p).project(film)
+      if (blur > 1 || Math.abs(ndc.x) > 0.8 || Math.abs(ndc.y) > 0.8) continue
+      const centre = Math.hypot(ndc.x, ndc.y)
+      const run = p.clone().addScaledVector(down, 0.035)
+      ndc.copy(run).project(laterFilm)
+      const runBlur = laterBlurAt(run)
+      if (runBlur > 5 || Math.abs(ndc.x) > 0.85 || Math.abs(ndc.y) > 0.85) continue
+      rows.push({ p, score: -0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.15 * runBlur - 0.4 * centre + 4 * (p.y - anchor.y) })
     }
   })
-  return best
+  rows.sort((x, y) => y.score - x.score)
+  for (const { p } of rows.slice(0, 12)) {
+    ray.set(camera.position, p.clone().sub(camera.position).normalize())
+    const hit = ray.intersectObject(vehicle.root, true)[0]
+    if (hit && hit.point.distanceTo(p) < 0.003) return p
+  }
+  return anchor.clone()
 }
 
 export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
@@ -116,6 +129,11 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
     surfRain: { value: 1 },
     surfTime: { value: 0 },
     surfVibration: { value: 0 },
+    surfBeadTime: { value: 0 },
+    surfFocus: { value: 1 },
+    surfCocScale: { value: 0 },
+    surfSampleRoot: { value: 1 },
+    surfPupil: { value: 0 },
     surfShakeAge: { value: 0 },
     surfRefill: { value: 0 },
     surfGeo: { value: new THREE.Vector4(0, 0, 0, 0) },
@@ -171,10 +189,24 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
 
   const drops = new DropGeometry(vehicleMeshes(vehicle.root, beadMaterials), uniforms)
   root.add(drops.group)
-  const runners = new Runners(vehicle, drops.runner, drops.plain, rivuletStart(vehicle))
-  const track = runners.track(trackPoints)
-  track.points.forEach((p, i) => (uniforms.surfTrack.value[i] as THREE.Vector4).copy(p))
-  uniforms.surfTrackBox.value.set(track.center.x, track.center.y, track.center.z, track.radius)
+  // Each format frames its own macro and wheel inserts, so each places its own rivulet and arch drips for its lens.
+  const runnersByFormat = new Map<string, Runners>()
+  let runners: Runners | null = null
+  const runnersFor = (format: FormatSpec): Runners => {
+    let r = runnersByFormat.get(format.id)
+    if (!r) {
+      r = new Runners(vehicle, drops.runner, drops.plain, rivuletStart(vehicle, format), format)
+      runnersByFormat.set(format.id, r)
+    }
+    if (r !== runners) {
+      if (runners) root.remove(runners.group)
+      runners = r
+      const track = r.track(trackPoints)
+      track.points.forEach((p, i) => (uniforms.surfTrack.value[i] as THREE.Vector4).copy(p))
+      uniforms.surfTrackBox.value.set(track.center.x, track.center.y, track.center.z, track.radius)
+    }
+    return r
+  }
 
   const shutter = config.film.shutterDegrees / 360 / config.film.fps
   let frameStart = 0
@@ -186,9 +218,10 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
     root,
     lights: [],
     beginFrame(frame: FrameContext) {
+      const t = frame.frame.timeSeconds
+      const runners = runnersFor(frame.format)
       // Joined late, as the drop chunks are, so the shade stage leaves water out of its screen space occlusion.
       if (!runners.group.parent) root.add(runners.group)
-      const t = frame.frame.timeSeconds
       frameStart = t - shutter / 2
       const cam = frame.camera
       forward.set(0, 0, -1).applyQuaternion(cam.quaternion)
@@ -196,12 +229,22 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       const flat = new THREE.Vector2(forward.x, forward.z)
       if (flat.lengthSq() > 1e-6) flat.normalize()
       const center = new THREE.Vector2(cam.position.x, cam.position.z).addScaledVector(flat, ahead)
+      runners.beginFrame(cam, t)
       const extra: ExtraImpact[] = runners.impacts(frameStart - 0.6, frameStart + shutter)
       ripples.update(frameStart, frameStart + shutter, center, extra)
       drops.update(cam, frame.format.width, frame.format.width / frame.format.height, (p, r) => runners.sweptDistance(p, t) < trackClear + r)
       uniforms.surfGeo.value.set(cam.position.x, cam.position.y, cam.position.z, drops.count > 0 ? geometryRange : 0)
       uniforms.surfGeoAngle.value = geometryAngle(cam, frame.format.width)
-      runners.beginFrame(cam)
+      // Beads hold still for every sample of a frame: sub-shutter motion with few samples shows as offset copies, not blur.
+      uniforms.surfBeadTime.value = t
+      uniforms.surfFocus.value = cam.focusDistance
+      uniforms.surfCocScale.value = circleScale(cam, frame.format.width)
+      uniforms.surfSampleRoot.value = Math.sqrt(frame.frame.samples)
+      uniforms.surfPupil.value = pupilIsActive(cam, frame.format.width, frame.frame.samples) ? 1 : 0
+      uniforms.surfVibration.value = stateAt(t).vibration
+      const age = t - shakeStart
+      uniforms.surfShakeAge.value = age > 0 && t < refill.end ? age : 0
+      uniforms.surfRefill.value = t > refill.start && t < refill.end ? THREE.MathUtils.smoothstep(t, refill.start, refill.end) : 0
     },
     beginSample(sample: SampleContext) {
       const t = sample.timeSeconds
@@ -209,18 +252,16 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       uniforms.surfTime.value = t
       uniforms.surfImpactTime.value = t - frameStart
       uniforms.surfPulseTime.value = t
-      uniforms.surfVibration.value = state.vibration
-      const age = t - shakeStart
-      uniforms.surfShakeAge.value = age > 0 && t < refill.end ? age : 0
-      uniforms.surfRefill.value = t > refill.start && t < refill.end ? THREE.MathUtils.smoothstep(t, refill.start, refill.end) : 0
       const pulse = uniforms.surfPulse.value[0] as THREE.Vector4
       if (state.engine > 0) {
         const exhaust = vehicle.anchors.exhaust
         scratch.copy(exhaust.position).addScaledVector(exhaust.normal, 0.35)
         pulse.set(scratch.x, scratch.z, state.engine * pulseStrength, 0)
       } else pulse.set(0, 0, 0, 0)
-      runners.beginSample(t)
-      uniforms.surfTrackLen.value = runners.travel(t)
+      if (runners) {
+        runners.beginSample(t)
+        uniforms.surfTrackLen.value = runners.travel(t)
+      }
     },
     setDiagnostic(view: string) {
       uniforms.surfDiag.value = view === 'wetness' ? 1 : 0
