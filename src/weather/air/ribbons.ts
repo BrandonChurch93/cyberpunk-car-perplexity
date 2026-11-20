@@ -49,8 +49,8 @@ uniform vec3 uOpticalEye;
 flat out vec2 vHead;
 flat out vec2 vTail;
 flat out vec2 vSigma;
-flat out vec3 vLight;
-flat out float vEnergy;
+flat out vec3 vRadiance;
+flat out float vVeil;
 flat out float vBead;
 
 ${scatter}
@@ -64,6 +64,15 @@ vec4 lensProject(vec4 vv) {
 
 vec3 wrapAround(vec3 point, vec3 anchor, vec3 span) {
   return anchor + mod(point - anchor + 0.5 * span, span) - 0.5 * span;
+}
+
+vec3 veilHighlights(vec3 peak, float weight) {
+  float brightest = max(peak.r, max(peak.g, peak.b));
+  const float knee = 0.105;
+  const float span = 0.17;
+  float excess = max(0.0, brightest - knee);
+  float scale = 1.0 - weight * excess * excess / max(1e-6, brightest * (span + excess));
+  return peak * scale;
 }
 
 void main() {
@@ -133,11 +142,14 @@ void main() {
   vec3 eye = uFilmView > 0.5 ? uOpticalEye : cameraPosition;
   vec3 radiance = scatterRain(p, normalize(eye - p));
   float gain = uLayer < 0.0 ? 0.64 : uLayer < 0.5 ? 1.30 : 4.2;
+  float coverage = min(1.0, diameter * 0.39894228 / sigmaSide) * min(1.0, max(len, diameter) / (1.35 * sigmaEnd));
+  float angularTravel = len / max(1.0, pixelFocal.y);
+  float veil = uLayer >= 0.0 && uLayer < 1.5 ? uFilmView * smoothstep(0.024, 0.052, angularTravel) : 0.0;
   vHead = ap;
   vTail = bp;
   vSigma = vec2(sigmaSide, sigmaEnd);
-  vEnergy = amount * gain * min(1.0, diameter * 0.39894228 / sigmaSide) * min(1.0, max(len, diameter) / (1.35 * sigmaEnd));
-  vLight = radiance;
+  vRadiance = veilHighlights(radiance * (amount * gain * coverage), veil);
+  vVeil = veil;
   vBead = uLayer < 0.0 ? 0.0 : clamp((aDrop.w - 0.0017) * 450.0, 0.0, 0.28);
   vec4 corner = position.x < 0.0 ? ca : cb;
   vec2 offset = 2.7 * (axis * position.x * sigmaEnd + normal * position.y * sigmaSide);
@@ -150,8 +162,8 @@ const fragment = /* glsl */ `
 flat in vec2 vHead;
 flat in vec2 vTail;
 flat in vec2 vSigma;
-flat in vec3 vLight;
-flat in float vEnergy;
+flat in vec3 vRadiance;
+flat in float vVeil;
 flat in float vBead;
 out vec4 outColor;
 
@@ -165,9 +177,11 @@ void main() {
   float endpoint = (x - clamp(x, 0.0, len)) / vSigma.y;
   float across = y / vSigma.x;
   float envelope = exp(-0.5 * (endpoint * endpoint + across * across));
-  float core = smoothstep(-vSigma.y, vSigma.y * 1.6, len - x) * mix(0.49, 1.0, smoothstep(0.0, max(len, 0.2), x));
-  float bead = 1.0 + vBead * cos(x / max(len, 0.02) * 16.0 + 1.4);
-  outColor = vec4(vLight * (vEnergy * envelope * core * bead), 0.0);
+  float progress = x / max(len, 0.2);
+  float core = smoothstep(-vSigma.y, vSigma.y * 1.6, len - x) * mix(0.49, 1.0, smoothstep(0.0, 1.0, progress));
+  float tips = (0.38 + 0.62 * smoothstep(-0.04, 0.27, progress)) * (1.0 - 0.57 * smoothstep(0.72, 1.04, progress));
+  float bead = 1.0 + vBead * cos(progress * 16.0 + 1.4);
+  outColor = vec4(vRadiance * (envelope * core * bead * mix(1.0, tips, vVeil)), 0.0);
 }
 `
 
