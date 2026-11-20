@@ -94,20 +94,30 @@ function captureLamp(three: typeof THREE, reflections: typeof createReflections,
   source.position.set(0, .6, 2)
   const origin = new three.Object3D()
   origin.name = 'test lamp emission origin'
-  sprung.add(body, source, origin)
+  const door = new three.Mesh(new three.PlaneGeometry(1, .4), new three.MeshStandardMaterial({ envMapIntensity: .65 }))
+  door.position.set(.996, .551, -.718)
+  const deck = new three.MeshStandardMaterial()
+  sprung.add(body, source, origin, door)
   root.add(sprung)
-  scene.add(root)
+  const backdrop = new three.Mesh(new three.PlaneGeometry(2, 2), new three.MeshBasicMaterial({
+    color: new three.Color(0, 0, 2), side: three.DoubleSide,
+  }))
+  backdrop.position.set(6, .6, 0)
+  backdrop.rotation.y = Math.PI / 2
+  const world = new three.Group()
+  world.add(backdrop)
+  scene.add(root, world)
   const part = reflections({
     renderer, scene,
     vehicle: { root, lamps: [{ object: origin, stage: 0, beam: true }] },
     world: {
-      root: new three.Group(),
-      deck: { material: new three.MeshStandardMaterial(), meshes: [] },
+      root: world,
+      deck: { material: deck, meshes: [] },
       reflectionBox: new three.Box3(new three.Vector3(-4, 0, -4), new three.Vector3(4, 4, 4)),
     },
   })
   part.resize(fmt)
-  const state = { position: new three.Vector3(0, 1, 4), quaternion: new three.Quaternion(), focalMm: 35, sensorWidthMm: 36, focusDistance: 4, fNumber: 2, near: .1, far: 50 }
+  const state = { position: new three.Vector3(3.15, .79, 7.87), quaternion: new three.Quaternion(), focalMm: 35, sensorWidthMm: 36, focusDistance: 4, fNumber: 2, near: .1, far: 50 }
   const sampler = new three.Scene()
   const output = new three.WebGLRenderTarget(1, 1)
   const uniforms = { captured: { value: null as THREE.Texture | null }, direction: { value: new three.Vector3() } }
@@ -118,27 +128,42 @@ function captureLamp(three: typeof THREE, reflections: typeof createReflections,
   })
   sampler.add(new three.Mesh(new three.PlaneGeometry(2, 2), material))
   const eye = new three.Camera()
-  const test = (frameIndex: number, intensity: number, x: number) => {
-    source.material.emissiveIntensity = intensity
-    sprung.position.x = x
-    part.beginFrame!({ camera: state, format: fmt, frame: { format: fmt, frameIndex, frameKey: frameIndex, tier: 'draft', samples: 1, timeSeconds: 0 } })
-    uniforms.captured.value = scene.environment
-    uniforms.direction.value.set(x, 0, 2).normalize()
+  const read = (texture: THREE.Texture | null, direction: THREE.Vector3) => {
+    uniforms.captured.value = texture
+    uniforms.direction.value.copy(direction).normalize()
     renderer.setRenderTarget(output)
     renderer.render(sampler, eye)
     const pixel = new Uint8Array(4)
     renderer.readRenderTargetPixels(output, 0, 0, 1, 1, pixel)
     return Array.from(pixel.slice(0, 3))
   }
+  const test = (frameIndex: number, intensity: number, x: number, z = 2) => {
+    source.material.emissiveIntensity = intensity
+    sprung.position.x = x
+    source.position.z = z
+    part.beginFrame!({ camera: state, format: fmt, frame: { format: fmt, frameIndex, frameKey: frameIndex, tier: 'draft', samples: 1, timeSeconds: 0 } })
+    return read(scene.environment, new three.Vector3(x, 0, z))
+  }
   const off = test(0, 0, 0)
   const dim = test(1, 2, 0)
   const bright = test(2, 6, .48)
+  const tail = test(195, 6, 0, -2)
+  const incident = door.position.clone().sub(state.position).normalize()
+  const normal = new three.Vector3(0, 0, -1).sub(incident).normalize()
+  const ray = incident.reflect(normal)
+  const doorTail = read(door.material.envMap, ray)
+  const deckTail = read(deck.envMap, ray)
+  const side = new three.Vector3(1, 0, 0)
+  const doorCity = read(door.material.envMap, side)
+  const worldCity = read(scene.environment, side)
+  test(0, 0, 0)
+  const reset = door.material.envMap === null && door.material.envMapIntensity === .65 && deck.envMap === null
   let captureOnly = false
   scene.traverse((node) => { if (node.name === 'cube lamp emitters') captureOnly = !node.visible })
   const bodyRestored = root.visible && body.visible && source.visible && source.material.side === three.FrontSide
   output.dispose()
   renderer.dispose()
-  return { off, dim, bright, captureOnly, bodyRestored }
+  return { off, dim, bright, tail, doorTail, deckTail, doorCity, worldCity, reset, captureOnly, bodyRestored }
 }
 
 it('captures the moving lamp at its current output but keeps the car body out of the cube', async () => {
@@ -175,8 +200,14 @@ it('captures the moving lamp at its current output but keeps the car body out of
       expect(errors).toEqual([])
       expect(result.off).toEqual([0, 0, 0])
       expect(result.dim[0]).toBeGreaterThan(50)
-      expect(result.bright[0]).toBeGreaterThan(result.dim[0] * 2)
-      expect(result.bright.slice(1)).toEqual([0, 0])
+    expect(result.bright[0]).toBeGreaterThan(result.dim[0] * 2)
+    expect(result.bright.slice(1)).toEqual([0, 0])
+    expect(result.tail[0]).toBeGreaterThan(150)
+    expect(result.doorTail).toEqual([0, 0, 0])
+    expect(result.deckTail).toEqual([0, 0, 0])
+    expect(result.doorCity[2]).toBeGreaterThan(50)
+    expect(result.worldCity).toEqual(result.doorCity)
+    expect(result.reset).toBe(true)
       expect(result.captureOnly && result.bodyRestored).toBe(true)
     } finally {
       await browser.close()
