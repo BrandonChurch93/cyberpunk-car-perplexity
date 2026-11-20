@@ -52,7 +52,6 @@ function flakeUniforms(spec: PaintSpec) {
     binder: new T.Vector4(base.r / peak, base.g / peak, base.b / peak, f.binder),
     shape: new T.Vector4(density, T.MathUtils.degToRad(f.tiltDeg), T.MathUtils.degToRad(f.lobeDeg), radius),
     cell: new T.Vector4(Math.min(cellLimit, Math.sqrt(cellFlakes / density)), explicitUntil[0], explicitUntil[1], f.coverage),
-    albedo: f.reflectance * f.coverage,
   }
 }
 
@@ -262,6 +261,7 @@ function paintStack(paint: T.MeshPhysicalMaterial, spec: PaintSpec) {
     apply(shader) {
       shader.vertexShader = 'varying vec3 carLocal;\nvarying vec3 carNormal;\n' + insertAfter(shader.vertexShader, '#include <begin_vertex>', 'carLocal = position;\ncarNormal = objectNormal;')
       let f = insertAfter(shader.fragmentShader, '#include <lights_physical_pars_fragment>', paintPars)
+      f = insertAfter(f, '#include <color_fragment>', 'diffuseColor.rgb *= 1.0 - carFlakeCell.w * carFlakeColor;')
       f = insertAfter(f, '#include <clearcoat_normal_fragment_begin>', `
         paintSurface(normal);
         #ifdef USE_CLEARCOAT
@@ -288,7 +288,7 @@ function paintStack(paint: T.MeshPhysicalMaterial, spec: PaintSpec) {
     uniforms.carBinder.value.copy(u.binder)
     uniforms.carFlakeShape.value.copy(u.shape)
     uniforms.carFlakeCell.value.copy(u.cell)
-    paint.color.set(next.base).multiplyScalar(1 - u.albedo)
+    paint.color.set(next.base)
   }
 }
 

@@ -34,6 +34,7 @@ describe('paint stack', () => {
   it('compiles into the physical shader at every anchor', () => {
     const shader = compile(palette(paintById('black-pearl'), true).paint)
     expect(shader.fragmentShader).toContain('#define RE_Direct RE_Direct_Paint')
+    expect(shader.fragmentShader).toContain('diffuseColor.rgb *= 1.0 - carFlakeCell.w * carFlakeColor;')
     expect(shader.fragmentShader).toContain('paintFlakeEnv(geometryNormal, geometryViewDir)')
     expect(shader.fragmentShader).toContain('clearcoatNormal = paintPeel(clearcoatNormal)')
     expect(shader.fragmentShader.indexOf('paintCells(')).toBeLessThan(shader.fragmentShader.indexOf('#include <lights_fragment_begin>'))
@@ -76,7 +77,7 @@ describe('paint stack', () => {
       const coverage = (u.carFlakeCell.value as T.Vector4).w
       for (const c of ['r', 'g', 'b'] as const) {
         expect(flake[c]).toBeLessThanOrEqual(1)
-        expect(m.color[c] + flake[c] * coverage + .04).toBeLessThanOrEqual(1)
+        expect(m.color[c] * (1 - flake[c] * coverage) + flake[c] * coverage + .04).toBeLessThanOrEqual(1)
       }
       expect(m.metalness).toBe(0)
       expect(m.clearcoat).toBe(1)
