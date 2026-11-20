@@ -119,6 +119,33 @@ function profileGuide(mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>, hu
   })
 }
 
+function projectorSource(radius: number, rotation: T.Quaternion, center: T.Vector3) {
+  const face = (x: number, y: number, z: number, w: number, h: number, gain: number) => {
+    const geometry = new T.PlaneGeometry(radius * w, radius * h).translate(radius * x, radius * y, z)
+    geometry.setAttribute('sourceGain', new T.Float32BufferAttribute(new Float32Array(4).fill(gain), 1))
+    return geometry
+  }
+  const base = face(0, 0, -.0005, .51, .38, .0008)
+  const dies = [-1, 1].flatMap(y => [-1, 1].map(x =>
+    face(x * .108, y * .075, 0, .181, .121, x === y ? .60 : 1.12)))
+  const contacts = [-1, 1].flatMap(x => [-1, 1].map(y =>
+    face(x * .222, y * .075, -.00018, .031, .042, .003)))
+  return joined([base, ...dies, ...contacts]).applyQuaternion(rotation).translate(...center.toArray())
+}
+
+function profileProjector(material: T.MeshStandardMaterial) {
+  patchMaterial(material, {
+    id: 'projector-source',
+    apply(shader) {
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'attribute float sourceGain; varying float vSourceGain;')
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', 'vSourceGain = sourceGain;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'varying float vSourceGain;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>',
+        'diffuseColor.rgb *= mix(0.13, 1.0, step(0.1, vSourceGain)); totalEmissiveRadiance *= vSourceGain;')
+    },
+  })
+}
+
 export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const frontPaint: T.BufferGeometry[] = [], rearPaint: T.BufferGeometry[] = []
   const carbon: T.BufferGeometry[] = [], black: T.BufferGeometry[] = [], dark: T.BufferGeometry[] = []
@@ -328,15 +355,35 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const transform = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), normal)
       const p = vec(f(x, y + lift, .018))
       const segments = full ? 96 : 56
-      const turn = (profile: readonly XY[]) =>
-        new T.LatheGeometry(profile.map(([r, z]) => new T.Vector2(radius * r, z)), segments)
-          .rotateX(Math.PI / 2).scale(1, .84, 1).applyQuaternion(transform).translate(...p.toArray())
+      const fit = (g: T.BufferGeometry) => g.rotateX(Math.PI / 2).scale(1, .84, 1).applyQuaternion(transform).translate(...p.toArray())
+      const lathe = (profile: readonly XY[], count = segments) =>
+        new T.LatheGeometry(profile.map(([r, z]) => new T.Vector2(radius * r, z)), count)
+      const turn = (profile: readonly XY[]) => fit(lathe(profile))
       black.push(turn([[0, -.034], [1.12, -.034], [1.17, -.028], [1.16, -.017], [1.085, -.007], [1.063, -.005]]))
-      projectorCollars.push(turn([[1.063, -.005], [1.055, -.0023], [1.025, -.0006], [.978, -.0003],
-        [.944, -.0011], [.931, -.0024], [.927, -.0041], [.908, -.0053], [.878, -.0053], [.875, -.007]]))
-      projectorBowls.push(turn([[.875, -.007], [.857, -.0077], [.818, -.0088], [.754, -.0113], [.688, -.0137],
+      projectorCollars.push(turn([[1.063, -.005], [1.055, -.0023], [1.025, -.0006], [1.009, -.0005],
+        [1.003, -.0009], [.989, -.0009], [.984, -.00035], [.970, -.00035], [.964, -.00075],
+        [.951, -.00075], [.944, -.0011], [.931, -.0024], [.927, -.0041], [.908, -.0053], [.878, -.0053], [.875, -.007]]))
+      const bowlProfile = [[.875, -.007], [.857, -.0077], [.818, -.0088], [.754, -.0113], [.688, -.0137],
         [.665, -.015], [.633, -.0153], [.608, -.0149], [.555, -.0171], [.485, -.0194], [.414, -.0212],
-        [.373, -.023], [.352, -.0244], [.311, -.0245], [.286, -.0237], [0, -.0237]]))
+        [.373, -.023], [.352, -.0244], [.311, -.0245], [.286, -.0237], [0, -.0237]] as const
+      const bowl = lathe(bowlProfile, full ? 96 : 48)
+      const wall = bowl.getAttribute('position')
+      for (let i = 0; i < wall.count; i++) {
+        const bx = wall.getX(i), bz = wall.getZ(i), r = Math.hypot(bx, bz) / radius
+        const a = Math.atan2(bx, bz) / tau * 16
+        const facet = Math.abs(2 * (a - Math.floor(a)) - 1)
+        const fade = smooth(r, .28, .49) * (1 - smooth(r, .79, .873))
+        wall.setY(i, wall.getY(i) - .00165 * fade * facet)
+      }
+      bowl.computeVertexNormals()
+      const normals = bowl.getAttribute('normal')
+      for (let j = 0; j < bowlProfile.length; j++) {
+        const last = wall.count - bowlProfile.length + j
+        const n = new T.Vector3().fromBufferAttribute(normals, j).add(new T.Vector3().fromBufferAttribute(normals, last)).normalize()
+        normals.setXYZ(j, ...n.toArray())
+        normals.setXYZ(last, ...n.toArray())
+      }
+      projectorBowls.push(fit(bowl))
       const domeSteps = full ? 24 : 12
       const dome = Array.from({ length: domeSteps + 1 }, (_, j): XY => {
         const a = mix(Math.PI / 2, 0, j / domeSteps)
@@ -344,8 +391,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       })
       projectorGlass.push(turn([[0, -.0059], [.885, -.0059], [.910, -.0055], ...dome]))
       const core = p.clone().addScaledVector(normal, -.0145)
-      emit('main beam projector', new T.SphereGeometry(radius * .27, 32, 12)
-        .scale(1.10, .80, .22).applyQuaternion(transform).translate(...core.toArray()), false, true, f(x, y, -.025), intensity)
+      const source = emit('main beam projector', projectorSource(radius, transform, core), false, true, f(x, y, -.025), intensity)
+      profileProjector(source.material)
     }
     if (side === 1) {
       const u = .61, v = .52
