@@ -423,7 +423,21 @@ async function measure(frame: number, key: 'master' | 'vertical') {
   }
   const view = `${frame}-${key}`
   await sharp(rgb, { raw: { width: W, height: H, channels: 3 } }).resize(format.width, format.height, { kernel: 'nearest' }).png().toFile(join(out, `ripple-${view}.png`))
-  return { view, stride, stats, format }
+  // Native pixel box around the painted body, padded, for the close-up sheets.
+  let x0 = W, y0 = H, x1 = -1, y1 = -1
+  for (let k = 0; k < W * H; k++) if (panel[k] >= 0) {
+    const x = k % W, y = Math.floor(k / W)
+    if (x < x0) x0 = x
+    if (x > x1) x1 = x
+    if (y < y0) y0 = y
+    if (y > y1) y1 = y
+  }
+  const pad = 24
+  const box = x1 < 0 ? [0, 0, format.width, format.height] : [
+    Math.max(0, x0 * stride - pad), Math.max(0, y0 * stride - pad),
+    Math.min(format.width, (x1 + 1) * stride + pad), Math.min(format.height, (y1 + 1) * stride + pad),
+  ]
+  return { view, stride, stats, format, box }
 }
 
 const pct = (values: number[], q: number) => {
@@ -452,6 +466,7 @@ for (const frame of frames) for (const key of formatKeys) {
   }
 }
 writeFileSync(join(out, 'table.txt'), lines.join('\n') + '\n')
+writeFileSync(join(out, 'boxes.json'), JSON.stringify(Object.fromEntries(results.map((r) => [r.view, r.box]))))
 console.log(lines.join('\n'))
 
 // Sheets: one row per frame, master then tall, scaled to a common height.
@@ -508,6 +523,33 @@ if (a.base) {
     await sharp({ create: { width: w, height: top.info.height + bottom.info.height, channels: 3, background: '#111' } })
       .composite([{ input: top.data, raw: top.info, left: 0, top: 0 }, { input: bottom.data, raw: bottom.info, left: 0, top: top.info.height }])
       .jpeg({ quality: 88 }).toFile(join(out, `${a.base}-vs-${name}`))
+  }
+  // Close-up pairs: each view cropped to the painted body (the union of both runs' boxes), base left, this run right,
+  // at native scale, so a pixel box read off the sheet maps back by adding the crop origin printed in the caption.
+  const baseBoxes = existsSync(join(base, 'boxes.json')) ? JSON.parse(readFileSync(join(base, 'boxes.json'), 'utf8')) as Record<string, number[]> : {}
+  for (const kind of ['zebra', 'ripple']) {
+    const pairs: Array<{ input: Buffer; w: number; h: number; caption: string }> = []
+    for (const r of results) {
+      const before = join(base, `${kind}-${r.view}.png`), after = join(out, `${kind}-${r.view}.png`)
+      if (!existsSync(before) || !existsSync(after)) continue
+      const b = baseBoxes[r.view] ?? r.box
+      const [x0, y0, x1, y1] = [Math.min(b[0], r.box[0]), Math.min(b[1], r.box[1]), Math.max(b[2], r.box[2]), Math.max(b[3], r.box[3])].map(Math.round)
+      const region = { left: x0, top: y0, width: x1 - x0, height: y1 - y0 }
+      const scale = Math.min(1, 960 / region.width)
+      const w = Math.round(region.width * scale), h = Math.round(region.height * scale)
+      const tile = async (f: string) => sharp(f).extract(region).resize(w, h).toBuffer()
+      const caption = `${r.view}  ${a.base} left, ${label} right, crop origin ${x0},${y0}${scale < 1 ? ` scale ${scale.toFixed(2)}` : ''}`
+      const text = Buffer.from(`<svg width="${2 * w + 8}" height="24"><text x="6" y="17" font-family="sans-serif" font-size="15" fill="#ddd">${caption}</text></svg>`)
+      const input = await sharp({ create: { width: 2 * w + 8, height: h + 24, channels: 3, background: '#111' } })
+        .composite([{ input: text, left: 0, top: 0 }, { input: await tile(before), left: 0, top: 24 }, { input: await tile(after), left: w + 8, top: 24 }])
+        .png().toBuffer()
+      pairs.push({ input, w: 2 * w + 8, h: h + 24, caption })
+    }
+    if (!pairs.length) continue
+    const W = Math.max(...pairs.map((p) => p.w)), H = pairs.reduce((s, p) => s + p.h, 0)
+    let y = 0
+    const layers = pairs.map((p) => { const l = { input: p.input, left: 0, top: y }; y += p.h; return l })
+    await sharp({ create: { width: W, height: H, channels: 3, background: '#111' } }).composite(layers).jpeg({ quality: 90 }).toFile(join(out, `${a.base}-vs-${kind}-close.jpg`))
   }
 }
 console.log(`wrote ${out}`)
