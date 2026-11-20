@@ -14,7 +14,7 @@ const palette = {
   amber: [5.14, 2.39, .41],
   violet: [1.20, .25, 2.75],
   magenta: [2.43, .054, .90],
-  strip: [5.56, 4.08, 2.62],
+  strip: [6.73, 4.17, 2.12],
 } as const satisfies Record<string, Tuple>
 
 type Tint = keyof typeof palette
@@ -301,6 +301,11 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
           length,n===0 ? crownCyan : edgeRust,false,index===8 ? .61 : .82)
       }
     }
+    if (index === 8) {
+      const px = wx+w*.27, pz = wz+d*.50+.52
+      practical.cabinet(tower,'stacked amber arcade cabinet',[px,58.4,pz],[7.74,2.50],[4.83,2.13,.48],'ARCADE')
+      practical.cabinet(tower,'stacked amber noodle cabinet',[px,63.2,pz],[7.21,1.86],[4.36,2.43,.78],'NOODLES')
+    }
   }
   const upper = towerSurface('hero tower setback roof bay', .094, 'curtain', screenReflection, spillAt('setback'))
   scaledBox(city, 'screen tower setback service bay', [2.60,14.94,-32.38], [4.63,4.71,4.42], upper,scale.screen)
@@ -327,8 +332,8 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   markerRow('east outer glass cyan markers',[35.5,11.8,-150.94],[.48,1.26,.12],2.15,13,[.056,.85,1.59],scale.outerEast)
   box(roof, 'hero full span concrete parapet', [0, .525, -10.025], [29, 1.05, .34], heroWall)
   box(roof, 'hero concrete wall cap', [0, 1.047, -10.02], [29, .048, .377], heroWall)
-  box(roof, 'hero full span steel top rail', [0, 1.228, -10.015], [29, .047, .067], zinc)
-  box(roof, 'hero steel intermediate rail', [0, 1.145, -10.015], [29, .027, .040], zinc)
+  box(roof, 'hero full span steel top rail', [0, 1.228, -10.015], [29, .034, .052], zinc)
+  box(roof, 'hero steel intermediate rail', [0, 1.145, -10.015], [29, .020, .032], zinc)
   for (let i = -6; i <= 6; i++) {
     box(roof, 'hero rail post', [i * 2.35, 1.149, -10.015], [.057, .178, .057], zinc)
     box(roof, 'hero steel post mounting plate', [i * 2.35, 1.075, -10.015], [.125,.016,.112], zinc)
@@ -346,7 +351,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     box(housing, 'folded weatherproof cabinet', [0, 0, -.081-setback], [width + 2*lip, height + 2*lip, .16+setback], frame)
     const color = new THREE.Color(...palette[source.tint])
     if (source.id === 'magenta violet tower screen') {
-      const mural = billboardMural(width*k, height*k, color)
+      const mural = billboardMural(width*k, height*k, color, { travel: .166, laps: 2, relief: .62 })
       plate(housing, 'animated magenta violet mural', offset(mural.material,-4), [0,0,.002], width,height)
       for (const side of [-1,1]) {
         box(housing, 'LED wall sealed stile', [side*(width*.5+.082),0,-.017], [.164,height+.32,.15], frame)
@@ -403,8 +408,9 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     if (source.id === 'cyan garage rise') mountLight(housing,'east parking canopy fascia',source.size,color,46,66,true)
     if (source.id === 'amber garage rise') mountLight(housing,'red deck marker',source.size,color,28,56)
     if (source.onWall) {
-      const { anchor } = mountLight(housing, x < 0 ? 'doorway' : 'lane separator opal',source.size,color,3.8,15)
-      anchor.rotation.x = 1.45
+      const left = x < 0
+      const { anchor } = mountLight(housing, left ? 'doorway' : 'lane separator opal',source.size,color,left ? 8.4 : 8.8,15)
+      anchor.rotation.x = left ? .98 : .89
       for (const side of [-1,1]) box(housing, 'sealed parapet light end bracket', [side*(width/2+.012),0,-.022], [.045,height+.037,.15], zinc)
     }
   }

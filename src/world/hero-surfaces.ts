@@ -171,25 +171,28 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   return mat
 }
 
-export function billboardMural(width: number, height: number, magenta: THREE.Color, violet = new THREE.Color(.165,.061,2.39),
-  offset = 0, banded = 0) {
+type MuralProfile = { violet?: THREE.Color; offset?: number; banded?: number; travel?: number; laps?: number; relief?: number }
+
+export function billboardMural(width: number, height: number, magenta: THREE.Color, profile: MuralProfile = {}) {
+  const { violet = new THREE.Color(.165,.061,2.39), offset = 0, banded = 0, travel = .071, laps = 1, relief = 0 } = profile
   const shade = new THREE.Color()
   const uniforms = {
     flow: { value: new THREE.Vector2(1,0) }, pixelCount: { value: new THREE.Vector2(width / .041, height / .041) },
     cabinetCount: { value: new THREE.Vector2(Math.round(width/3.12), Math.round(height/3.02)) },
     cabinetSalt: { value: stream('world/hero/mural modules').range(0,61) },
     magenta: { value: magenta }, violet: { value: violet }, banded: { value: banded },
+    travel: { value: travel }, relief: { value: relief },
   }
   const material = new THREE.ShaderMaterial({
     uniforms, toneMapped: false, vertexShader: opalVertex,
     fragmentShader: /* glsl */ `
       varying vec2 face;
       uniform vec2 flow, pixelCount, cabinetCount;
-      uniform float cabinetSalt, banded;
+      uniform float cabinetSalt, banded, travel, relief;
       uniform vec3 magenta, violet;
       ${noise}
       void main() {
-        vec2 p=face-.5+flow*.071;
+        vec2 p=face-.5+flow*travel;
         float billow=field(p*2.05+vec2(.73,1.48));
         float curve=p.x-.58*p.y+.28*(billow-.5);
         float sweep=smoothstep(-.35,.46,curve);
@@ -218,16 +221,25 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
         float cap=smoothstep(.0,.13,face.y)*(1.0-smoothstep(.91,.996,face.y));
         led=mix(led,led*.81+vec3(.83,.44,1.27),banded*lightwell*.66);
         level*=mix(1.0,.065+.935*lightwell*cap,banded);
+        if (relief>0.0) {
+          float silk=field(vec2(curve*2.87,p.y*1.86)+vec2(.78,2.08)+flow*.12);
+          float sheen=ribbon*(.26+.74*smoothstep(.25,.76,silk));
+          led+=vec3(.82,.26,.73)*sheen*relief;
+          level*=1.0+relief*(.065+.69*sheen);
+        }
         gl_FragColor = vec4(led*level,1.0);
       }
     `,
   })
   const phase = (time: number) => time * 2 * Math.PI / config.film.durationSeconds
+  const pinned = phase(config.film.heroFrameSeconds)*(1-laps)+offset
+  const pinX = Math.cos(pinned), pinY = Math.sin(pinned)
   return {
     material,
     set(time: number) {
-      const a = phase(time)+offset, y = Math.sin(a)
-      uniforms.flow.value.set(Math.cos(a), Math.abs(y) < 1e-14 ? 0 : y)
+      const a = laps*phase(time), x = Math.cos(a), y = Math.sin(a)
+      const c = Math.abs(x) < 1e-14 ? 0 : x, s = Math.abs(y) < 1e-14 ? 0 : y
+      uniforms.flow.value.set(c*pinX-s*pinY,s*pinX+c*pinY)
     },
     colorAt(time: number, color: THREE.Color) {
       shade.copy(magenta).lerp(violet, .44 + .034 * Math.sin(phase(time)))
