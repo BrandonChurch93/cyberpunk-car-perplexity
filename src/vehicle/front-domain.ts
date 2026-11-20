@@ -27,7 +27,7 @@ const inside = (loop: Edge[], u: number, y: number) =>
   loop.reduce((n, e) => n + Number(active(e, u) && yAt(e, u) < y), 0) % 2 !== 0
 
 export function trimmedFrontSkin(point: Surface, boundary: readonly UV[], holes: readonly (readonly UV[])[],
-  columns: readonly number[], stepY: number, side: number): T.BufferGeometry {
+  columns: readonly number[], stepY: number, side: number, returnAt: (point: Point) => boolean) {
   const [outer, ...cut] = [boundary, ...holes].map(segments)
   const all = [outer, ...cut].flat()
   const us = [...columns, ...[boundary, ...holes].flatMap(loop => loop.map(p => p[0]))]
@@ -83,10 +83,58 @@ export function trimmedFrontSkin(point: Surface, boundary: readonly UV[], holes:
       }
     }
   }
-  const geometry = new T.BufferGeometry()
-  geometry.setAttribute('position', new T.Float32BufferAttribute(positions, 3))
-  geometry.setAttribute('normal', new T.Float32BufferAttribute(normals, 3))
-  geometry.setAttribute('uv', new T.Float32BufferAttribute(uv, 2))
-  geometry.setIndex(indices)
-  return geometry
+  const buffer = (p: number[], n: number[], uv: number[], indices: number[]) => {
+    const geometry = new T.BufferGeometry()
+    geometry.setAttribute('position', new T.Float32BufferAttribute(p, 3))
+    geometry.setAttribute('normal', new T.Float32BufferAttribute(n, 3))
+    geometry.setAttribute('uv', new T.Float32BufferAttribute(uv, 2))
+    geometry.setIndex(indices)
+    return geometry
+  }
+  const edges = new Map<string, readonly [number, number]>()
+  for (let i = 0; i < indices.length; i += 3) for (let j = 0; j < 3; j++) {
+    const a = indices[i + j], b = indices[i + (j + 1) % 3]
+    const key = a < b ? `${a}:${b}` : `${b}:${a}`
+    if (edges.has(key)) edges.delete(key); else edges.set(key, [a, b])
+  }
+  const read = (a: number[], at: number) => new T.Vector3().fromArray(a, at * 3)
+  const angles = new Map<number, T.Vector3>()
+  const returns = [...edges.values()].filter(([a, b]) => {
+    const p = read(positions, a).lerp(read(positions, b), .5)
+    return returnAt(p.toArray())
+  })
+  for (const [a, b] of returns) {
+    const tangent = read(positions, b).sub(read(positions, a)).normalize()
+    for (const i of [a, b]) {
+      const out = tangent.clone().cross(read(normals, i)).normalize()
+      angles.set(i, (angles.get(i) ?? new T.Vector3()).add(out))
+    }
+  }
+  for (const out of angles.values()) out.normalize()
+  const lipRadius = .00135
+  const rim = (finish: boolean) => {
+    const p: number[] = [], n: number[] = [], uvs: number[] = [], id: number[] = []
+    const nodes = new Map<number, number>(), rings = finish ? 4 : 1, stride = rings + 1
+    const make = (source: number) => {
+      const found = nodes.get(source)
+      if (found !== undefined) return found
+      const k = p.length / 3
+      const base = read(positions, source), face = read(normals, source), out = angles.get(source)!
+      for (let j = 0; j <= rings; j++) {
+        const t = j / rings, angle = finish ? Math.PI / 2 * t : Math.PI / 2
+        const inset = lipRadius * (1 - Math.cos(angle)) + (finish ? 0 : .008 * t)
+        const normal = face.clone().multiplyScalar(Math.cos(angle)).addScaledVector(out, Math.sin(angle)).normalize()
+        p.push(...base.clone().addScaledVector(out, lipRadius * Math.sin(angle)).addScaledVector(face, -inset).toArray())
+        n.push(...normal.toArray()); uvs.push(uv[2 * source], uv[2 * source + 1] - inset)
+      }
+      nodes.set(source, k)
+      return k
+    }
+    for (const [a, b] of returns) {
+      const u = make(a), v = make(b)
+      for (let j = 0; j + 1 < stride; j++) id.push(v + j, u + j, u + j + 1, v + j, u + j + 1, v + j + 1)
+    }
+    return buffer(p, n, uvs, id)
+  }
+  return { skin: buffer(positions, normals, uv, indices), lip: rim(true), lining: rim(false) }
 }

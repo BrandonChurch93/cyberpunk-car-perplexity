@@ -272,14 +272,16 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       controls: 6, pins: [[.20, blade[1][i]], [.60, blade[3][i]]],
     })
     const [outerXAt, outerYAt, innerXAt, innerYAt] = [0, 1, 2, 3].map(trace)
-    const bladeSkin = (u: number, v: number) => {
+    const bladeSkin = (t: number, v: number) => {
+      const u = mix(.34, 1, t)
       const x = mix(outerXAt(u), innerXAt(u), v), y = mix(outerYAt(u), innerYAt(u), v)
-      return f(x, y, mix(-.006, .020, v) - .004 * Math.sin(Math.PI * v))
+      const step = .012 * (1 - fair(t, 0, .21))
+      return f(x, y, step + mix(-.006, .020, v) - .004 * Math.sin(Math.PI * v))
     }
     frontPaint.push(patch(bladeSkin, 65, 8, outFront, .008))
     black.push(patch((u, v) => {
       const lip = bladeSkin(u, 1)
-      return f(Math.abs(lip[0]), lip[1] + .009 * v, mix(.020, .085, v))
+      return [lip[0], lip[1] + .009 * v, lip[2] - .065 * v]
     }, 65, 6, [0, 1, 1], .006))
     dark.push(ribbon(f, [[.462, .395], [.578, .411], [.729, .426], [.801, .436]], .028, .024))
     black.push(patch((u, v) => {

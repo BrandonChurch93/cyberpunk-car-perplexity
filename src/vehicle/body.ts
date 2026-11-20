@@ -333,7 +333,9 @@ export function frontCheek(s: number, y: number, side: number): Point {
   const arch = Math.hypot(y - frontWheel.loaded, zAt(s) - frontWheel.z) - frontWheel.arch
   const archFade = fairStep(s, .150, .194) * (1 - fairStep(s, .286, .313))
     * (1 - fairStep(y, .694, .756))
-  const archForm = .0047 * archFade * (1 - fairStep(arch, .003, .081))
+  const flange = .32 * fairPositive(arch - .023, .0016) * (1 - fairStep(arch, .031, .052))
+    * fairStep(s, .168, .213) * (1 - fairStep(s, .274, .307))
+  const archForm = .0047 * archFade * (1 - fairStep(arch, .003, .081)) + flange
   const sill = .053 * (1 - q) ** 5 * fairStep(s, .096, .153)
   const x = plan(s) + cheekBreadth(s) * fairStep(drop, 0, .099) - sill + archForm + wingDraft(s, drop)
   return [side * mix(x, sidePoint(s, y, 1)[0], fairStep(s, .252, .307)), y, zAt(s)]
@@ -353,8 +355,8 @@ function cheekTrims(full: boolean, arch: (u: number) => UV) {
   const faceTrim = (u: number, v: number) => {
     const p = lampWindow(face, u, v, -.008)
     const y = p[1] + mix(-.004, .005, v)
-    const [s] = project([p[0] + mix(-.005, .007, u), y, p[2]], .34)
-    return [s, Math.min(y, noseShoulder(s) - .0025)] as const
+    const [s] = project([p[0] + mix(-.005, .002, u), y, p[2]], .34)
+    return [s, Math.min(y, noseShoulder(s) - .006)] as const
   }
   const n = full ? 35 : 21
   const lamp = [
@@ -457,7 +459,6 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const hoodTraces = [hoodInner, hoodOuter, lampFold].map(lateralTrace)
   const sideTrace = (line: (s: number) => number) => (p: Point) => p[1] - line(sAt(p[2]))
   const beltLine = sideTrace(doorBelt), heelLine = sideTrace(heelFold), haunchLine = sideTrace(haunchFold)
-  const wingDraftLine = sideTrace((s) => shoulder(s) - paintWingDrop)
   const crossLine = (p: Point) => crossOffset(sAt(p[2]), p[1])
   const crossToe = (p: Point) => crossLine(p) - crossStepRun
   const gap = .00055
@@ -477,7 +478,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     return (a + b) / 2
   }
   const mouthStart = gridU(wingVentFront), mouthEnd = gridU(wingVentBack), rollStart = gridU(.071)
-  const noseReturnEnd = gridU(cheekStart), noseTipEnd = gridU(.035)
+  const noseReturnEnd = gridU(cheekStart), noseDenseEnd = gridU(frontHoodStation(.86)), noseTipEnd = gridU(.035)
   const outerS = (u: number, q: number) => bonnetGrid(u) + (frontEnd(q) - bonnetGap - splitEnd) * fairStep(u, .81, 1)
   const ventQ = (s: number, v: number) => {
     const t = T.MathUtils.clamp(s, wingVentFront, wingVentBack)
@@ -508,10 +509,10 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     }
   }
   const baseStations = [...Array.from({ length: bonnetLengthSteps + 1 }, (_, i) => i / bonnetLengthSteps),
-    noseReturnEnd, rollStart, ...crossings].sort((a, b) => a - b)
+    noseReturnEnd, noseDenseEnd, rollStart, ...crossings].sort((a, b) => a - b)
   const stations = baseStations.flatMap((u, i) => {
     const next = baseStations[i + 1]
-    const segments = full && next <= noseReturnEnd ? (next <= noseTipEnd ? 3 : 2) : 1
+    const segments = full && next <= noseDenseEnd ? (next <= noseTipEnd ? 3 : 2) : 1
     return Array.from({ length: segments }, (_, j) => j ? mix(u, next, j / segments) : u)
   })
   const mouthSteps = full ? 36 : 20
@@ -738,7 +739,12 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const step = full ? .011 : .023
         const span = Math.ceil((after - cheekStart) * dimensions.length / step)
         const samples = Array.from({ length: span + 1 }, (_, i) => mix(cheekStart, after, i / span))
-        paint.push(trimmedFrontSkin((s, y) => frontCheek(s, y, side), bounds, cut, samples, step, side))
+        const skin = trimmedFrontSkin((s, y) => frontCheek(s, y, side), bounds, cut, samples, step, side, p => {
+          const s = sAt(p[2])
+          return s > cheekStart + 1e-7 && s < after - 1e-7 && p[1] < noseShoulder(s) - .0007
+        })
+        paint.push(skin.skin, skin.lip)
+        black.push(skin.lining)
       }
       if (rear) for (const [start, end] of [[theta0, 0], [Math.PI, theta1]]) part(paint, (u, v) => {
         const p = lower(mix(start, end, u))
