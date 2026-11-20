@@ -147,6 +147,92 @@ def front(net, full):
         x, y = (w[0] * N1 + w[1] * Lo + w[2] * yn)[:2]
         c = np.array([x, y, _depth(x, y) - 0.052])
         obs += projector(c, r, (0.06, -0.03, 1.0), f'projector {cd:.0f}', segs, cd)
+    return obs + intake(net, full)
+
+
+def _inside(P, q):
+    x, y = q
+    c = False
+    n = len(P)
+    for i in range(n):
+        (x0, y0), (x1, y1) = P[i], P[(i + 1) % n]
+        if (y0 > y) != (y1 > y) and x < x0 + (y - y0) * (x1 - x0) / (y1 - y0):
+            c = not c
+    return c
+
+
+def _edge_dist(P, q):
+    q = np.asarray(q)
+    best = 1e9
+    for i in range(len(P)):
+        a, b = P[i], P[(i + 1) % len(P)]
+        t = np.clip(np.dot(q - a, b - a) / max(np.dot(b - a, b - a), 1e-12), 0, 1)
+        best = min(best, np.linalg.norm(q - a - t * (b - a)))
+    return best
+
+
+def hex_mesh(poly, place, cell, bar, depth, margin=0.0):
+    """Hexagonal mesh as real bars over the plane region poly (2D); place(u, v) gives the 3D point and normal."""
+    poly = np.asarray(poly, float)
+    lo, hi = poly.min(0), poly.max(0)
+    rc = cell / math.sqrt(3)
+    ri = rc - bar / math.cos(math.pi / 6) / 2
+    bm = bmesh.new()
+    dx, dy = cell, cell * math.sqrt(3) / 2
+    j = 0
+    y = lo[1]
+    while y <= hi[1] + dy:
+        x = lo[0] + (cell / 2 if j % 2 else 0.0)
+        while x <= hi[0] + cell:
+            c = np.array([x, y])
+            if _inside(poly, c) and _edge_dist(poly, c) > margin:
+                rings = []
+                for r in (rc, ri):
+                    for side in (0.5, -0.5):
+                        ring = []
+                        for k in range(6):
+                            a = math.pi / 6 + k * math.pi / 3
+                            u = c + r * np.array([math.cos(a), math.sin(a)])
+                            p, nrm = place(*u)
+                            ring.append(bm.verts.new(bl.b(p + nrm * depth * side)))
+                        rings.append(ring)
+                of, ob, inf, inb = rings
+                for k in range(6):
+                    m = (k + 1) % 6
+                    bm.faces.new((of[k], of[m], inf[m], inf[k]))
+                    bm.faces.new((ob[k], inb[k], inb[m], ob[m]))
+                    bm.faces.new((inf[k], inf[m], inb[m], inb[k]))
+                    bm.faces.new((of[k], ob[k], ob[m], of[m]))
+            x += dx
+        y += dy
+        j += 1
+    return bm
+
+
+def intake(net, full):
+    """Front intake internals: the dark strut from the blade tip up to the intake top and the hexagonal mesh behind."""
+    obs = []
+    top = curve(net, 'int_top')
+    zt = float(np.interp(0.252, top[:, 0], top[:, 2])) if top[0, 0] < top[-1, 0] else float(np.interp(0.252, top[::-1, 0], top[::-1, 2]))
+    a = np.asarray(net.points['Dt'], float)
+    b = np.array([0.252, 0.384, zt])
+    S = np.array([a + t * (b - a) for t in np.linspace(0, 1, 8)]) + np.array([0, 0, -0.065])
+    obs.append(_obj('intake strut', strip(S, 0.030, 0.13, (0.0, 0.0, 1.0), ends=1.0), 'matte', 'intake strut', smooth=False, bevel=0.003))
+    loop = []
+    for e in ('int_top', 'lamp_low', 'arm_low', 'arm_down', 'bl_top', 'bl_in', 'lip_top', 'int_ctr'):
+        c = curve(net, e)
+        if loop:
+            c = toward(c, loop[-1])
+        elif np.linalg.norm(c[0] - net.points['I0']) > 1e-6:
+            c = c[::-1]
+        loop.extend(c if not loop else c[1:])
+    L = np.array(loop)
+    cf = np.polyfit(L[:, 0], L[:, 2], 2)
+    place = lambda u, v: (np.array([u, v, float(np.polyval(cf, abs(u))) - 0.11]), np.array([0.0, 0.0, 1.0]))
+    half = L[:, :2].copy()
+    half[np.abs(half[:, 0]) < 1e-6, 0] = -0.012
+    bm = hex_mesh(half, place, 0.022 if full else 0.034, 0.0026, 0.008, margin=0.004)
+    obs.append(_obj('front intake mesh', bm, 'dark', 'front intake hexagonal mesh', smooth=False))
     return obs
 
 
