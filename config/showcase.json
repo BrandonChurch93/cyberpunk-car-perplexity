@@ -62,6 +62,9 @@
     "focalLengthsMm": [24, 35, 50, 85, 100],
     "anamorphic": true
   },
+  "vehicle": {
+    "maxSurfacePasses": 3
+  },
   "paint": {
     "locked": "black-pearl",
     "candidates": [

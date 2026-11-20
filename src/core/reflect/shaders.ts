@@ -17,6 +17,7 @@ export interface PlanarUniforms {
   reflectLodMax: { value: number }
   reflectSeed: { value: number }
   reflectOn: { value: number }
+  reflectBillboard: { value: THREE.Vector4 }
 }
 
 const worldVarying = 'varying vec3 vReflectWorld;'
@@ -77,6 +78,7 @@ uniform vec2 reflectSize;
 uniform float reflectLodMax;
 uniform float reflectSeed;
 uniform float reflectOn;
+uniform vec4 reflectBillboard;
 
 vec2 reflectUv( vec3 x ) {
   vec4 c = reflectViewProjection * vec4( x, 1.0 );
@@ -174,6 +176,38 @@ radiance = planarRadiance( geometryNormal, material.roughness, radiance );
 #endif
 `
 
+const spotStart = '#if ( NUM_SPOT_LIGHTS > 0 ) && defined( RE_Direct )'
+const spotDirect = 'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );'
+
+function deckDirectChunk(): string {
+  // The resolved billboard image supplies specular on the mirrored deck, not the analytic light sample.
+  const lighting = THREE.ShaderChunk.lights_fragment_begin
+  const start = lighting.indexOf(spotStart)
+  if (start < 0) throw new Error('deck area shading requires a spot light block')
+  return lighting.slice(0, start) + replaceOnce(lighting.slice(start), spotDirect, /* glsl */ `
+    {
+      vec3 beforeSpecular = reflectedLight.directSpecular;
+      #ifdef USE_CLEARCOAT
+        vec3 beforeCoat = clearcoatSpecularDirect;
+      #endif
+      ${spotDirect}
+      vec3 billboardView = ( viewMatrix * vec4( reflectBillboard.xyz, 1.0 ) ).xyz;
+      if ( reflectOn > 0.5 && reflectBillboard.w > 0.5 && distance( spotLight.position, billboardView ) < 0.002 ) {
+        vec3 worldNormal = transformDirectionByInverseViewMatrix( geometryNormal, viewMatrix );
+        vec2 uv = reflectUv( vReflectWorld );
+        vec2 edge = min( uv, 1.0 - uv );
+        float covered = smoothstep( 0.0, 0.02, min( edge.x, edge.y ) ) * smoothstep( 0.6, 0.8, worldNormal.y );
+        float areaSpecular = 1.0 - covered * ( 1.0 - smoothstep( 0.12, 0.35, material.roughness ) );
+        reflectedLight.directSpecular = mix( beforeSpecular, reflectedLight.directSpecular, areaSpecular );
+        #ifdef USE_CLEARCOAT
+          float coatAreaSpecular = 1.0 - covered * ( 1.0 - smoothstep( 0.12, 0.35, material.clearcoatRoughness ) );
+          clearcoatSpecularDirect = mix( beforeCoat, clearcoatSpecularDirect, coatAreaSpecular );
+        #endif
+      }
+    }
+  `)
+}
+
 export interface PlanarTuning {
   taps: number
   filter: number
@@ -209,6 +243,7 @@ export function planarPatch(uniforms: PlanarUniforms, tuning: PlanarTuning, deck
     apply(shader) {
       shader.fragmentShader = insertBefore(shader.fragmentShader, 'void main() {', planarPars)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <lights_fragment_maps>', planarApply)
+      if (!deckDetail) shader.fragmentShader = replaceOnce(shader.fragmentShader, '#include <lights_fragment_begin>', deckDirectChunk())
     },
   }
 }
