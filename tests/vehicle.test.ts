@@ -340,6 +340,20 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('registers beading on the bay covers and stepped carbon vents only', () => {
+    for (const vehicle of [blockout, full]) {
+      for (const [name, wetness] of [
+        ['carbon cam covers with hex relief', 'beads'],
+        ['stepped carbon bay vents', 'beads'],
+        ['dark chevron rear bay louvers', 'none'],
+      ]) {
+        const mesh = vehicle.root.getObjectByName(name) as T.Mesh
+        expect(mesh).toBeDefined()
+        expect(vehicle.surfaces.find((surface) => surface.material === mesh.material)?.wetness).toBe(wetness)
+      }
+    }
+  })
+
   it('responds to the lamp sequence and the kick without reconstructing the previous frame', () => {
     const car = full
     const fullBeam = stateAt(events.lampStageThree)
