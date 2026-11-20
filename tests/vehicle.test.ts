@@ -93,7 +93,7 @@ describe('vehicle geometry and state', () => {
       expect(T.MathUtils.radToDeg(a.angleTo(normalAt(x - .010, s)))).toBeLessThan(3)
       expect(T.MathUtils.radToDeg(b.angleTo(normalAt(x + .010, s)))).toBeLessThan(3)
     }
-    for (const [y, s] of [[.338, .530], [.647, .460], [.896, .760], [.924, .812], [.7814, .724]]) {
+    for (const [y, s] of [[.338, .530], [.650, .460], [.896, .760], [.924, .812], [.7814, .724]]) {
       const a = normalAt(y - .002, s, true), b = normalAt(y + .002, s, true)
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
@@ -181,7 +181,7 @@ describe('vehicle geometry and state', () => {
       expect(hit(rearWheel.loaded, tangent + .006).point.x).toBeGreaterThan(rearWheel.x)
       const inside = hit(.622, tangent - .002), outside = hit(.622, tangent + .002)
       expect(T.MathUtils.radToDeg(inside.normal!.angleTo(outside.normal!))).toBeLessThan(8)
-      for (const [s, y] of [[.629, .766], [.646, .790], [.670, .824]]) {
+      for (const [s, y] of [[.636, .766], [.653, .790], [.677, .824]]) {
         const ray = new T.Raycaster(new T.Vector3(2, y, zAt(s)), new T.Vector3(-1, 0, 0))
         const throat = ray.intersectObject(vehicle.root, true)[0]
         expect(throat.object.name).toBe('stowage, seals and wheelhouse liners')
@@ -204,8 +204,13 @@ describe('vehicle geometry and state', () => {
           expect(b.object.name).toBe(a.object.name)
           expect(turn).toBeGreaterThan(15)
           expect(turn).toBeLessThan(25)
+          const toe = profile(s + .0066, y)
+          expect(toe.object.name).toBe(a.object.name)
+          expect((b.point.x - toe.point.x) * side).toBeGreaterThan(.007)
+          expect((b.point.x - toe.point.x) * side).toBeLessThan(.011)
         }
-        for (const [s, y] of [[.617, .230], [.618, .400], [.576, .650]]) {
+        expect(profile(.617, .230).object.name).toBe('closed body panels and returns')
+        for (const [s, y] of [[.624, .230], [.625, .400], [.583, .650]]) {
           const mouth = profile(s, y), panel = profile(s - .05, y)
           expect(mouth.object.name).toBe('stowage, seals and wheelhouse liners')
           expect((panel.point.x - mouth.point.x) * side).toBeGreaterThan(.145)
