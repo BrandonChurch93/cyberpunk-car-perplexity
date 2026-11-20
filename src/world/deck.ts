@@ -129,6 +129,25 @@ function stripePattern(forms: Forms, roof: THREE.Group): void {
   arrow(3.75, 5.9, Math.PI / 2)
 }
 
+function foregroundStop(forms: Forms, roof: THREE.Group): void {
+  const stop = group(roof, 'foreground wheel stop', [3.7, 0, 3.24])
+  stop.rotation.y = THREE.MathUtils.degToRad(18)
+  const crest = 0.102
+  const rings = [
+    [0.82, 0, 0.075],
+    [0.808, 0.022, 0.073],
+    [0.75, crest, 0.048],
+  ] as const
+  const vertices = rings.flatMap(([x, y, z]): Tuple[] => [[-x, y, -z], [-x, y, z], [x, y, z], [x, y, -z]])
+  const faces = [0, 2, 1, 0, 3, 2, 8, 9, 10, 8, 10, 11]
+  for (const a of [0, 4]) for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4
+    faces.push(a + i, a + j, a + j + 4, a + i, a + j + 4, a + i + 4)
+  }
+  forms.surface(stop, 'precast concrete stop', 'slate', vertices, faces)
+  for (const x of [-0.5, 0.5]) forms.cylinder(stop, 'steel anchor washer', 'graphite', [x, crest, 0], 0.004, 0.018)
+}
+
 function drain(forms: Forms, roof: THREE.Group, x: number, z: number, width = 0.2): void {
   const grate = group(roof, 'drain grate', [x, 0, z])
   forms.box(grate, 'iron rim', 'slate', [width, 0.007, 0.2], [0, 0.0035, 0])
@@ -205,7 +224,7 @@ function coreAndServices(forms: Forms, roof: THREE.Group): void {
   const camera = forms.box(core, 'security camera body', 'chalk', [0.13, 0.12, 0.24], [-3.38, 3.03, 2.73])
   camera.rotation.set(0.28, -0.55, 0)
 
-  for (const [x, z, turn] of [[-15.2, 1.2, 0.12], [-26.3, -4.9, 0], [-26.3, 2.1, 0], [-26.3, 14.1, 0], [21.4, -15.5, 0], [24.2, -3.6, 0], [24.8, 8.4, 0], [13.2, 15.4, 0.55], [0.6, 16.2, 0.28], [-19.8, 11.5, 0]]) {
+  for (const [x, z, turn] of [[-15.2, 1.2, 0.12], [-26.3, 5.4, 0], [-26.3, 2.1, 0], [-26.3, 14.1, 0], [21.4, -15.5, 0], [24.2, -3.6, 0], [24.8, 8.4, 0], [13.2, 15.4, 0.55], [0.6, 16.2, 0.28], [-19.8, 11.5, 0]]) {
     const pole = group(roof, 'deck light pole', [x, 0, z])
     pole.rotation.y = turn
     forms.box(pole, 'pole concrete plinth', 'stone', [0.39, 0.16, 0.39], [0, 0.08, 0])
@@ -235,7 +254,9 @@ export function buildDeck(forms: Forms, roof: THREE.Group): DeckSurface {
   const deck = floors(forms, roof)
   edges(forms, roof)
   stripePattern(forms, roof)
-  for (const [x, z] of [[-1.7, 2.75], [1.75, 2.6], [2.1, -3.4], [-12.5, -15.7], [15.45, 11.4], [20.1, -14.6]]) drain(forms, roof, x, z)
+  foregroundStop(forms, roof)
+  for (const [x, z] of [[-1.7, 2.75], [1.75, 2.6], [-12.5, -15.7], [15.45, 11.4], [20.1, -14.6]]) drain(forms, roof, x, z)
+  drain(forms, roof, 0.65, -3.95, 1.5)
   rampAndControl(forms, roof)
   coreAndServices(forms, roof)
   return deck
