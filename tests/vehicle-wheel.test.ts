@@ -29,7 +29,7 @@ describe('closed-web forged wheel', () => {
         for (let k = 0; k < 5; k++) {
           const th = 0.22 + (k * Math.PI * 2) / 5
           for (const sign of [-1, 1]) {
-            const a = th + sign * 0.468
+            const a = th + sign * 0.456
             const p = wheel.localToWorld(new T.Vector3(1, 0.94 * R * Math.cos(a), 0.94 * R * Math.sin(a)))
             ray.set(p, dir)
             const hit = ray.intersectObject(wheel, true)[0]
