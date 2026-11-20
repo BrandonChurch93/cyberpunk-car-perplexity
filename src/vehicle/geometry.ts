@@ -31,6 +31,119 @@ export function curve(knots: readonly Knot[]): (x: number) => number {
   }
 }
 
+type FairOptions = {
+  controls?: number
+  interior?: readonly number[]
+  pins?: readonly Knot[]
+  breaks?: readonly Knot[]
+  penalty?: number
+  flatStart?: boolean
+  flatEnd?: boolean
+}
+
+function cubicBasis(knots: readonly number[], t: number): number[] {
+  const count = knots.length - 4
+  if (t >= 1) return Array.from({ length: count }, (_, i) => +(i === count - 1))
+  const b = knots.slice(1).map((right, i) => +(t >= knots[i] && t < right))
+  for (let d = 1; d <= 3; d++) for (let i = 0; i + d < b.length; i++) {
+    const a = knots[i + d] - knots[i], c = knots[i + d + 1] - knots[i + 1]
+    b[i] = (a ? (t - knots[i]) * b[i] / a : 0) + (c ? (knots[i + d + 1] - t) * b[i + 1] / c : 0)
+  }
+  return b.slice(0, count)
+}
+
+function solveFit(a: number[][], b: number[]): number[] {
+  for (let i = 0; i < a.length; i++) {
+    let p = i
+    for (let j = i + 1; j < a.length; j++) if (Math.abs(a[j][i]) > Math.abs(a[p][i])) p = j
+    if (Math.abs(a[p][i]) < 1e-12) throw new Error('Dependent fair-curve constraints')
+    ;[a[i], a[p]] = [a[p], a[i]]
+    ;[b[i], b[p]] = [b[p], b[i]]
+    for (let j = i + 1; j < a.length; j++) {
+      const scale = a[j][i] / a[i][i]
+      for (let k = i + 1; k < a.length; k++) a[j][k] -= a[i][k] * scale
+      b[j] -= b[i] * scale
+    }
+  }
+  for (let i = b.length - 1; i >= 0; i--) {
+    for (let j = i + 1; j < b.length; j++) b[i] -= a[i][j] * b[j]
+    b[i] /= a[i][i]
+  }
+  return b
+}
+
+export function fairCurve(trace: readonly Knot[], options: FairOptions = {}): (x: number) => number {
+  const first = trace[0], last = trace[trace.length - 1], origin = first[0], span = last[0] - origin
+  const unit = (x: number) => (x - origin) / span
+  if (options.breaks?.length) {
+    const ends = [first, ...options.breaks, last]
+    const fits = ends.slice(1).map((right, i) => {
+      const left = ends[i], inside = (x: number) => left[0] < x && x < right[0]
+      return fairCurve([left, ...trace.filter(([x]) => inside(x)), right], {
+        ...options, breaks: [], interior: options.interior?.filter(inside), pins: options.pins?.filter(([x]) => inside(x)),
+        flatStart: i === 0 && options.flatStart, flatEnd: i === ends.length - 2 && options.flatEnd,
+      })
+    })
+    return (x) => {
+      let i = 0
+      while (i + 1 < fits.length && x > ends[i + 1][0]) i++
+      return fits[i](x)
+    }
+  }
+  const pins = (options.pins ?? []).filter(([x]) => x > origin && x < last[0])
+  const minimum = 2 + pins.length + 2 * (Number(!!options.flatStart) + Number(!!options.flatEnd))
+  const count = options.interior ? options.interior.length + 4 :
+    Math.max(4, minimum, options.controls ?? Math.min(8, Math.ceil(trace.length * .68)))
+  const interior = options.interior?.map(unit) ??
+    Array.from({ length: count - 4 }, (_, i) => (i + 1) / (count - 3))
+  const edges = [0, ...interior, 1]
+  const knots = [0, 0, 0, ...edges, 1, 1, 1]
+  const basis = (u: number) => cubicBasis(knots, u)
+  const constraints = [first, ...pins, last].map(([x, y]) => ({ row: basis(unit(x)), y }))
+  const flat = (i: number, j: number) => constraints.push({ row: Array.from({ length: count }, (_, k) => +(k === i) - +(k === j)), y: 0 })
+  if (options.flatStart) { flat(0, 1); flat(1, 2) }
+  if (options.flatEnd) { flat(count - 1, count - 2); flat(count - 2, count - 3) }
+  const size = count + constraints.length
+  const a = Array.from({ length: size }, () => new Array<number>(size).fill(0))
+  const b = new Array<number>(size).fill(0)
+  const accumulate = (row: number[], y: number, weight: number) => {
+    for (let i = 0; i < count; i++) {
+      b[i] += row[i] * y * weight
+      for (let j = 0; j < count; j++) a[i][j] += row[i] * row[j] * weight
+    }
+  }
+  trace.forEach(([x, y]) => accumulate(basis(unit(x)), y, 1))
+  const samples = edges.slice(1).map((right, i) => {
+    const left = edges[i], length = right - left
+    return [0, 1 / 3, 2 / 3, 1].map((u) => basis(left + u * length))
+  })
+  // Each span contributes the integral of its squared third derivative.
+  samples.forEach(([p, q, r, s], i) => {
+    const length = edges[i + 1] - edges[i]
+    accumulate(p.map((v, j) => s[j] - 3 * r[j] + 3 * q[j] - v), 0, (options.penalty ?? 6e-8) * 729 / length ** 5)
+  })
+  constraints.forEach(({ row, y }, k) => {
+    row.forEach((v, j) => { a[count + k][j] = a[j][count + k] = v })
+    b[count + k] = y
+  })
+  const controls = solveFit(a, b)
+  const coefficients = samples.map((rows) => {
+    const [p, q, r, s] = rows.map((row) => row.reduce((y, v, i) => y + v * controls[i], 0))
+    const d1 = q - p, d2 = r - 2 * q + p, d3 = s - 3 * r + 3 * q - p
+    return [p, 3 * d1 - 1.5 * d2 + d3, 4.5 * (d2 - d3), 4.5 * d3]
+  })
+  return (x) => {
+    if (x <= origin) return first[1]
+    if (x >= last[0]) return last[1]
+    const u = unit(x)
+    let i = 0
+    while (u > edges[i + 1]) i++
+    const t = (u - edges[i]) / (edges[i + 1] - edges[i])
+    const [p, q, r, s] = coefficients[i]
+    return p + t * (q + t * (r + t * s))
+  }
+}
+
 export function patch(point: Surface, uSteps: number, vSteps: number, outward: Point, thickness = 0, row?: (u: number, j: number) => number): T.BufferGeometry {
   const p: number[] = [], n: number[] = [], uv: number[] = [], id: number[] = []
   const d = 0.0001
