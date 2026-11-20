@@ -275,12 +275,12 @@ function panelPractical(
 
 function rearDeckPractical(pole: THREE.Object3D, metal: THREE.Material, frame: THREE.Material): FilmLight {
   const tint = new THREE.Color(.53,.76,1)
-  const radiance = 185
+  const radiance = 245
   const face = new THREE.MeshBasicMaterial({ color: tint.clone().multiplyScalar(radiance), toneMapped: false })
   const mast = pole.getObjectByName('tapered steel post')!
   mast.scale.y *= 1.81
   mast.position.y = 4.18
-  pole.position.set(-10.45,0,2.1)
+  pole.position.set(-3.9,0,12.3)
   for (const child of [...pole.children]) if (/opaque lamp head|unlit lamp diffuser|luminaire cross arm/.test(child.name)) child.removeFromParent()
   block(pole, 'worklight mast socket', metal, [0,8.08,0], [.24,.41,.26])
   const rack = new THREE.Group()
@@ -304,8 +304,8 @@ function rearDeckPractical(pole: THREE.Object3D, metal: THREE.Material, frame: T
   const anchor = new THREE.Object3D()
   anchor.position.z = .54
   rack.add(anchor)
-  return { id: 'north deck pole', kind: 'area', object: anchor, color: tint, intensity: radiance * (3*1.27*.51) * .42, size: [4.15,.51],
-    range: 39, shadow: true, beam: false, level: () => 1 }
+  return { id: 'north deck pole', kind: 'spot', object: anchor, color: tint, intensity: radiance * (3*1.27*.51) * 1.31, size: [1.42,.35],
+    angle: .123, penumbra: .39, range: 39, shadow: true, beam: false, level: () => 1 }
 }
 
 export interface RoofFixtures { lights: FilmLight[]; signs: string[]; steamSources: NonNullable<import('./contract').WorldModule['steamSources']>; set(t: number): void }
