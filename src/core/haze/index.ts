@@ -45,6 +45,7 @@ uniform mat4 inverseProjection;
 uniform mat4 cameraWorld;
 uniform vec4 deckBounds;
 uniform int cloudLightIndex;
+uniform int hazeLightLimit;
 uniform vec2 sampleJitter;
 uniform float focusDistance;
 in vec2 vUv;
@@ -272,7 +273,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   float pixelNoise = fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
 
   for (int i = 0; i < MAX_FILM_LIGHTS; i++) {
-    if (i >= filmLightCount) break;
+    if (i >= filmLightCount || (hazeLightLimit >= 0 && i >= hazeLightLimit)) break;
     vec4 color = filmLightColor[i];
     if (max(color.r, max(color.g, color.b)) < 1e-5) continue;
     vec3 toSource = filmLightPosition[i] - origin;
@@ -420,7 +421,67 @@ void main() {
 }
 `
 
-export function createHaze({ rig, world }: StageDeps): StagePart {
+type HazeDomain = {
+  rig: StageDeps['rig']
+  world: Pick<StageDeps['world'], 'lights'> & { deck: Pick<StageDeps['world']['deck'], 'bounds'> }
+}
+
+function hazeUniforms({ rig, world }: HazeDomain, texture: THREE.Texture | null) {
+  const { min, max } = world.deck.bounds
+  return {
+    ...rig.uniforms,
+    ...rig.shadowUniforms,
+    sceneColor: { value: null as THREE.Texture | null },
+    sceneDepth: { value: null as THREE.Texture | null },
+    coarseHaze: { value: texture },
+    coarseResolution: { value: new THREE.Vector2(1, 1) },
+    inverseProjection: { value: new THREE.Matrix4() },
+    cameraWorld: { value: new THREE.Matrix4() },
+    deckBounds: { value: new THREE.Vector4(min.x, min.y, max.x, max.y) },
+    cloudLightIndex: { value: world.lights?.findIndex((light) => light.id === 'magenta violet tower screen') ?? -1 },
+    hazeLightLimit: { value: -1 },
+    sampleJitter: { value: new THREE.Vector2() },
+    focusDistance: { value: 1 },
+  }
+}
+
+const captureComposite = scattering + /* glsl */ `
+void main() {
+  ivec2 pixel = ivec2(gl_FragCoord.xy);
+  float depth = texelFetch(sceneDepth, pixel, 0).r;
+  vec4 fog = scatterToDepth(vUv, depth);
+  vec4 scene = texelFetch(sceneColor, pixel, 0);
+  outColor = vec4(scene.rgb * fog.a + fog.rgb, scene.a);
+}
+`
+
+export function createHazeCapture(domain: HazeDomain) {
+  const uniforms = hazeUniforms(domain, null)
+  uniforms.focusDistance.value = 6
+  uniforms.sampleJitter.value.set(.5, .5)
+  const eye = new THREE.Camera()
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), passMaterial(captureComposite, uniforms, { blending: THREE.NoBlending }))
+  mesh.frustumCulled = false
+  return {
+    render(renderer: THREE.WebGLRenderer, source: THREE.WebGLRenderTarget, output: THREE.WebGLCubeRenderTarget,
+      face: number, camera: THREE.PerspectiveCamera, includeVehicleLights: boolean) {
+      const { min, max } = domain.world.deck.bounds
+      uniforms.deckBounds.value.set(min.x, min.y, max.x, max.y)
+      uniforms.sceneColor.value = source.texture
+      uniforms.sceneDepth.value = source.depthTexture
+      uniforms.inverseProjection.value.copy(camera.projectionMatrixInverse)
+      uniforms.cameraWorld.value.copy(camera.matrixWorld)
+      uniforms.hazeLightLimit.value = includeVehicleLights ? -1 : domain.world.lights.length
+      domain.rig.syncShadowUniforms()
+      renderer.setRenderTarget(output, face)
+      renderer.render(mesh, eye)
+    },
+  }
+}
+
+export type HazeCapture = ReturnType<typeof createHazeCapture>
+
+export function createHaze({ rig, world }: HazeDomain): StagePart {
   const coarse = new THREE.WebGLRenderTarget(1, 1, {
     type: THREE.HalfFloatType,
     minFilter: THREE.NearestFilter,
@@ -428,20 +489,7 @@ export function createHaze({ rig, world }: StageDeps): StagePart {
     depthBuffer: false,
     generateMipmaps: false,
   })
-  const uniforms = {
-    ...rig.uniforms,
-    ...rig.shadowUniforms,
-    sceneColor: { value: null as THREE.Texture | null },
-    sceneDepth: { value: null as THREE.Texture | null },
-    coarseHaze: { value: coarse.texture },
-    coarseResolution: { value: new THREE.Vector2(1, 1) },
-    inverseProjection: { value: new THREE.Matrix4() },
-    cameraWorld: { value: new THREE.Matrix4() },
-    deckBounds: { value: new THREE.Vector4() },
-    cloudLightIndex: { value: world.lights?.findIndex((light) => light.id === 'magenta violet tower screen') ?? -1 },
-    sampleJitter: { value: new THREE.Vector2() },
-    focusDistance: { value: 1 },
-  }
+  const uniforms = hazeUniforms({ rig, world }, coarse.texture)
   const integratePass = new FullscreenPass(passMaterial(integrate, uniforms, { blending: THREE.NoBlending }))
   const compositePass = new FullscreenPass(passMaterial(composite, uniforms, { blending: THREE.NoBlending }))
   return {

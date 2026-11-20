@@ -93,3 +93,16 @@ describe('film lights', () => {
     expect(rig.shadowUniforms.filmShadowParams.value[0].x).toBe(0)
   })
 })
+
+describe('film light angle', () => {
+  it('follows a changed half angle on the next sample', () => {
+    const spot = emitter({ kind: 'spot', size: [0.4, 0.15], angle: 1 })
+    const rig = new LightRig([spot], 2048)
+    rig.update(0, [0.5, 0.5])
+    expect(rig.uniforms.filmLightAxis.value[0].w).toBeCloseTo(Math.cos(1))
+    spot.angle = 0.4
+    rig.update(1, [0.5, 0.5])
+    expect(rig.uniforms.filmLightAxis.value[0].w).toBeCloseTo(Math.cos(0.4))
+    expect(rig.uniforms.filmLightShape.value[0].x).toBeCloseTo(Math.cos(0.4 * 0.7))
+  })
+})

@@ -9,7 +9,8 @@ import type { WeatherDeps } from '../contract'
 import { prevailingWind } from './motion'
 
 const maxVaporSources = 8
-const slabHeight = 0.29
+const slabFloor = 0.002
+const slabHeight = 0.22
 const vaporScale = 0.42
 
 const optics = /* glsl */ `
@@ -61,7 +62,7 @@ uniform vec4 uDeck;
 ${optics}
 ${filmLightsGlsl}
 
-vec3 vaporLight(vec3 p, vec3 toEye) {
+vec3 vaporLight(vec3 p, vec3 toEye, bool deck) {
   vec3 illumination = vec3(0.0);
   for (int i = 0; i < MAX_FILM_LIGHTS; ++i) {
     if (i >= filmLightCount) break;
@@ -73,7 +74,8 @@ vec3 vaporLight(vec3 p, vec3 toEye) {
     vec3 incident = filmLightAt(i, p, toLight);
     float mu = -dot(toEye, toLight);
     float lobe = 0.51 * inversesqrt(pow(1.42 - 1.30 * mu, 3.0));
-    illumination += incident * (0.10 + lobe * 0.20);
+    float coupling = deck && filmLightShape[i].w > 0.5 ? 0.26 : 1.0;
+    illumination += incident * ((0.10 + lobe * 0.20) * coupling);
   }
   return illumination / (1.0 + max(max(illumination.r, illumination.g), illumination.b) * 0.38);
 }
@@ -81,11 +83,11 @@ vec3 vaporLight(vec3 p, vec3 toEye) {
 float deckSpray(vec3 p) {
   vec2 border = min(p.xz - uDeck.xy, uDeck.zw - p.xz);
   float edge = smoothstep(0.0, 1.5, min(border.x, border.y));
-  float e = exp(-max(0.0, p.y - 0.025) * 18.0) * (1.0 - smoothstep(0.12, ${slabHeight}, p.y));
+  float e = exp(-max(0.0, p.y - ${slabFloor}) * 20.0) * (1.0 - smoothstep(0.105, ${slabHeight}, p.y));
   float primary = sin(dot(p.xz, vec2(2.04, -2.14)) - TAU * 12.0 * uPhase + uNoise.x);
   float secondary = sin(dot(p.xz, vec2(3.89, 1.13)) - TAU * 15.0 * uPhase + uNoise.y);
   float pockets = 0.48 + 0.52 * smoothstep(-0.62, 0.78, primary * 0.68 + secondary * 0.32);
-  return 0.050 * edge * e * pockets;
+  return 0.044 * edge * e * pockets;
 }
 
 float plumeDensity(vec3 q, vec3 axis, float type, float index) {
@@ -123,7 +125,7 @@ void main() {
   vec3 scattered = vec3(0.0);
 
   if (abs(ray.y) > 1e-5) {
-    vec2 water = (vec2(0.025, ${slabHeight}) - uEye.y) / ray.y;
+    vec2 water = (vec2(${slabFloor}, ${slabHeight}) - uEye.y) / ray.y;
     float enter = max(uClip.x, min(water.x, water.y));
     float exit = min(scene, min(26.0 / rayLength, max(water.x, water.y)));
     if (exit > enter) {
@@ -134,7 +136,7 @@ void main() {
         float density = deckSpray(p) * dt * rayLength * (1.0 - smoothstep(18.0, 26.0, t * rayLength));
         if (density > 0.00002) {
           optical += density;
-          scattered += vaporLight(p, toEye) * density;
+          scattered += vaporLight(p, toEye, true) * density;
         }
       }
     }
@@ -163,7 +165,7 @@ void main() {
       float density = plumeDensity(p - source, axis, type, float(i)) * emission * dt * rayLength;
       if (density > 0.00002) {
         optical += density;
-        scattered += vaporLight(p, toEye) * density;
+        scattered += vaporLight(p, toEye, false) * density;
       }
     }
   }

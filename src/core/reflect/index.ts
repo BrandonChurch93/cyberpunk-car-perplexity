@@ -3,6 +3,7 @@ import type { FormatSpec, TierId } from '../../config'
 import { config } from '../../config'
 import { patchMaterial } from '../../materials/patch'
 import { layers, type FrameContext, type SampleContext } from '../contract'
+import { createHazeCapture } from '../haze'
 import type { StageDeps, StagePart } from '../parts'
 import { hash01, streamSeed } from '../random'
 import { probeLamps } from './lamps'
@@ -46,7 +47,8 @@ export interface ReflectionsPart extends StagePart {
 interface ReflectionDeps extends Pick<StageDeps, 'renderer' | 'scene'> {
   rig?: StageDeps['rig']
   world: Pick<StageDeps['world'], 'root' | 'reflectionBox'> & {
-    deck: Pick<StageDeps['world']['deck'], 'material' | 'meshes'>
+    lights?: StageDeps['world']['lights']
+    deck: Pick<StageDeps['world']['deck'], 'material' | 'meshes'> & Partial<Pick<StageDeps['world']['deck'], 'bounds'>>
   }
   vehicle: Pick<StageDeps['vehicle'], 'root' | 'lamps'>
 }
@@ -150,9 +152,12 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const planarMeshes = [...world.deck.meshes, ...details.meshes]
 
   const probes = new Map<number, Probe>()
+  const hazeCapture = deps.rig && world.lights && world.deck.bounds
+    ? createHazeCapture({ rig: deps.rig, world: { lights: world.lights, deck: { bounds: world.deck.bounds } } })
+    : undefined
   const probeOf = (edge: number): Probe => {
     let probe = probes.get(edge)
-    if (!probe) probes.set(edge, (probe = new Probe(renderer, edge, captureNear, captureFar)))
+    if (!probe) probes.set(edge, (probe = new Probe(renderer, edge, captureNear, captureFar, hazeCapture)))
     return probe
   }
   const fitTarget = (): void => {

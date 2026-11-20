@@ -14,14 +14,16 @@ interface RibbonField {
   gain: number
   size: THREE.Vector3
   center: THREE.Vector3
+  local?: boolean
   selection?: WorldRibbonSelection
 }
 
 const scatter = /* glsl */ `
 ${filmLightsGlsl}
 
-vec3 scatterRain(vec3 p, vec3 toEye, bool mist, float field) {
+vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool local, out vec3 flash) {
   vec3 light = vec3(0.0);
+  flash = vec3(0.0);
   for (int i = 0; i < MAX_FILM_LIGHTS; ++i) {
     if (i >= filmLightCount) break;
     vec4 source = filmLightColor[i];
@@ -29,8 +31,16 @@ vec3 scatterRain(vec3 p, vec3 toEye, bool mist, float field) {
     vec3 offset = filmLightPosition[i] - p;
     float distance2 = dot(offset, offset);
     if (distance2 > source.a * source.a * 1.000001) continue;
+    bool compact = filmLightShape[i].w > 0.5;
+    if (local && !compact && distance2 > 900.0) continue;
     vec3 toSource;
     vec3 incident = filmLightAt(i, p, toSource);
+    if (compact && field >= 0.0 && distance2 < 81.0 && dot(-offset, filmLightAxis[i].xyz) > 0.0) {
+      vec3 unused;
+      vec3 early = filmLightAt(i, p - delta * 0.774597, unused);
+      vec3 late = filmLightAt(i, p + delta * 0.774597, unused);
+      incident = (incident * 4.0 + (early + late) * 2.5) / 9.0;
+    }
     if (all(equal(incident, vec3(0.0)))) continue;
     float mu = clamp(-dot(toEye, toSource), -1.0, 1.0);
     if (mist) {
@@ -41,15 +51,21 @@ vec3 scatterRain(vec3 p, vec3 toEye, bool mist, float field) {
       continue;
     }
     bool area = filmLightShape[i].x < 0.0;
-    float width = area ? 0.067 : 0.043;
+    float width = area ? 0.067 : compact ? 0.078 : 0.043;
     float extent = filmLightShape[i].y;
     float spread = area ? min(0.045, extent * extent * 0.38 / max(0.01, distance2)) : 0.0;
     float forward = exp(-(1.0 - mu) / (width + spread)) * width / (width + spread);
-    float rim = exp2(-55.0 * abs(mu - 0.774));
+    float rim = exp2(-(compact ? 26.0 : 55.0) * abs(mu - 0.774));
     float distantPanel = area ? smoothstep(8100.0, 40000.0, distance2) * smoothstep(0.7, 2.6, field) : 0.0;
-    light += incident * (0.002 + ((area ? 2.55 : 2.16) + 4.85 * distantPanel) * forward + (area ? 0.17 : 0.095) * rim);
+    float forwardGain = area ? 2.55 : compact ? 3.45 : 2.16;
+    vec3 scattered = incident * (0.002 + (forwardGain + 4.85 * distantPanel) * forward + (area ? 0.17 : compact ? 0.16 : 0.095) * rim);
+    if (compact && field >= 0.0) flash += scattered;
+    else light += scattered;
   }
-  return light / (1.0 + max(max(light.r, light.g), light.b) * 0.21);
+  vec3 total = light + flash;
+  float response = 1.0 + max(max(total.r, total.g), total.b) * 0.21;
+  flash /= response;
+  return light / response;
 }
 `
 
@@ -64,6 +80,7 @@ uniform vec2 uWind;
 uniform vec4 uFade;
 uniform float uGain;
 uniform float uLayer;
+uniform float uLocalFine;
 uniform float uPhase;
 uniform float uShutter;
 uniform float uDuration;
@@ -135,6 +152,11 @@ void main() {
     } else {
       amount *= smoothstep(0.014, 0.11, min(cycle, 1.0 - cycle));
     }
+    if (uLocalFine > 0.5) {
+      vec2 across = abs(p.xz - origin.xz) / span.xz;
+      amount *= (1.0 - smoothstep(0.30, 0.49, max(across.x, across.y)))
+        * (1.0 - smoothstep(1.16, 2.62, p.y - origin.y + 0.5 * span.y));
+    }
     float gustSheet = sin(dot(p, vec3(1.45, 0.32, -1.73)) - tau * 3.0 * uPhase);
     amount *= mix(0.77, 1.16, smoothstep(-0.85, 0.86, gustSheet));
     if (amount < 0.0003) return;
@@ -160,15 +182,15 @@ void main() {
   vec2 pixelFocal = 0.5 * uViewport * vec2(projectionMatrix[0][0], projectionMatrix[1][1]);
   float diameter = aDrop.w * pixelFocal.y / depth;
   vec2 coc = uAperture * abs(1.0 - depth / uFocus) * pixelFocal / depth;
-  coc = min(coc, vec2(28.0, 36.0) * uViewport.y / ${config.formats.master.height.toFixed(1)});
   float physical = diameter * 0.5;
   bool mist = uLayer < -1.5;
   float sigma = physical * physical * (mist ? 0.5 : 0.25) + 0.17;
   float sigmaSide = sqrt(pow(length(normal * coc) * 0.5, 2.0) + sigma);
   float sigmaEnd = sqrt(pow(length(axis * coc) * 0.5, 2.0) + sigma);
   vec3 eye = uFilmView > 0.5 ? uOpticalEye : cameraPosition;
-  vec3 radiance = scatterRain(p, normalize(eye - p), mist, uLayer);
-  if (all(equal(radiance, vec3(0.0)))) return;
+  vec3 flash;
+  vec3 radiance = scatterRain(p, delta, normalize(eye - p), mist, uLayer, uLocalFine > 0.5, flash);
+  if (all(equal(radiance + flash, vec3(0.0)))) return;
   float gain = uLayer < 0.0 ? (mist ? 1.0 : 0.64) : uGain;
   float coverage = min(1.0, diameter * 0.39894228 / sigmaSide) * min(1.0, max(len, diameter) / (1.35 * sigmaEnd));
   float frameTravel = len / max(uViewport.x, uViewport.y);
@@ -179,6 +201,9 @@ void main() {
   vTail = bp;
   vSigma = vec2(sigmaSide, sigmaEnd);
   vec3 peak = radiance * (amount * gain * coverage);
+  if (uLocalFine > 0.5) peak /= 1.0 + 25.0 * max(peak.r, max(peak.g, peak.b));
+  flash *= amount * gain * coverage;
+  peak += flash / (1.0 + 20.0 * max(flash.r, max(flash.g, flash.b)));
   if (uLayer < 0.0 && !mist) peak /= 1.0 + 32.0 * max(peak.r, max(peak.g, peak.b));
   vRadiance = veilHighlights(peak, veil);
   vVeil = veil;
@@ -256,6 +281,7 @@ export class RibbonView {
       uFade: { value: new THREE.Vector4(...(field?.fade ?? [0, 1, 2, 3])) },
       uGain: { value: field?.gain ?? 0 },
       uLayer: { value: layer },
+      uLocalFine: { value: field?.local ? 1 : 0 },
       uPhase: { value: 0 },
       uShutter: { value: shutterSeconds },
       uDuration: { value: config.film.durationSeconds },
@@ -314,16 +340,17 @@ export class RibbonView {
   }
 }
 
-export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLightUniforms): THREE.Mesh[] {
+export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLightUniforms, body = new THREE.Vector3()): THREE.Mesh[] {
   const deckCenter = world.deck.bounds.getCenter(new THREE.Vector2())
   const deckSpan = world.deck.bounds.getSize(new THREE.Vector2())
-  const specs: { key: string; density: number; fine: number; size: THREE.Vector3; fade: Fade; gain: number }[] = [
-    { key: 'near', density: 8.5, fine: 2.65, size: new THREE.Vector3(9.4, 9.4, 9.4), fade: [0.63, 1.31, 3.25, 4.8], gain: 1.04 },
-    { key: 'close', density: 5.4, fine: 2.2, size: new THREE.Vector3(21, 7.8, 21), fade: [2.25, 4.1, 7.6, 13.0], gain: 2.6 },
-    { key: 'middle', density: 2.65, fine: 1.75, size: new THREE.Vector3(Math.min(deckSpan.x, 41), 11.6, Math.min(deckSpan.y, 40)), fade: [7.2, 11.25, 20, 29], gain: 5.15 },
-    { key: 'distance', density: 0.17, fine: 1.6, size: new THREE.Vector3(Math.max(deckSpan.x, 66), 16.5, Math.max(deckSpan.y, 66)), fade: [17.4, 24, 28, 38], gain: 2.05 },
+  const specs: { key: string; layer: number; density: number; fine: number; size: THREE.Vector3; fade: Fade; gain: number; local?: boolean }[] = [
+    { key: 'near', layer: 0, density: 8.5, fine: 2.65, size: new THREE.Vector3(9.4, 9.4, 9.4), fade: [0.63, 1.31, 3.25, 4.8], gain: 1.04 },
+    { key: 'close', layer: 1, density: 5.4, fine: 2.2, size: new THREE.Vector3(21, 7.8, 21), fade: [2.25, 4.1, 7.6, 13.0], gain: 2.6 },
+    { key: 'middle', layer: 2, density: 2.65, fine: 1.75, size: new THREE.Vector3(Math.min(deckSpan.x, 41), 11.6, Math.min(deckSpan.y, 40)), fade: [7.2, 11.25, 20, 29], gain: 5.15 },
+    { key: 'distance', layer: 3, density: 0.17, fine: 1.6, size: new THREE.Vector3(Math.max(deckSpan.x, 66), 16.5, Math.max(deckSpan.y, 66)), fade: [17.4, 24, 28, 38], gain: 2.05 },
+    { key: 'beam', layer: 1, density: 27.0, fine: 4.4, size: new THREE.Vector3(12, 3.2, 14), fade: [1.05, 2.15, 9, 13], gain: 1.38, local: true },
   ]
-  return specs.map(({ key, density, fine, size, fade, gain }, layer) => {
+  return specs.map(({ key, layer, density, fine, size, fade, gain, local }) => {
     const rng = stream(`air-streaks-${key}`)
     const volume = size.x * size.y * size.z
     const count = Math.round(Math.min(volume, 90_000) * density)
@@ -335,9 +362,9 @@ export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLig
       drops.set([rng.range(-0.5, 0.5), rng.next(), rng.range(-0.5, 0.5), diameter], i * 4)
       motion.set([cycles, wrapHeight, terminalSpeed(diameter), rng.next()], i * 4)
     }
-    const center = layer === 0 ? new THREE.Vector3() : new THREE.Vector3(deckCenter.x, size.y * 0.48, deckCenter.y)
+    const center = layer === 0 ? new THREE.Vector3() : local ? body.clone().add(new THREE.Vector3(0, size.y * 0.48, 0)) : new THREE.Vector3(deckCenter.x, size.y * 0.48, deckCenter.y)
     const selection = layer > 0 ? new WorldRibbonSelection(drops, motion, size, center, [fade[0], fade[3]]) : undefined
-    const mesh = view.makeMesh(lights, selection?.geometry ?? makeRibbonGeometry(drops, motion), layer, { center, size, fade, gain, selection })
+    const mesh = view.makeMesh(lights, selection?.geometry ?? makeRibbonGeometry(drops, motion), layer, { center, size, fade, gain, local, selection })
     mesh.name = `rain-${key}`
     return mesh
   })
