@@ -20,7 +20,7 @@ interface RibbonField {
 const scatter = /* glsl */ `
 ${filmLightsGlsl}
 
-vec3 scatterRain(vec3 p, vec3 toEye, bool mist) {
+vec3 scatterRain(vec3 p, vec3 toEye, bool mist, float field) {
   vec3 light = vec3(0.0);
   for (int i = 0; i < MAX_FILM_LIGHTS; ++i) {
     if (i >= filmLightCount) break;
@@ -46,7 +46,8 @@ vec3 scatterRain(vec3 p, vec3 toEye, bool mist) {
     float spread = area ? min(0.045, extent * extent * 0.38 / max(0.01, distance2)) : 0.0;
     float forward = exp(-(1.0 - mu) / (width + spread)) * width / (width + spread);
     float rim = exp2(-55.0 * abs(mu - 0.774));
-    light += incident * (0.002 + (area ? 2.55 : 2.16) * forward + (area ? 0.17 : 0.095) * rim);
+    float distantPanel = area ? smoothstep(8100.0, 40000.0, distance2) * smoothstep(0.7, 2.6, field) : 0.0;
+    light += incident * (0.002 + ((area ? 2.55 : 2.16) + 4.85 * distantPanel) * forward + (area ? 0.17 : 0.095) * rim);
   }
   return light / (1.0 + max(max(light.r, light.g), light.b) * 0.21);
 }
@@ -166,7 +167,7 @@ void main() {
   float sigmaSide = sqrt(pow(length(normal * coc) * 0.5, 2.0) + sigma);
   float sigmaEnd = sqrt(pow(length(axis * coc) * 0.5, 2.0) + sigma);
   vec3 eye = uFilmView > 0.5 ? uOpticalEye : cameraPosition;
-  vec3 radiance = scatterRain(p, normalize(eye - p), mist);
+  vec3 radiance = scatterRain(p, normalize(eye - p), mist, uLayer);
   if (all(equal(radiance, vec3(0.0)))) return;
   float gain = uLayer < 0.0 ? (mist ? 1.0 : 0.64) : uGain;
   float coverage = min(1.0, diameter * 0.39894228 / sigmaSide) * min(1.0, max(len, diameter) / (1.35 * sigmaEnd));
