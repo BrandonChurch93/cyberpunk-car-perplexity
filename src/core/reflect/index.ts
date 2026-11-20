@@ -140,6 +140,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const lamps = probeLamps(vehicle)
   scene.add(lamps.root)
   const probePosition = new THREE.Vector3()
+  const backgroundReceivers = new Map<THREE.MeshStandardMaterial, number>()
   let stripes: THREE.Texture | null = null
   const mirrorMaterial = zebraMirror()
   const swapped = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>()
@@ -148,6 +149,23 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     const was = objects.map((o) => o.visible)
     for (const o of objects) o.visible = false
     return () => objects.forEach((o, i) => (o.visible = was[i]))
+  }
+
+  const clearBackground = (): void => {
+    for (const [material, intensity] of backgroundReceivers) {
+      material.envMap = null
+      material.envMapIntensity = intensity
+    }
+    backgroundReceivers.clear()
+  }
+
+  const setBackground = (texture: THREE.Texture): void => {
+    for (const material of [world.deck.material, ...materialsOf(vehicle.root)]) {
+      if (material.envMap) continue
+      backgroundReceivers.set(material, material.envMapIntensity)
+      material.envMap = texture
+      material.envMapIntensity = scene.environmentIntensity
+    }
   }
 
   const capture = (): void => {
@@ -159,17 +177,21 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     box.reflectBoxMax.value.copy(world.reflectionBox.max)
     box.reflectBoxOn.value = 1
     planar.reflectOn.value = 0
+    clearBackground()
     lamps.sync()
     const showVehicle = hide([vehicle.root])
     const showDeck = hide(world.deck.meshes)
     try {
-      lamps.root.visible = true
       scene.environment = null
       if (quality[tier].bounce) scene.environment = bounce.capture(scene, probePosition)
       showDeck()
-      scene.environment = probeOf(quality[tier].captureSize).capture(scene, probePosition)
+      const probe = probeOf(quality[tier].captureSize)
+      if (lamps.root.children.some((emitter) => emitter.visible)) {
+        const { full, background } = probe.capture(scene, probePosition, lamps.root)
+        scene.environment = full
+        setBackground(background)
+      } else scene.environment = probe.capture(scene, probePosition)
     } finally {
-      lamps.root.visible = false
       showDeck()
       showVehicle()
     }
@@ -198,6 +220,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       fitTarget()
     },
     setDiagnostic(view) {
+      clearBackground()
       diagnostic = view
       setZebra(view === 'zebra')
     },

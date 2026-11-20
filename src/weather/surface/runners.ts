@@ -41,7 +41,7 @@ const pathStep = 0.002
 const pathSteps = 160
 const trailAcross = 9
 /** Behind the head the trail stays a continuous neck this long, then pinches off into a line of small drops, as it does on wax. */
-const trailNeck = 0.02
+const trailNeck = 0.03
 
 interface Tri {
   a: THREE.Vector3
@@ -244,25 +244,8 @@ export class Runners {
   }
 
   private trailGeometry(): THREE.BufferGeometry {
-    const positions: number[] = []
-    const normals: number[] = []
     const index: number[] = []
-    const width = 0.0024
-    const height = 0.0010
     const across = trailAcross
-    for (let i = 0; i < this.path.length; i++) {
-      const s = i * pathStep
-      const p = this.path[i]
-      const n = this.pathNormals[i]
-      const side = this.sideAt(s)
-      for (let k = 0; k < across; k++) {
-        const u = (k / (across - 1)) * 2 - 1
-        const h = height * Math.sqrt(Math.max(0, 1 - u * u))
-        positions.push(p.x + side.x * u * width + n.x * h, p.y + side.y * u * width + n.y * h, p.z + side.z * u * width + n.z * h)
-        const tilt = n.clone().multiplyScalar(width * Math.sqrt(Math.max(0.02, 1 - u * u))).addScaledVector(side, u * height).normalize()
-        normals.push(tilt.x, tilt.y, tilt.z)
-      }
-    }
     for (let i = 0; i + 1 < this.path.length; i++) {
       for (let k = 0; k + 1 < across; k++) {
         const a = i * across + k
@@ -271,10 +254,38 @@ export class Runners {
       }
     }
     const g = new THREE.BufferGeometry()
-    g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+    const count = this.path.length * across * 3
+    g.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(count), 3))
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(new Float32Array(count), 3))
     g.setIndex(index)
     return g
+  }
+
+  /** The neck is widest where it leaves the head and thins toward where it pinches off, so it reads as one body of water with the head. */
+  private shapeTrail(s: number, from: number, to: number, headRadius: number): void {
+    const g = this.trail.geometry
+    const position = g.getAttribute('position') as THREE.BufferAttribute
+    const normal = g.getAttribute('normal') as THREE.BufferAttribute
+    const across = trailAcross
+    const tilt = new THREE.Vector3()
+    for (let i = from; i <= to && i < this.path.length; i++) {
+      const behind = THREE.MathUtils.clamp((s - i * pathStep) / trailNeck, 0, 1)
+      const width = THREE.MathUtils.lerp(0.0011, headRadius * 0.62, 1 - behind * behind)
+      const height = THREE.MathUtils.lerp(0.0006, headRadius * 0.34, 1 - behind)
+      const p = this.path[i]
+      const n = this.pathNormals[i]
+      const side = this.sideAt(i * pathStep)
+      for (let k = 0; k < across; k++) {
+        const u = (k / (across - 1)) * 2 - 1
+        const h = height * Math.sqrt(Math.max(0, 1 - u * u))
+        const at = i * across + k
+        position.setXYZ(at, p.x + side.x * u * width + n.x * h, p.y + side.y * u * width + n.y * h, p.z + side.z * u * width + n.z * h)
+        tilt.copy(n).multiplyScalar(width * Math.sqrt(Math.max(0.02, 1 - u * u))).addScaledVector(side, u * height).normalize()
+        normal.setXYZ(at, tilt.x, tilt.y, tilt.z)
+      }
+    }
+    position.needsUpdate = true
+    normal.needsUpdate = true
   }
 
   /**
@@ -504,6 +515,7 @@ export class Runners {
       this.runner.instanceMatrix.needsUpdate = true
       const steps = Math.floor(s / pathStep)
       const from = Math.max(0, Math.floor((s - trailNeck) / pathStep))
+      this.shapeTrail(s, from, steps, r)
       this.trail.geometry.setDrawRange(from * (trailAcross - 1) * 6, Math.max(0, steps - 1 - from) * (trailAcross - 1) * 6)
       let beads = 0
       for (let i = 0; i < this.trailBeadAt.length; i++) if (this.trailBeadAt[i] < s - trailNeck) beads = i + 1
