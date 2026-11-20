@@ -84,6 +84,7 @@
   },
   "quality": {
     "passScore": 9,
+    "blockoutCompositionPass": 7,
     "plateauRounds": 3,
     "judgedFramesPerBeat": 2,
     "loopSeamMinSsim": 0.98,
