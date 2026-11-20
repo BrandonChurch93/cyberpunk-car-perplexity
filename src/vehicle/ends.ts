@@ -227,9 +227,16 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 56, 5, outFront, 0))
     black.push(patch((u, v) => window(u, v, .071), 44, 17, outFront, .009))
     optical.push(patch((u, v) => window(u, v, -.008), 52, 20, outFront, .0034))
+    const browLow = curve([[.473, .418], [.578, .418], [.709, .420], [.820, .424], [.874, .438], [.918, .571]])
+    black.push(patch((u, v) => {
+      const x = mix(.474, .918, u)
+      const y = mix(browLow(x), eyeLow(x) + .004, v)
+      const d = mix(.033, -.004, v) + .009 * Math.sin(Math.PI * v)
+      return f(x, y, d)
+    }, 76, 10, outFront))
     for (const edge of [0, 1]) {
       const sign = 2 * edge - 1
-      black.push(patch((u, v) => window(u, edge + sign * mix(-.030, .053, v), mix(-.006, .005, v)), 68, 4, outFront, .003))
+      if (edge === 1) black.push(patch((u, v) => window(u, 1 + mix(-.030, .053, v), mix(-.006, .005, v)), 68, 4, outFront, .003))
       black.push(patch((u, v) => window(edge + sign * mix(-.004, .012, v), u, mix(-.006, .005, v)), 14, 4, outFront, .003))
     }
     for (const [x, y, radius, lift, intensity] of [[.743, .526, .029, .002, 170], [.827, .560, .023, .008, 80]]) {
