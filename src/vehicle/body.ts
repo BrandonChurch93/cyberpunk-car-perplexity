@@ -361,7 +361,9 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const shape = base + .22 * fade * (hinge(tBend, .006) - .5 * tBend)
       const capBlend = smooth(s, .735, .782)
       const cap = hinge(shape - high + mix(.008, .004, capBlend), mix(.014, .004, capBlend))
-      return [x, shape - cap * smooth(x, .695, .765), zAt(s)]
+      const crownTrim = .013 * smooth(s, .833, .874) * (1 - smooth(s, .895, .924))
+        * smooth(x, .598, .705) * (1 - smooth(x, .758, .852))
+      return [x, shape - cap * smooth(x, .695, .765) - crownTrim, zAt(s)]
     }
     folded(sided((u, v) => deckSection(mix(.5984, .942 - .019 * v, u), v)),
       [0, 1, 0], [haunchLine, lateralTrace(deckIn), lateralTrace(deckOut)])
