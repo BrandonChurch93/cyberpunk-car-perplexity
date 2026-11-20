@@ -161,7 +161,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const depth = .006 * Math.sin(t) + .006 * smooth(v, .65, 1)
       return [side * x, edge[1] - (.007 + .003 * smooth(x, .49, .71)) * (1 - Math.cos(t)), edge[2] - depth]
     }, 84, 5, outFront))
-    black.push(mapped(f, outline, outFront, .025, .055))
+    black.push(mapped(f, outline, outFront, .064, .031))
     dark.push(mapped(f, points, outFront, .123, .036))
     black.push(joinRim(points, 1.035, .88, f, -.002, .085, outFront))
     const blade = [
@@ -220,36 +220,24 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return f(x, y, d - .013 * Math.sin(Math.PI * v) * Math.sin(Math.PI * u))
     }
     black.push(patch((u, v) => {
-      const lower = window(u, 1, .019)
-      const upper = frontHoodEdge(Math.abs(lower[0]))
+      const lower = window(u, 1, -.002)
+      const x = Math.abs(lower[0])
+      const upper = frontHoodEdge(x)
       const y = lower[1] + .5 * ((upper[1] - lower[1]) + Math.hypot(upper[1] - lower[1], .008))
-      return [lower[0], mix(lower[1] - .002, y - .003, v), mix(lower[2], upper[2] - .0075, v)]
-    }, 56, 5, outFront, 0))
+      return [lower[0], mix(lower[1] - .005, y - .0008, v), mix(lower[2], upper[2] - .009, v)]
+    }, 100, 8, outFront))
     black.push(patch((u, v) => window(u, v, .071), 44, 17, outFront, .009))
     optical.push(patch((u, v) => window(u, v, -.008), 100, 20, outFront))
-    const browLow = curve([[.473, .418], [.578, .418], [.709, .420], [.820, .424], [.874, .438], [.918, .571]])
     black.push(patch((u, v) => {
-      const x = mix(.474, .918, u)
-      const y = mix(browLow(x) - .003, eyeLow(x) + .0015, v)
-      const depth = mix(-.0095, .012, smooth(x, .824, .864))
-      const d = mix(.030, depth, v)
+      const x = mix(.462, .936, u)
+      const edge = eyeLow(x)
+      const low = .404 - .128 * smooth(x, .828, .866)
+      const y = mix(low, edge + .004, v)
+      const d = .0005 + .039 * smooth(edge - y, -.004, .085)
+        - .017 * smooth(x, .833, .887) * smooth(y, .276, .36)
+        + .010 * smooth(x, .823, .859)
       return f(x, y, d)
-    }, 92, 8, outFront))
-    const drlFlank = curve([[.271, .895], [.291, .891], [.352, .878], [.428, .853], [.466, .859],
-      [.525, .873], [.579, .884], [.646, .896], [.683, .910]])
-    black.push(patch((u, v) => {
-      const y = mix(.276, .665, u)
-      const edge = drlFlank(y)
-      const x = mix(edge - .006, edge + .047, v)
-      return f(x, y, mix(.014, .019, v) - .006 * Math.sin(Math.PI * v))
-    }, 76, 7, outFront))
-    black.push(patch((u, v) => {
-      const a = window(u, 1, -.008)
-      const b = window(u, .96, -.008)
-      const q = mix(.82, 1.92, v)
-      const x = Math.abs(mix(b[0], a[0], q)), y = mix(b[1], a[1], q)
-      return f(x, y, mix(-.012, .021, v ** 2.25))
-    }, 76, 6, outFront))
+    }, 100, 16, outFront))
     for (const edge of [0, 1]) {
       const sign = 2 * edge - 1
       black.push(patch((u, v) => window(edge + sign * mix(-.004, .012, v), u, mix(-.006, .005, v)), 14, 4, outFront, .003))
