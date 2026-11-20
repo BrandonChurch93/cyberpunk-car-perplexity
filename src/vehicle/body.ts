@@ -525,7 +525,11 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const p = sillPoint(s, mix(.542, shoulder(s) - .006, v))
       return [side * (Math.abs(p[0]) * .62), p[1], Math.max(p[2], zAt(mix(.948, .989, smooth(p[1], .713, .746))))]
     }, uSide, full ? 24 : 16, full ? 7 : 5, .008)
-    part(paint, (u, v) => cap(mix(.141, first.before, u), v), uSide, n, k)
+    part(paint, (u, v) => {
+      const s = mix(.141, first.before, u)
+      const p = cap(s, v - .085 * Math.sin(tau * v))
+      return [p[0] + side * wingDraft(s, shoulder(s) - p[1]), p[1], p[2]]
+    }, uSide, n, k)
     folded((u, v) => {
       const s = mix(first.after, Math.max(first.after, cutLeading(v) - gap), u)
       return cap(s, v)

@@ -272,12 +272,21 @@ describe('vehicle geometry and state', () => {
       const skin = vehicle.root.getObjectByName('closed body panels and returns')!
       const ray = new T.Raycaster()
       const direction = new T.Vector3(-1, 0, 0)
+      const archStart = frontWheel.z + frontWheel.arch
+      const hit = (y: number, z: number) => {
+        ray.set(new T.Vector3(1.1, y, z), direction)
+        return ray.intersectObject(skin)[0]
+      }
+      for (const y of [.715, .725, .735, .745]) {
+        const ahead = hit(y, archStart + .001), behind = hit(y, archStart - .001)
+        expect(Math.abs(ahead.point.x - behind.point.x)).toBeLessThan(.0006)
+        expect(T.MathUtils.radToDeg(ahead.normal!.angleTo(behind.normal!))).toBeLessThan(2.5)
+      }
       for (const y of [.745, .753, .757]) {
         let previous: T.Vector3 | undefined
         let sweep = 0
         for (let step = 0; step <= 32; step++) {
-          ray.set(new T.Vector3(1.1, y, 1.622 - .008 * step), direction)
-          const normal = ray.intersectObject(skin)[0].normal!.normalize()
+          const normal = hit(y, 1.622 - .008 * step).normal!.normalize()
           expect(normal.x).toBeGreaterThan(.95)
           if (previous) {
             const turn = T.MathUtils.radToDeg(normal.angleTo(previous))
