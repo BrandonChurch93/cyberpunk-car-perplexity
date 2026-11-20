@@ -34,11 +34,14 @@ const tailPlan = curve([
   [.656, .965], [.690, .960], [.758, .950], [.828, .940], [.900, .920], [.943, .900], [.986, .880], [1.0165, .825],
 ])
 export const limitTailZ = (x: number, z: number) => Math.max(zAt(tailPlan(Math.abs(x))), z)
-const shoulder = curve([
+const shoulderBase = curve([
   [0, .431], [.016, .440], [.025, .454], [.044, .549], [.08, .622], [.10, .655], [.15, .735], [.20, .779], [.25, .772],
   [.30, .738], [.34, .747], [.40, .765], [.51, .803], [.56, .842], [.61, .889], [.66, .906], [.71, .919],
   [.758, .927], [.781, .929], [.816, .930], [.85, .927], [.89, .906], [.92, .878], [.96, .848], [1, .833],
 ])
+const haunchShoulderFall = curve([[.596, 0], [.609, 0], [.650, .030], [.675, .045], [.695, .047],
+  [.708, .043], [.727, .034], [.746, .024], [.765, .012], [.780, 0], [.792, 0]])
+const shoulder = (s: number) => shoulderBase(s) - haunchShoulderFall(s)
 const haunchCeiling = curve([[.69, 1.050], [.74, 1.006], [.78, .977], [.82, .947], [.86, .935], [.90, .925], [.94, .921], [1.02, .928]])
 const hoodLine = curve([[0, .431], [.028, .466], [.06, .523], [.105, .608], [.165, .716], [.225, .761], [.265, .769], [.33, .764], [.6, .83]])
 const hoodDome = curve([[0, .003], [.033, .046], [.074, .095], [.111, .101], [.159, .060], [.207, .009], [.235, 0]])
@@ -497,8 +500,9 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const intakeShift = .035 / dimensions.length
     const intakeFront = curve([[0, .617], [.20, .597], [.49, .570], [1, .538]])
     const intakeBack = curve([[0, .617], [.27, .651], [.55, .635], [1, .590]])
+    const intakeTaper = curve([[0, 0], [.12, 0], [.29, .025], [.55, .035], [.73, .030], [.88, .012], [1, 0]])
     const intakeLeft = (v: number) => intakeFront(v) + intakeShift
-    const intakeRight = (v: number) => intakeBack(v) + intakeShift
+    const intakeRight = (v: number) => intakeBack(v) + intakeShift - intakeTaper(v) / dimensions.length
     const intakeBottom = .208, intakeTopLeft = .686, intakeTopRight = .708
     const leftY = (v: number) => mix(intakeBottom, intakeTopLeft, v)
     const rightY = (v: number) => mix(intakeBottom, intakeTopRight, v)
@@ -591,7 +595,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const recess = .155 * smooth(u, .025, .70) * smooth(y, .472, .548)
       return [side * x, y, limitTailZ(x, zAt(s) + recess)]
     }, uSide, n, 5, .007)
-    const throatDepth = .164
+    const throatDepth = .165
     const intake = (u: number, v: number, inset: number): Point => {
       const s = mix(intakeLeft(v), intakeRight(v), u)
       const p = sillPoint(s, mix(leftY(v), rightY(v), u))
