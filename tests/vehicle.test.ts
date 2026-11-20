@@ -265,6 +265,8 @@ describe('vehicle geometry and state', () => {
         const hit = topHit(0, zAt(s))
         expect(hit.object.name).toBe('dark chevron rear bay louvers')
         expect(hit.point.y - previous).toBeGreaterThan(.02)
+        const color = (hit.object as T.Mesh).geometry.getAttribute('color')
+        expect(color.getX(hit.face!.a)).toBeCloseTo(s === .887 ? .25 : .76)
         previous = hit.point.y
       }
     }
@@ -433,18 +435,25 @@ describe('vehicle geometry and state', () => {
     }
   })
 
-  it('keeps all four diffuser blade edges exposed to the ignition camera', () => {
+  it('keeps full-height rear-facing edges on all four diffuser blades', () => {
     for (const vehicle of [full, blockout]) {
       vehicle.root.updateMatrixWorld(true)
       const { position } = cameraAt(950 / config.film.fps, config.formats.preview, vehicle.anchors)
-      for (const side of [-1, 1]) for (const [x, y, z] of [
-        [.419, .584, -2.419], [.420, .536, -2.445], [.648, .583, -2.306], [.659, .523, -2.293],
-      ]) {
-        const ray = new T.Raycaster(position, new T.Vector3(side * x, y, z).sub(position).normalize())
-        expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('thin graphite diffuser blades')
+      for (const eye of [position, new T.Vector3(2.8, .75, -5.25)]) for (const side of [-1, 1]) {
+        for (const [x, y, z] of [
+          [.4237, .5977, -2.3979], [.4254, .5687, -2.4420], [.4281, .5300, -2.4343],
+          [.4312, .4914, -2.4283], [.4346, .4527, -2.4256], [.4391, .4044, -2.4206],
+          [.6517, .5918, -2.3011], [.6554, .5636, -2.2975], [.6614, .5261, -2.2927],
+          [.6682, .4886, -2.2885], [.6757, .4511, -2.2844], [.6858, .4043, -2.2781],
+        ]) {
+          const ray = new T.Raycaster(eye, new T.Vector3(side * x, y, z).sub(eye).normalize())
+          const hit = ray.intersectObject(vehicle.root, true)[0]
+          expect(hit?.object.name, `${side * x}, ${y}`).toBe('thin graphite diffuser blades')
+          expect(hit.normal!.z).toBeLessThan(-.44)
+        }
       }
     }
-  })
+  }, 15_000)
 
   it('keeps the painted rear fascia in front of the internal liner', () => {
     for (const vehicle of [full, blockout]) {
@@ -452,7 +461,7 @@ describe('vehicle geometry and state', () => {
       const { position } = cameraAt(950 / config.film.fps, config.formats.preview, vehicle.anchors)
       for (const [x, y, z] of [
         [.390, .648, -2.310], [.374, .637, -2.307], [.354, .609, -2.314], [.287, .656, -2.294],
-        [.725, .574, -2.226], [.617, .548, -2.302], [.536, .557, -2.348], [-.62, .589, -2.3],
+        [.725, .574, -2.226], [.617, .548, -2.302], [.536, .557, -2.348], [-.62, .625, -2.3],
       ]) {
         const ray = new T.Raycaster(position, new T.Vector3(x, y, z).sub(position).normalize())
         expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('rear bumper paint surfaces')

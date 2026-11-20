@@ -141,6 +141,12 @@ export function palette(spec: PaintSpec, full: boolean) {
   ventCarbon.specularIntensity = .50
   ventCarbon.clearcoat = .14
   ventCarbon.clearcoatRoughness = .34
+  const rearVent = ventCarbon.clone()
+  rearVent.vertexColors = true
+  rearVent.roughness = .86
+  rearVent.metalness = .035
+  rearVent.specularIntensity = .085
+  rearVent.clearcoat = 0
   const mirror = new T.MeshPhysicalMaterial({ color: 0x57636b, metalness: .94, roughness: .096, clearcoat: .72 })
   const hot = new T.MeshPhysicalMaterial({ color: full ? 0x494241 : 0x626367, metalness: .72, roughness: .4, anisotropy: full ? .38 : 0 })
   const engine = new T.MeshStandardMaterial({ color: full ? 0x2b2d31 : 0x55595f, metalness: .38, roughness: .59 })
@@ -196,6 +202,7 @@ export function palette(spec: PaintSpec, full: boolean) {
   for (const m of [paint, glass, optics, rearOptics, carbon, mirror]) tag(m, 'beads')
   tag(bayCover, 'none')
   tag(ventCarbon, 'none')
+  tag(rearVent, 'none')
   for (const m of [matte, tire, diffuser]) tag(m, 'sheet')
   for (const m of [projector, brushed, forged, spoke, brake, caliper, dark, hot, engine]) tag(m, 'none')
   if (full) tag(cabin, 'none')
@@ -215,7 +222,7 @@ export function palette(spec: PaintSpec, full: boolean) {
       tex.repeat.set(31, 31)
       tex.anisotropy = 4
       tex.colorSpace = key === 'map' ? T.SRGBColorSpace : T.NoColorSpace
-      for (const finish of [carbon, bayCover, ventCarbon]) finish[key as keyof typeof carbonPaths] = tex
+      for (const finish of [carbon, bayCover, ventCarbon, rearVent]) finish[key as keyof typeof carbonPaths] = tex
     }))
     carbon.normalScale.setScalar(.2)
     carbon.needsUpdate = true
@@ -223,8 +230,10 @@ export function palette(spec: PaintSpec, full: boolean) {
     bayCover.needsUpdate = true
     ventCarbon.normalScale.setScalar(.16)
     ventCarbon.needsUpdate = true
+    rearVent.normalScale.setScalar(.14)
+    rearVent.needsUpdate = true
   }
-  return { paint, glass, optics, rearOptics, projector, brushed, forged, spoke, brake, caliper, matte, dark, diffuser, tire, carbon, bayCover, ventCarbon, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
+  return { paint, glass, optics, rearOptics, projector, brushed, forged, spoke, brake, caliper, matte, dark, diffuser, tire, carbon, bayCover, ventCarbon, rearVent, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
 }
 
 export type Palette = ReturnType<typeof palette>

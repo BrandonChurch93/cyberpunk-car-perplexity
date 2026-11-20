@@ -476,7 +476,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const high = mix(cap(.926, rearCorner(1))[1], .587, u)
       const x = mix(cap(.926, rearCorner(1))[0] * side, .512, u) - .035 * (1 - v)
       const y = mix(low, high, v)
-      const recess = .090 * smooth(u, .025, .70) * smooth(y, .489, .557)
+      const recess = .155 * smooth(u, .025, .70) * smooth(y, .472, .548)
       return [side * x, y, limitTailZ(x, zAt(s) + recess)]
     }, uSide, n, 5, .007)
     const intake = (u: number, v: number, inset: number): Point => {
