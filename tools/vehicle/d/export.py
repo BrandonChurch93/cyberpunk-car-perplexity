@@ -20,7 +20,7 @@ argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
 OUT = argv[0] if argv else os.path.join(HERE, '..', '..', '..', 'public', 'assets', 'vehicle')
 LEVELS = argv[1:] or ['blockout', 'full']
 SETTINGS = {
-    'full': dict(deflection=0.00012, angle=0.05, bevel=0.004, segments=3),
+    'full': dict(deflection=0.00012, angle=0.05, bevel=0.004, segments=3, lmax=0.04),
     'blockout': dict(deflection=0.0008, angle=0.2, bevel=0.0, segments=1),
 }
 BODY_MATS = {'paint': 'paint', 'black': 'matte', 'glass': 'glass', 'dark': 'dark', 'hot': 'hot', 'optics': 'optics'}
@@ -127,7 +127,7 @@ def build(level):
     full = level == 'full'
     bl.reset()
     NET = car.network()
-    built = occ.build(NET, deflection=st['deflection'], angle=st['angle'])
+    built = occ.build(NET, deflection=st['deflection'], angle=st['angle'], lmax=st.get('lmax'))
     sprung = empty('sprung assembly')
     for name, o in built.items():
         mats = ['hot' if f.startswith('exh~wall') else m for m, f in zip(o['mats'], o['facet'])]
@@ -154,12 +154,16 @@ def build(level):
     fl.parent = sprung
     mirrors = empty('door mirrors', sprung)
     for s, sd in ((1, 'left'), (-1, 'right')):
-        r = parts.mirror(s, f'mirror {sd}')
+        r = parts.mirror(s, f'mirror {sd}', fine=full)
         for c in list(r.children):
             mw = c.matrix_world.copy()
             c.parent = mirrors
             c.matrix_world = mw
         bpy.data.objects.remove(r)
+    bpy.context.view_layer.update()
+    paint = [o for o in sprung.children if o.type == 'MESH' and o.data.materials and o.data.materials[0].name == 'paint']
+    for ob in parts.shut_lines(NET, paint):
+        ob.parent = sprung
     for ob in parts.bay(NET, full):
         ob.parent = sprung
     bpy.context.view_layer.update()

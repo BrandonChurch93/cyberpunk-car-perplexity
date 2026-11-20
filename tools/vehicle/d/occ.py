@@ -13,15 +13,17 @@ from OCP.Approx import Approx_ChordLength
 from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge, BRepBuilderAPI_MakeVertex, BRepBuilderAPI_Sewing
 from OCP.BRepOffsetAPI import BRepOffsetAPI_MakeFilling
 from OCP.BRepMesh import BRepMesh_IncrementalMesh
-from OCP.BRep import BRep_Tool
+from OCP.BRep import BRep_Tool, BRep_Builder
 from OCP.BRepLProp import BRepLProp_SLProps
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopAbs import TopAbs_FACE, TopAbs_REVERSED
-from OCP.TopoDS import TopoDS
+from OCP.TopoDS import TopoDS, TopoDS_Compound
 from OCP.TopLoc import TopLoc_Location
 from OCP.ShapeAnalysis import ShapeAnalysis_Surface
 from kernel_np import spline
+
+COARSE = (float(os.environ.get('OCC_COARSE_DEFL', 0.0005)), float(os.environ.get('OCC_COARSE_ANGLE', 0.2)))
 G1 = bool(os.environ.get('OCC_G1'))
 MVS = os.environ.get('OCC_MVS', '1') == '1'
 POLY = os.environ.get('OCC_POLY', '0') == '1'
@@ -216,15 +218,16 @@ def _triangulate(face):
     loc = TopLoc_Location()
     tri = BRep_Tool.Triangulation_s(face, loc)
     if tri is None:
-        return np.zeros((0, 3)), np.zeros((0, 3), int), np.zeros((0, 3))
+        return np.zeros((0, 3)), np.zeros((0, 3), int), np.zeros((0, 3)), np.zeros((0, 2))
     tr = loc.Transformation()
     ad = BRepAdaptor_Surface(face)
     pr = BRepLProp_SLProps(ad, 1, 1e-7)
-    V, N = [], []
+    V, N, UV = [], [], []
     for i in range(1, tri.NbNodes() + 1):
         p = tri.Node(i).Transformed(tr)
         V.append((p.X(), p.Y(), p.Z()))
         uv = tri.UVNode(i)
+        UV.append((uv.X(), uv.Y()))
         pr.SetParameters(uv.X(), uv.Y())
         if pr.IsNormalDefined():
             n = pr.Normal()
@@ -238,7 +241,7 @@ def _triangulate(face):
     T = np.array(T, int)
     if face.Orientation() == TopAbs_REVERSED:
         T = T[:, [0, 2, 1]]
-    return np.array(V), T, np.array(N)
+    return np.array(V), T, np.array(N), np.array(UV)
 
 
 def _orient_normals(V, T, N):
@@ -255,7 +258,8 @@ def _orient_normals(V, T, N):
     return N / np.maximum(np.linalg.norm(N, axis=1), 1e-12)[:, None]
 
 
-def build(half, deflection=float(os.environ.get("OCC_DEFL", 0.0003)), angle=float(os.environ.get("OCC_ANGLE", 0.1)), log=print, faces_only=False):
+def build(half, deflection=float(os.environ.get("OCC_DEFL", 0.0003)), angle=float(os.environ.get("OCC_ANGLE", 0.1)), log=print, faces_only=False,
+          lmax=float(os.environ.get('OCC_LMAX', 0)) or None):
     from net import full
     net = full(half)
     verts = {n: BRepBuilderAPI_MakeVertex(gp_Pnt(*map(float, p))).Vertex() for n, p in net.points.items()}
@@ -373,19 +377,30 @@ def build(half, deflection=float(os.environ.get("OCC_DEFL", 0.0003)), angle=floa
         sew.Add(face)
     sew.Perform()
     shell = sew.SewedShape()
-    BRepMesh_IncrementalMesh(shell, deflection, False, angle, True)
     sewn = {}
     for name, face in faces.items():
         m = sew.Modified(face)
         sewn[name] = TopoDS.Face(m) if not m.IsNull() else face
-    return _assemble(net, sewn, samples, log)
+    finfo = {f['name']: f for f in net.facets}
+    fine_mats = ('paint', 'glass')
+    for group, d, a in ((fine_mats, deflection, angle), (None, max(deflection, COARSE[0]), max(angle, COARSE[1]))):
+        cb = BRep_Builder()
+        cmp = TopoDS_Compound()
+        cb.MakeCompound(cmp)
+        for name, face in sewn.items():
+            if (finfo[name]['mat'] in fine_mats) == (group is not None):
+                cb.Add(cmp, face)
+        BRepMesh_IncrementalMesh(cmp, d, False, a, True)
+    return _assemble(net, sewn, samples, log, lmax)
 
 
-def _assemble(net, sewn, samples, log):
+def _assemble(net, sewn, samples, log, lmax=None):
     finfo = {f['name']: f for f in net.facets}
     objs = {}
+    flist = []
     for name, face in sewn.items():
-        V, T, N = _triangulate(face)
+        V, T, N, UV = _triangulate(face)
+        flist.append(face)
         hint = finfo[name]['hint']
         if hint is not None and len(T):
             fn = np.cross(V[T[:, 1]] - V[T[:, 0]], V[T[:, 2]] - V[T[:, 0]]).sum(0)
@@ -393,9 +408,11 @@ def _assemble(net, sewn, samples, log):
                 T = T[:, [0, 2, 1]]
         if len(T):
             N = _orient_normals(V, T, N)
-        o = objs.setdefault(finfo[name]['obj'], {'V': [], 'T': [], 'N': [], 'mats': [], 'facet': [], 'n': 0})
+        o = objs.setdefault(finfo[name]['obj'], {'V': [], 'T': [], 'N': [], 'UV': [], 'F': [], 'mats': [], 'facet': [], 'n': 0})
         o['V'].append(V)
         o['N'].append(N[T] if len(T) else np.zeros((0, 3, 3)))
+        o['UV'].append(UV[T] if len(T) else np.zeros((0, 3, 2)))
+        o['F'].append(np.full(len(T), len(flist) - 1))
         o['T'].append(T + o['n'])
         o['n'] += len(V)
         o['mats'] += [finfo[name]['mat']] * len(T)
@@ -414,6 +431,21 @@ def _assemble(net, sewn, samples, log):
         T, CN = T[keep], CN[keep]
         facets = [f for f, k in zip(o['facet'], keep) if k]
         mats = [m for m, k in zip(o['mats'], keep) if k]
+        if lmax:
+            from refine import refine
+            CUV = np.vstack(o['UV'])[keep]
+            TF = np.concatenate(o['F'])[keep]
+            V, T, CN, TF2 = refine(V, T, CN, CUV, TF, flist, lmax, log=log, tol=float(os.environ.get('OCC_NTOL', 0.05)),
+                                    mask=[m_ in ('paint', 'glass') for m_ in mats])
+            V[np.abs(V[:, 0]) < 2e-5, 0] = 0.0
+            fname = {}
+            for f_, i_ in zip(facets, TF):
+                fname[int(i_)] = f_
+            mname = {}
+            for m_, i_ in zip(mats, TF):
+                mname[int(i_)] = m_
+            facets = [fname[i_] for i_ in TF2]
+            mats = [mname[i_] for i_ in TF2]
         crease = _feature_edges(V, T, facets, net, samples)
         CN = _soft_normals(V, T, CN, crease)
         out[oname] = {'V': V, 'T': T, 'N': CN, 'mats': mats, 'facet': facets, 'crease': crease}

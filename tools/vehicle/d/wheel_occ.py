@@ -115,8 +115,8 @@ def _ccw(P):
     return P if a > 0 else P[::-1]
 
 
-def windows(rh=0.054, rs=0.115, rw=0.226, hs=0.0165, ha0=0.0135, ha1=0.0115, delta=math.radians(17), n=5, phase=math.pi / 2):
-    """2D window polygons of a five-arm Y spoke: one between each pair of Ys and one inside each Y."""
+def windows(rh=0.054, rs=0.115, rw=0.226, hs=0.0165, ha0=0.0135, ha1=0.0115, delta=math.radians(17), n=5, phase=math.pi / 2, web=0.016):
+    """2D window polygons of a five-arm Y spoke: one between each pair of Ys and one inside each Y, closed by a web short of the rim."""
     out = []
     rt = rw + 0.01
     pol = lambda r, a: np.array([r * math.cos(a), r * math.sin(a)])
@@ -145,11 +145,12 @@ def windows(rh=0.054, rs=0.115, rw=0.226, hs=0.0165, ha0=0.0135, ha1=0.0115, del
         ip = _side(SA, TAp, ha0, ha1, -1)
         im = _side(SA, TAm, ha0, ha1, 1)
         t0 = _lines_x(*ip, *im)
-        r3 = _circle_x(*ip, rw)
-        r4 = _circle_x(*im, rw)
+        rv = rw - web
+        r3 = _circle_x(*ip, rv)
+        r4 = _circle_x(*im, rv)
         a3, a4 = math.atan2(r4[1], r4[0]), math.atan2(r3[1], r3[0])
         a4 = a3 + (a4 - a3) % (2 * math.pi)
-        arc = [pol(rw, a) for a in np.linspace(a3, a4, 7)[1:-1]]
+        arc = [pol(rv, a) for a in np.linspace(a3, a4, 7)[1:-1]]
         out.append(_ccw([t0, r4] + arc + [r3]))
     return out
 
@@ -334,7 +335,7 @@ def mesh(shape, deflection=0.0003, angle=0.25):
     Vs, Ts, Ns = [], [], []
     off = 0
     for f in _faces(shape):
-        V, T, N = occ._triangulate(f)
+        V, T, N, _ = occ._triangulate(f)
         if len(T) == 0:
             continue
         N = occ._orient_normals(V, T, N)

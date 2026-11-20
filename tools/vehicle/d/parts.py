@@ -80,9 +80,9 @@ def _solids(w, fine):
         d = 0.00015 if fine else 0.0006
         a = 0.12 if fine else 0.35
         _SOLIDS[key] = {
-            'spokes': wheel_occ.mesh(wheel_occ.spoke_face(w, pockets=True), d, a),
+            'spokes': wheel_occ.mesh(wheel_occ.spoke_face(w, pockets=True), d * 1.7, a * 1.5),
             'nuts': wheel_occ.mesh(wheel_occ.nuts(w), d, a),
-            'disc': wheel_occ.mesh(wheel_occ.disc(w, holes=True), d, a),
+            'disc': wheel_occ.mesh(wheel_occ.disc(w, holes=True), d * 2, a * 2),
             'caliper': wheel_occ.mesh(wheel_occ.caliper(w), d, a),
         }
     return _SOLIDS[key]
@@ -176,55 +176,30 @@ def floor(name):
     return _obj(name, bm, 'dark', smooth=False)
 
 
-def mirror(side_sign, label):
-    """Door mirror: angular painted housing with its glass on the rear face, on a thin blade stalk."""
+_MIRROR = {}
+
+
+def mirror(side_sign, label, fine=False):
+    """Door mirror from the OCC solids in mirror_occ: carbon wedge housing, recessed glass, thin strut."""
+    import mirror_occ
+    if fine not in _MIRROR:
+        _MIRROR[fine] = mirror_occ.meshes(fine)
     root = bpy.data.objects.new(label, None)
     bpy.context.scene.collection.objects.link(root)
-    L = 0.288
-    pts = [(0.0, 0.0), (L, 0.02), (L * 0.97, 0.10), (0.05, 0.085)]
-    xi, xo = 1.035, 1.133
-    cin = lambda z, y: (side_sign * xi, 0.83 + y, 0.85 - z)
-    cout = lambda z, y: (side_sign * xo, 0.83 + y + 0.004, 0.85 - z + 0.025 * (z / L))
-    bm = bmesh.new()
-    vs_in = [bm.verts.new(bl.b(cin(z, y))) for z, y in pts]
-    vs_out = [bm.verts.new(bl.b(cout(z, y))) for z, y in pts]
-    bm.faces.new(vs_in)
-    bm.faces.new(vs_out[::-1])
-    for i in range(4):
-        j = (i + 1) % 4
-        bm.faces.new((vs_in[i], vs_in[j], vs_out[j], vs_out[i]))
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    shell = _obj(f'{label} shell', bm, 'paint', root, smooth=False)
-    md = shell.modifiers.new('round', 'BEVEL')
-    md.width = 0.004
-    md.segments = 2
-    shell['part'] = 'mirror housing'
-    a, b, c, d = cin(*pts[1]), cin(*pts[2]), cout(*pts[2]), cout(*pts[1])
-    ctr = np.mean([a, b, c, d], 0)
-    quad = [ctr + 0.86 * (np.asarray(p) - ctr) + np.array([0, 0, -0.0015]) for p in (a, b, c, d)]
-    bm = bmesh.new()
-    f = bm.faces.new([bm.verts.new(bl.b(p)) for p in quad])
-    if (Vector(bl.b((0, 0, -1))).dot(f.normal)) < 0:
-        f.normal_flip()
-    g = _obj(f'{label} glass', bm, 'mirror', root, smooth=False)
-    g['part'] = 'mirror glass'
-    bm = bmesh.new()
-    sec = [(0.0, -0.035), (0.004, -0.035), (0.004, 0.035), (0.0, 0.035)]
-    ring0 = [bm.verts.new(bl.b((side_sign * (0.965 + dx), 0.795, 0.70 + dz))) for dx, dz in sec]
-    ring1 = [bm.verts.new(bl.b((side_sign * (xi + 0.01 + dx), 0.84, 0.70 + dz * 0.8))) for dx, dz in sec]
-    bm.faces.new(ring0)
-    bm.faces.new(ring1[::-1])
-    for i in range(4):
-        j = (i + 1) % 4
-        bm.faces.new((ring0[i], ring0[j], ring1[j], ring1[i]))
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    st = _obj(f'{label} stalk', bm, 'matte', root, smooth=False)
-    st['part'] = 'mirror stalk'
+    for key, mat, part in (('housing', 'carbon', 'mirror housing'), ('glass', 'mirror', 'mirror glass'), ('stalk', 'matte', 'mirror stalk')):
+        V, T, N = _MIRROR[fine][key]
+        V = V * np.array([side_sign, 1.0, 1.0])
+        N = N * np.array([side_sign, 1.0, 1.0])
+        if side_sign < 0:
+            T = T[:, ::-1]
+            N = N[:, ::-1]
+        ob = _occ_obj(f'{label} {key}', V[:, [0, 2, 1]] * np.array([1.0, -1.0, 1.0]), T, N[:, :, [0, 2, 1]] * np.array([1.0, -1.0, 1.0]), mat, root)
+        ob['part'] = part
     return root
 
 
 def bay(net, full):
-    """Engine bay placeholder: a closed tray under the opening between the haunches, block and covers."""
+    """Engine bay: a closed tray under the opening, OCC stepped side panels, ribbed cam covers, block, airboxes with mesh lids."""
     from kernel_np import spline
     out = []
     for e in ('roof_rear', 'bay_edge', 'deck_tail'):
@@ -251,25 +226,91 @@ def bay(net, full):
             f.normal_flip()
     obs = [_obj('engine bay tub', bm, 'dark', smooth=False)]
     obs[-1]['part'] = 'engine bay tub'
-    bm = bmesh.new()
-    bmesh.ops.create_cube(bm, size=1.0)
-    for v in bm.verts:
-        x, y, z = v.co.x, v.co.y, v.co.z
-        v.co = Vector(bl.b((x * 0.56, 0.74 + y * 0.26, -1.36 + z * 0.92)))
-    obs.append(_obj('engine block', bm, 'engine', smooth=False))
-    obs[-1]['part'] = 'engine block'
-    for k, xc in enumerate((-0.15, 0.15)):
-        bm = bmesh.new()
-        bmesh.ops.create_cube(bm, size=1.0)
-        for v in bm.verts:
-            x, y, z = v.co.x, v.co.y, v.co.z
-            v.co = Vector(bl.b((xc + x * 0.22, 0.90 + y * 0.05 - 0.02 * z, -1.36 + z * 0.80)))
-        ob = _obj(f'engine cover {k}', bm, 'carbon', smooth=False)
-        md = ob.modifiers.new('round', 'BEVEL')
-        md.width = 0.01
-        md.segments = 3
-        ob['part'] = 'engine cover banks'
+    import bay_occ
+    import lamps
+    key = ('bay', bool(full))
+    if key not in _MIRROR:
+        _MIRROR[key] = bay_occ.meshes(full)
+    M = _MIRROR[key]
+    paired = (('side panel', 'carbon', 'engine bay side panel'), ('cam cover', 'carbon', 'engine cam cover'), ('airbox', 'dark', 'engine airbox'))
+    for key, mat, part in paired:
+        for s, sd in ((1, 'left'), (-1, 'right')):
+            V, T, N = M[key]
+            V = V * np.array([s, 1.0, 1.0])
+            N = N * np.array([s, 1.0, 1.0])
+            if s < 0:
+                T = T[:, ::-1]
+                N = N[:, ::-1]
+            ob = _occ_obj(f'{part} {sd}', V[:, [0, 2, 1]] * np.array([1.0, -1.0, 1.0]), T, N[:, :, [0, 2, 1]] * np.array([1.0, -1.0, 1.0]), mat, None)
+            ob['part'] = part
+            obs.append(ob)
+    for key, mat, part in (('block', 'engine', 'engine block'), ('valley', 'dark', 'engine valley')):
+        V, T, N = M[key]
+        ob = _occ_obj(part, V[:, [0, 2, 1]] * np.array([1.0, -1.0, 1.0]), T, N[:, :, [0, 2, 1]] * np.array([1.0, -1.0, 1.0]), mat, None)
+        ob['part'] = part
         obs.append(ob)
+    x0, x1, z0, z1, y = bay_occ.AIRBOX_LID
+    for s, sd in ((1, 'left'), (-1, 'right')):
+        poly = [(x0, z0), (x1, z0), (x1, z1), (x0, z1)]
+        bm = lamps.hex_mesh(poly, lambda u, v, s=s: (np.array([s * u, y, v]), np.array([0.0, 1.0, 0.0])), 0.016, 0.0025, 0.006)
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        ob = _obj(f'engine airbox mesh {sd}', bm, 'matte', smooth=False)
+        ob['part'] = 'engine airbox mesh'
+        obs.append(ob)
+    return obs
+
+
+SHUT = ('door_f', 'shut_up', 'shut_mid', 'shut_low')
+
+
+def shut_lines(net, paint, width=0.0032, lift=0.00035, depth=0.0006):
+    """Door shut gaps: dark ribbons laid onto the paint along the door outline, each side point projected to the skin."""
+    from kernel_np import spline
+    from mathutils.bvhtree import BVHTree
+    dg = bpy.context.evaluated_depsgraph_get()
+    trees = [BVHTree.FromObject(o, dg) for o in paint]
+    mws = [(o.matrix_world, o.matrix_world.inverted(), o.matrix_world.to_3x3().inverted().transposed()) for o in paint]
+
+    def snap(p):
+        best = None
+        for t, (mw, inv, nm) in zip(trees, mws):
+            loc, n, _, d = t.find_nearest(inv @ Vector(p))
+            if loc is not None and (best is None or d < best[2]):
+                best = (mw @ loc, (nm @ n).normalized(), d)
+        return best
+
+    obs = []
+    for sg, sd in ((1, 'left'), (-1, 'right')):
+        for e in SHUT:
+            P = np.array([bl.b(q * np.array([sg, 1.0, 1.0])) for q in spline([net.resolve(c) for c in net.edges[e]['ctrl']], spacing=0.004)])
+            bm = bmesh.new()
+            rows = []
+            for i, p in enumerate(P):
+                tg = P[min(i + 1, len(P) - 1)] - P[max(i - 1, 0)]
+                tg = tg / (np.linalg.norm(tg) + 1e-12)
+                c = snap(p)
+                if c is None:
+                    continue
+                n = np.array(c[1])
+                sdv = np.cross(n, tg)
+                sdv = sdv / (np.linalg.norm(sdv) + 1e-12)
+                row = []
+                for k in (-0.5, 0.5):
+                    q = snap(np.array(c[0]) + sdv * width * k)
+                    a = np.array(q[0])
+                    m = np.array(q[1])
+                    row.append((a + m * lift, a - m * depth))
+                rows.append(row)
+            vs = [[bm.verts.new(r[0][0]), bm.verts.new(r[1][0]), bm.verts.new(r[1][1]), bm.verts.new(r[0][1])] for r in rows]
+            for a, b in zip(vs[:-1], vs[1:]):
+                for k in range(4):
+                    bm.faces.new((a[k], a[(k + 1) % 4], b[(k + 1) % 4], b[k]))
+            bm.faces.new(vs[0][::-1])
+            bm.faces.new(vs[-1])
+            bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+            ob = _obj(f'door shut {e} {sd}', bm, 'dark', smooth=False)
+            ob['part'] = 'door shut line'
+            obs.append(ob)
     return obs
 
 

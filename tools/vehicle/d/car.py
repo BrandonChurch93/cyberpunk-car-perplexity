@@ -206,7 +206,7 @@ def network():
     E('sill_bot', ['Arb', (0.985, 0.13, 0.0), 'Rsb'])
     E('sill_f', ['Ar', 'Arb'])
     E('sill_r', ['Rs', 'Rsb'])
-    F('sill', ['vent_bot', 'door_bot', 'sill_top', 'sill_r', 'sill_bot', 'sill_f'], hint=(1, -0.2, 0))
+    F('sill', ['vent_bot', 'door_bot', 'sill_top', 'sill_r', 'sill_bot', 'sill_f'], hint=(1, -0.2, 0), mat='black')
 
     E('int_rear', ['Ii1', S(1705, 330, 0.98), 'Ii2'])
     E('int_bot', ['Ii2', 'Ii3'])
@@ -223,9 +223,11 @@ def network():
     Q('Tc', (0.93, 0.905, -1.975))
     Q('Sh1', (1.012, 0.80, -1.10))
     E('arch_r', ['Rs', arc(RH, -178, 1.006), arc(RH, 150, 1.013), arc(RH, 120, 1.015), 'Rt', arc(RH, 60, 1.015), arc(RH, 30, 1.01), 'Rb'])
-    E('rear_side', ['Rb', (0.955, 0.65, -1.99), 'Tc'])
+    Q('Rm', (0.958, 0.621, -1.985))
+    E('rear_side', ['Rb', (0.971, 0.51, -1.949), 'Rm'])
+    E('rear_side_up', ['Rm', (0.944, 0.761, -1.990), 'Tc'])
     E('shoulder', ['Ii1', S(1800, 214, 1.0), 'Sh1', S(2200, 158, 1.0), 'Tc'])
-    F('q_up', ['int_rear', 'q_split', 'arch_r', 'rear_side', 'shoulder'], crown=0.006, hint=(1, 0.2, 0))
+    F('q_up', ['int_rear', 'q_split', 'arch_r', 'rear_side', 'rear_side_up', 'shoulder'], crown=0.006, hint=(1, 0.2, 0))
 
     Q('Bk', (0.30, 0.955, -1.95))
     Q('Bk0', (0.0, 0.955, -1.98))
@@ -234,9 +236,11 @@ def network():
     E('bay_edge', ['Rr', (0.42, 1.04, -1.30), 'Bk'])
     E('deck_rear', ['Bk', 'Ht'])
     E('tail_top', ['Ht', (0.80, 0.93, -1.995), 'Tc'])
-    E('h_split', ['Dr0', (0.86, 0.96, -0.70), 'Hc', (0.84, 0.95, -1.6), 'Ht'], kind='soft')
-    F('haunch_side', ['shut_up', 'shoulder', 'tail_top', 'h_split'], crown=0.004, hint=(1, 0.6, 0))
-    F('haunch_top', ['h_split', 'deck_rear', 'bay_edge', 'frame_r', 'g_rear'], crown=0.004, hint=(0.3, 1, 0))
+    Q('Hg0', (0.862, 0.962, -0.72))
+    Q('Hg1', (0.80, 0.946, -1.70))
+    E('h_split', ['Hg0', 'Hc', (0.84, 0.95, -1.6), 'Hg1'], kind='soft')
+    F('haunch', ['shut_up', 'shoulder', 'tail_top', 'deck_rear', 'bay_edge', 'frame_r', 'g_rear'], crown=0.004, hint=(0.6, 1, 0),
+      guides=['h_split'])
 
     # tail: deck drop, lamp band, exhaust, blade, diffuser; flat across the centre, swept back at the sides
     Q('Tt0', (0.0, 0.955, -2.08))
@@ -324,6 +328,9 @@ def network():
     E('df3_rk', ['Df3', 'Rk'])
     F('rear_low', ['arch_r_low', 'rdif_bot', 'rdif_back', 'rc_dif', 'rc_low'], mat='black', hint=(1, 0, -0.3))
     F('strake_in', ['rdif_bot', 'rdif_back', 'dif_side', 'df3_rk'], mat='black', hint=(-1, -0.3, 0))
-    F('rear_corner', ['rear_side', 'tc_down', 'band_end', 'blade_top_e', 'blade_e', 'blade_under_e', 'rc_dif', 'rc_low'],
-      crown=0.004, hint=(1, 0, -1))
+    E('rc_mid', ['Rm', (0.918, 0.618, -2.045), 'Tb2'])
+    F('rear_corner', ['rear_side_up', 'tc_down', 'band_end', 'rc_mid'], crown=0.004, hint=(1, 0, -1))
+    E('blade_end', ['Df1', 'Tb2'])
+    F('blade_cap', ['blade_top_e', 'blade_e', 'blade_under_e', 'blade_end'], mat='black', hint=(1, 0, 0))
+    F('rear_corner_low', ['rear_side', 'rc_mid', 'blade_end', 'rc_dif', 'rc_low'], mat='black', hint=(1, 0, -1))
     return n

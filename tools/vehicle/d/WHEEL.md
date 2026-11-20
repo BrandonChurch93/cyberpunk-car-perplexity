@@ -6,5 +6,5 @@ For a right wheel use a mirrored clone (`scale.x = -1`) and flip material `side`
 Child nodes: `wheel tire`, `wheel rim barrel`, `wheel spokes`, `wheel center cap`, `wheel nuts`, `wheel disc`, `wheel caliper`; the disc and caliper do not spin, so reparent them to the upright if the rim rotates.
 Materials (names are the finish): `alloy dark gloss`, `nut dark gloss`, `tire rubber`, `disc carbon ceramic`, `caliper graphite gloss`; swap them by name for car B's own PBR materials.
 Tire radius 0.34675 m, section 0.265 m, rim 0.254 m radius; the tread is round, not flattened at the contact patch.
-The caliper sits in the rear upper quadrant (12 to 84 degrees above the rearward axis), straddling the disc behind the spokes.
+Each Y encloses a closed triangular window, its arms joined by a 16 mm web inside the rim. The caliper sits in the rear upper quadrant (12 to 84 degrees above the rearward axis), straddling the disc behind the spokes.
 Every node carries `extras.part`; no textures, no lettering, no logos.

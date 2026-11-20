@@ -252,23 +252,34 @@ def _depth(x, y):
 
 
 def rear(net, full):
+    """Tail running light as a sideways Y: a long stem from the exhaust frame forking around a triangle at the outer end."""
     obs = []
-    L = [net.points[f'L{i}'] for i in range(4)]
-    top, bot = L[0][1], L[3][1]
-    xi, xo = L[0][0], L[1][0]
     from car import zb
-    z = lambda x: zb(x) + 0.024
-    ym = 0.5 * (top + bot)
+    z = lambda x: zb(x) + 0.007
+    fx, fy = 0.735, 0.804
     paths = [
-        [(xi + 0.01, ym + 0.002), (xi + 0.10, ym + 0.004), (xi + 0.17, ym + 0.006)],
-        [(xi + 0.17, ym + 0.006), (xo - 0.06, top - 0.016), (xo - 0.012, top - 0.014)],
-        [(xi + 0.17, ym + 0.006), (xo - 0.06, bot + 0.020), (xo - 0.012, bot + 0.018)],
+        [(0.462, fy), (0.60, fy), (fx, fy)],
+        [(fx, fy), (0.80, 0.829), (0.848, 0.848)],
+        [(fx, fy), (0.80, 0.778), (0.850, 0.746)],
+        [(0.848, 0.848), (0.851, 0.797), (0.850, 0.746)],
     ]
     n = 36 if full else 12
-    for P in paths:
-        S = spline([np.array([x, y, z(x)]) for x, y in P], spacing=0.004)
-        ob = _obj('tail running guide', strip(S, 0.011, 0.005, (0.6, 0.0, -1.0), n=n), 'emitter_rear', 'tail running guide')
+    for group in ((paths[0],), (paths[1],), (paths[2], paths[3])):
+        guide, channel = bmesh.new(), bmesh.new()
+        for P in group:
+            S = spline([np.array([x, y, z(x)]) for x, y in P], spacing=0.004)
+            _merge(guide, strip(S, 0.014, 0.006, (0.6, 0.0, -1.0), ends=0.9, n=n))
+            _merge(channel, strip(S + np.array([0, 0, 0.005]), 0.026, 0.006, (0.6, 0.0, -1.0), ends=1.0, n=n))
+        ob = _obj('tail running guide', guide, 'emitter_rear', 'tail running guide')
         ob['lamp'] = 'running'
         obs.append(ob)
-        obs.append(_obj('tail guide channel', strip(S + np.array([0, 0, 0.004]), 0.020, 0.006, (0.6, 0.0, -1.0), n=n), 'matte', 'tail guide channel'))
+        obs.append(_obj('tail guide channel', channel, 'matte', 'tail guide channel'))
     return obs
+
+
+def _merge(dst, src):
+    me = bpy.data.meshes.new('tmp')
+    src.to_mesh(me)
+    src.free()
+    dst.from_mesh(me)
+    bpy.data.meshes.remove(me)
