@@ -246,7 +246,7 @@ const edgeGlass = (s: number, v: number): Point => {
 const bayWidth = curve([[.60, .36], [.641, .431], [.68, .477], [.75, .452], [.82, .389], [.873, .326], [.901, .218], [.918, .04]])
 export const bayEdge = (s: number, side: number): Point => [side * bayWidth(s), spine(s) - .009, zAt(s)]
 const deckInnerX = curve([[.5984, edgeGlass(.5984, 0)[0]], [.616, .687], [.638, .608], [.657, .537], [.678, .486], [.706, bayWidth(.706)]])
-const deckInnerY = curve([[.5984, edgeGlass(.5984, 0)[1]], [.616, .952], [.638, .995], [.659, 1.041], [.680, 1.074], [.706, bayEdge(.706, 1)[1]]])
+const deckInnerY = curve([[.5984, edgeGlass(.5984, 0)[1]], [.617, .950], [.641, .993], [.666, 1.044], [.683, 1.066], [.696, 1.071], [.706, bayEdge(.706, 1)[1]]])
 export const tailLipY = (x: number): number => .898 - .038 * smooth(x, .295, .935)
 export const tailCrestZ = (x: number): number => limitTailZ(x, zAt(.9878 - .007 * smooth(x, .24, .48)))
 
@@ -477,10 +477,20 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       return [side * (plan(s) - .083), mix(shoulder(s) - .086, shoulder(s) + .008, v), zAt(s)]
     }, uSide, 8, 5, .006)
     part(black, (u, v) => {
-      const s = cutLeading(v) + mix(-.009, .011, u)
-      const p = cap(s, v)
-      return [p[0] - side * mix(.007, .034, smooth(v, 0, .085) * (1 - smooth(v, .91, 1))), p[1], p[2]]
-    }, uSide, 5, n, .006)
+      const q = mix(.003, .996, u)
+      const s = cutLeading(q) + mix(-.003, .007, v)
+      const p = cap(s, q)
+      const inset = .0037 + .003 * (2 * v - 1) ** 2
+      return [p[0] - side * inset, p[1], p[2]]
+    }, uSide, full ? 64 : 36, 3, 0)
+    part(paint, (u, v) => {
+      const y = mix(floorY, shoulder(cutLeading(1)), u)
+      const span = .0044 + .0032 * (1 - smooth(u, .20, .47))
+      const s = doorLeadAt(y) + mix(-span, span, v)
+      const p = sillPoint(s, y)
+      const inset = .0018 + .0034 * smooth(Math.abs(2 * v - 1), .28, 1)
+      return [p[0] - side * inset, p[1], p[2]]
+    }, uSide, full ? 82 : 58, 4, 0)
     part(black, (u, v) => {
       const s = mix(.510, .686, u)
       const p = sillPoint(s, mix(.314, shoulder(s) + .003, v))
@@ -497,7 +507,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     }, uSide, full ? 24 : 16, full ? 7 : 5, .008)
     part(paint, (u, v) => cap(mix(.141, first.before, u), v), uSide, n, k)
     folded((u, v) => {
-      const s = mix(first.after, cutLeading(v) - gap, u)
+      const s = mix(first.after, Math.max(first.after, cutLeading(v) - gap), u)
       return cap(s, v)
     }, uSide, [beltLine])
     folded((u, v) => {
