@@ -72,6 +72,12 @@ const fairStep = (s: number, a: number, b: number) => {
   const t = T.MathUtils.clamp((s - a) / (b - a), 0, 1)
   return t ** 3 * (10 + t * (-15 + 6 * t))
 }
+const fairNose = (profile: (s: number) => number, s: number): number => {
+  const d = .005 * fairStep(s, .002, .030) * (1 - fairStep(s, .145, .178))
+  const center = profile(s)
+  return d > 0 ? (profile(s - 2 * d) + 4 * profile(s - d) + 6 * center + 4 * profile(s + d) + profile(s + 2 * d)) / 16 : center
+}
+const noseShoulder = (s: number) => shoulder(s) - noseCornerFall(s)
 const wingDraft = (s: number, drop: number) => {
   const d = drop / paintWingDrop
   return .00160 * d ** 3 * Math.exp(.306 * (1 - d ** 2))
@@ -144,7 +150,7 @@ function bonnetSection(s: number, x: number) {
 
 function wingEdge(s: number) {
   const width = plan(s)
-  const center = hoodLine(s), outer = shoulder(s) - noseCornerFall(s)
+  const center = fairNose(hoodLine, s), outer = fairNose(noseShoulder, s)
   const radius = wingRadius(s)
   let angle = Math.PI / 2
   if (radius > 0) for (let i = 0; i < 3; i++) {
@@ -167,12 +173,12 @@ function bonnet(s: number, v: number): Point {
   const fair = mix(weight, v, smooth(v, .73, .95))
   const across = -hoodFoldStrength * foldSlope * (section(x) - mix(section(0), section(w.x), fair))
   const base = mix(w.center, w.y, weight + .05 * v ** 6 * (1 - v))
-  const crown = hoodDome(s) * Math.max(0, 1 - (x / .675) ** 2) ** 2
+  const crown = fairNose(hoodDome, s) * Math.max(0, 1 - (x / .675) ** 2) ** 2
   const wingCrown = .005 * fairStep(s, .143, .223) * (1 - fairStep(s, .243, .315))
     * fairStep(v, .60, .84) * (1 - fairStep(v, .92, 1))
   const cowlDrop = .021 * fairStep(s, .127, .236) * (1 - v ** 3)
     - .015 * fairStep(s, .122, .189) * (1 - fairStep(s, .260, .335)) * (1 - fairStep(v, .735, 1))
-  const profileFall = bonnetProfileFall(s) * (1 - smooth(v, .74, 1))
+  const profileFall = fairNose(bonnetProfileFall, s) * (1 - smooth(v, .74, 1))
   return [x, base + across + crown + wingCrown - cowlDrop - profileFall, zAt(s)]
 }
 
@@ -213,14 +219,18 @@ function foldRows(surface: Surface, traces: readonly ((p: Point) => number)[], b
   } }
 }
 
-export function frontHoodEdge(x: number): Point {
+function frontHoodStation(x: number): number {
   let low = 0, high = .18
   for (let i = 0; i < 24; i++) {
     const middle = (low + high) / 2
     if (wingEdge(middle).x < x) low = middle
     else high = middle
   }
-  const p = bonnet((low + high) / 2, 1)
+  return (low + high) / 2
+}
+
+export function frontHoodEdge(x: number): Point {
+  const p = bonnet(frontHoodStation(x), 1)
   return [x, p[1], p[2]]
 }
 
@@ -318,15 +328,22 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     return (a + b) / 2
   }
   const mouthStart = gridU(wingVentFront), mouthEnd = gridU(wingVentBack), rollStart = gridU(.071)
+  const noseReturnEnd = gridU(frontHoodStation(.86)), noseTipEnd = gridU(.035)
   const upperNoseStart = .114, noseStart = gridU(upperNoseStart)
   const frontArchStart = sAt(frontWheel.z + frontWheel.arch), archStart = gridU(frontArchStart)
-  const stations = [...Array.from({ length: bonnetLengthSteps + 1 }, (_, i) => i / bonnetLengthSteps),
-    rollStart, noseStart, archStart].sort((a, b) => a - b)
+  const baseStations = [...Array.from({ length: bonnetLengthSteps + 1 }, (_, i) => i / bonnetLengthSteps),
+    noseReturnEnd, rollStart, noseStart, archStart].sort((a, b) => a - b)
+  const stations = baseStations.flatMap((u, i) => {
+    const next = baseStations[i + 1]
+    const segments = full && next <= noseReturnEnd ? (next <= noseTipEnd ? 3 : 2) : 1
+    return Array.from({ length: segments }, (_, j) => j ? mix(u, next, j / segments) : u)
+  })
   const mouthSteps = full ? 36 : 20
   const frontStations = stations.filter(u => u < mouthStart).concat(mouthStart)
   const mouthStations = Array.from({ length: mouthSteps + 1 }, (_, i) => gridU(mix(wingVentFront, wingVentBack, i / mouthSteps)))
   const backStations = [mouthEnd, ...stations.filter(u => u > mouthEnd)]
   const bonnetStations = [...frontStations, ...mouthStations.slice(1, -1), ...backStations]
+  const noseStations = frontStations.filter(u => u <= noseReturnEnd)
   const sampleGrid = (samples: number[], u: number) => {
     const p = u * (samples.length - 1), i = Math.min(Math.floor(p), samples.length - 2)
     return mix(samples[i], samples[i + 1], p - i)
@@ -345,6 +362,14 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       return bonnet(bonnetGrid(sampleGrid(bonnetStations, u)) * (frontEnd(q) - bonnetGap) / splitEnd, q)
     }), [0, 1, 0], hoodTraces, bonnetStations.length - 1, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
     const outerS = (u: number, q: number) => bonnetGrid(u) + (frontEnd(q) - bonnetGap - splitEnd) * fairStep(u, .81, 1)
+    const noseReturn = ([x, y, z]: Point, v: number): Point => {
+      const angle = v * Math.PI * .64
+      return [x, y - (.007 + .003 * smooth(x, .49, .71)) * (1 - Math.cos(angle)),
+        z - .006 * (Math.sin(angle) + smooth(v, .65, 1))]
+    }
+    part(paint, sided((u, v) => noseReturn(bonnet(bonnetGrid(sampleGrid(noseStations, u)), 1), v)),
+      [0, 0, 1], noseStations.length - 1, 5, 0)
+    part(paint, sided((u, v) => noseReturn(bonnet(0, u), v)), [0, 0, 1], 6, 5, 0)
     const outerSkin = (samples: number[], low: (s: number) => number, high: (s: number) => number): Surface => sided((u, v) => {
       const t = sampleGrid(samples, u), s = bonnetGrid(t)
       const q = mix(low(s), high(s), v)

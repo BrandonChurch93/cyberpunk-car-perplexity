@@ -11,7 +11,7 @@ import { DropGeometry, geometryAngle, geometryRange } from './drop-geometry'
 import { applyPorous, type Uniforms } from './porous'
 import { heroBasin, SyntheticRelief, type Basin } from './relief'
 import { type ExtraImpact, RippleField } from './ripples'
-import { Runners } from './runners'
+import { rivuletTravel, Runners } from './runners'
 import { applySheet, looksLikeRubber } from './sheet'
 
 const reliefSize = 1024
@@ -50,8 +50,8 @@ function rearPuddle(anchors: Parameters<typeof cameraAt>[2]): Basin {
 }
 
 /**
- * The rivulet waits on the wing as near the crest crease as the macro focus allows in this format: its first centimeter of run
- * blurs under a pixel at the macro frame, it faces the lens and it runs down the panel across the frame.
+ * The rivulet waits on the wing above the macro aim in this format: at the macro frame its head has run into the focus and
+ * blurs under a pixel, the path behind it is in frame, it faces the lens and it runs down the panel clear of the vents.
  */
 export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec): THREE.Vector3 {
   const anchor = vehicle.anchors.paint.position
@@ -72,25 +72,30 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
     return (q: THREE.Vector3) => circle * Math.abs(1 / state.focusDistance - 1 / new THREE.Vector3().subVectors(q, state.position).dot(forward))
   }
   const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
+  const lead = rivuletTravel(config.film.macroFrameSeconds)
   const blurAt = blurFor(camera)
   const laterBlurAt = blurFor(later)
   const paint = new Set(vehicle.surfaces.filter((s) => s.wetness === 'beads' && !s.material.transparent).map((s) => s.material))
   const trim = new Set(vehicle.surfaces.filter((s) => s.wetness === 'sheet').map((s) => s.material))
-  const slots: THREE.Vector3[] = []
+  const slots: THREE.Triangle[] = []
   vehicle.root.updateMatrixWorld(true)
   vehicle.root.traverse((o) => {
     const mesh = o as THREE.Mesh
     if (!mesh.isMesh || Array.isArray(mesh.material) || !trim.has(mesh.material)) return
     const pos = mesh.geometry.getAttribute('position')
-    for (let i = 0; pos && i < pos.count; i++) {
-      const q = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld)
-      if (q.distanceTo(aim) < 0.4) slots.push(q)
+    const index = mesh.geometry.index
+    const count = !pos ? 0 : index ? index.count : pos.count
+    const corner = (k: number) => new THREE.Vector3().fromBufferAttribute(pos, index ? index.getX(k) : k).applyMatrix4(mesh.matrixWorld)
+    for (let k = 0; k < count; k += 3) {
+      const t = new THREE.Triangle(corner(k), corner(k + 1), corner(k + 2))
+      if (t.a.distanceTo(aim) < 0.4) slots.push(t)
     }
   })
-  const clearOfSlots = (q: THREE.Vector3, gap: number) => slots.every((t) => t.distanceToSquared(q) > gap * gap)
+  const near = new THREE.Vector3()
+  const clearOfSlots = (q: THREE.Vector3, gap: number) => slots.every((t) => t.closestPointToPoint(q, near).distanceToSquared(q) > gap * gap)
   const ray = new THREE.Raycaster()
   const ndc = new THREE.Vector3()
-  const rows: Array<{ p: THREE.Vector3; score: number }> = []
+  const rows: Array<{ p: THREE.Vector3; head: THREE.Vector3; score: number }> = []
   const a = new THREE.Vector3()
   const b = new THREE.Vector3()
   const c = new THREE.Vector3()
@@ -114,24 +119,30 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
       if (n.dot(toLens) < 0) n.negate()
       if (n.dot(toLens) < 0.2 || n.y < -0.3 || n.y > 0.985) continue
       const down = new THREE.Vector3(0, -1, 0).addScaledVector(n, n.y).normalize()
-      const blur = Math.max(blurAt(p), blurAt(p.clone().addScaledVector(down, 0.014)))
+      const head = p.clone().addScaledVector(down, lead)
+      const blur = Math.max(blurAt(head), blurAt(head.clone().addScaledVector(down, 0.014)), blurAt(p) / 3)
       ndc.copy(p).project(film)
+      if (Math.abs(ndc.x) > 0.9 || Math.abs(ndc.y) > 0.9) continue
+      ndc.copy(head).project(film)
       if (blur > 1 || Math.abs(ndc.x) > 0.7 || Math.abs(ndc.y) > 0.7) continue
       const centre = Math.hypot(ndc.x, ndc.y)
-      const run = p.clone().addScaledVector(down, 0.035)
+      const run = head.clone().addScaledVector(down, 0.035)
       ndc.copy(run).project(laterFilm)
       const runBlur = laterBlurAt(run)
       if (runBlur > 5 || Math.abs(ndc.x) > 0.75 || Math.abs(ndc.y) > 0.75) continue
-      if (!clearOfSlots(p, 0.012) || !clearOfSlots(run, 0.02) || !clearOfSlots(p.clone().addScaledVector(down, 0.08), 0.025)) continue
-      rows.push({ p, score: -0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.15 * runBlur - 1.5 * centre + (p.y - aim.y) })
+      let clear = true
+      for (let d = 0; clear && d <= lead + 0.035; d += 0.006) clear = clearOfSlots(p.clone().addScaledVector(down, d), 0.009)
+      if (!clear || !clearOfSlots(head.clone().addScaledVector(down, 0.08), 0.02)) continue
+      rows.push({ p, head, score: -0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.15 * runBlur - 1.5 * centre + (p.y - aim.y) })
     }
   })
   rows.sort((x, y) => y.score - x.score)
-  for (const { p } of rows.slice(0, 12)) {
-    ray.set(camera.position, p.clone().sub(camera.position).normalize())
+  const visible = (q: THREE.Vector3) => {
+    ray.set(camera.position, q.clone().sub(camera.position).normalize())
     const hit = ray.intersectObject(vehicle.root, true)[0]
-    if (hit && hit.point.distanceTo(p) < 0.003) return p
+    return !!hit && hit.point.distanceTo(q) < 0.003
   }
+  for (const { p, head } of rows.slice(0, 12)) if (visible(p) && visible(head)) return p
   return anchor.clone()
 }
 
