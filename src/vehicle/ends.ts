@@ -212,7 +212,6 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 18, 9, [side, 0, 1], .009))
     const hub: XY = [.834, .429]
     const tips: XY[] = [[.877, .285], [.879, .644], [.470, .421]]
-    black.push(lightGuide(f, hub, tips, .038, .010, outFront))
     emit('front running guide', lightGuide(f, hub, tips, .015, -.007, outFront), false, false, f(...hub, -.008), 3.99)
     const eyeStart = .495, eyeEnd = .919
     const window = (u: number, v: number, d: number): Point => {
@@ -227,15 +226,23 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return [lower[0], mix(lower[1] - .002, y - .003, v), mix(lower[2], upper[2] - .0075, v)]
     }, 56, 5, outFront, 0))
     black.push(patch((u, v) => window(u, v, .071), 44, 17, outFront, .009))
-    optical.push(patch((u, v) => window(u, v, -.008), full ? 76 : 61, 20, outFront, .0034))
+    optical.push(patch((u, v) => window(u, v, -.008), 100, 20, outFront))
     const browLow = curve([[.473, .418], [.578, .418], [.709, .420], [.820, .424], [.874, .438], [.918, .571]])
     black.push(patch((u, v) => {
       const x = mix(.474, .918, u)
-      const y = mix(browLow(x), eyeLow(x) + .0015, v)
-      const depth = mix(-.0105, .001, smooth(x, .824, .856))
-      const d = mix(.033, depth, v) + .009 * Math.sin(Math.PI * v)
+      const y = mix(browLow(x) - .003, eyeLow(x) + .0015, v)
+      const depth = mix(-.0095, .012, smooth(x, .824, .864))
+      const d = mix(.030, depth, v)
       return f(x, y, d)
-    }, 76, 10, outFront))
+    }, 92, 8, outFront))
+    const drlFlank = curve([[.271, .895], [.291, .891], [.352, .878], [.428, .853], [.466, .859],
+      [.525, .873], [.579, .884], [.646, .896], [.683, .910]])
+    black.push(patch((u, v) => {
+      const y = mix(.276, .665, u)
+      const edge = drlFlank(y)
+      const x = mix(edge - .006, edge + .047, v)
+      return f(x, y, mix(.014, .019, v) - .006 * Math.sin(Math.PI * v))
+    }, 76, 7, outFront))
     black.push(patch((u, v) => {
       const a = window(u, 1, -.008)
       const b = window(u, .96, -.008)
