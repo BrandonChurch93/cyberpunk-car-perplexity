@@ -11,7 +11,7 @@ const q = new THREE.Vector4()
  * whose image is the true mirror image flipped left to right, so a deck point lands on the mirrored pixel of the source.
  * The near plane is made oblique so nothing below y = 0 is drawn.
  */
-export function mirrorCamera(source: THREE.PerspectiveCamera, out: THREE.PerspectiveCamera): void {
+export function mirrorCamera(source: THREE.PerspectiveCamera, out: THREE.PerspectiveCamera, guard = 1): void {
   out.matrixAutoUpdate = false
   out.matrixWorldAutoUpdate = false
   out.matrixWorld.multiplyMatrices(mirrorY, source.matrixWorld).multiply(flipX)
@@ -21,6 +21,8 @@ export function mirrorCamera(source: THREE.PerspectiveCamera, out: THREE.Perspec
   out.near = source.near
   out.far = source.far
   const e = out.projectionMatrix.copy(source.projectionMatrix).elements
+  e[0] /= guard
+  e[5] /= guard
   for (const i of [1, 2, 3, 4, 8, 12]) e[i] = -e[i]
   obliqueNear(out.projectionMatrix, out.matrixWorldInverse)
   out.projectionMatrixInverse.copy(out.projectionMatrix).invert()
@@ -31,7 +33,8 @@ export function obliqueNear(projection: THREE.Matrix4, view: THREE.Matrix4): voi
   deckPlane.set(new THREE.Vector3(0, 1, 0), 0).applyMatrix4(view)
   clip.set(deckPlane.normal.x, deckPlane.normal.y, deckPlane.normal.z, deckPlane.constant)
   const e = projection.elements
-  q.set((Math.sign(clip.x) + e[8]) / e[0], (Math.sign(clip.y) + e[9]) / e[5], -1, (1 + e[10]) / e[14])
+  // Cube cameras reverse both projection axes.
+  q.set((Math.sign(clip.x / e[0]) + e[8]) / e[0], (Math.sign(clip.y / e[5]) + e[9]) / e[5], -1, (1 + e[10]) / e[14])
   clip.multiplyScalar(2 / clip.dot(q))
   e[2] = clip.x
   e[6] = clip.y

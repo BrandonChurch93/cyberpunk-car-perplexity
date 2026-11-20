@@ -8,6 +8,7 @@ import { createReflections, quality } from '../src/core/reflect'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
 import { Probe } from '../src/core/reflect/probe'
 import { patchesOf } from '../src/materials/patch'
+import { applyPorous } from '../src/weather/surface/porous'
 import { launchBrowser } from '../tools/lib/browser'
 
 function camera(): THREE.PerspectiveCamera {
@@ -53,6 +54,23 @@ describe('mirror camera', () => {
 
   it('is a proper rigid camera', () => {
     expect(mirror.matrixWorld.determinant()).toBeCloseTo(1, 5)
+  })
+
+  it('keeps perturbed mirror rays inside the padded cube face', () => {
+    const eye = new THREE.PerspectiveCamera(-90, 1, .05, 1500)
+    eye.position.y = .6
+    eye.updateMatrixWorld(true)
+    const padded = new THREE.PerspectiveCamera()
+    mirrorCamera(eye, padded, 1.18)
+    const p = new THREE.Vector3(10.6, 2, -10)
+    const a = clipOf(padded, p)
+    const b = clipOf(eye, p)
+    expect(Math.abs(b.x)).toBeGreaterThan(b.w)
+    expect(Math.abs(a.x)).toBeLessThan(a.w)
+    expect(a.z).toBeGreaterThan(-a.w)
+    expect(a.z).toBeLessThan(a.w)
+    const under = clipOf(padded, new THREE.Vector3(p.x, -p.y, p.z))
+    expect(under.z).toBeLessThan(-under.w)
   })
 })
 
@@ -112,6 +130,8 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   const renderer = {
     coordinateSystem: THREE.WebGLCoordinateSystem,
     getRenderTarget: () => null,
+    getActiveCubeFace: () => 0,
+    getActiveMipmapLevel: () => 0,
     getClearColor: (color: THREE.Color) => color,
     getClearAlpha: () => 1,
     setRenderTarget: () => undefined,
@@ -332,6 +352,98 @@ function captureAir(three: typeof THREE, createCameraHaze: typeof createHaze, cr
   return { values, lampRadiance, emittersHidden: !emitters.visible }
 }
 
+function captureWetDeck(three: typeof THREE, reflections: typeof createReflections, porous: typeof applyPorous,
+  fmt: typeof config.formats.preview) {
+  const renderer = new three.WebGLRenderer()
+  const scene = new three.Scene()
+  const root = new three.Group()
+  const world = new three.Group()
+  const deck = new three.Mesh(new three.PlaneGeometry(18, 20), new three.MeshStandardMaterial({ color: .0, roughness: .92 }))
+  deck.rotation.x = -Math.PI / 2
+  deck.position.z = -4
+  world.add(deck)
+  const sign = new three.Mesh(new three.PlaneGeometry(18, .4), new three.MeshBasicMaterial({ color: new three.Color(8, .12, 2) }))
+  sign.position.set(0, .85, -12)
+  world.add(sign)
+  const parapet = new three.Mesh(new three.PlaneGeometry(2, .7), new three.MeshStandardMaterial({ color: 0x676a70, roughness: .85 }))
+  parapet.position.set(4.5, .35, -7)
+  world.add(parapet)
+  const strip = new three.PointLight(new three.Color(1, .38, .11), 5, 3)
+  strip.position.set(4.5, .58, -6.55)
+  scene.add(world, root, strip)
+  const relief = new three.DataTexture(new Uint8Array([0, 0, 0, 255, 255, 0, 0, 255]), 2, 1)
+  relief.needsUpdate = true
+  porous(deck.material, {
+    surfDiag: { value: 0 }, surfRain: { value: 1 }, surfRelief: { value: relief },
+    surfReliefBounds: { value: new three.Vector4(-9, -14, 18, 20) },
+    surfReliefScale: { value: 64 }, surfReliefOffset: { value: -14 },
+    surfShelter: { value: new three.Vector4(90, 90, 92, 92) },
+    surfImpacts: { value: null }, surfImpactGrid: { value: new three.Vector4() }, surfImpactTime: { value: 0 },
+    surfPulse: { value: [new three.Vector4(), new three.Vector4()] }, surfPulseTime: { value: 0 },
+  }, true)
+  const ref = reflections({
+    renderer, scene, vehicle: { root, lamps: [] },
+    world: { root: world, deck: { material: deck.material, meshes: [deck] }, reflectionBox: new three.Box3() },
+  })
+  const size = 256
+  const format = { ...fmt, width: size * 4, height: size * 4 }
+  ref.resize(format)
+  const frame = { format, frameIndex: 195, frameKey: 195, tier: 'draft' as const, samples: 1, timeSeconds: 0 }
+  const sample = { frame, sampleIndex: 0, timeSeconds: 0, shutter: .5, aperture: [0, 0] as [number, number],
+    misc: [.5, .5] as [number, number], pixel: [0, 0] as [number, number], light: [.5, .5] as [number, number] }
+  const eye = new three.PerspectiveCamera(-90, 1, .05, 1500)
+  eye.position.y = .6
+  eye.updateMatrixWorld(true)
+  const state = { position: eye.position, quaternion: eye.quaternion, focalMm: 35, sensorWidthMm: 36, focusDistance: 6, fNumber: 2, near: .05, far: 1500 }
+  const input = new three.WebGLRenderTarget(size, size, { type: three.FloatType })
+  const output = new three.WebGLRenderTarget(1, 1, { type: three.FloatType })
+  const uniforms = { captured: { value: null as THREE.Texture | null }, direction: { value: new three.Vector3() } }
+  const sampler = new three.Mesh(new three.PlaneGeometry(2, 2), new three.ShaderMaterial({
+    uniforms,
+    vertexShader: 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: 'uniform samplerCube captured; uniform vec3 direction; void main(){ gl_FragColor = vec4(textureLod(captured, direction, 0.0).rgb, 1.0); }',
+  }))
+  sampler.frustumCulled = false
+  const sampleEye = new three.Camera()
+  const read = (target: THREE.WebGLRenderTarget, x: number, y: number) => {
+    const values = new Float32Array(4)
+    renderer.readRenderTargetPixels(target, x, y, 1, 1, values)
+    return Array.from(values.slice(0, 3))
+  }
+  const pixels = [[177, 143], [78, 143], [45, 131]]
+  const rays = pixels.map(([x, y]) => new three.Vector3(1 - (x + .5) * 2 / size, 1 - (y + .5) * 2 / size, -1))
+  const lookup = (texture: THREE.Texture) => rays.map((ray) => {
+    uniforms.captured.value = texture
+    uniforms.direction.value.copy(ray)
+    renderer.setRenderTarget(output)
+    renderer.render(sampler, sampleEye)
+    return read(output, 0, 0)
+  })
+  ref.beginFrame!({ frame, camera: state, format })
+  const cube = lookup(scene.environment!)
+  const rebound = ref.planar.reflectOn.value === 0 && ref.planar.reflectSize.value.equals(new three.Vector2(size, size))
+  scene.environment = null
+  const planarEye = eye.clone()
+  planarEye.projectionMatrix.elements[0] /= 1.18
+  planarEye.projectionMatrix.elements[5] /= 1.18
+  ref.beforeSample!({ camera: planarEye, state, sample, timeSeconds: 0 })
+  renderer.setRenderTarget(input)
+  renderer.render(scene, eye)
+  const direct = pixels.map(([x, y]) => read(input, x, y))
+  strip.intensity = 0
+  sign.visible = false
+  const viewProjection = ref.planar.reflectViewProjection.value.clone()
+  const viewProjectionInverse = ref.planar.reflectInverseViewProjection.value.clone()
+  ref.beginFrame!({ frame, camera: state, format })
+  const cameraRestored = ref.planar.reflectViewProjection.value.equals(viewProjection)
+    && ref.planar.reflectInverseViewProjection.value.equals(viewProjectionInverse)
+  const off = lookup(scene.environment!)
+  input.dispose()
+  output.dispose()
+  renderer.dispose()
+  return { cube, direct, off, rebound, cameraRestored, deckVisible: deck.visible, parapetVisible: parapet.visible }
+}
+
 it('captures moving emitters without the car body and matches camera air along 12 rays', async () => {
   const id = '/reflect-test-entry.js'
   const app = await createServer({
@@ -346,9 +458,11 @@ it('captures moving emitters without the car body and matches camera air along 1
         import { LightRig } from '/src/core/lights.ts'
         import { createReflections } from '/src/core/reflect/index.ts'
         import { Probe } from '/src/core/reflect/probe.ts'
+        import { applyPorous } from '/src/weather/surface/porous.ts'
         import { config } from '/src/config.ts'
         export const run = () => (${captureLamp.toString()})(THREE, createReflections, config.formats.preview)
         export const air = () => (${captureAir.toString()})(THREE, createHaze, createHazeCapture, LightRig, Probe, config.formats.preview)
+        export const deck = () => (${captureWetDeck.toString()})(THREE, createReflections, applyPorous, config.formats.preview)
       ` : null,
       configureServer(server) {
         server.middlewares.use('/reflect-test', (_req, res) => {
@@ -396,6 +510,17 @@ it('captures moving emitters without the car body and matches camera air along 1
         if (length(cube.map((channel, j) => channel - clear[j])) / length(cube) > .15) altered++
       }
       expect(altered).toBeGreaterThanOrEqual(4)
+      const wet: ReturnType<typeof captureWetDeck> = await page.evaluate(`import("${id}").then(module => module.deck())`)
+      expect(errors).toEqual([])
+      expect(wet.rebound && wet.cameraRestored && wet.deckVisible && wet.parapetVisible).toBe(true)
+      for (const [i, direct] of wet.direct.entries()) {
+        const cube = wet.cube[i]
+        expect(direct[0], `wet deck ray ${i}`).toBeGreaterThan(.002)
+        expect(Math.hypot(...cube.map((c, j) => c - direct[j])) / Math.hypot(...direct), `wet deck ray ${i}`).toBeLessThan(.15)
+        expect(cube[0], `switched source ${i}`).toBeGreaterThan(wet.off[i][0] + .002)
+      }
+      expect(wet.cube[0][0]).toBeGreaterThan(wet.cube[1][0])
+      expect(wet.cube[2][0]).toBeGreaterThan(2 * wet.cube[2][2])
     } finally {
       await browser.close()
     }
