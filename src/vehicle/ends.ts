@@ -120,10 +120,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const outline: XY[] = [[.474, .455], [.568, .501], [.685, .554], [.797, .609], [.884, .667], [.923, .675], [.931, .599], [.883, .471], [.912, .354], [.930, .283], [.858, .198], [.819, .179], [.520, .180], [.429, .245], [.405, .360]]
     const frontEdge = curve([[0, .981], [.40, .972], [.67, .939], [1, .953]])
     const outerY = curve([[0, .191], [.42, .37], [.70, .534], [1, .735]])
-    const outerX = curve([[0, .896], [.25, .926], [.51, .880], [.79, .918], [1, .958]])
+    const outerX = curve([[0, .835], [.25, .904], [.51, .872], [.79, .906], [1, .929]])
     const fPanel = (u: number, v: number): Point => {
       const x = mix(outerX(v), frontEdge(v), u)
-      return f(x, mix(outerY(v), mix(chin(x), noseTop(x), v), u), .003)
+      return f(x, mix(outerY(v), mix(chin(x), noseTop(x), v), u), mix(-.007, .011, u) - .005 * Math.sin(Math.PI * u))
     }
     frontPaint.push(patch(fPanel, 22, 28, outFront, .008))
     black.push(patch((u, v) => {
@@ -136,10 +136,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return f(x, noseTop(x) - .007 - .029 * v, mix(.005, .129, v))
     }, 34, 6, [0, -1, 0], .004))
     const shield: Surface = (u, v) => {
-      const x = u * mix(.169, .310, v)
+      const x = u * mix(.240, .320, v)
       const edge = frontHoodEdge(x)
-      const y = mix(.306 + .014 * u ** 2, edge[1] - .011, v)
-      const retreat = (.093 + .018 * u * u) * (1 - v) ** 1.36
+      const y = mix(.354 + .030 * u ** 2, edge[1] - .008, v)
+      const retreat = (.054 + .020 * u * u) * (1 - v) ** 1.22
       return [side * x, y, edge[2] - .006 - retreat]
     }
     frontPaint.push(patch(shield, full ? 28 : 18, full ? 14 : 8, outFront, .004))
@@ -158,7 +158,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     frontPaint.push(patch((u, v) => {
       const x = mix(0, .86, u)
       const edge = frontHoodEdge(x)
-      return [side * x, edge[1] - .014 * v, edge[2] - .003 * v]
+      return [side * x, edge[1] - (.009 + .004 * smooth(x, .48, .73)) * v, edge[2] - .005 * v * v]
     }, 84, 4, outFront, .004))
     black.push(mapped(f, outline, outFront, .025, .055))
     dark.push(mapped(f, points, outFront, .123, .036))
@@ -219,6 +219,11 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const y = mix(eyeLow(x), eyeTop(x), v)
       return f(x, y, d - .013 * Math.sin(Math.PI * v) * Math.sin(Math.PI * u))
     }
+    black.push(patch((u, v) => {
+      const lower = window(u, 1, .023)
+      const upper = frontHoodEdge(Math.abs(lower[0]))
+      return [lower[0], mix(lower[1] - .002, Math.max(lower[1], upper[1] - .003), v), mix(lower[2], upper[2] - .010, v)]
+    }, 56, 5, outFront, 0))
     black.push(patch((u, v) => window(u, v, .071), 44, 17, outFront, .009))
     optical.push(patch((u, v) => window(u, v, -.008), 52, 20, outFront, .0034))
     for (const edge of [0, 1]) {

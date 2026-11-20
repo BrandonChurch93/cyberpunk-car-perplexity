@@ -140,6 +140,24 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('keeps the bonnet crowned and the wheelhouse below the paint at the screen foot', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const top = (x: number, s: number) => new T.Raycaster(new T.Vector3(x, 1.5, zAt(s)), new T.Vector3(0, -1, 0))
+        .intersectObject(vehicle.root)[0]
+      for (const s of [.075, .100, .130]) {
+        for (const side of [-1, 1]) {
+          const crest = top(0, s), outer = top(side * .31, s)
+          expect(crest.object.name).toBe('closed body panels and returns')
+          expect(crest.point.y - outer.point.y).toBeGreaterThan(.001)
+        }
+      }
+      for (const side of [-1, 1]) for (const x of [.750, .776, .800]) for (const s of [.232, .237, .242]) {
+        expect(top(side * x, s).object.name).toBe('closed body panels and returns')
+      }
+    }
+  })
+
   it('carries the upper haunch fold across the deck and clears the quarter at the rear arch', () => {
     for (const vehicle of [full, blockout]) {
       vehicle.root.updateMatrixWorld(true)
