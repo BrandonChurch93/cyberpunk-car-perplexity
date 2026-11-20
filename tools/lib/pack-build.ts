@@ -318,9 +318,20 @@ async function c2(ctx: PackContext): Promise<CriticPack> {
   return { critic: 'C2', folder: 'c2', brief: ctx.brief('C2 ·'), items }
 }
 
+/** Addendum 003: the C3 crops always include the paint, the glass, a lamp and a wheel. */
+const finishCrops = ['paint', 'glass', 'lamp', 'wheel']
+
 async function c3(ctx: PackContext): Promise<CriticPack> {
-  return { critic: 'C3', folder: 'c3', brief: ctx.brief('C3 ·'), items: await framesWithCrops(ctx, ctx.judged(), 'A', 'B') }
+  const items = await framesWithCrops(ctx, ctx.judged(), 'A', 'B')
+  const shown = new Set<string>()
+  for (const j of ctx.judged()) for (const c of (await ctx.crops(ctx.spec(j.frame, 'final', config.formats.master))).crops) if (c.kind === 'anchor') for (const id of c.on) shown.add(id)
+  const missing = finishCrops.filter((id) => !shown.has(id))
+  if (missing.length) throw new Error(`the C3 pack has no crop of: ${missing.join(', ')}. Addendum 003 requires all of ${finishCrops.join(', ')}`)
+  return { critic: 'C3', folder: 'c3', brief: ctx.brief('C3 ·'), items }
 }
+
+/** Addendum 003: in Phase 3 the C4 pack carries stripe views of the vehicle from three angles. The hero frame is one. These are the other two. */
+export const zebraAngleFrames = [1060, 0]
 
 async function c4(ctx: PackContext): Promise<CriticPack> {
   const items: PackItem[] = []
@@ -331,6 +342,10 @@ async function c4(ctx: PackContext): Promise<CriticPack> {
   }
   for (const [diag, set, cropSet] of [['beauty', 'A', 'B'], ['clay', 'C', 'D'], ['zebra', 'E', 'F']] as const) {
     items.push(...(await framesWithCrops(ctx, withVehicle, set, cropSet, diag, 'anchors')))
+  }
+  if (ctx.phase === 3) {
+    const angles = zebraAngleFrames.map((frame) => ({ frame, vertical: false, beat: beatOfFrame(frame), why: 'stripe view from another angle' }))
+    for (const [diag, set, cropSet] of [['clay', 'C', 'D'], ['zebra', 'E', 'F']] as const) items.push(...(await framesWithCrops(ctx, angles, set, cropSet, diag, 'anchors')))
   }
   return { critic: 'C4', folder: 'c4', brief: ctx.brief('C4 ·'), items }
 }
