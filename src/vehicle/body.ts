@@ -333,24 +333,31 @@ export function frontCheek(s: number, y: number, side: number): Point {
   const arch = Math.hypot(y - frontWheel.loaded, zAt(s) - frontWheel.z) - frontWheel.arch
   const archFade = fairStep(s, .150, .194) * (1 - fairStep(s, .286, .313))
     * (1 - fairStep(y, .694, .756))
-  const flange = .32 * fairPositive(arch - .023, .0016) * (1 - fairStep(arch, .031, .052))
-    * fairStep(s, .168, .213) * (1 - fairStep(s, .274, .307))
-  const archForm = .0047 * archFade * (1 - fairStep(arch, .003, .081)) + flange
+  const archForm = .0047 * archFade * (1 - fairStep(arch, .003, .081))
   const sill = .053 * (1 - q) ** 5 * fairStep(s, .096, .153)
   const x = plan(s) + cheekBreadth(s) * fairStep(drop, 0, .099) - sill + archForm + wingDraft(s, drop)
   return [side * mix(x, sidePoint(s, y, 1)[0], fairStep(s, .252, .307)), y, zAt(s)]
 }
 
-function cheekTrims(full: boolean, arch: (u: number) => UV) {
-  const project = ([x, y, z]: Point, lateral: number): UV => {
-    let lo = 0, hi = .161
-    for (let i = 0; i < 21; i++) {
-      const u = (lo + hi) / 2, delta = zAt(u) - z
-      if (frontCheek(u, y, 1)[0] < x + lateral * delta) lo = u
-      else hi = u
-    }
-    return [(lo + hi) / 2, y]
+function cheekStation(x: number, y: number, z: number, lateral: number): number {
+  let lo = 0, hi = .186
+  for (let i = 0; i < 24; i++) {
+    const s = (lo + hi) / 2
+    if (frontCheek(s, y, 1)[0] < x + lateral * (zAt(s) - z)) lo = s
+    else hi = s
   }
+  return (lo + hi) / 2
+}
+
+export function recessFrontLiner(p: Point, blend: number): Point {
+  if (blend === 0) return p
+  const [x, y, z] = p
+  const target = zAt(cheekStation(Math.abs(x), y, z, 0)) - .010
+  return [x, y, z - blend * fairPositive(z - target, .004)]
+}
+
+function cheekTrims(full: boolean, arch: (u: number) => UV) {
+  const project = ([x, y, z]: Point, lateral: number): UV => [cheekStation(x, y, z, lateral), y]
   const face = (x: number, y: number, depth: number) => frontFascia(1, x, y, depth, .006)
   const faceTrim = (u: number, v: number) => {
     const p = lampWindow(face, u, v, -.008)
@@ -478,7 +485,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     return (a + b) / 2
   }
   const mouthStart = gridU(wingVentFront), mouthEnd = gridU(wingVentBack), rollStart = gridU(.071)
-  const noseReturnEnd = gridU(cheekStart), noseDenseEnd = gridU(frontHoodStation(.86)), noseTipEnd = gridU(.035)
+  const noseReturnEnd = gridU(frontHoodStation(.60)), noseDenseEnd = gridU(frontHoodStation(.86)), noseTipEnd = gridU(.035)
+  const oldCheekJoin = gridU(.114), archStart = gridU(sAt(frontWheel.z + frontWheel.arch))
   const outerS = (u: number, q: number) => bonnetGrid(u) + (frontEnd(q) - bonnetGap - splitEnd) * fairStep(u, .81, 1)
   const ventQ = (s: number, v: number) => {
     const t = T.MathUtils.clamp(s, wingVentFront, wingVentBack)
@@ -509,7 +517,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     }
   }
   const baseStations = [...Array.from({ length: bonnetLengthSteps + 1 }, (_, i) => i / bonnetLengthSteps),
-    noseReturnEnd, noseDenseEnd, rollStart, ...crossings].sort((a, b) => a - b)
+    noseReturnEnd, noseDenseEnd, rollStart, oldCheekJoin, archStart, ...crossings].sort((a, b) => a - b)
   const stations = baseStations.flatMap((u, i) => {
     const next = baseStations[i + 1]
     const segments = full && next <= noseDenseEnd ? (next <= noseTipEnd ? 3 : 2) : 1
@@ -1040,15 +1048,15 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const shellPositions = paintedShell.getAttribute('position')
   const nose = zAt(0)
   for (let i = 0; i < shellPositions.count; i++) if (shellPositions.getZ(i) > nose) shellPositions.setZ(i, nose)
-  const skin = add(parent, 'closed body panels and returns', paintedShell, m.paint)
+  add(parent, 'closed body panels and returns', paintedShell, m.paint)
   add(parent, 'recessed wing vent cavities', joined(ventLiners), m.matte)
   add(parent, 'stowage, seals and wheelhouse liners', joined(black), m.matte)
   addMirrors(parent, m, full, dimensions.mirrorWidth * .5, edgeGlass(.353, 0), zAt)
   if (cabin.length) add(parent, 'covered cockpit upholstery', joined(cabin), m.cabin)
-  const s = sAt(1.55)
-  const w = wingEdge(s), y = w.y - paintWingDrop
-  const hit = new T.Raycaster(new T.Vector3(w.width + .03, y, zAt(s)), new T.Vector3(-1, 0, 0), 0, .060)
-    .intersectObject(skin, false)[0]
-  if (!hit?.normal) throw new Error('Paint anchor missed the front wing skin')
-  return { paintPoint: hit.point.toArray(), paintNormal: hit.normal.normalize().toArray() }
+  const z = 1.55, y = wingEdge(sAt(z)).y - paintWingDrop
+  // Keep the approved macro aim independent of shell tessellation.
+  const paintPoint: Point = [full ? .9798682652181455 : .9799021267190087, y, z]
+  const paintNormal: Point = full ? [.9969634953251777, .06467907484659491, .0433636514375002]
+    : [.9971200511878247, .062260642294022124, .04330376358153965]
+  return { paintPoint, paintNormal }
 }

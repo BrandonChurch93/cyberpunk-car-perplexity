@@ -1,7 +1,7 @@
 import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
 import { insertAfter, patchMaterial } from '../materials/patch'
-import { fascia, frontFascia, frontHoodEdge, limitTailZ, sAt, tailCrestZ, tailLipY, zAt } from './body'
+import { fascia, frontFascia, frontHoodEdge, limitTailZ, recessFrontLiner, sAt, tailCrestZ, tailLipY, zAt } from './body'
 import { lampWindow, lampWindowLow } from './front-domain'
 import { add, blend, curve, fairCurve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
 import type { Palette } from './materials'
@@ -260,7 +260,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return f(x, mix(lipY(x) + .031, .304 + .055 * smooth(x, .17, .419), v), .132 - .020 * smooth(x, .20, .46))
     }, .439, .149, .024, .00095))
     black.push(mapped(f, outline, outFront, .183, .018))
-    black.push(joinRim(points, 1.035, .88, f, -.002, .085, outFront))
+    black.push(joinRim(points, 1.035, .88, (x, y, d) =>
+      recessFrontLiner(f(x, y, d), fair(x, .852, .875)), -.002, .085, outFront))
     const radiator = frontRadiator(f, full, side, outFront)
     radiatorBacks.push(radiator.backing)
     radiatorFins.push(radiator.fins)
@@ -296,7 +297,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 48, 3, [0, 1, 0], .024))
     dark.push(patch((u, v) => {
       const x = .969 * u
-      return f(x, lipY(x) - .012 + .095 * v, mix(.019, .154, v))
+      const y = lipY(x) - .012 + .095 * v
+      return recessFrontLiner(f(x, y, mix(.019, .154, v)), fair(x, .858, .895) * fair(y, .157, .203))
     }, 38, 7, [0, 1, 0], .005))
     const hub: XY = [.834, .429]
     const tips: XY[] = [[.877, .285], [.879, .644], [.470, .421]]
@@ -331,7 +333,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const d = .0005 + .039 * smooth(edge - y, -.004, .085)
         - .017 * smooth(x, .833, .887) * smooth(y, .276, .36)
         + .010 * smooth(x, .823, .859) + .031 * smooth(x, .889, .929) * smooth(y, .548, .624)
-      return f(x, y, d)
+      return recessFrontLiner(f(x, y, d), fair(x, .856, .880))
     }, 100, 16, outFront))
     for (const edge of [0, 1]) {
       const sign = 2 * edge - 1
