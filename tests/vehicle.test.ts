@@ -635,6 +635,8 @@ describe('vehicle geometry and state', () => {
       for (const x of [-.22, 0, .22]) {
         const top = (s: number) => new T.Raycaster(new T.Vector3(x, 1.8, zAt(s)), new T.Vector3(0, -1, 0))
           .intersectObject(vehicle.root)[0].point.y
+        expect(top(.95)).toBeGreaterThan(.915)
+        expect(top(.95)).toBeLessThan(.924)
         expect(top(.985)).toBeGreaterThan(.889)
         expect(top(.995)).toBeGreaterThan(.570)
         expect(top(.995)).toBeLessThan(.630)

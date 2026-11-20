@@ -262,6 +262,7 @@ const deckInnerX = curve([[.5984, edgeGlass(.5984, 0)[0]], [.616, .687], [.638, 
 const deckInnerY = curve([[.5984, edgeGlass(.5984, 0)[1]], [.617, .950], [.641, .993], [.666, 1.044], [.683, 1.066], [.696, 1.071], [.706, bayEdge(.706, 1)[1]]])
 export const tailLipY = (x: number): number => .903 - .043 * smooth(x, .22, .935)
 export const tailCrestZ = (x: number): number => limitTailZ(x, zAt(.989 - .0082 * smooth(x, .18, .54)))
+const tailDeckProfile = curve([[.913, .950], [.925, .940], [.943, .926], [.956, .914], [.970, .906], [.981, .901], [.989, .903]])
 
 export function frontFascia(side: number, x: number, y: number, recess: number, radius = 0): Point {
   const s = frontWidth(x) + .002 * smooth(y, .2, .48) - .0008
@@ -418,7 +419,10 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const s1 = sAt(tailCrestZ(x))
       const s = mix(Math.min(s0, s1 - .014), s1, u)
       const lead = y + mix(-.020, .023, smooth(x, .21, .74))
-      return [x, mix(lead, y, u * (1.26 - .26 * u)), zAt(s)]
+      const sideY = mix(lead, y, u * (1.26 - .26 * u))
+      const joinY = mix(spine(s) - .009, sideY, fairStep(x, .04, .47))
+      const deckY = mix(mix(joinY, tailDeckProfile(s), fairStep(s, .919, .938)), y, fairStep(u, .82, 1))
+      return [x, mix(deckY, sideY, fairStep(x, .28, .70)), zAt(s)]
     }), [0, 1, 0])
 
     const archEnds = (w: WheelSize) => {
