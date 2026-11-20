@@ -42,8 +42,8 @@ function perforatedGrille(face: AirFace, up: T.Vector3, side: number, full: bool
   const vertices = points.flatMap(({ x, y }) => face(x, y))
   const normals = points.flatMap(() => up.toArray())
   const uv = points.flatMap(({ x, y }) => [x + a, y + b])
-  const bevel = full ? .00045 : .00060
-  const setback = full ? .00036 : bevel / Math.cos(Math.PI / 6)
+  const bevel = full ? .00045 : .00118
+  const setback = full ? .00036 : .00067
   for (const hole of holes) {
     const center = hole[0].clone().lerp(hole[3], .5)
     const throat = hole.map((point) => point.clone().lerp(center, setback / radius))
@@ -60,8 +60,8 @@ function perforatedGrille(face: AirFace, up: T.Vector3, side: number, full: bool
         }
         indices.push(...(flip ? [at, at + 2, at + 1, at, at + 3, at + 2] : [at, at + 1, at + 2, at, at + 2, at + 3]))
       }
-      quad(hole, throat, 0, bevel, inward.clone().addScaledVector(up, full ? .8 : 1).normalize())
-      if (full) quad(throat, throat, bevel, .0014, inward)
+      quad(hole, throat, 0, bevel, inward.clone().addScaledVector(up, full ? .8 : .50).normalize())
+      if (full) quad(throat, throat, bevel, .00165, inward)
     }
   }
   return new T.BufferGeometry().setIndex(indices)
@@ -231,6 +231,18 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
     grilleFrames.push(patch((u, v) => airFace(mix(-shellFoot[0], shellFoot[0], u), mix(-shellFoot[1], shellFoot[1], v), shellDepth),
       1, 1, up.clone().negate().toArray()))
     grilleTrays.push(patch((u, v) => airFace(mix(-a, a, u), mix(-b, b, v), trayDepth), 1, 1, up.toArray()))
+    for (const at of [-.067, .049, .146]) {
+      const profile = [[-.011, trayDepth + .0005], [-.007, .0196], [-.0048, .0178],
+        [.0048, .0178], [.007, .0196], [.011, trayDepth + .0005]]
+      for (let i = 1; i < profile.length; i++) {
+        const [fromX, fromY] = profile[i - 1], [toX, toY] = profile[i]
+        const normal = up.clone().multiplyScalar(toX - fromX).addScaledVector(grilleAxis, toY - fromY).normalize()
+        grilleTrays.push(patch((u, v) => {
+          const y = mix(-b, b, v)
+          return airFace(at + mix(fromX, toX, u) + .094 * y, y, mix(fromY, toY, u))
+        }, 1, 1, normal.toArray()))
+      }
+    }
     grilleTrays.push(...grilleRing(airFace, opening, [a, b, trayDepth], inward))
 
     const rows = full ? 18 : 12
@@ -306,14 +318,14 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   padEdge.roughness = .72
   add(parent, 'matte hex pad walls', joined(padWalls), m.tag(padEdge, 'none'))
   const grilleFinish = new T.MeshPhysicalMaterial({
-    color: full ? 0x828384 : 0x81868e, roughness: full ? .37 : .60, metalness: full ? .56 : .28,
+    color: full ? 0x6d7176 : 0x737881, roughness: full ? .43 : .57, metalness: full ? .54 : .28,
     clearcoat: full ? .16 : 0, clearcoatRoughness: .32,
   })
   const ductFinish = new T.MeshPhysicalMaterial({
     color: 0x303135, roughness: .86, specularIntensity: .12,
   })
   const trayFinish = new T.MeshPhysicalMaterial({
-    color: 0x000000, emissive: 0x121213, roughness: 1, specularIntensity: 0,
+    color: 0x1a1d21, emissive: 0x050607, roughness: .94, specularIntensity: .08,
   })
   add(parent, 'front airbox hex grilles', joined(mesh), m.tag(grilleFinish, 'none'))
   add(parent, 'flush airbox grille ducts', joined(grilleFrames), m.tag(ductFinish, 'none'))

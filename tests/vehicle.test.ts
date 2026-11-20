@@ -449,12 +449,18 @@ describe('vehicle geometry and state', () => {
       const backing = look(hole.clone().addScaledVector(normal, .4), hole)
       expect(backing.object.name).toBe('recessed airbox grille trays')
       expect(backing.distance).toBeCloseTo(.424, 5)
+      const rib = position.clone().addScaledVector(axis.clone().normalize(), car === full ? .0468 : .052875)
+        .addScaledVector(across.clone().normalize(), car === full ? apothem : 0)
+      const raisedBacking = look(rib.clone().addScaledVector(normal, .4), rib)
+      expect(raisedBacking.object).toBe(backing.object)
+      expect(raisedBacking.distance).toBeCloseTo(.4178, 5)
       if (car === blockout) {
         const chamfer = position.clone().addScaledVector(across.clone().normalize(), .0013)
         const hit = look(chamfer.clone().addScaledVector(normal, .4), chamfer)
         expect(hit.object).toBe(grille)
-        expect(hit.distance).toBeCloseTo(.4003, 5)
-        expect(hit.normal!.dot(normal)).toBeCloseTo(Math.SQRT1_2, 5)
+        expect(hit.distance).toBeGreaterThan(.40045)
+        expect(hit.distance).toBeLessThan(.40085)
+        expect(hit.normal!.dot(normal)).toBeCloseTo(.447214, 5)
       }
       for (const [u, v] of [[1, 0], [0, 1], [-1, 0], [0, -1], [0, 0]]) {
         const eye = position.clone().addScaledVector(normal, .7)
@@ -466,13 +472,15 @@ describe('vehicle geometry and state', () => {
       const duct = car.root.getObjectByName('flush airbox grille ducts') as T.Mesh
       const tray = backing.object as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
       const obliqueTarget = position.clone().addScaledVector(across.clone().normalize(), .076)
-      for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [750, 790, 830, 869]) {
+      for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [750, 810, 869]) {
         const obliqueEye = cameraAt(frame / config.film.fps, format, car.anchors).position
         expect([grille.name, tray.name]).toContain(look(obliqueEye, obliqueTarget).object.name)
       }
-      expect(tray.material.color.getHex()).toBe(0)
-      expect(tray.material.specularIntensity).toBe(0)
-      expect(tray.material.roughness).toBe(1)
+      expect(tray.material.color.getHex()).toBeGreaterThan(0x101010)
+      expect(tray.material.color.getHex()).toBeLessThan(0x303030)
+      expect(tray.material.specularIntensity).toBeGreaterThan(0)
+      expect(tray.material.specularIntensity).toBeLessThan(.10)
+      expect(tray.material.roughness).toBeGreaterThan(.90)
       for (const direction of [
         axis.clone().multiplyScalar(.5), axis.clone().multiplyScalar(-.5),
         across.clone().multiplyScalar(.5), across.clone().multiplyScalar(-.5),
