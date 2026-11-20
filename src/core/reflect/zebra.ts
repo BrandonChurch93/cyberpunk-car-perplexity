@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { insertAfter, patchMaterial } from '../../materials/patch'
 
 const width = 2048
 const height = 1024
@@ -36,6 +37,14 @@ export function stripeEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture 
   return target.texture
 }
 
+/** The stripes alone: a lamp seen in a perfect mirror is a near delta far above half float range, and water over it reads it back as infinity. */
 export function zebraMirror(): THREE.MeshPhysicalMaterial {
-  return new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 1, roughness: 0 })
+  const material = new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 1, roughness: 0 })
+  patchMaterial(material, {
+    id: 'zebra stripes only',
+    apply(shader) {
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <lights_fragment_end>', 'reflectedLight.directSpecular = vec3(0.0);\nreflectedLight.directDiffuse = vec3(0.0);')
+    },
+  })
+  return material
 }
