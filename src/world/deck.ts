@@ -125,18 +125,18 @@ function stripePattern(forms: Forms, roof: THREE.Group): void {
       [-0.4, 0, 0.26], [-0.105, 0, 0.26],
     ], [0, 6, 2, 0, 2, 1, 5, 4, 3])
   }
-  arrow(-0.7, 4.55, -Math.PI / 2)
-  arrow(3.75, 5.9, Math.PI / 2)
+  arrow(-1, 4.55, -Math.PI / 2)
+  arrow(3.75, 6.35, Math.PI / 2)
 }
 
 function foregroundStop(forms: Forms, roof: THREE.Group): void {
-  const stop = group(roof, 'foreground wheel stop', [3.7, 0, 3.24])
+  const stop = group(roof, 'foreground wheel stop', [3.025, 0, 4])
   stop.rotation.y = THREE.MathUtils.degToRad(18)
   const crest = 0.102
   const rings = [
-    [0.82, 0, 0.075],
-    [0.808, 0.022, 0.073],
-    [0.75, crest, 0.048],
+    [0.17, 0, 0.075],
+    [0.158, 0.022, 0.073],
+    [0.116, crest, 0.048],
   ] as const
   const vertices = rings.flatMap(([x, y, z]): Tuple[] => [[-x, y, -z], [-x, y, z], [x, y, z], [x, y, -z]])
   const faces = [0, 2, 1, 0, 3, 2, 8, 9, 10, 8, 10, 11]
@@ -145,7 +145,7 @@ function foregroundStop(forms: Forms, roof: THREE.Group): void {
     faces.push(a + i, a + j, a + j + 4, a + i, a + j + 4, a + i + 4)
   }
   forms.surface(stop, 'precast concrete stop', 'slate', vertices, faces)
-  for (const x of [-0.5, 0.5]) forms.cylinder(stop, 'steel anchor washer', 'graphite', [x, crest, 0], 0.004, 0.018)
+  for (const x of [-0.075, 0.075]) forms.cylinder(stop, 'steel anchor washer', 'graphite', [x, crest, 0], 0.004, 0.018)
 }
 
 function drain(forms: Forms, roof: THREE.Group, x: number, z: number, width = 0.2): void {
@@ -255,8 +255,8 @@ export function buildDeck(forms: Forms, roof: THREE.Group): DeckSurface {
   edges(forms, roof)
   stripePattern(forms, roof)
   foregroundStop(forms, roof)
-  for (const [x, z] of [[-1.7, 2.75], [1.75, 2.6], [-12.5, -15.7], [15.45, 11.4], [20.1, -14.6]]) drain(forms, roof, x, z)
-  drain(forms, roof, 0.65, -3.95, 1.5)
+  for (const [x, z] of [[-1.7, 3.4], [1.75, 2.6], [-12.5, -15.7], [15.45, 11.4], [20.1, -14.6]]) drain(forms, roof, x, z)
+  drain(forms, roof, 0.4, -3.95, 1.5)
   rampAndControl(forms, roof)
   coreAndServices(forms, roof)
   return deck
