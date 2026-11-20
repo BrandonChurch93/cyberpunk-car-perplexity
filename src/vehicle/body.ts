@@ -669,7 +669,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const [offset, bottom, top] = [trace(p), trace(a), trace(high)]
         const section = hinge(offset, foldHalf) - mix(hinge(bottom, foldHalf), hinge(top, foldHalf), v)
         const span = (s - before) / (after - before)
-        const arc = section * smooth(span, 0, .10) * (1 - smooth(span, .90, 1))
+        const arc = section * (rear ? fairStep(span, 0, .04) * (1 - fairStep(span, .96, 1)) : smooth(span, 0, .10) * (1 - smooth(span, .90, 1)))
         const runIn = rear ? 0 : (1 - fairStep(span, .25, .46)) * (1 - fairStep(p[1], .675, .732))
         const round = runIn ? (fairPositive(offset, .032) - mix(fairPositive(bottom, .032), fairPositive(top, .032), v))
           * fairStep(span, 0, .16) : arc
