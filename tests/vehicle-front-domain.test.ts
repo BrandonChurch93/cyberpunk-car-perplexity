@@ -6,10 +6,11 @@ import { trimmedFrontSkin, type UV } from '../src/vehicle/front-domain'
 const rect = (x0: number, y0: number, x1: number, y1: number): UV[] => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]]
 
 describe('trimmed front skin', () => {
-  it.each([-1, 1])('trims overlapping cuts without winding flips or cracks on side %s', side => {
+  it.each([-1, 1])('trims overlapping cuts and carries internal guides without cracks on side %s', side => {
+    const outlines = [rect(0, 0, 1, 1), rect(.2, .15, .5, .55), rect(.4, .35, .7, .75)]
+    const guide: UV[] = [[.08, .3], [.44, .4], [.76, .6], [.88, .8]]
     const { skin, lip } = trimmedFrontSkin((u, y) => [side * (.7 + .02 * u * u + .04 * y * y), y, 1 - u],
-      rect(0, 0, 1, 1), [rect(.2, .15, .5, .55), rect(.4, .35, .7, .75)], [0, .125, .25, .5, .75, 1], .079,
-      side, () => true)
+      outlines[0], outlines.slice(1), [0, .125, .25, .5, .75, 1], .079, side, () => true, [guide])
     const { position, normal } = skin.attributes, index = skin.getIndex()!
     const borders = new Map<string, number>(), degree = new Map<number, number>()
     const point = (i: number) => new T.Vector3().fromBufferAttribute(position, i)
@@ -28,7 +29,17 @@ describe('trimmed front skin', () => {
     expect(area).toBeCloseTo(.78, 6)
     for (const [edge, count] of borders) {
       expect(count).toBeLessThanOrEqual(2)
-      if (count === 1) for (const i of edge.split(':').map(Number)) degree.set(i, (degree.get(i) ?? 0) + 1)
+      if (count !== 1) continue
+      const [a, b] = edge.split(':').map(Number), middle = point(a).lerp(point(b), .5)
+      const u = 1 - middle.z, y = middle.y
+      const liesOnCut = outlines.some(loop => loop.some(([s0, y0], j) => {
+        const [s1, y1] = loop[(j + 1) % loop.length]
+        return Math.abs((s1 - s0) * (y - y0) - (y1 - y0) * (u - s0)) < 1e-7
+          && u >= Math.min(s0, s1) - 1e-7 && u <= Math.max(s0, s1) + 1e-7
+          && y >= Math.min(y0, y1) - 1e-7 && y <= Math.max(y0, y1) + 1e-7
+      }))
+      expect(liesOnCut).toBe(true)
+      for (const i of [a, b]) degree.set(i, (degree.get(i) ?? 0) + 1)
     }
     const { position: lipPosition, normal: lipNormal } = lip.attributes
     expect(lipPosition.count).toBe(degree.size * 5)

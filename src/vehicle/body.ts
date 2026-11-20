@@ -326,17 +326,32 @@ const cheekBreadth = fairCurve([
   [0, 0], [.027, -.004], [.043, .001], [.065, .012], [.086, .025], [.098, .024],
   [.116, .013], [.137, .002], [.161, 0], [.19, 0],
 ], { controls: 8, flatStart: true, flatEnd: true, penalty: 1.6e-8 })
+const frontArchFold = .023
+const frontArchBend = .0009
+const noseReturnBlend = (s: number) => fairStep(s, .072, .089)
+
+function noseReturnBound(s: number): Point {
+  const transition = noseReturnBlend(s), v = 1 - transition
+  const lead = s - v * .012 / dimensions.length
+  return blend(noseReturn(bonnet(lead, 1), v), [plan(s), noseShoulder(s), zAt(s)], transition)
+}
 
 export function frontCheek(s: number, y: number, side: number): Point {
   const top = noseShoulder(s), drop = top - y
-  const q = (y - floorY) / (top - floorY)
   const arch = Math.hypot(y - frontWheel.loaded, zAt(s) - frontWheel.z) - frontWheel.arch
   const archFade = fairStep(s, .150, .194) * (1 - fairStep(s, .286, .313))
-    * (1 - fairStep(y, .694, .756))
+    * (1 - fairStep(y, .681, .733))
   const archForm = .0047 * archFade * (1 - fairStep(arch, .003, .081))
-  const sill = .053 * (1 - q) ** 5 * fairStep(s, .096, .153)
-  const x = plan(s) + cheekBreadth(s) * fairStep(drop, 0, .099) - sill + archForm + wingDraft(s, drop)
-  return [side * mix(x, sidePoint(s, y, 1)[0], fairStep(s, .252, .307)), y, zAt(s)]
+    + .34 * fairPositive(frontArchFold - arch, frontArchBend)
+      * fairStep(s, .199, .232) * (1 - fairStep(s, .252, .282))
+  const sill = .053 * (drop / (top - floorY)) ** 5 * fairStep(s, .096, .153)
+  const tuck = .0005 * fairStep(s, .096, .165) * (1 - fairStep(s, .234, .275)) * fairStep(drop, 0, .034)
+  const width = plan(s), form = cheekBreadth(s)
+  const x = width + form * fairStep(drop, 0, .099) - sill - tuck + archForm + .82 * wingDraft(s, drop)
+  const [lipX, lipY] = s < .089 ? noseReturnBound(s) : [width, top]
+  const shoulderBlend = 1 - fairStep(lipY - y, 0, .034)
+  const seated = x + shoulderBlend * (lipX - width - form * fairStep(top - lipY, 0, .099))
+  return [side * mix(seated, sidePoint(s, y, 1)[0], fairStep(s, .252, .307)), y, zAt(s)]
 }
 
 function cheekStation(x: number, y: number, z: number, lateral: number): number {
@@ -485,7 +500,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     return (a + b) / 2
   }
   const mouthStart = gridU(wingVentFront), mouthEnd = gridU(wingVentBack), rollStart = gridU(.071)
-  const noseReturnEnd = gridU(frontHoodStation(.60)), noseDenseEnd = gridU(frontHoodStation(.86)), noseTipEnd = gridU(.035)
+  const noseDenseEnd = gridU(frontHoodStation(.86)), noseTipEnd = gridU(.035)
+  const noseReturnEnd = gridU(.089)
   const oldCheekJoin = gridU(.114), archStart = gridU(sAt(frontWheel.z + frontWheel.arch))
   const outerS = (u: number, q: number) => bonnetGrid(u) + (frontEnd(q) - bonnetGap - splitEnd) * fairStep(u, .81, 1)
   const ventQ = (s: number, v: number) => {
@@ -541,8 +557,20 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const q = bonnetSplit * v
       return bonnet(bonnetGrid(sampleGrid(bonnetStations, u)) * (frontEnd(q) - bonnetGap) / splitEnd, q)
     }), [0, 1, 0], hoodTraces, bonnetStations.length - 1, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
-    part(paint, sided((u, v) => noseReturn(bonnet(bonnetGrid(sampleGrid(noseStations, u)), 1), v)),
-      [0, 0, 1], noseStations.length - 1, 5, 0)
+    const noseRim = (u: number, v: number): Point => {
+      const s = bonnetGrid(sampleGrid(noseStations, u))
+      const span = .012 / dimensions.length
+      let lo = 0, hi = 1
+      for (let i = 0; i < 15; i++) {
+        const t = (lo + hi) / 2
+        if (t < 1 - noseReturnBlend(s + t * span)) lo = t
+        else hi = t
+      }
+      const t = (lo + hi) / 2, edge = bonnet(s, 1)
+      const p = noseReturn(edge, v * t), finish = noseReturn(edge, t), bound = noseReturnBound(s + t * span)
+      return [p[0] + v ** 3 * (bound[0] - finish[0]), p[1] + v ** 3 * (bound[1] - finish[1]), p[2]]
+    }
+    part(paint, sided(noseRim), [0, 0, 1], noseStations.length - 1, 8, 0)
     part(paint, sided((u, v) => noseReturn(bonnet(0, u), v)), [0, 0, 1], 6, 5, 0)
     const outerSkin = (samples: number[], low: (s: number) => number, high: (s: number) => number): Surface => sided((u, v) => {
       const t = sampleGrid(samples, u), s = bonnetGrid(t)
@@ -738,7 +766,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const lowerY = fairCurve([[cheekStart, .425], [.031, .466], [.053, .460], [.075, .404], [.089, .189],
           [.099, .172], [.123, .155], [.154, .133], [.179, floorY], [after, floorY]],
         { interior: [.028, .052, .075, .088, .102, .147, .165, .19], flatEnd: true, penalty: 1e-11 })
-        const bounds: UV[] = stations.map(s => [s, noseShoulder(s)])
+        const bounds: UV[] = stations.map(s => [s, s < .089 ? noseReturnBound(s)[1] : noseShoulder(s)])
         bounds.push(...stations.map(s => [s, lowerY(s)] as const).reverse())
         const cut = cheekTrims(full, u => {
           const a = mix(theta0, theta1, u)
@@ -747,10 +775,19 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const step = full ? .011 : .023
         const span = Math.ceil((after - cheekStart) * dimensions.length / step)
         const samples = Array.from({ length: span + 1 }, (_, i) => mix(cheekStart, after, i / span))
+        const arcSamples = full ? 36 : 18
+        const folds = [-frontArchBend, 0, frontArchBend, .008].map(offset => Array.from({ length: arcSamples + 1 }, (_, i): UV => {
+          const s = mix(.182, .292, i / arcSamples)
+          const rise = Math.sqrt((w.arch + frontArchFold + offset) ** 2 - (zAt(s) - w.z) ** 2)
+          return [s, w.loaded + rise]
+        }))
+        const shoulderStations = samples.filter(s => s >= .145 && s < .300)
+        const shoulderGuides = [.012, .024, .041].map(drop => shoulderStations.map((s): UV => [s, noseShoulder(s) - drop]))
         const skin = trimmedFrontSkin((s, y) => frontCheek(s, y, side), bounds, cut, samples, step, side, p => {
           const s = sAt(p[2])
-          return s > cheekStart + 1e-7 && s < after - 1e-7 && p[1] < noseShoulder(s) - .0007
-        })
+          const top = s < .089 ? noseReturnBound(s)[1] : noseShoulder(s)
+          return s > cheekStart + 1e-7 && s < after - 1e-7 && p[1] < top - .0007
+        }, [...folds, ...shoulderGuides])
         paint.push(skin.skin, skin.lip)
         black.push(skin.lining)
       }

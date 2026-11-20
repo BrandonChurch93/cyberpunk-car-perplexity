@@ -204,7 +204,7 @@ describe('vehicle geometry and state', () => {
   it('keeps the front cheek return fair without hiding the lower running guide', () => {
     for (const vehicle of [blockout, full]) {
       vehicle.root.updateMatrixWorld(true)
-      const paint = vehicle.root.getObjectByName('nose blades, shield and lower lip')!
+      const paint = vehicle.root.getObjectByName('closed body panels and returns')!
       const guide = vehicle.root.getObjectsByProperty('name', 'front running guide').find((node) => node.position.x > 0)!
       const time = config.film.heroFrameSeconds
       const master = cameraAt(time, config.formats.master, vehicle.anchors).position
@@ -1108,7 +1108,7 @@ describe('vehicle geometry and state', () => {
       for (const p of [[.91272, .64982, 1.86923], [.91414, .64861, 1.87039], [.91514, .63917, 1.87650]]) {
         const direction = new T.Vector3().fromArray(p).sub(position).normalize()
         const hit = new T.Raycaster(position, direction).intersectObject(vehicle.root, true)[0]
-        expect(hit.object.name).toBe('nose blades, shield and lower lip')
+        expect(hit.object.name).toBe('closed body panels and returns')
       }
     }
   })

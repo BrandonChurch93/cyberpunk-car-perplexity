@@ -16,8 +16,8 @@ export function lampWindow(face: (x: number, y: number, depth: number) => Point,
 
 const epsilon = 1e-8
 const unique = (values: number[]) => values.sort((a, b) => a - b).filter((n, i, a) => !i || n - a[i - 1] > epsilon)
-const segments = (loop: readonly UV[]): Edge[] =>
-  loop.flatMap((a, i) => {
+const segments = (loop: readonly UV[], closed = true): Edge[] =>
+  (closed ? loop : loop.slice(0, -1)).flatMap((a, i) => {
     const b = loop[(i + 1) % loop.length]
     return Math.abs(a[0] - b[0]) <= epsilon ? [] : [a[0] < b[0] ? [a, b] as const : [b, a] as const]
   })
@@ -27,10 +27,11 @@ const inside = (loop: Edge[], u: number, y: number) =>
   loop.reduce((n, e) => n + Number(active(e, u) && yAt(e, u) < y), 0) % 2 !== 0
 
 export function trimmedFrontSkin(point: Surface, boundary: readonly UV[], holes: readonly (readonly UV[])[],
-  columns: readonly number[], stepY: number, side: number, returnAt: (point: Point) => boolean) {
-  const [outer, ...cut] = [boundary, ...holes].map(segments)
-  const all = [outer, ...cut].flat()
-  const us = [...columns, ...[boundary, ...holes].flatMap(loop => loop.map(p => p[0]))]
+  columns: readonly number[], stepY: number, side: number, returnAt: (point: Point) => boolean,
+  guides: readonly (readonly UV[])[] = []) {
+  const [outer, ...cut] = [boundary, ...holes].map(loop => segments(loop))
+  const all = [outer, ...cut, ...guides.map(path => segments(path, false))].flat()
+  const us = [...columns, ...[boundary, ...holes, ...guides].flatMap(loop => loop.map(p => p[0]))]
   for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
     const a = all[i], b = all[j]
     const lo = Math.max(a[0][0], b[0][0]), hi = Math.min(a[1][0], b[1][0])
