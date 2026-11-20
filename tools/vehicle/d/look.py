@@ -65,11 +65,27 @@ CAMS = {
 
 
 def zebra_mats():
+    f = float(os.environ.get('FREQ', '40'))
     for m in bpy.data.materials:
-        bs = m.node_tree.nodes['Principled BSDF']
-        bs.inputs['Base Color'].default_value = (0.95, 0.95, 0.95, 1)
-        bs.inputs['Roughness'].default_value = 0.0
-        bs.inputs['Metallic'].default_value = 1.0
+        nt = m.node_tree
+        out = next(n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL')
+        g = nt.nodes.new('ShaderNodeNewGeometry')
+        r = nt.nodes.new('ShaderNodeVectorMath'); r.operation = 'REFLECT'
+        ng = nt.nodes.new('ShaderNodeVectorMath'); ng.operation = 'SCALE'; ng.inputs['Scale'].default_value = -1.0
+        nt.links.new(g.outputs['Incoming'], ng.inputs[0])
+        nt.links.new(ng.outputs[0], r.inputs[0])
+        nt.links.new(g.outputs['Normal'], r.inputs[1])
+        sep = nt.nodes.new('ShaderNodeSeparateXYZ')
+        nt.links.new(r.outputs[0], sep.inputs[0])
+        m1 = nt.nodes.new('ShaderNodeMath'); m1.operation = 'MULTIPLY'; m1.inputs[1].default_value = f
+        nt.links.new(sep.outputs['Z'], m1.inputs[0])
+        s = nt.nodes.new('ShaderNodeMath'); s.operation = 'SINE'
+        nt.links.new(m1.outputs[0], s.inputs[0])
+        gt = nt.nodes.new('ShaderNodeMath'); gt.operation = 'GREATER_THAN'; gt.inputs[1].default_value = 0.0
+        nt.links.new(s.outputs[0], gt.inputs[0])
+        em = nt.nodes.new('ShaderNodeEmission')
+        nt.links.new(gt.outputs[0], em.inputs['Color'])
+        nt.links.new(em.outputs[0], out.inputs['Surface'])
 
 
 mode = None
