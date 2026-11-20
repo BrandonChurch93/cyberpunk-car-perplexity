@@ -56,4 +56,15 @@ describe('vehicle skin normal fairness outside creases', () => {
     expect(along.max).toBeLessThan(.0009)
     expect(across.max).toBeLessThan(.0020)
   })
+
+  it('keeps the skin beside the lamp fold fair approaching the vent corner', () => {
+    const [along, across] = samplePatchFairness({
+      name: 'lamp fold at wing vent',
+      surface: (u, v) => bonnet(mix(.115, .150, u), mix(.85, .97, v)),
+      crease: bonnetCrease,
+    })
+    expect(Math.min(along.count, across.count)).toBeGreaterThan(800)
+    expect(along.max).toBeLessThan(.00005)
+    expect(across.max).toBeLessThan(.00004)
+  })
 })

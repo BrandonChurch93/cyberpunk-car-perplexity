@@ -89,12 +89,12 @@ const hoodOuter = fairCurve([[hoodTipS, hoodTipX], [.104, .557], [.140, .627], [
 })
 const hoodFoldStrength = .90
 const wingVentFront = .1285, wingVentBack = .1497
-const lampFoldBase = fairCurve([[.044, .470], [.0875, .647], [.102, .7022], [.1292, .797], [.1709, .942], [.182, .963], [.205, .963]], {
-  controls: 7, pins: [[.102, .7022]], flatEnd: true,
+const ventFoldX = plan(wingVentBack) - .0048 - .094
+const lampFoldBase = fairCurve([[.044, .470], [.0875, .647], [.102, .7022], [.1292, .788], [wingVentBack, ventFoldX],
+  [.170, .925], [.182, .953], [.205, .963]], {
+  interior: [.083, .111, .156, .183], pins: [[.102, .7022], [wingVentBack, ventFoldX]], flatEnd: true, penalty: 2e-8,
 })
-const ventFoldInset = lampFoldBase(wingVentBack) - (plan(wingVentBack) - .0048 - .094)
 const lampFold = (s: number) => mix(plan(s) - .0012, lampFoldBase(s), fairStep(s, .028, .085))
-  - ventFoldInset * fairStep(s, .104, .148) * (1 - fairStep(s, .153, .194))
 const hoodShut = (v: number) => .166 + .089 * v ** 2.10
 const cabFront = (v: number) => .194 + .067 * v ** 2.40
 const cowlStep = (v: number) => mix(hoodShut(v), cabFront(v), .62)
