@@ -257,6 +257,7 @@ const beadsFragment = /* glsl */ `
 SurfHit surfHit = SurfHit(0.0, 0.0, vec3(0.0), vec3(0.0), 0.0, 0.0, 0.0, 0.0);
 float surfMist = 0.0;
 float surfLane = 0.0;
+float surfGlint = 0.0;
 {
   vec3 n = normalize(surfObjNormal);
   vec3 an = abs(n);
@@ -285,7 +286,10 @@ float surfLane = 0.0;
     float cell = cellMm * 0.001;
     float density = mix(steepD, flatD, up) * (1.0 - 0.8 * under);
     if (maxMm * 0.001 < 0.6 * pix) {
-      surfMist += density * mix(sparseD, denseD, surfCoverage(uv, axis, salt)) * 0.6 * (maxMm / cellMm) * (maxMm / cellMm);
+      float fill = density * mix(sparseD, denseD, surfCoverage(uv, axis, salt));
+      surfMist += fill * 0.6 * (maxMm / cellMm) * (maxMm / cellMm);
+      float meanR = 0.25 * (minMm + maxMm) / cellMm;
+      surfGlint += fill * 0.25 * meanR * meanR;
       continue;
     }
     ivec2 c = ivec2(floor(uv / cell));
@@ -320,7 +324,12 @@ float surfLane = 0.0;
     float geometry = surfGeo.w > 0.5 && i > 0 && dMm >= ${geometryMinMm.toFixed(2)} && distance(worldCenter, surfGeo.xyz) < surfGeo.w && dMm * 0.001 >= surfGeoAngle * distance(worldCenter, surfGeo.xyz) ? 1.0 : 0.0;
     // Drops under two pixels across alias into glitter: they join the mist sheen instead of drawing a sharp lens.
     float resolved = smoothstep(0.6 * pix, 1.4 * pix, radius);
-    if (resolved < 1.0) surfMist += density * (1.0 - resolved) * 0.6 * (dMm / cellMm) * (dMm / cellMm);
+    if (resolved < 1.0) {
+      surfMist += density * (1.0 - resolved) * 0.6 * (dMm / cellMm) * (dMm / cellMm);
+      // A drop under a pixel is a convex mirror that sends each light's irradiance out as E F r^2 / 4 per steradian: it lands as one point.
+      float spot = 0.5 * pix;
+      surfGlint += (1.0 - resolved) * radius * radius / (12.566371 * spot * spot) * exp(-dot(d3, d3) / (spot * spot));
+    }
     if (resolved <= 0.0) continue;
     surfCap(surfHit, d3, radius, height * resolved, n, down, slope, pix, geometry);
     if (lobes > 1) {
@@ -368,6 +377,22 @@ float surfLane = 0.0;
       caustic += e * facing * exp(-s * s) * 2.2;
     }
     totalEmissiveRadiance += caustic * w * (diffuseColor.rgb + 0.08);
+  }
+  if (surfGlint > 0.0) {
+    vec3 nW = surfToWorld(toView * n);
+    vec3 vW = normalize(cameraPosition - surfWorldPos);
+    vec3 glint = vec3(0.0);
+    for (int i = 0; i < MAX_FILM_LIGHTS; i++) {
+      if (i >= filmLightCount) break;
+      vec3 toLight;
+      vec3 e = filmLightAt(i, surfWorldPos, toLight);
+      vec3 hw = normalize(toLight + vW);
+      float nh = dot(nW, hw);
+      if (nh <= 0.0 || dot(nW, toLight) <= -0.2) continue;
+      float vh = clamp(dot(vW, hw), 0.0, 1.0);
+      glint += e * (0.02 + 0.98 * pow(1.0 - vh, 5.0)) * smoothstep(0.0, 0.25, nh);
+    }
+    totalEmissiveRadiance += glint * surfGlint * (1.0 - surfLane);
   }
   surfBeadOut = shaded;
   // A dome a few pixels across holds every normal inside one pixel: spread its highlight, as a prefiltered normal map would.

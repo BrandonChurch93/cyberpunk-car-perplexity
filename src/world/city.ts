@@ -1,8 +1,10 @@
 import * as THREE from 'three'
 import { stream } from '../core/random'
-import { type Box, Forms, group, heroCityYaw, streetY, type Tone, type Tuple } from './forms'
+import { type Box, Forms, group, streetY, type Tone, type Tuple } from './forms'
+import { heroSightline } from './hero-scale'
 
 export const primaryBillboardSize = [5.72, 3.55] as const
+export const billboardTerraceRoof = 2.35
 
 interface Plot {
   name: string
@@ -36,27 +38,24 @@ const nearPlots: readonly Plot[] = [
 ]
 
 const heroPlots = nearPlots.map(plot => {
-  if (plot.name === 'west corner slab') return { ...plot, x: -66.3, z: -47 }
-  if (plot.name === 'south avenue tower') return { ...plot, x: -88.6, z: -61 }
+  if (plot.name === 'billboard terrace') return { ...plot, roof: billboardTerraceRoof }
+  if (plot.name === 'southwest exchange') return { ...plot, x: -102, z: -48 }
+  if (plot.name === 'west corner slab') return { ...plot, x: -73, z: -39 }
+  if (plot.name === 'south avenue tower') return { ...plot, x: -125, z: -70 }
   return plot
 })
-
-function skylineHeight(x: number, z: number, roof: number): number {
-  const [c, s] = [Math.cos(heroCityYaw), Math.sin(heroCityYaw)]
-  const depth = -(s * x + c * z)
-  if (depth < 0) return roof
-  const azimuth = (c * x - s * z) / depth
-  const shoulder = THREE.MathUtils.smoothstep
-  const west = shoulder(azimuth, -.30, -.22) * (1 - shoulder(azimuth, -.015, .09))
-  const east = shoulder(azimuth, .16, .22) * (1 - shoulder(azimuth, .33, .42))
-  return THREE.MathUtils.lerp(roof, Math.min(roof, depth * .064), Math.max(west, east))
-}
 
 const skylinePlots: readonly Plot[] = [
   { name: 'southwest signal tower', x: -35, z: -102, width: 21, depth: 20, roof: 109, tone: 'slate', profile: 'shaft' },
   { name: 'south pinnacle', x: 17, z: -111, width: 22, depth: 29, roof: 133, tone: 'graphite', profile: 'shaft' },
   { name: 'northern court tower', x: -50, z: 112, width: 21, depth: 19, roof: 89, tone: 'stone', profile: 'terrace' },
 ]
+
+const heroSkylinePlots = skylinePlots.map(plot => {
+  if (plot.name === 'southwest signal tower') return { ...plot, x: -174, z: -112 }
+  if (plot.name === 'south pinnacle') return { ...plot, x: 73, z: -107 }
+  return plot
+})
 
 const track = { z: 84, y: 8.5, length: 650, width: 8.8 }
 
@@ -137,6 +136,12 @@ function nearCity(forms: Forms, city: THREE.Group, full: boolean): void {
   for (const x of [-bracket, bracket]) forms.box(billboard, 'facade bracket', 'stone', [0.32, height - .45, 0.52], [x, 0.09, -0.3])
   const red = panel(forms, frontage, 'red sign', [0.3, 15.8, -47.82], 2.3, 1)
   for (const x of [-0.83, 0.83]) forms.box(red, 'roof sign stanchion', 'slate', [0.14, 2, 0.2], [x, -1, 0])
+  if (full) {
+    const screenDrop = billboard.position.y-billboardTerraceRoof
+    const bladeDrop = red.position.y-billboardTerraceRoof
+    for (const x of [-bracket,bracket]) forms.box(billboard,'steel terrace support','graphite',[.24,screenDrop,.34],[x,-screenDrop*.5,-.64])
+    for (const x of [-.83,.83]) forms.box(red,'steel terrace support','graphite',[.18,bladeDrop,.27],[x,-bladeDrop*.5,-.54])
+  }
 
   const cool = group(near, 'cool sign group')
   panel(forms, cool, 'wide cool panel', [-24.4, 11.1, 48.08], 4.4, 1.5, Math.PI)
@@ -145,12 +150,13 @@ function nearCity(forms: Forms, city: THREE.Group, full: boolean): void {
   panel(forms, cool, 'corner cool panel', [-41.88, 8.6, 50.4], 1.5, 2.2, Math.PI / 2)
 
   const warm = group(near, 'warm sign group')
-  panel(forms, warm, 'vertical warm panel', [-40.75, 9.3, -37.88], 0.94, 4.2)
-  panel(forms, warm, 'wide warm panel', [-36.5, 5.6, -37.88], 3.1, 1.22)
-  panel(forms, warm, 'small warm panel', [-32.4, 2.65, -37.88], 1.6, 0.67)
+  const warmX = full ? -35.7 : 0, warmZ = full ? 8 : 0
+  panel(forms, warm, 'vertical warm panel', [-40.75+warmX, 9.3, -37.88+warmZ], 0.94, 4.2)
+  panel(forms, warm, 'wide warm panel', [-36.5+warmX, 5.6, -37.88+warmZ], 3.1, 1.22)
+  panel(forms, warm, 'small warm panel', [-32.4+warmX, 2.65, -37.88+warmZ], 1.6, 0.67)
 
-  roofClutter(forms, near, 'billboard building water tank', [9.7, 13.8, -49.5], true)
-  roofClutter(forms, near, 'corner roof aerial', [full ? -71.1 : -42.1, 21.5, -42.7], false)
+  roofClutter(forms, near, 'billboard building water tank', [9.7, full ? billboardTerraceRoof : 13.8, -49.5], true)
+  roofClutter(forms, near, 'corner roof aerial', [full ? -77.8 : -42.1, 21.5, full ? -34.7 : -42.7], false)
   roofClutter(forms, near, 'north terrace water tank', [-26.3, 15.2, 54], true)
   roofClutter(forms, near, 'east roof aerial', [59.7, 16, -17], false)
 }
@@ -158,13 +164,14 @@ function nearCity(forms: Forms, city: THREE.Group, full: boolean): void {
 function outerCity(forms: Forms, city: THREE.Group, full: boolean): void {
   const tones = ['graphite', 'slate', 'stone'] as const
   const profiles = ['terrace', 'shaft', 'slab'] as const
+  const featured = full ? heroSkylinePlots : skylinePlots
   for (const layer of [
     { name: 'middle city', step: 37, first: 73, last: 279, minWidth: 13, maxWidth: 27, minRoof: 14, maxRoof: 110, skip: 0.33 },
     { name: 'far skyline', step: 68, first: 287, last: 716, minWidth: 23, maxWidth: 52, minRoof: 30, maxRoof: 195, skip: 0.46 },
   ]) {
     const ring = group(city, layer.name)
     if (layer.name === 'middle city') {
-      for (const plot of skylinePlots) {
+      for (const plot of featured) {
         const building = group(ring, plot.name)
         massing(plot, (tone, size, at) => forms.box(building, 'building mass', tone, size, at))
       }
@@ -181,15 +188,15 @@ function outerCity(forms: Forms, city: THREE.Group, full: boolean): void {
         if (distance < layer.first || distance > layer.last || rng.next() < layer.skip) continue
         const width = rng.range(layer.minWidth, layer.maxWidth)
         const depth = rng.range(layer.minWidth, layer.maxWidth)
+        if (full && heroSightline(x,z,width,depth)) continue
         if (layer.name === 'middle city') {
           if (Math.abs(z - track.z) < (track.width + depth) / 2 + 2.5) continue
-          if ([...(full ? heroPlots : nearPlots), ...skylinePlots].some((p) => Math.abs(p.x - x) < (p.width + width) / 2 + 5 &&
+          if ([...(full ? heroPlots : nearPlots), ...featured].some((p) => Math.abs(p.x - x) < (p.width + width) / 2 + 5 &&
             Math.abs(p.z - z) < (p.depth + depth) / 2 + 5)) continue
         } else if (distance < 307 && distance - Math.hypot(width, depth) / 2 < 278) {
           continue
         }
-        const stockRoof = layer.minRoof + (layer.maxRoof - layer.minRoof) * (rng.next() ** 1.5)
-        const roof = full ? skylineHeight(x, z, stockRoof) : stockRoof
+        const roof = layer.minRoof + (layer.maxRoof - layer.minRoof) * (rng.next() ** 1.5)
         const cluster = Math.floor(row / 4) + ':' + Math.floor(column / 4)
         let batch = batches.get(cluster)
         if (!batch) {
@@ -211,7 +218,7 @@ function outerCity(forms: Forms, city: THREE.Group, full: boolean): void {
 
 function streetAndGuideway(forms: Forms, city: THREE.Group): void {
   const ground = group(city, 'street level')
-  forms.box(ground, 'continuous ground', 'slate', [2200, 0.85, 2200], [0, streetY - 0.425, 0])
+  forms.box(ground, 'continuous ground', 'slate', [3600, 0.85, 3600], [0, streetY - 0.425, 0])
   for (const x of [-44, 42]) forms.box(ground, 'cross street', 'graphite', [13.5, 0.02, 450], [x, streetY + 0.01, 0])
   for (const z of [-33.5, 31.5]) forms.box(ground, 'street at garage', 'graphite', [450, 0.022, 13.5], [0, streetY + 0.01, z])
 
