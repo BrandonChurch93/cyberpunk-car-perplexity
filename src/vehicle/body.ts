@@ -173,18 +173,19 @@ export function sidePoint(s: number, y: number, side: number): Point {
   const thickness = shoulderInset(s)
   const dent = sideDent(s) * 2.5 * q * (1 - q) ** 2
   const face = .007 * Math.sin(Math.PI * q) * fairStep(s, .27, .37)
-  const fold = (line: number, first: number, direction: number, endRound = .028, top = shoulder(s), band = .972) => {
+  const fold = (line: number, first: number, direction: number, endRound = .028, top = shoulder(s), taper = 0) => {
     const t = y - line
     const low = rockerY(s) - line, high = top - line
     const q = T.MathUtils.clamp((y - rockerY(s)) / (top - rockerY(s)), 0, 1)
-    const interior = hinge(t, foldHalf) - mix(fairPositive(low, endRound), fairPositive(high, endRound), q)
+    const lean = taper ? mix(q ** 2, q, fairStep(high, 0, taper)) : q
+    const interior = hinge(t, foldHalf) - mix(fairPositive(low, endRound), fairPositive(high, endRound), lean)
     const edge = (fairPositive(low, endRound) - hinge(low, foldHalf)) * (1 - fairStep(q, 0, .06))
-      + (fairPositive(high, endRound) - hinge(high, foldHalf)) * fairStep(q, band, 1)
+      + (fairPositive(high, endRound) - hinge(high, foldHalf)) * fairStep(q, .972, 1)
     return direction * first * foldSlope * (interior + edge)
   }
   const belt = fold(doorBelt(s), fairStep(s, .237, .332) * (1 - fairStep(s, .895, .928)), -.88 - .05 * fairStep(s, .60, .73))
   const heel = fold(heelFold(s), fairStep(s, .321, .415) * (1 - fairStep(s, .725, .765)), .84)
-  const haunch = fold(haunchFold(s), fairStep(s, .631, .681) * (1 - fairStep(s, .770, .805)), -.88, .06, shoulder(s), .7)
+  const haunch = fold(haunchFold(s), fairStep(s, .631, .681) * (1 - fairStep(s, .770, .805)), -.88, .028, shoulder(s), .15)
   const ordinary = sill + thickness * q + dent + face + belt + heel
   const rise = y - doorBelt(s)
   const run = shoulder(s) - doorBelt(s)
@@ -370,8 +371,12 @@ const edgeGlass = (s: number, v: number): Point => {
 
 const bayWidth = curve([[.60, .36], [.641, .431], [.68, .477], [.75, .452], [.82, .389], [.873, .326], [.901, .218], [.918, .04]])
 export const bayEdge = (s: number, side: number): Point => [side * bayWidth(s), spine(s) - .009, zAt(s)]
-const deckInnerX = curve([[.5984, edgeGlass(.5984, 0)[0]], [.616, .687], [.638, .608], [.657, .537], [.678, .486], [.706, bayWidth(.706)]])
-const deckInnerY = curve([[.5984, edgeGlass(.5984, 0)[1]], [.617, .950], [.641, .993], [.666, 1.044], [.683, 1.066], [.696, 1.071], [.706, bayEdge(.706, 1)[1]]])
+const deckRunIn = [.585, .590, .594].map((s) => [s, edgeGlass(s, 0)] as const)
+const deckRunOut = [.715, .725, .735].map((s) => [s, bayEdge(s, 1)] as const)
+const deckInnerX = fairCurve([...deckRunIn.map(([s, p]): [number, number] => [s, p[0]]), [.5984, edgeGlass(.5984, 0)[0]], [.616, .687], [.638, .608],
+  [.657, .537], [.678, .486], [.706, bayWidth(.706)], ...deckRunOut.map(([s, p]): [number, number] => [s, p[0]])], { controls: 7, pins: [[.5984, edgeGlass(.5984, 0)[0]]] })
+const deckInnerY = fairCurve([...deckRunIn.map(([s, p]): [number, number] => [s, p[1]]), [.5984, edgeGlass(.5984, 0)[1]], [.617, .950], [.641, .993],
+  [.666, 1.044], [.683, 1.066], [.696, 1.071], [.706, bayEdge(.706, 1)[1]], ...deckRunOut.map(([s, p]): [number, number] => [s, p[1]])], { controls: 7, pins: [[.5984, edgeGlass(.5984, 0)[1]]] })
 export const tailLipY = (x: number): number => .903 - .043 * smooth(x, .22, .935)
 export const tailCrestZ = (x: number): number => limitTailZ(x, zAt(.989 - .0082 * smooth(x, .18, .54)))
 const tailDeckProfile = curve([[.913, .950], [.925, .940], [.943, .926], [.956, .914], [.970, .906], [.981, .901], [.989, .903]])
@@ -565,7 +570,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const deckShape = (s: number, v: number): Point => {
       const inside = bayEdge(s, 1)
       const outside: Point = [shoulderX(s), shoulder(s), zAt(s)]
-      const t = smooth(s, .677, .706)
+      const t = fairStep(s, .684, .716)
       const inX = mix(deckInnerX(s), inside[0], t)
       const inY = mix(deckInnerY(s), inside[1], t)
       const x = mix(inX, outside[0], v)
@@ -574,23 +579,24 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const bend = mix(foldHalf, .024, fairStep(s, .800, .852))
       const section = (at: number) => hinge(at - ridge, bend) - returnFold * hinge(at - deckOut(s), bend)
       const vane = section(x) - mix(section(inX), section(outside[0]), v)
-      const ridgeV = T.MathUtils.clamp((ridge - inX) / (outside[0] - inX), .14, .86)
-      const turn = -.37 * smooth(s, .614, .672) * smooth(ridge - inX, -.009, .055)
+      const ridgeV = .86 - fairPositive(.72 - fairPositive((ridge - inX) / (outside[0] - inX) - .14, .05), .05)
+      const turn = -.37 * fairStep(s, .614, .672) * fairStep(ridge - inX, -.009, .055)
         * (1 - smooth(s, .905, .937))
       const ridgeFold = turn * (section(ridge) - mix(section(inX), section(outside[0]), ridgeV))
       const fairCrest = smooth(s, .813, .880)
       const correction = ridgeFold * fairCrest
-      const fallAtRidge = T.MathUtils.clamp((inY - haunchRidgeY(s) + ridgeFold - correction) / (inY - outside[1]), .085, .915)
-      const reach = smooth(inY - haunchRidgeY(s), -.027, .020)
+      const rawFall = (inY - haunchRidgeY(s) + ridgeFold - correction) / (inY - outside[1])
+      const fallAtRidge = .915 - fairPositive(.915 - .085 - fairPositive(rawFall - .085, .08), .03)
+      const reach = fairStep(inY - haunchRidgeY(s), -.05, .035)
       const fall = mix(1, ridgeV * (1 - fallAtRidge) / (fallAtRidge * (1 - ridgeV)),
-        reach * smooth(s, .635, .695) * (1 - smooth(s, .915, .939)))
+        reach * fairStep(s, .635, .695) * (1 - smooth(s, .915, .939)))
       const y = mix(inY, outside[1], v / (fall + (1 - fall) * v))
       const high = Math.max(haunchCeiling(x), outside[1] + .005)
       const crestBlend = smooth(v, 0, ridgeV) * (1 - smooth(v, ridgeV, 1))
       const base = y + turn * vane - correction * crestBlend
       const tBend = base - haunchFold(s)
-      const fade = smooth(s, .631, .654) * (1 - smooth(s, .715, .752))
-        * (1 - smooth(Math.abs(tBend), .014, .105)) * Math.sin(Math.PI * v)
+      const fade = fairStep(s, .631, .654) * (1 - fairStep(s, .715, .752))
+        * (1 - fairStep(Math.abs(tBend), .014, .105)) * Math.sin(Math.PI * v)
       const shape = base + .22 * fade * (hinge(tBend, .006) - .5 * tBend)
       const capBlend = smooth(s, .735, .782)
       const cap = hinge(shape - high + mix(.008, .004, capBlend), mix(mix(.014, .004, capBlend), .012, fairStep(s, .800, .840)))
