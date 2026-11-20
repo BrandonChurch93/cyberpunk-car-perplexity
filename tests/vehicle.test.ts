@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import * as T from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { config, defaultPaint, paintById } from '../src/config'
+import { applyLens } from '../src/core/lens'
 import { cameraAt } from '../src/director/shots'
 import { events, lampThresholds, stateAt } from '../src/director/timeline'
 import { patchesOf } from '../src/materials/patch'
@@ -449,12 +450,18 @@ describe('vehicle geometry and state', () => {
       const backing = look(hole.clone().addScaledVector(normal, .4), hole)
       expect(backing.object.name).toBe('recessed airbox grille trays')
       expect(backing.distance).toBeCloseTo(.424, 5)
+      const rib = position.clone().addScaledVector(axis.clone().normalize(), car === full ? .0468 : .052875)
+        .addScaledVector(across.clone().normalize(), car === full ? apothem : 0)
+      const raisedBacking = look(rib.clone().addScaledVector(normal, .4), rib)
+      expect(raisedBacking.object.name).toBe('low ribs in the airbox trays')
+      expect(raisedBacking.distance).toBeCloseTo(.4178, 5)
       if (car === blockout) {
         const chamfer = position.clone().addScaledVector(across.clone().normalize(), .0013)
         const hit = look(chamfer.clone().addScaledVector(normal, .4), chamfer)
         expect(hit.object).toBe(grille)
-        expect(hit.distance).toBeCloseTo(.4003, 5)
-        expect(hit.normal!.dot(normal)).toBeCloseTo(Math.SQRT1_2, 5)
+        expect(hit.distance).toBeGreaterThan(.40045)
+        expect(hit.distance).toBeLessThan(.40085)
+        expect(hit.normal!.dot(normal)).toBeCloseTo(.447214, 5)
       }
       for (const [u, v] of [[1, 0], [0, 1], [-1, 0], [0, -1], [0, 0]]) {
         const eye = position.clone().addScaledVector(normal, .7)
@@ -466,13 +473,15 @@ describe('vehicle geometry and state', () => {
       const duct = car.root.getObjectByName('flush airbox grille ducts') as T.Mesh
       const tray = backing.object as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
       const obliqueTarget = position.clone().addScaledVector(across.clone().normalize(), .076)
-      for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [750, 790, 830, 869]) {
+      for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [750, 810, 869]) {
         const obliqueEye = cameraAt(frame / config.film.fps, format, car.anchors).position
-        expect([grille.name, tray.name]).toContain(look(obliqueEye, obliqueTarget).object.name)
+        expect([grille.name, tray.name, raisedBacking.object.name]).toContain(look(obliqueEye, obliqueTarget).object.name)
       }
-      expect(tray.material.color.getHex()).toBe(0)
-      expect(tray.material.specularIntensity).toBe(0)
-      expect(tray.material.roughness).toBe(1)
+      expect(tray.material.color.getHex()).toBeGreaterThan(0x101010)
+      expect(tray.material.color.getHex()).toBeLessThan(0x303030)
+      expect(tray.material.specularIntensity).toBeGreaterThan(0)
+      expect(tray.material.specularIntensity).toBeLessThan(.10)
+      expect(tray.material.roughness).toBeGreaterThan(.90)
       for (const direction of [
         axis.clone().multiplyScalar(.5), axis.clone().multiplyScalar(-.5),
         across.clone().multiplyScalar(.5), across.clone().multiplyScalar(-.5),
@@ -493,13 +502,26 @@ describe('vehicle geometry and state', () => {
       const baySurround = car.root.getObjectByName('thin carbon engine bay surround')!
       const bayReturns = car.root.getObjectByName('dry carbon bay wall returns')!
       const long = axis.clone().normalize(), out = across.clone().normalize()
-      const skim = cameraAt(750 / config.film.fps, config.formats.master, car.anchors).position
-      for (const [run, lateral, depth = .006] of [[-.244, .1166], [-.2328, .1143], [-.224, .112], [-.2146, .1099, .003], [-.2104, .1092, .003]]) {
-        const corner = position.clone().addScaledVector(long, run).addScaledVector(out, lateral).addScaledVector(normal, -depth)
-        const surface = look(skim, corner).object.name
-        const visible = depth === .003 ? [duct.name, 'recessed bay chamber and blank plate'] : [duct.name]
-        expect(visible).toContain(surface)
-        expect(ray.intersectObject(duct)[0]?.distance).toBeLessThan(skim.distanceTo(corner) + .018)
+      const chamber = car.root.getObjectByName('recessed bay chamber and blank plate')!
+      for (const frame of [750, 810, 869]) {
+        const skim = cameraAt(frame / config.film.fps, config.formats.master, car.anchors).position
+        for (const [run, lateral, depth] of [[-.244, .1166, .006], [-.2328, .1143, .006], [-.224, .112, .006],
+          [-.2146, .1099, .003], [-.2104, .1092, .003]]) {
+          const corner = position.clone().addScaledVector(long, run).addScaledVector(out, lateral).addScaledVector(normal, -depth)
+          const surface = look(skim, corner)
+          const flange = ray.intersectObject(duct)[0]
+          expect([duct, chamber]).toContain(surface.object)
+          expect(Math.abs(flange.distance - skim.distanceTo(corner))).toBeLessThan(.012)
+          if (surface.object === chamber) expect(flange.distance - surface.distance).toBeLessThan(.050)
+        }
+      }
+      const format = config.formats.master
+      const endCamera = new T.PerspectiveCamera()
+      applyLens(endCamera, cameraAt(869 / config.film.fps, format, car.anchors), format.width, format.height,
+        { pixel: [0, 0], aperture: [0, 0] }, 1)
+      for (const [x, y] of [[-.28125, -.91667], [-.265625, -.93519], [-.265625, -.94815]]) {
+        ray.setFromCamera(new T.Vector2(x, y), endCamera)
+        expect(ray.intersectObject(car.root, true)[0]?.object).toBe(duct)
       }
       const shellOffset = (depth: number) => {
         const eye = position.clone().addScaledVector(out, .13).addScaledVector(normal, -depth)
@@ -892,6 +914,20 @@ describe('vehicle geometry and state', () => {
       }
     }
   }, 15_000)
+
+  it('keeps the four LED dies separated by a dark substrate in each projector', () => {
+    for (const vehicle of [blockout, full]) {
+      const sources = vehicle.root.getObjectsByProperty('name', 'main beam projector') as T.Mesh<T.BufferGeometry, T.Material>[]
+      expect(sources).toHaveLength(4)
+      for (const { geometry, material } of sources) {
+        const gain = geometry.getAttribute('sourceGain')
+        const values = Array.from(gain.array)
+        expect(values.filter(value => value > .1)).toHaveLength(16)
+        expect(values.filter(value => value < .001)).toHaveLength(4)
+        expect(patchesOf(material)).toContain('projector-source')
+      }
+    }
+  })
 
   it('closes the projector socket behind the emitter and seats the lens continuously', () => {
     for (const vehicle of [blockout, full]) {

@@ -477,9 +477,12 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   core.add(doorAnchor)
   lights.push({ id: 'doorway', kind: 'area', object: doorAnchor, color: doorTint, intensity: 2.8, size: [.9, .36], range: 18, shadow: false, beam: false, level: () => 1 })
   const signMount = core.getObjectByName('blank wayfinding plate')
-  if (signMount instanceof THREE.Mesh) signMount.material = frame
   const stairs = generic('STAIRS')
-  labelFace(core, stairs, [-2.73, 2.48, 2.434], [.84, .26], labels, new THREE.Color(.69, .72, .71))
+  if (signMount instanceof THREE.Mesh) {
+    signMount.material = frame
+    const { x, y, z } = signMount.position
+    labelFace(core, stairs, [x, y, z + .024], [.84, .26], labels, new THREE.Color(.69, .72, .71))
+  }
   signs.push(stairs)
   const payMount = roof.getObjectByName('pay station display')
   if (payMount) {

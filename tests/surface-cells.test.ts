@@ -28,7 +28,7 @@ describe('grille cell drops', () => {
   const vehicle = { root, anchors: { detail: { position: new THREE.Vector3(0, 1, -1), normal: new THREE.Vector3(0, 1, 0), radius: 0.1 } } }
 
   it('finds every open cell of the plate with its spacing and size', () => {
-    const drops = new CellDrops(vehicle as never, new THREE.MeshBasicMaterial(), new THREE.MeshBasicMaterial()) as unknown as {
+    const drops = new CellDrops(vehicle as never, new THREE.MeshBasicMaterial()) as unknown as {
       findCells(mesh: THREE.Mesh, n: THREE.Vector3, along: THREE.Vector3, across: THREE.Vector3): { cells: Array<{ apothem: number }>; pitch: number }
     }
     const n = new THREE.Vector3(0, 1, 0)
@@ -40,7 +40,7 @@ describe('grille cell drops', () => {
   })
 
   it('places the same drops every time, on the plate and only near the lens', () => {
-    const make = () => new CellDrops(vehicle as never, new THREE.MeshBasicMaterial(), new THREE.MeshBasicMaterial())
+    const make = () => new CellDrops(vehicle as never, new THREE.MeshBasicMaterial())
     const a = make()
     const b = make()
     const matrices = (c: CellDrops) => c.group.children.flatMap((m) => Array.from((m as THREE.InstancedMesh).instanceMatrix.array))

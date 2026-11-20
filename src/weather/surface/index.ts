@@ -34,13 +34,18 @@ function vehicleMeshes(root: THREE.Object3D, wanted: Map<THREE.Material, BeadCla
   return out
 }
 
+/** The exhaust pulse rings the floor this far behind the tailpipe. */
+const pulseReach = 0.35
+
+/** The puddle the exhaust pulse ripples, set around the ripple point and drawn toward the ignition lens so it fills the bottom of the frame. */
 function rearPuddle(anchors: Parameters<typeof cameraAt>[2]): Basin {
   const cam = cameraAt(beatById('ignition').start + 1.5, config.formats.master, anchors)
   const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion)
   const right = new THREE.Vector3(1, 0, 0).applyQuaternion(cam.quaternion)
   const f = new THREE.Vector2(forward.x, forward.z).normalize()
   const r = new THREE.Vector2(right.x, right.z).normalize()
-  const center = new THREE.Vector2(cam.position.x, cam.position.z).addScaledVector(f, 2.2).addScaledVector(r, 0.9)
+  const ripple = anchors.exhaust.position.clone().addScaledVector(anchors.exhaust.normal, pulseReach)
+  const center = new THREE.Vector2(ripple.x, ripple.z).addScaledVector(f, -0.6).addScaledVector(r, -0.3)
   return { center, axis: f, halfLength: 1.5, halfWidth: 0.85, depthMm: 5 }
 }
 
@@ -55,6 +60,7 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
   film.position.copy(camera.position)
   film.quaternion.copy(camera.quaternion)
   film.updateMatrixWorld(true)
+  const aim = camera.position.clone().addScaledVector(new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion), camera.focusDistance)
   const later = cameraAt(config.film.macroFrameSeconds + 0.6, format, vehicle.anchors)
   const laterFilm = film.clone()
   laterFilm.position.copy(later.position)
@@ -78,10 +84,10 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
     const pos = mesh.geometry.getAttribute('position')
     for (let i = 0; pos && i < pos.count; i++) {
       const q = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld)
-      if (q.distanceTo(anchor) < 0.4) slots.push(q)
+      if (q.distanceTo(aim) < 0.4) slots.push(q)
     }
   })
-  const clearOfSlots = (q: THREE.Vector3) => slots.every((t) => t.distanceToSquared(q) > 0.05 * 0.05)
+  const clearOfSlots = (q: THREE.Vector3, gap: number) => slots.every((t) => t.distanceToSquared(q) > gap * gap)
   const ray = new THREE.Raycaster()
   const ndc = new THREE.Vector3()
   const rows: Array<{ p: THREE.Vector3; score: number }> = []
@@ -97,7 +103,7 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
     const count = index ? index.count : pos.count
     for (let k = 0; k < count; k += 3) {
       a.fromBufferAttribute(pos, index ? index.getX(k) : k).applyMatrix4(mesh.matrixWorld)
-      if (a.distanceTo(anchor) > 0.25) continue
+      if (a.distanceTo(aim) > 0.25) continue
       b.fromBufferAttribute(pos, index ? index.getX(k + 1) : k + 1).applyMatrix4(mesh.matrixWorld)
       c.fromBufferAttribute(pos, index ? index.getX(k + 2) : k + 2).applyMatrix4(mesh.matrixWorld)
       const n = new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a))
@@ -110,14 +116,14 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
       const down = new THREE.Vector3(0, -1, 0).addScaledVector(n, n.y).normalize()
       const blur = Math.max(blurAt(p), blurAt(p.clone().addScaledVector(down, 0.014)))
       ndc.copy(p).project(film)
-      if (blur > 1 || Math.abs(ndc.x) > 0.6 || Math.abs(ndc.y) > 0.6) continue
+      if (blur > 1 || Math.abs(ndc.x) > 0.7 || Math.abs(ndc.y) > 0.7) continue
       const centre = Math.hypot(ndc.x, ndc.y)
       const run = p.clone().addScaledVector(down, 0.035)
       ndc.copy(run).project(laterFilm)
       const runBlur = laterBlurAt(run)
       if (runBlur > 5 || Math.abs(ndc.x) > 0.75 || Math.abs(ndc.y) > 0.75) continue
-      if (!clearOfSlots(p) || !clearOfSlots(run) || !clearOfSlots(p.clone().addScaledVector(down, 0.08))) continue
-      rows.push({ p, score: -0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.15 * runBlur - 1.5 * centre + (p.y - anchor.y) })
+      if (!clearOfSlots(p, 0.012) || !clearOfSlots(run, 0.02) || !clearOfSlots(p.clone().addScaledVector(down, 0.08), 0.025)) continue
+      rows.push({ p, score: -0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.15 * runBlur - 1.5 * centre + (p.y - aim.y) })
     }
   })
   rows.sort((x, y) => y.score - x.score)
@@ -203,7 +209,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
 
   const drops = new DropGeometry(vehicleMeshes(vehicle.root, beadMaterials), uniforms)
   root.add(drops.group)
-  const cells = new CellDrops(vehicle, drops.runner, drops.plain)
+  const cells = new CellDrops(vehicle, drops.runner)
   // Each format frames its own macro and wheel inserts, so each places its own rivulet and arch drips for its lens.
   const runnersByFormat = new Map<string, Runners>()
   let runners: Runners | null = null
@@ -272,7 +278,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       const pulse = uniforms.surfPulse.value[0] as THREE.Vector4
       if (state.engine > 0) {
         const exhaust = vehicle.anchors.exhaust
-        scratch.copy(exhaust.position).addScaledVector(exhaust.normal, 0.35)
+        scratch.copy(exhaust.position).addScaledVector(exhaust.normal, pulseReach)
         pulse.set(scratch.x, scratch.z, state.engine * pulseStrength, 0)
       } else pulse.set(0, 0, 0, 0)
       if (runners) {
