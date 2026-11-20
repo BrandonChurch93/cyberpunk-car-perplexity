@@ -173,18 +173,19 @@ export function sidePoint(s: number, y: number, side: number): Point {
   const thickness = shoulderInset(s)
   const dent = sideDent(s) * 2.5 * q * (1 - q) ** 2
   const face = .007 * Math.sin(Math.PI * q) * fairStep(s, .27, .37)
-  const fold = (line: number, first: number, direction: number, endRound = .028, top = shoulder(s), band = .972) => {
+  const fold = (line: number, first: number, direction: number, endRound = .028, top = shoulder(s), taper = 0) => {
     const t = y - line
     const low = rockerY(s) - line, high = top - line
     const q = T.MathUtils.clamp((y - rockerY(s)) / (top - rockerY(s)), 0, 1)
-    const interior = hinge(t, foldHalf) - mix(fairPositive(low, endRound), fairPositive(high, endRound), q)
+    const lean = taper ? mix(q ** 2, q, fairStep(high, 0, taper)) : q
+    const interior = hinge(t, foldHalf) - mix(fairPositive(low, endRound), fairPositive(high, endRound), lean)
     const edge = (fairPositive(low, endRound) - hinge(low, foldHalf)) * (1 - fairStep(q, 0, .06))
-      + (fairPositive(high, endRound) - hinge(high, foldHalf)) * fairStep(q, band, 1)
+      + (fairPositive(high, endRound) - hinge(high, foldHalf)) * fairStep(q, .972, 1)
     return direction * first * foldSlope * (interior + edge)
   }
   const belt = fold(doorBelt(s), fairStep(s, .237, .332) * (1 - fairStep(s, .895, .928)), -.88 - .05 * fairStep(s, .60, .73))
   const heel = fold(heelFold(s), fairStep(s, .321, .415) * (1 - fairStep(s, .725, .765)), .84)
-  const haunch = fold(haunchFold(s), fairStep(s, .631, .681) * (1 - fairStep(s, .770, .805)), -.88, .06, shoulder(s), .7)
+  const haunch = fold(haunchFold(s), fairStep(s, .631, .681) * (1 - fairStep(s, .770, .805)), -.88, .028, shoulder(s), .15)
   const ordinary = sill + thickness * q + dent + face + belt + heel
   const rise = y - doorBelt(s)
   const run = shoulder(s) - doorBelt(s)
