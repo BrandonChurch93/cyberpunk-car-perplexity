@@ -87,13 +87,13 @@ export function addSky(root: THREE.Group): void {
         c += horizon*cloud*(south*vec3(.014,.034,.071)+north*vec3(.013,.031,.047)+warm*vec3(.019,.012,.009));
         float canopy = pow(max(0.0,dot(d,normalize(vec3(-.68,.54,-.34)))), 5.2);
         float cloudBase = smoothstep(.03,.34,d.y)*(.68+.32*cloud);
-        c += cloudBase*(vec3(.024,.046,.069)+canopy*vec3(.27,.43,.60));
+        c += cloudBase*(vec3(.003,.007,.012)+canopy*vec3(.017,.030,.052));
         gl_FragColor = vec4(c, 1.0);
       }
     `,
   })
   mesh(root, new THREE.Mesh(new THREE.SphereGeometry(812, 32, 16), sky), 'city-lit cloud base', [0, 0, 0], false).renderOrder = -1000
-  root.add(new THREE.HemisphereLight(new THREE.Color(.25, .38, .54), new THREE.Color(.084, .096, .11), .62))
+  root.add(new THREE.HemisphereLight(new THREE.Color(.20, .31, .47), new THREE.Color(.072, .083, .10), .28))
 }
 
 const bbSize = [9.6, 4.8] as const
@@ -133,7 +133,7 @@ export function billboardState(t: number, out: THREE.Color, cool: THREE.Color, l
 
 function addBillboard(sign: THREE.Object3D, metal: THREE.Material, key: boolean, labels?: Label): { film: FilmLight; set(t: number): void } {
   const [width, height] = bbSize
-  const radiance = key ? 3.6 : 1
+  const direct = key ? .64 : .20
   const cool = new THREE.Color(), light = new THREE.Color(), average = new THREE.Color()
   const title = labels?.(generic('LEVEL 9'), 'World Condensed', undefined, 3.25) ?? null
   const uniforms = { centerX: { value: .5 }, cool: { value: cool }, light: { value: light }, headline: { value: title }, pixelCount: { value: new THREE.Vector2(width / .008, height / .008) } }
@@ -174,9 +174,12 @@ function addBillboard(sign: THREE.Object3D, metal: THREE.Material, key: boolean,
         float seamsDist = min(abs(fract(faceUV.x*10.0+.5)-.5),abs(fract(faceUV.y*5.0+.5)-.5));
         float seams = mix(.93,1.0,smoothstep(.0,.013,seamsDist));
         #ifdef WORLD_BILLBOARD_KEY
-          rgb *= .31+.69*smoothstep(.015,.13,uv.x)*(1.0-smoothstep(.85,.995,uv.x));
+          float edgeX = smoothstep(.02,.23,uv.x)*(1.0-smoothstep(.77,.99,uv.x));
+          float rail = (uv.y-.635-.025*sin(uv.x*6.28-centerX*3.0))/.077;
+          float softBar = exp(-rail*rail)*edgeX;
+          rgb = vec3(.008,.013,.021) + softBar * mix(vec3(.46,1.83,3.15),vec3(.73,2.68,4.6),band) * (.86+.14*wave);
         #endif
-        gl_FragColor = vec4(rgb * grid * seams * ${radiance.toFixed(2)},1.0);
+        gl_FragColor = vec4(rgb * grid * seams,1.0);
       }
     `,
   })
@@ -196,7 +199,7 @@ function addBillboard(sign: THREE.Object3D, metal: THREE.Material, key: boolean,
   }
   set(0)
   return { set, film: {
-    id: key ? 'raking billboard' : 'billboard', kind: 'area', object: anchor, color, intensity: radiance * width * height * (key ? .93 : 1),
+    id: key ? 'raking billboard' : 'billboard', kind: 'area', object: anchor, color, intensity: direct * width * height,
     size: [width-2.4, height-.32], range: key ? 63 : 112, shadow: false, beam: false,
     level: (t) => billboardState(t, scratch, scratchCool, scratchLight).mean,
     colorAt: (t, out) => { const { mean } = billboardState(t, out, scratchCool, scratchLight); out.multiplyScalar(1 / mean) },
@@ -229,7 +232,7 @@ function addRakingCabinet(roof: THREE.Group, metal: THREE.Material, frame: THREE
 function panelPractical(
   parent: THREE.Group, metal: THREE.Material, frame: THREE.Material,
   name: string, at: Tuple, yaw: number, size: [number, number], color: THREE.Color, radiance: number,
-  range: number, shadow: boolean, seams: number, foot = 0,
+  range: number, shadow: boolean, seams: number, foot = 0, delivery = 1,
 ): FilmLight {
   const group = new THREE.Group()
   const [width, height] = size
@@ -267,12 +270,12 @@ function panelPractical(
   const anchor = new THREE.Object3D()
   anchor.position.z = .19
   group.add(anchor)
-  return { id: name, kind: 'area', object: anchor, color, intensity: width*height*radiance*.78, size, range, shadow, beam: false, level: () => 1 }
+  return { id: name, kind: 'area', object: anchor, color, intensity: width*height*radiance*.78*delivery, size, range, shadow, beam: false, level: () => 1 }
 }
 
 function rearDeckPractical(pole: THREE.Object3D, metal: THREE.Material, frame: THREE.Material): FilmLight {
   const tint = new THREE.Color(.53,.76,1)
-  const radiance = 320
+  const radiance = 185
   const face = new THREE.MeshBasicMaterial({ color: tint.clone().multiplyScalar(radiance), toneMapped: false })
   const mast = pole.getObjectByName('tapered steel post')!
   mast.scale.y *= 1.81
@@ -301,7 +304,7 @@ function rearDeckPractical(pole: THREE.Object3D, metal: THREE.Material, frame: T
   const anchor = new THREE.Object3D()
   anchor.position.z = .54
   rack.add(anchor)
-  return { id: 'north deck pole', kind: 'area', object: anchor, color: tint, intensity: radiance * (3*1.27*.51) * .86, size: [4.15,.51],
+  return { id: 'north deck pole', kind: 'area', object: anchor, color: tint, intensity: radiance * (3*1.27*.51) * .42, size: [4.15,.51],
     range: 39, shadow: true, beam: false, level: () => 1 }
 }
 
@@ -324,9 +327,9 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   const raking = addBillboard(rakingCabinet, metal, true)
   const lights = [
     primary.film, raking.film,
-    panelPractical(roof, metal, frame, 'east parking canopy fascia', [13.65,2.58,-4.95], -1.42, [9.6,1.65], new THREE.Color(.43,.72,1), 8.6, 44, true, 8),
-    panelPractical(rakingCabinet, metal, frame, 'red deck marker', [1.765,2.8,.55], -.11, [5.3,.55], new THREE.Color(1,.078,.077), 20, 47, false, 3, 2.45),
-    panelPractical(roof, metal, frame, 'lane separator opal', [11.4,.32,7.65], -2.04, [5.4,.27], new THREE.Color(.85,.28,.22), 25, 30, false, 6),
+    panelPractical(roof, metal, frame, 'east parking canopy fascia', [13.65,2.58,-4.95], -1.42, [9.6,.46], new THREE.Color(.36,.66,1), 7.0, 44, true, 8, 0, .64),
+    panelPractical(rakingCabinet, metal, frame, 'red deck marker', [1.765,2.76,.55], -.11, [5.3,.20], new THREE.Color(1,.048,.068), 10, 47, false, 3, 2.45),
+    panelPractical(roof, metal, frame, 'lane separator opal', [11.4,.32,7.65], -2.04, [5.4,.27], new THREE.Color(.49,.64,.88), 15, 30, false, 6, 0, .72),
   ]
   const signs: string[] = []
   signs.push(generic('LEVEL 9'))
@@ -347,21 +350,21 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   }
 
   const core = roof.getObjectByName('stair and lift core')!
-  const warmth = new THREE.Color(1, .67, .31)
+  const doorTint = new THREE.Color(.76, .78, .84)
   const doorBack = core.getObjectByName('recessed doorway back')
-  if (doorBack instanceof THREE.Mesh) doorBack.material = new THREE.MeshStandardMaterial({ color: new THREE.Color(.25, .195, .133), emissive: warmth, emissiveIntensity: .038, roughness: .69 })
+  if (doorBack instanceof THREE.Mesh) doorBack.material = new THREE.MeshStandardMaterial({ color: new THREE.Color(.035, .041, .051), emissive: doorTint, emissiveIntensity: .008, roughness: .79 })
   for (const x of [-3.23, -2.23]) block(core, 'door channel jamb', metal, [x, 1.06, 2.085], [.056, 2.11, .22])
   block(core, 'door closer', metal, [-2.73, 2.076, 2.12], [.29, .041, .13])
   for (let i = 0; i < 4; i++) block(core, 'interior stair tread', metal, [-2.73, .09 - i * .028, 1.57 + i * .16], [.95, .036, .152])
   const innerHandrail = block(core, 'interior warm handrail', metal, [-3.08, .91, 1.88], [.034, .035, .65])
   innerHandrail.rotation.x = -.18
-  const door = plate(core, 'doorway opal luminaire', new THREE.MeshBasicMaterial({ color: warmth.clone().multiplyScalar(11), toneMapped: false, side: THREE.DoubleSide }), [-2.73, 2.0, 2.28], .39, .082)
+  const door = plate(core, 'doorway opal luminaire', new THREE.MeshBasicMaterial({ color: doorTint.clone().multiplyScalar(4.4), toneMapped: false, side: THREE.DoubleSide }), [-2.73, 2.0, 2.28], .39, .045)
   door.rotation.x = 1.14
   const doorAnchor = new THREE.Object3D()
   doorAnchor.position.set(-2.73, 1.54, 2.47)
-  doorAnchor.rotation.x = .32
+  doorAnchor.rotation.x = .69
   core.add(doorAnchor)
-  lights.push({ id: 'doorway', kind: 'area', object: doorAnchor, color: warmth, intensity: 8.7, size: [.9, 1.6], range: 24, shadow: false, beam: false, level: () => 1 })
+  lights.push({ id: 'doorway', kind: 'area', object: doorAnchor, color: doorTint, intensity: 2.8, size: [.9, .36], range: 18, shadow: false, beam: false, level: () => 1 })
   const signMount = core.getObjectByName('blank wayfinding plate')
   if (signMount instanceof THREE.Mesh) signMount.material = frame
   const stairs = generic('STAIRS')
@@ -390,7 +393,7 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
       continue
     }
     const key = i === 5 ? 'wheel deck pole' : 'auxiliary pole'
-    const radiance = key === 'wheel deck pole' ? 175 : 11
+    const radiance = key === 'wheel deck pole' ? 115 : 11
     let mat = poleMats.get(key)
     if (!mat) {
       mat = new THREE.MeshBasicMaterial({ color: cool.clone().multiplyScalar(radiance), toneMapped: false })
@@ -399,7 +402,7 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
     for (const o of pole.children) if (o.name === 'unlit lamp diffuser' && o instanceof THREE.Mesh) { o.material = mat; o.castShadow = false }
     if (key !== 'auxiliary pole') {
       pole.position.set(10.8, 0, 4.9)
-      const aim = new THREE.Vector3(.94, .38, 1.47)
+      const aim = new THREE.Vector3(1.35, .04, 1.79)
         .sub(new THREE.Vector3(pole.position.x, 4.586, pole.position.z)).applyAxisAngle(new THREE.Vector3(0,1,0), -pole.rotation.y).normalize()
       const tilt = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,-1,0), aim)
       for (const o of pole.children) {
@@ -418,7 +421,7 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
       anchor.position.set(0, 4.586, 0).addScaledVector(aim,.27)
       anchor.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), aim)
       pole.add(anchor)
-      lights.push({ id: key, kind: 'spot', object: anchor, color: cool, intensity: 100, size: [2, .36], angle: .64,
+      lights.push({ id: key, kind: 'spot', object: anchor, color: cool, intensity: 31, size: [2, .36], angle: .64,
         penumbra: .67, range: 30, shadow: true, beam: false, level: mild })
     }
   }
@@ -437,7 +440,7 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
     set(t) {
       primary.set(t)
       raking.set(t)
-      poleMats.get('wheel deck pole')?.color.copy(cool).multiplyScalar(175 * mild(t))
+      poleMats.get('wheel deck pole')?.color.copy(cool).multiplyScalar(115 * mild(t))
     },
   }
 }
