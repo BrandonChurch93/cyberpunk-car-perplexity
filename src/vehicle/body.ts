@@ -249,11 +249,15 @@ const deckInnerY = curve([[.5984, edgeGlass(.5984, 0)[1]], [.616, .952], [.638, 
 export const tailLipY = (x: number): number => .898 - .038 * smooth(x, .295, .935)
 export const tailCrestZ = (x: number): number => limitTailZ(x, zAt(.9878 - .007 * smooth(x, .24, .48)))
 
+export function frontFascia(side: number, x: number, y: number, recess: number, radius = 0): Point {
+  const s = frontWidth(x) + .002 * smooth(y, .2, .48) - .0008
+  const limit = zAt(nosePlan(Math.abs(x))), depth = zAt(s) - recess
+  const t = Math.max(0, radius - Math.abs(limit - depth))
+  return [x * side, y, Math.min(limit, depth) - (radius ? t * t / (4 * radius) : 0)]
+}
+
 export function fascia(front: boolean, side: number, x: number, y: number, recess = 0): Point {
-  if (front) {
-    const s = frontWidth(x) + .002 * smooth(y, .2, .48) - .0008
-    return [x * side, y, Math.min(zAt(nosePlan(Math.abs(x))), zAt(s) - recess)]
-  }
+  if (front) return frontFascia(side, x, y, recess)
   const s = tailWidth(x) + (.010 * smooth(y, .58, .81)) - .009 * smooth(y, .84, .94)
   const inset = .070 * smooth(y, .47, .70) * (1 - .78 * smooth(x, .32, .70))
   return [x * side, y, limitTailZ(x, zAt(s) + recess + inset)]

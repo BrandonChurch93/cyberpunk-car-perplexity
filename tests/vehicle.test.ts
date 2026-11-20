@@ -618,6 +618,24 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('keeps the optical shell normals continuous across the front plan limit', () => {
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      const shell = vehicle.root.getObjectByName('front optical lens shells')!
+      const ray = new T.Raycaster(new T.Vector3(), new T.Vector3(0, 0, -1))
+      for (const [x, y0] of [[.609, .508], [.625, .472], [.646, .471], [.682, .474]]) {
+        let prior: T.Vector3 | undefined
+        for (let i = 0; i <= 12; i++) {
+          ray.ray.origin.set(x, y0 + .0005 * i, 3)
+          const normal = ray.intersectObject(shell)[0]?.normal
+          expect(normal).toBeDefined()
+          if (prior) expect(prior.angleTo(normal!)).toBeLessThan(T.MathUtils.degToRad(1.3))
+          prior = normal
+        }
+      }
+    }
+  })
+
   it('keeps the upper running guide free of opaque trim in the lamp shot', () => {
     for (const vehicle of [blockout, full]) {
       vehicle.root.updateMatrixWorld(true)

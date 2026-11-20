@@ -1,6 +1,6 @@
 import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
-import { fascia, frontHoodEdge, limitTailZ, sAt, tailCrestZ, tailLipY, zAt } from './body'
+import { fascia, frontFascia, frontHoodEdge, limitTailZ, sAt, tailCrestZ, tailLipY, zAt } from './body'
 import { add, blend, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
 import type { Palette } from './materials'
 import type { Anchor, VehicleModule } from './contract'
@@ -217,7 +217,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const window = (u: number, v: number, d: number): Point => {
       const x = mix(eyeStart + .022 * (v - .5) ** 2, eyeEnd - .009 * v, u)
       const y = mix(eyeLow(x), eyeTop(x), v)
-      return f(x, y, d - .013 * Math.sin(Math.PI * v) * Math.sin(Math.PI * u))
+      return frontFascia(side, x, y, d - .013 * Math.sin(Math.PI * v) * Math.sin(Math.PI * u), .006)
     }
     black.push(patch((u, v) => {
       const lower = window(u, 1, -.002)
