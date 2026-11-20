@@ -2,7 +2,9 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { config } from '../src/config'
 import type { FrameContext, SampleContext } from '../src/core/contract'
+import { patchesOf } from '../src/materials/patch'
 import { createWorld } from '../src/world'
+import { heroDrain } from '../src/world/deck'
 import { billboardState } from '../src/world/fixtures'
 import { deckHeight } from '../src/world/roof-look'
 
@@ -26,6 +28,8 @@ describe('full roof world', () => {
     expect(deckHeight(.96, 1.285)).toBeGreaterThan(0)
     expect(deckHeight(.18, -3.71)).toBeLessThan(0)
     expect(deckHeight(0, 0)).toBeGreaterThan(0)
+    expect(deckHeight(...heroDrain)).toBeLessThan(-.002)
+    expect(deckHeight(heroDrain[0], heroDrain[1] - .42)).toBeGreaterThan(deckHeight(...heroDrain))
     const samples = map.image.data as Float32Array
     const w = map.image.width
     const h = map.image.height
@@ -51,6 +55,31 @@ describe('full roof world', () => {
     expect(world.signs.every(s => [...config.signage.generic, ...config.signage.invented].includes(s))).toBe(true)
     expect(world.lights.length).toBeLessThanOrEqual(8)
     expect(world.lights.filter(l => l.shadow).length).toBe(3)
+  })
+
+  it('holds standing water across the portrait foreground without flattening its shore', () => {
+    const { bounds, heightMap } = world.deck
+    const { data, width, height } = (heightMap as THREE.DataTexture).image
+    for (const [x, z] of [[2.03, 4.02], [2.37, 4.72], [3.32, 3.37], [.88, 4.58]]) {
+      expect(deckHeight(x, z)).toBeLessThan(-.0004)
+      const i = Math.floor((x - bounds.min.x) / (bounds.max.x - bounds.min.x) * width)
+      const j = Math.floor((z - bounds.min.y) / (bounds.max.y - bounds.min.y) * height)
+      expect((data as Float32Array)[j * width + i]).toBeLessThan(-.0004)
+    }
+    expect(deckHeight(2.64, 5.28)).toBeGreaterThan(0)
+    expect(deckHeight(3.63, 3.21)).toBeGreaterThan(0)
+  })
+
+  it('retains the lit sign mount and distinguishes city cladding from wet parapet', () => {
+    const cladding = world.root.getObjectByName('weathered cladding panels and spandrels') as THREE.InstancedMesh
+    const parapet = world.root.getObjectByName('solid concrete') as THREE.Mesh
+    expect(patchesOf(cladding.material as THREE.Material)).toContain('facade cladding and rain trails')
+    expect(world.surfaces.find(s => s.material === parapet.material)?.wetness).toBe('porous')
+    expect(patchesOf(parapet.material as THREE.Material)).toContain('world-roof-parapet')
+    const hotel = world.root.getObjectByName('HOTEL')!
+    expect(hotel.getObjectByName('steel sign frame brace')).toBeDefined()
+    expect(hotel.getObjectByName('cabinet back')).toBeDefined()
+    expect(world.signs).toContain('HOTEL')
   })
 
   it('sets the billboard for both capture times and supplies a periodic mean to the rig', () => {

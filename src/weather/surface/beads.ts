@@ -256,6 +256,7 @@ void surfCap(inout SurfHit hit, vec3 d3, float radius, float height, vec3 n, vec
 const beadsFragment = /* glsl */ `
 SurfHit surfHit = SurfHit(0.0, 0.0, vec3(0.0), vec3(0.0), 0.0, 0.0, 0.0, 0.0);
 float surfMist = 0.0;
+float surfLane = 0.0;
 {
   vec3 n = normalize(surfObjNormal);
   vec3 an = abs(n);
@@ -273,7 +274,10 @@ float surfMist = 0.0;
   float under = smoothstep(0.3, 0.9, -level);
   uint salt = uint(surfBeadSalt);
   float shake = surfVibration;
-  bool nearTrack = surfTrackLen > 0.0 && distance(surfWorldPos, surfTrackBox.xyz) < surfTrackBox.w && surfTrackDistance(surfWorldPos) < ${trackClear} + 0.007;
+  float laneDistance = surfTrackLen > 0.0 && distance(surfWorldPos, surfTrackBox.xyz) < surfTrackBox.w ? surfTrackDistance(surfWorldPos) : 1e9;
+  bool nearTrack = laneDistance < ${trackClear} + 0.007;
+  // The runner leaves a thin, level film where it took up the mist, so its lane is darker and glossier than the beaded paint.
+  surfLane = 1.0 - smoothstep(${trackClear} * 0.55, ${trackClear}, laneDistance);
   for (int i = 0; i < ${beadLayers.length}; i++) {
     float cellMm, minMm, maxMm, flatD, steepD, sparseD, denseD;
     int lobes;
@@ -329,7 +333,7 @@ float surfMist = 0.0;
       surfCap(surfHit, l3, r2, surfCapHeight(r2), n, down, slope, pix, geometry);
     }
   }
-  surfMist = clamp(surfMist, 0.0, 1.0);
+  surfMist = clamp(surfMist, 0.0, 1.0) * (1.0 - surfLane);
   // Out of focus, the samples of a frame land a defocus cell apart; a highlight tighter than that sums to separate copies.
   float surfCell = surfPupil * surfCocScale * abs(1.0 / surfFocus - 1.0 / max(vViewPosition.z, 1e-3)) / surfSampleRoot;
   float surfSpread = surfCell * pix / max(surfHit.radius, 1e-6);
@@ -337,7 +341,7 @@ float surfMist = 0.0;
   float w = surfHit.cover * (1.0 - 0.8 * smoothstep(1.0, 3.0, surfSpread));
   float shaded = w * (1.0 - surfHit.geometry);
   vec3 dropView = normalize(toView * surfHit.normal);
-  diffuseColor.rgb *= mix(1.0, 0.86, surfMist) * (1.0 - 0.55 * surfHalo * (1.0 - w));
+  diffuseColor.rgb *= mix(1.0, 0.86, surfMist) * mix(1.0, 0.8, surfLane) * (1.0 - 0.55 * surfHalo * (1.0 - w));
   diffuseColor.rgb *= mix(1.0, mix(0.72, 0.3, surfHit.rim), w);
   if (shaded > 0.0) {
     vec3 tilt = dropView - normal;
@@ -381,6 +385,7 @@ surfBeadRough = min(max(surfBeadRough, 0.045) + geometryRoughness, 1.0);
   material.clearcoat = mix(material.clearcoat, 1.0, surfBeadOut);
   material.clearcoatRoughness = mix(material.clearcoatRoughness, surfBeadRough, surfBeadOut);
   material.clearcoatRoughness = mix(material.clearcoatRoughness, max(material.clearcoatRoughness, 0.16), surfMist * 0.5);
+  material.clearcoatRoughness = mix(material.clearcoatRoughness, min(material.clearcoatRoughness, 0.03), surfLane);
 #else
   material.roughness = mix(material.roughness, surfBeadRough, surfBeadOut);
 #endif
