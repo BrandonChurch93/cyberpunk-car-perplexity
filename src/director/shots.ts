@@ -81,9 +81,10 @@ const master: Record<string, ShotMaker> = {
     const p = follow(t)
     const w = a.wheel.position
     const angle = mix(42, 46, p)
-    const target = v(w.x + 0.05, w.y + mix(0.255, -0.22, p), w.z + mix(0.2, 0.11, p))
+    const reach = mix(1.4, 1.5, p)
+    const target = v(w.x + 0.05, w.y + mix(0.27, -0.22, p), w.z + mix(0.2, 0.11, p))
     return {
-      position: v(w.x + Math.sin(rad(angle)) * 1.5, mix(0.74, 0.15, p), w.z + Math.cos(rad(angle)) * 1.5),
+      position: v(w.x + Math.sin(rad(angle)) * reach, mix(0.74, 0.15, p), w.z + Math.cos(rad(angle)) * reach),
       target,
       focalMm: portraitMm,
       focus: v(w.x + 0.1, target.y, target.z),
@@ -95,9 +96,9 @@ const master: Record<string, ShotMaker> = {
   lamp: (t, a) => {
     const p = glide(t, lamp.start, lamp.end, 1.2, 1.2)
     const l = a.lamp.position
-    const yaw = mix(31, 43, p)
+    const yaw = mix(32, 43, p)
     const reach = mix(1.9, 1.78, p)
-    const aside = ((mix(0.79, 0.67, p) * 2 - 1) * reach * 18) / portraitMm
+    const aside = ((mix(0.78, 0.67, p) * 2 - 1) * reach * 18) / portraitMm
     const target = v(l.x + 0.089 - Math.cos(rad(yaw)) * aside, l.y - 0.055, l.z - 0.066 + Math.sin(rad(yaw)) * aside)
     return {
       position: target.clone().addScaledVector(heading(yaw, 8), reach),
@@ -179,7 +180,7 @@ const vertical: Record<string, ShotMaker> = {
     const p = follow(t)
     const w = a.wheel.position
     const angle = mix(48, 45, p)
-    const target = v(w.x + 0.05, mix(0.47, 0.22, p), w.z + 0.12)
+    const target = v(w.x + 0.05, mix(0.47, 0.22, p), w.z + mix(0.12, 0.07, p))
     return {
       position: v(w.x + Math.sin(rad(angle)) * 1.5, mix(0.74, 0.15, p), w.z + Math.cos(rad(angle)) * 1.5),
       target,
@@ -193,9 +194,9 @@ const vertical: Record<string, ShotMaker> = {
   lamp: (t, a) => {
     const p = glide(t, lamp.start, lamp.end, 1.2, 1.2)
     const l = a.lamp.position
-    const target = l.clone().add(v(0.049, -0.03, -0.086))
+    const target = l.clone().add(v(0.049, -0.035, -0.086))
     return {
-      position: target.clone().addScaledVector(heading(mix(4, 14, p), 14), mix(1.34, 1.22, p)),
+      position: target.clone().addScaledVector(heading(mix(4, 14, p), 17), mix(1.34, 1.22, p)),
       target,
       focalMm: macroMm,
       focus: l,
@@ -206,7 +207,7 @@ const vertical: Record<string, ShotMaker> = {
   },
   detail: (t, a) => {
     const p = glide(t, detail.start, detail.end, 1, 1)
-    const target = a.detail.position.clone().add(v(0, 0, mix(0.07, -0.055, p)))
+    const target = a.detail.position.clone().add(v(0, 0, mix(0.07, -0.065, p)))
     return {
       position: target.clone().add(v(0.123, 0.542, -0.426)),
       target,
