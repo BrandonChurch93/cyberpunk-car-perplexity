@@ -91,6 +91,7 @@ function profileGuide(mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>, hu
       float guideRadiance() {
         float nearest = 1.0;
         float along = 0.0;
+        float facetStrength = 0.16;
         for (int i = 0; i < 3; ++i) {
           vec2 axis = guideRays[i];
           float t = clamp(dot(vGuidePlane, axis) / dot(axis, axis), 0.0, 1.0);
@@ -98,6 +99,7 @@ function profileGuide(mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>, hu
           if (dist < nearest) {
             nearest = dist;
             along = t * length(axis);
+            facetStrength = i == 2 ? 0.0 : 0.08;
           }
         }
         float crossSection = nearest / guideHalfWidth;
@@ -105,7 +107,7 @@ function profileGuide(mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>, hu
         float core = crossSection / 0.145;
         float pocket = smoothstep(0.28, 0.44, crossSection) * (1.0 - smoothstep(0.67, 0.91, crossSection));
         float pitch = along / 0.010;
-        float facets = 0.16 * pocket * cos(PI2 * pitch) * smoothstep(0.003, 0.014, along)
+        float facets = facetStrength * pocket * cos(PI2 * pitch) * smoothstep(0.003, 0.014, along)
           * (1.0 - smoothstep(0.12, 0.45, fwidth(pitch)));
         float resolve = 1.0 - smoothstep(0.065, 0.20, length(fwidth(vGuidePlane)) / guideHalfWidth);
         return mix(1.05, sleeve * (1.0 + facets) + 5.65 * exp(-0.5 * core * core), resolve);
@@ -267,15 +269,23 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const hub: XY = [.834, .429]
     const tips: XY[] = [[.877, .285], [.879, .644], [.470, .421]]
     const guideWidth = .015
+    const guideDepth = -.007
+    const upper = tips[1]
+    const hubZ = f(...hub, guideDepth)[2]
+    const upperZ = f(...upper, guideDepth)[2] + .0034
     const guideFace: Face = (x, y, depth) => {
       const p = f(x, y, depth)
-      const lift = .0105 * smooth(y, .505, .553) * (1 - smooth(y, .631, .652))
+      const t = Math.max(0, (y - hub[1]) / (upper[1] - hub[1]))
+      const center = f(mix(hub[0], upper[0], t), y, depth)[2]
+      const rise = mix(hubZ, upperZ, t) + .0148 * Math.sin(Math.PI * t) - center
+      const lift = rise * smooth(y, hub[1], .45)
       return [p[0], p[1], p[2] + lift]
     }
-    const guide = emit('front running guide', lightGuide(guideFace, hub, tips, guideWidth, -.007, outFront),
+    const guide = emit('front running guide', lightGuide(guideFace, hub, tips, guideWidth, guideDepth, outFront),
       false, false, f(...hub, -.008), 3.99)
     profileGuide(guide, hub, tips, guideWidth)
     const eyeStart = .495, eyeEnd = .919
+    const lensTuck = (x: number, y: number) => .021 * smooth(x, .895, .912) * smooth(y, .589, .625)
     const window = (u: number, v: number, d: number): Point => {
       const x = mix(eyeStart + .022 * (v - .5) ** 2, eyeEnd - .009 * v, u)
       const y = mix(eyeLow(x), eyeTop(x), v)
@@ -289,7 +299,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return [lower[0], mix(lower[1] - .005, y - .0008, v), mix(lower[2], upper[2] - .009, v)]
     }, 100, 8, outFront))
     black.push(patch((u, v) => window(u, v, .071), full ? 44 : 32, full ? 17 : 12, outFront, .009))
-    optical.push(patch((u, v) => window(u, v, -.008), 100, 20, outFront))
+    optical.push(patch((u, v) => {
+      const p = window(u, v, -.008)
+      return [p[0], p[1], p[2] - lensTuck(Math.abs(p[0]), p[1])]
+    }, 100, 20, outFront))
     black.push(patch((u, v) => {
       const x = mix(.462, .936, u)
       const edge = eyeLow(x)
@@ -302,7 +315,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 100, 16, outFront))
     for (const edge of [0, 1]) {
       const sign = 2 * edge - 1
-      black.push(patch((u, v) => window(edge + sign * mix(-.004, .012, v), u, mix(-.006, .005, v)), 14, 4, outFront, .003))
+      black.push(patch((u, v) => {
+        const p = window(edge + sign * mix(-.004, .012, v), u, mix(-.006, .005, v))
+        return [p[0], p[1], p[2] - 1.12 * lensTuck(Math.abs(p[0]), p[1])]
+      }, 14, 4, outFront, .003))
     }
     for (const [x, y, radius, lift, intensity] of [[.743, .526, .029, .002, 170], [.827, .560, .023, .008, 80]]) {
       const normal = new T.Vector3(side * .51, .12, .851).normalize()

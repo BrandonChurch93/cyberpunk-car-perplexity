@@ -812,6 +812,18 @@ describe('vehicle geometry and state', () => {
     }
   }, 15_000)
 
+  it('keeps the outer lamp return behind the fender in the portrait macro', () => {
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      const { position } = cameraAt(600 / config.film.fps, config.formats.vertical, vehicle.anchors)
+      for (const p of [[.91272, .64982, 1.86923], [.91414, .64861, 1.87039], [.91514, .63917, 1.87650]]) {
+        const direction = new T.Vector3().fromArray(p).sub(position).normalize()
+        const hit = new T.Raycaster(position, direction).intersectObject(vehicle.root, true)[0]
+        expect(hit.object.name).toBe('nose blades, shield and lower lip')
+      }
+    }
+  })
+
   it('uses the same running-guide optical coordinates and emitted intensity on each side', () => {
     for (const vehicle of [blockout, full]) {
       const guides = vehicle.root.getObjectsByProperty('name', 'front running guide')
