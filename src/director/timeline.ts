@@ -51,7 +51,7 @@ export const events = {
   lampsOffStart: finale.start + 2,
   lampsOffEnd: finale.start + 4,
   pullStart: finale.start + 0.3,
-  pullEnd: finale.start + 8.6,
+  pullEnd: finale.end,
 }
 
 /** Lamp thresholds on the 0 to 1 lamp stage, placed so each stage lands on its time in the wake beat. */

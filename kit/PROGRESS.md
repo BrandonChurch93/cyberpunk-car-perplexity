@@ -213,6 +213,8 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | The lamp shots hold the whole Y-shaped running light with both projectors and nothing wider. Wide: 85 mm from 1.9 m, sliding 32 to 43 degrees round the lamp at lamp height. Tall: 100 mm from 1.3 m, 17 degrees above, with the upper arm as the spine of the frame. No tire in either | The draft reviewers found a slice of tire and a severed lower arm in the wide lamp frame and a blank strip of hood in the tall one | `src/director/shots.ts` |
 | 2026-11-19 | The detail pass is levelled on the grille. Wide: a side view across the car with the grille as a level band, forward corner in at the start and aft corner in at the end. Tall: from aft and above with the grille as an upright runway, forward bar at the top at the start and aft bar at the bottom at the end | A pattern with no edge in frame gave no sense of travel. A corner entering and a corner leaving make the pass readable | `src/director/shots.ts` |
 | 2026-11-19 | The round 5 draft sheets went to the same two development agents once more before the formal pack. Their severe and major notes (tire slice and cut arm on the wide lamp, tall wheel wedged in the frame, blank hood on the tall lamp, arch void on the tall paint, bezel slivers on the detail, tangent at the arch crown on the wide wheel) were answered in the camera data. No score was taken | Same reason as the earlier draft reviews: a formal pack costs about 50 minutes | `out/work/look/` |
+| 2026-11-19 | Round 6 shot plan. The wide paint glide is 0.26 m with a locked head, so the vent slot on the wing top enters at 12 s and crosses to the left third while the valley beside the bonnet comes in above. The tall paint shot has its own oblique path with the crest crease as a diagonal through the middle. The lamp slides close on the lens (2.08 to 1.75 m wide, 1.48 to 1.20 m tall). The wheel jib moves over the whole beat with a 2.2 s start, 1.55 to 1.6 m out, so the arch lip holds to about 17.6 s. The detail start is eased over 1.5 s. The tall push starts at 8.9 m, ends at 5.95 m and eases its aim onto the nose and the near lamp. The tall rear shot arcs from 42 to 32 degrees off the tail at 4.9 to 4.3 m. The crane lands on the last frame (`events.pullEnd` is the film end) with a 1.3 s stop, and the push starts over 1.15 s | Critic round 5: C5 8, C8 8 with one major issue. See `scorecards/round-005/SUMMARY.md` | `src/director/shots.ts`, `src/director/timeline.ts`, `cut/SHOTS.md` |
+| 2026-11-19 | The easing rule in `cut/SHOTS.md` reads: each end takes at least 15 percent of the move, the dolly and the crane keep each end to 25 percent or less, and the sliders and the jib may take longer over a start that follows a cut | The round 5 motion critic read a 25 percent start on the detail slider as abrupt and the wheel boom as leaving the arch too soon. A longer ease is always within what the rig can do. The board gives 15 to 25 percent as a working figure, not a limit of the hardware | `cut/SHOTS.md` |
 
 ## Config changes
 
@@ -264,10 +266,17 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | the commit titled "Round 2 scorecards and the round 3 shot plan" | pushed to main. Round 2 scorecards, new wheel, paint, tall and crane shots, haze, surface water, vehicle B pass 3 and pass 4 through the side |
 | 2026-11-19 | the commit titled "Round 3 scorecards and the round 4 shot plan" | pushed to main. Round 3 scorecards, new paint, wheel, lamp, detail and return shots in both formats, headlamp haze cones, vehicle B pass 5 rear with the moved paint anchor, the five spoke wheel |
 | 2026-11-19 | the commits titled "Round 4 scorecards and the round 5 shot plan" | pushed to main. Round 4 scorecards, every insert shot again as a macro in both formats, the hex grille anchor, vehicle B grille duct and lamp fixes, wheel pass, world poles and insert lighting, headlamp haze, the status rule |
+| 2026-11-19 | the commit titled "Round 6 shot plan" | pushed to main. Round 5 scorecards, the inline status tool, the round 6 cameras, vehicle B final-camera pass, wheel pass with the blockout triangle cut (380,930), world divider and pole, rivulet and drips for the round 5 cameras |
 
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-19, session 10
+
+- Done: critic round 5 on the gray box: C5 8 with four minor issues, C8 8 with one major (the paint macro showed no landmark) and two minor. Picture statuses are now shown inline in the thread. Merged vehicle B (final-camera grille, lamp, tail, diffuser, deck), the wheel pass with a blockout triangle cut on the unseen wheel, the world divider and pole fix and the surface placement. Every round 5 note answered in the camera data from fixed-pose probes, and `cut/SHOTS.md` updated in the same commit.
+- Measured: 163 tests pass. Blockout vehicle 380,930 triangles. Slider peaks 0.034 to 0.127 m per second, jib 0.18, dolly 0.21 to 0.48, crane 0.38 to 0.46. Tall push 2.95 m of track.
+- Next: the surface owner places the rivulet and the drips for the round 6 cameras, then the round 6 pack with fresh C5 and C8 reviewers, then the Phase 2 gate.
 
 ### 2026-11-19, session 9
 
