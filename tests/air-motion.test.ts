@@ -33,10 +33,12 @@ describe('air rain motion', () => {
       beginSample() {},
     }
     const light = new LightRig([], 1).uniforms
-    const geometries = rainMeshes(new RibbonView(), world, light).map((mesh) => mesh.geometry as THREE.InstancedBufferGeometry)
+    const geometries = rainMeshes(new RibbonView(), world, light).map((mesh) => mesh.geometry)
     const [near, mid, far] = geometries
-    expect(mid.instanceCount).toBeGreaterThan(far.instanceCount)
-    expect(mid.instanceCount).toBeGreaterThan(near.instanceCount * 2)
+    const dropCount = (geometry: THREE.BufferGeometry): number =>
+      geometry.getAttribute('aDrop').count / (geometry instanceof THREE.InstancedBufferGeometry ? 1 : 4)
+    expect(dropCount(mid)).toBeGreaterThan(dropCount(far))
+    expect(dropCount(mid)).toBeGreaterThan(dropCount(near) * 2)
     world.deck.bounds.max.x += 3
     const resized = rainMeshes(new RibbonView(), world, light).map((mesh) => mesh.geometry)
     expect(resized[0].getAttribute('aDrop').array).toEqual(near.getAttribute('aDrop').array)
