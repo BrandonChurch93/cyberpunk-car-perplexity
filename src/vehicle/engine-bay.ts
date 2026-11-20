@@ -8,8 +8,30 @@ const coverStart = .684, coverEnd = .834
 const crown = (u: number) => mix(.974, .920, u) + .005 * Math.sin(u * Math.PI)
 const fore = .664, aft = .897
 
+function finishFaces(g: T.BufferGeometry, skin: number, wet: T.BufferGeometry[], dry: T.BufferGeometry[]): void {
+  const index = g.getIndex()
+  if (index) {
+    const top = g.clone()
+    top.setIndex(new T.BufferAttribute(index.array.slice(0, skin), 1))
+    g.setIndex(new T.BufferAttribute(index.array.slice(skin), 1))
+    wet.push(top)
+    dry.push(g)
+  } else {
+    const top = new T.BufferGeometry(), returnFaces = new T.BufferGeometry()
+    for (const name of ['position', 'normal', 'uv']) {
+      const a = g.getAttribute(name)
+      const split = skin * a.itemSize
+      top.setAttribute(name, new T.BufferAttribute(a.array.slice(0, split), a.itemSize))
+      returnFaces.setAttribute(name, new T.BufferAttribute(a.array.slice(split), a.itemSize))
+    }
+    wet.push(top)
+    dry.push(returnFaces)
+  }
+}
+
 export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   const surround: T.BufferGeometry[] = [], covers: T.BufferGeometry[] = [], steps: T.BufferGeometry[] = []
+  const returns: T.BufferGeometry[] = []
   const mesh: T.BufferGeometry[] = [], ribs: T.BufferGeometry[] = [], internals: T.BufferGeometry[] = [], black: T.BufferGeometry[] = []
   const rearLouvers: T.BufferGeometry[] = []
   const n = full ? 40 : 18
@@ -31,7 +53,7 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
       const span = .071 + .034 * Math.sin(Math.PI * u)
       return [x + side * (.0008 - span * v), y + .0015 - .037 * v - .010 * v ** 3, z]
     }
-    surround.push(patch(frame, n, 7, [0, 1, 0], .0027))
+    finishFaces(patch(frame, n, 7, [0, 1, 0], .0027), n * 7 * 6, surround, returns)
     const wall = (u: number, v: number): Point => {
       const p = frame(u, 1)
       return [p[0] + side * (.025 - .126 * v), p[1] - (.184 - .036 * u) * v, p[2]]
@@ -47,7 +69,8 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
         const height = .015 + .058 * v ** 1.28 + .014 * i / 3
         return [p[0] - side * inner * v, p[1] - height - .010 * u + .005 * smooth(u, .77, 1), p[2]]
       }
-      steps.push(patch(step, full ? 18 : 9, full ? 12 : 8, [0, 1, 0], .004))
+      const columns = full ? 18 : 9, rows = full ? 12 : 8
+      finishFaces(patch(step, columns, rows, [0, 1, 0], .004), columns * rows * 6, steps, returns)
     }
     const airFace = (u: number, v: number): Point => {
       const s = mix(.673, .731, u)
@@ -63,7 +86,8 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
     const airBorder: Point[] = [airFace(0, 0), airFace(1, 0), airFace(1, 1), airFace(0, 1)]
     surround.push(contour([...airBorder, airBorder[0]], .0038, false, 5))
 
-    covers.push(patch((u, v) => cover(side, u, v), n, full ? 18 : 12, [0, 1, 0], .038))
+    const rows = full ? 18 : 12
+    finishFaces(patch((u, v) => cover(side, u, v), n, rows, [0, 1, 0], .038), n * rows * 6, covers, returns)
     for (let tile = 0; tile < 5; tile++) {
       const at = .263 + tile * .116
       for (const lane of [0, 1]) {
@@ -73,7 +97,9 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
             const p = cover(side, centerU + du, centerV + dv)
             return [p[0], p[1] + .006, p[2]]
           })
-        covers.push(polygon(roundedPath(hex, 2, .16), [0, 1, 0], .007))
+        const outline = roundedPath(hex, 2, .16)
+        const pad = polygon(outline, [0, 1, 0], .007)
+        finishFaces(pad, (pad.getAttribute('position').count - outline.length * 6) / 2, covers, returns)
       }
     }
     const pad: Point[] = [[.325, .465], [.345, .435], [.614, .435], [.649, .469], [.649, .534], [.623, .569],
@@ -127,7 +153,8 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   add(parent, 'thin carbon engine bay surround', joined(surround), m.carbon)
   add(parent, 'carbon cam covers with hex relief', joined(covers), m.bayCover)
   add(parent, 'stepped carbon bay vents', joined(steps), m.ventCarbon)
-  add(parent, 'front airbox hex grilles', joined(mesh), m.carbon)
+  add(parent, 'dry carbon bay wall returns', joined(returns), m.dark)
+  add(parent, 'front airbox hex grilles', joined(mesh), m.dark)
   add(parent, 'paired cam cover rib groups and blank pads', joined(ribs), m.diffuser)
   add(parent, 'dark intake plenum and engine hardware', joined(internals), m.engine)
   add(parent, 'recessed bay chamber and blank plate', joined(black), m.dark)

@@ -392,11 +392,13 @@ describe('vehicle geometry and state', () => {
     }
   })
 
-  it('registers beading on the bay covers and stepped carbon vents only', () => {
+  it('keeps the exposed bay cover and vent faces beaded and the cavity returns dry', () => {
     for (const vehicle of [blockout, full]) {
       for (const [name, wetness] of [
         ['carbon cam covers with hex relief', 'beads'],
         ['stepped carbon bay vents', 'beads'],
+        ['dry carbon bay wall returns', 'none'],
+        ['front airbox hex grilles', 'none'],
         ['dark chevron rear bay louvers', 'none'],
       ]) {
         const mesh = vehicle.root.getObjectByName(name) as T.Mesh
