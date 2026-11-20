@@ -13,7 +13,11 @@ export const anchor = (position: Point, normal: Point, radius: number): Anchor =
 const diffuserProfile = [[.908, .159], [.929, .191], [.940, .203], [.960, .233], [.970, .265], [.975, .295], [.980, .325], [.990, .399], [.995, .430], [1, .470]] as const
 const diffuserRise = curve(diffuserProfile)
 const diffuserRun = curve(diffuserProfile.map(([s, y]) => [y, s]))
-const diffuserZ = (x: number, y: number, z: number): number => limitTailZ(x, Math.max(z, zAt(diffuserRun(y))))
+const diffuserZ = (x: number, y: number, z: number, blendWidth = 0): number => {
+  const floor = zAt(diffuserRun(y))
+  const t = Math.max(0, blendWidth - Math.abs(z - floor))
+  return limitTailZ(x, Math.max(z, floor) + (blendWidth ? t * t / (4 * blendWidth) : 0))
+}
 
 function ribbon(face: Face, knots: readonly XY[], width: number, depth: number, steps = 36): T.BufferGeometry {
   const path = new T.CatmullRomCurve3(knots.map(([x, y]) => new T.Vector3(x, y, 0)), false, 'centripetal')
@@ -101,7 +105,7 @@ function profileGuide(mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>, hu
         float core = crossSection / 0.145;
         float pocket = smoothstep(0.28, 0.44, crossSection) * (1.0 - smoothstep(0.67, 0.91, crossSection));
         float pitch = along / 0.010;
-        float facets = 0.31 * pocket * cos(PI2 * pitch) * smoothstep(0.003, 0.014, along)
+        float facets = 0.16 * pocket * cos(PI2 * pitch) * smoothstep(0.003, 0.014, along)
           * (1.0 - smoothstep(0.12, 0.45, fwidth(pitch)));
         float resolve = 1.0 - smoothstep(0.065, 0.20, length(fwidth(vGuidePlane)) / guideHalfWidth);
         return mix(1.05, sleeve * (1.0 + facets) + 5.65 * exp(-0.5 * core * core), resolve);
@@ -263,7 +267,13 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const hub: XY = [.834, .429]
     const tips: XY[] = [[.877, .285], [.879, .644], [.470, .421]]
     const guideWidth = .015
-    const guide = emit('front running guide', lightGuide(f, hub, tips, guideWidth, -.007, outFront), false, false, f(...hub, -.008), 3.99)
+    const guideFace: Face = (x, y, depth) => {
+      const p = f(x, y, depth)
+      const lift = .0105 * smooth(y, .505, .553) * (1 - smooth(y, .631, .652))
+      return [p[0], p[1], p[2] + lift]
+    }
+    const guide = emit('front running guide', lightGuide(guideFace, hub, tips, guideWidth, -.007, outFront),
+      false, false, f(...hub, -.008), 3.99)
     profileGuide(guide, hub, tips, guideWidth)
     const eyeStart = .495, eyeEnd = .919
     const window = (u: number, v: number, d: number): Point => {
@@ -287,7 +297,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const y = mix(low, edge + .004, v)
       const d = .0005 + .039 * smooth(edge - y, -.004, .085)
         - .017 * smooth(x, .833, .887) * smooth(y, .276, .36)
-        + .010 * smooth(x, .823, .859)
+        + .010 * smooth(x, .823, .859) + .031 * smooth(x, .889, .929) * smooth(y, .548, .624)
       return f(x, y, d)
     }, 100, 16, outFront))
     for (const edge of [0, 1]) {
@@ -346,7 +356,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const x = (.979 - .024 * v) * u
       const low = tailLower(x), high = tailUnderSlot(x) + .002
       const y = mix(low, high, v)
-      const underMask = mix(.080, .008, smooth(x, .115, .665))
+      const underMask = mix(.060, .008, smooth(x, .115, .665))
       const z = bumperSweep(x) + underMask * v * (1.10 - .10 * v)
       const limit = limitTailZ(x, -3)
       const offset = z - limit
@@ -400,7 +410,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const low = .161 + .026 * smooth(u, .66, 1)
       const crown = (.019 * (1 - smooth(u, .32, .48)) + .035 * smooth(u, .63, .78)) * smooth(v, .24, 1)
       const y = low + mix(.161, .184, u) * v + crown
-      return [side * x, y, diffuserZ(x, y, z)]
+      return [side * x, y, diffuserZ(x, y, z, .012)]
     }
     diffuserShell.push(patch(diffuser, 64, 20, [0, -1, 0], .016))
     diffuserShell.push(patch((u, v) => {
@@ -427,7 +437,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const recess = Math.sin(Math.PI * v) ** 1.16
       const lane = smooth(x, .485, .538) * (1 - smooth(x, .754, .82))
       const p = r(x, y, .029 + .017 * v + (.046 + .069 * center + .056 * lane) * recess)
-      return [p[0], y, diffuserZ(x, y, mix(diff[2], p[2], smooth(v, 0, .78)))]
+      return [p[0], y, diffuserZ(x, y, mix(diff[2], p[2], smooth(v, 0, .78)), .012)]
     }
     const mouthSplit = .454, lipStart = .84
     diffuserShell.push(patch((u, v) => rampMouth(mix(mouthSplit, 1, u), v), 37, 19, outRear, .010))
