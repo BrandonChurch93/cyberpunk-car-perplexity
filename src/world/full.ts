@@ -6,6 +6,7 @@ import { buildDeck } from './deck'
 import { detailFacades } from './facades'
 import { loadLabels, roofFixtures } from './fixtures'
 import { Forms, group } from './forms'
+import { addApprovedHeroLayout } from './hero-layout'
 import { finishRoof } from './roof-look'
 
 export async function createFullWorld(): Promise<WorldModule> {
@@ -16,7 +17,7 @@ export async function createFullWorld(): Promise<WorldModule> {
   const city = group(root, 'city')
   const forms = new Forms()
   const deck = buildDeck(forms, roof)
-  buildCity(forms, city)
+  buildCity(forms, city, true)
   const surfaces = finishRoof(deck, roof)
   const cityColors = new Map<THREE.Material, THREE.Material>()
   city.traverse(o => {
@@ -34,6 +35,7 @@ export async function createFullWorld(): Promise<WorldModule> {
   const fixtures = roofFixtures(root, roof, city, labels, surfaces)
   const updateCity = cityPracticals(city, labels, fixtures.signs)
   detailFacades(city)
+  const hero = addApprovedHeroLayout(root, labels)
   const set = (timeSeconds: number, cutTime = timeSeconds) => {
     fixtures.set(timeSeconds, cutTime)
     updateCity(timeSeconds)
@@ -42,7 +44,7 @@ export async function createFullWorld(): Promise<WorldModule> {
   return {
     root,
     lights: fixtures.lights,
-    signs: fixtures.signs,
+    signs: [...new Set([...fixtures.signs, ...hero.signs])],
     deck,
     reflectionBox: new THREE.Box3(new THREE.Vector3(min.x, 0, min.y), new THREE.Vector3(max.x, 81, max.y)),
     surfaces,
