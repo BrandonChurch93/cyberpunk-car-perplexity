@@ -586,7 +586,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const fairCrest = smooth(s, .813, .880)
       const correction = ridgeFold * fairCrest
       const rawFall = (inY - haunchRidgeY(s) + ridgeFold - correction) / (inY - outside[1])
-      const fallAtRidge = .915 - fairPositive(.915 - .085 - fairPositive(rawFall - .085, .08), .03)
+      const fallAtRidge = .915 - fairPositive(.915 - .16 - fairPositive(rawFall - .16, .08), .03)
       const reach = fairStep(inY - haunchRidgeY(s), -.05, .035)
       const fall = mix(1, ridgeV * (1 - fallAtRidge) / (fallAtRidge * (1 - ridgeV)),
         reach * fairStep(s, .635, .695) * (1 - smooth(s, .915, .939)))
