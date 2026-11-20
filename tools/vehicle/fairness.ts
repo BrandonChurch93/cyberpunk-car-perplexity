@@ -5,7 +5,7 @@
 //   npx tsx tools/vehicle/fairness.ts --base <label>     also stack the saved sheets of an earlier run above this one
 //   npx tsx tools/vehicle/fairness.ts --control true     measure a fine 1 m sphere instead of the car: the noise floor
 //
-// Options: --frames 195,360  --formats master,vertical  --step 10 (mm)  --crease 40 (mm)  --label <name>
+// Options: --frames 195,360  --detail full|blockout  --formats master,vertical  --step 10 (mm)  --crease 40 (mm)  --label <name>
 //
 // Rays are cast through the pixel grid of each film camera against the full-detail vehicle at rest at that frame.
 // Every hit on a painted surface keeps its world position and its interpolated shading normal, the normal that the
@@ -31,6 +31,7 @@ import { args, ensureDir, repoRoot, workDir } from '../lib/env.ts'
 
 const a = args()
 const frames = (a.frames ?? '195,360').split(',').map(Number)
+const detail: 'full' | 'blockout' = a.detail === 'blockout' ? 'blockout' : 'full'
 const formatKeys = (a.formats ?? 'master,vertical').split(',') as Array<'master' | 'vertical'>
 const step = Number(a.step ?? 10) / 1000
 const creaseRadius = Number(a.crease ?? 40) / 1000
@@ -217,7 +218,7 @@ const visible = (o: T.Object3D | null): boolean => !o || (o.visible && visible(o
 const isSeeThrough = (m: T.Material) => (m.transparent && m.opacity < 0.5) || m.blending === T.AdditiveBlending || (m.transparent && !m.depthWrite)
 
 async function soupAt(timeSeconds: number) {
-  const car = await createVehicle({ paint: paintById(defaultPaint), detail: 'full' })
+  const car = await createVehicle({ paint: paintById(defaultPaint), detail })
   const s = stateAt(timeSeconds)
   car.update({ timeSeconds, lampStage: s.lampStage, engine: s.engine, vibration: s.vibration })
   car.root.updateMatrixWorld(true)
@@ -501,11 +502,11 @@ if (a.zebra === 'true') {
   const files: string[] = []
   for (const key of formatKeys) {
     const id = config.formats[key].id
-    execFileSync('npx', ['tsx', 'tools/vehicle/stills.ts', '--studio', 'true', '--detail', 'full', '--format', id, '--frames', frames.join(','), '--diags', 'zebra'], { cwd: repoRoot, stdio: 'inherit' })
+    execFileSync('npx', ['tsx', 'tools/vehicle/stills.ts', '--studio', 'true', '--detail', detail, '--format', id, '--frames', frames.join(','), '--diags', 'zebra'], { cwd: repoRoot, stdio: 'inherit' })
   }
   for (const frame of frames) for (const key of formatKeys) {
     const id = config.formats[key].id
-    const src = join(workDir, 'vehicle', 'studio', `f${String(frame).padStart(5, '0')}-${id}-draft-zebra-${defaultPaint}-full.png`)
+    const src = join(workDir, 'vehicle', 'studio', `f${String(frame).padStart(5, '0')}-${id}-draft-zebra-${defaultPaint}-${detail}.png`)
     const dst = join(out, `zebra-${frame}-${key}.png`)
     writeFileSync(dst, readFileSync(src))
     files.push(dst)
