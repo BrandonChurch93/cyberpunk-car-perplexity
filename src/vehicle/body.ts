@@ -313,6 +313,26 @@ export function frontHoodEdge(x: number): Point {
   return [x, p[1], p[2]]
 }
 
+function noseReturn([x, y, z]: Point, v: number): Point {
+  const aft = z - .012 * v
+  const s = sAt(aft), skin = bonnet(s, x / wingEdge(s).x)
+  const drop = .020 * v ** 3 * (4 - 3 * v)
+  return [x, mix(skin[1], y, fairStep(v, 0, .26)) - drop, aft]
+}
+
+export function frontBezelSeat(edge: Point): Point {
+  const [x, , z] = edge
+  const apron = noseReturn(edge, .45)
+  let lo = Math.max(0, sAt(z) - .014), hi = sAt(z)
+  for (let i = 0; i < 18; i++) {
+    const s = (lo + hi) / 2
+    if (plan(s) < x) lo = s
+    else hi = s
+  }
+  const s = (lo + hi) / 2
+  return blend(apron, [x, noseShoulder(s), zAt(s)], fairStep(x, .809, .874))
+}
+
 const cowl = (v: number): Point => bonnet(cabFront(v), v * .818)
 const roofWidth = curve([[.417, .625], [.46, .620], [.51, .621], [.56, .597], [.595, .550], [.625, .49]])
 const roofHeight = curve([[.417, 1.122], [.445, 1.14], [.472, 1.157], [.5, 1.16], [.545, 1.16], [.578, 1.153], [.595, 1.15]])
@@ -468,12 +488,6 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const q = bonnetSplit * v
       return bonnet(bonnetGrid(sampleGrid(bonnetStations, u)) * (frontEnd(q) - bonnetGap) / splitEnd, q)
     }), [0, 1, 0], hoodTraces, bonnetStations.length - 1, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
-    const noseReturn = ([x, y, z]: Point, v: number): Point => {
-      const aft = z - .012 * v
-      const s = sAt(aft), skin = bonnet(s, x / wingEdge(s).x)
-      const drop = .020 * v ** 3 * (4 - 3 * v)
-      return [x, mix(skin[1], y, fairStep(v, 0, .26)) - drop, aft]
-    }
     part(paint, sided((u, v) => noseReturn(bonnet(bonnetGrid(sampleGrid(noseStations, u)), 1), v)),
       [0, 0, 1], noseStations.length - 1, 5, 0)
     part(paint, sided((u, v) => noseReturn(bonnet(0, u), v)), [0, 0, 1], 6, 5, 0)
