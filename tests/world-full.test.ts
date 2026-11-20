@@ -457,12 +457,23 @@ describe('full roof world', () => {
       expect(skyRay(x,.92).intersectObject(world.root, true)[0]?.object.name).toBe('city-lit cloud base')
     }
     expect(skyRay(-.16,.75).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
-    for (const [x,y] of [[-.44,.70],[-.32,.75],[-.20,.70]]) {
-      const hit = skyRay(x,y).intersectObject(world.root, true)[0]
-      expect(hit?.distance).toBeGreaterThan(800)
-      expect(hit?.distance).toBeLessThan(1100)
+    const centerTowers = [
+      [.291,.175,'hero middle west distance',650,720],
+      [.327,.200,'far west narrow crown',980,1_025],
+      [.363,.150,'hero far west distance',790,830],
+      [.402,.200,'far inner west glass crown',965,1_015],
+      [.440,.175,'hero far center distance',845,900],
+      [.478,.120,'hero violet tower',630,690],
+    ] as const
+    for (const [x,y,name,near,far] of centerTowers) {
+      const hit = skyRay(x*2-1,1-y*2).intersectObject(world.root, true)[0]
+      expect(hit?.object.name).toBe(name)
+      expect(hit?.distance).toBeGreaterThan(near)
+      expect(hit?.distance).toBeLessThan(far)
       expect(patchesOf((hit?.object as THREE.Mesh).material as THREE.Material)).toContain('hero tower cladding and window rooms')
     }
+    expect(skyRay(.402*2-1,1-.175*2).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
+    expect(skyRay(.421*2-1,1-.175*2).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
     cameraAtTime(vertical, heroFrameSeconds)
     const tallScreen = toScreen(position(billboard))
     expect(Math.abs(tallScreen.x)).toBeLessThan(.7)
