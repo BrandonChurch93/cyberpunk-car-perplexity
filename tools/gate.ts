@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { frameCount, formatById } from '../src/config.ts'
@@ -170,22 +171,43 @@ const checks: Record<string, Check> = {
     const bad: string[] = []
     for (const e of requiredExtensions) if (!caps.extensions.includes(e)) bad.push(e)
     for (const [k, v] of Object.entries(requiredLimits)) if (!(k in caps.limits) || caps.limits[k] < v) bad.push(`${k} ${v}`)
-    const src = execFileSync('grep', ['-rhoE', "getExtension\\(['\"][A-Za-z0-9_]+['\"]\\)", join(repoRoot, 'src')], { encoding: 'utf8' }).split('\n').filter(Boolean)
+    let found = ''
+    try {
+      found = execFileSync('grep', ['-rhoE', "getExtension\\(['\"][A-Za-z0-9_]+['\"]\\)", join(repoRoot, 'src')], { encoding: 'utf8' })
+    } catch (e) {
+      if ((e as { status?: number }).status !== 1) throw e
+    }
+    const src = found.split('\n').filter(Boolean)
     for (const hit of src) {
       const name = hit.replace(/getExtension\(['"]|['"]\)/g, '')
       if (!caps.extensions.includes(name)) bad.push(`${name} requested in src`)
     }
     return { ok: bad.length === 0, detail: bad.length ? `outside the recorded set: ${bad.join(', ')}` : `${requiredExtensions.length} extensions and ${Object.keys(requiredLimits).length} limits required, all inside the recorded set` }
   },
+  G15: () => {
+    const dir = join(repoRoot, 'reference', 'approved')
+    const manifest = join(dir, 'MANIFEST.sha256')
+    if (!existsSync(manifest)) return { ok: false, detail: 'reference/approved/MANIFEST.sha256 is missing' }
+    const bad: string[] = []
+    const lines = readFileSync(manifest, 'utf8').split('\n').filter((l) => l.trim())
+    for (const line of lines) {
+      const [want, name] = line.trim().split(/\s+/)
+      const file = join(dir, name)
+      if (!existsSync(file)) bad.push(`${name} is missing`)
+      else if (createHash('sha256').update(readFileSync(file)).digest('hex') !== want) bad.push(`${name} does not match its hash`)
+    }
+    if (!lines.some((l) => l.trim().endsWith('hero.jpg'))) bad.push('hero.jpg is not listed')
+    return { ok: bad.length === 0, detail: bad.length ? bad.join('; ') : `the approved image matches its hash, ${lines.length} file listed` }
+  },
 }
 
 const phases: Record<string, string[]> = {
-  '0': ['G1', 'G2', 'G3', 'G4'],
-  '1': ['G1', 'G2', 'R1', 'R2', 'R3', 'R4', 'G12', 'G13'],
-  '2': ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9'],
-  '3': ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G9', 'G10', 'G11', 'G12', 'G13', 'G14'],
-  '4': ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11', 'G12', 'G13', 'G14'],
-  '5': ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11', 'G12', 'G13', 'G14'],
+  '0': ['G1', 'G2', 'G3', 'G4', 'G15'],
+  '1': ['G1', 'G2', 'R1', 'R2', 'R3', 'R4', 'G12', 'G13', 'G15'],
+  '2': ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G15'],
+  '3': ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G9', 'G10', 'G11', 'G12', 'G13', 'G14', 'G15'],
+  '4': ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11', 'G12', 'G13', 'G14', 'G15'],
+  '5': ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11', 'G12', 'G13', 'G14', 'G15'],
 }
 
 async function main(): Promise<void> {
