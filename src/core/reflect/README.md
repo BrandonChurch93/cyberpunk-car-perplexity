@@ -4,7 +4,9 @@
 
 ## Environment capture (`box`)
 
-Once per frame in `beginFrame` a cube is drawn from 0.6 m above the deck at the vehicle, with the vehicle hidden, filtered for roughness by `Prefilter` (GGX, PMREM layout) and set as `scene.environment`. On the final tier a small first capture without the deck lights the deck inside the main capture, so the body sees the deck's own reflection.
+Once per frame in `beginFrame` a cube is drawn from 0.6 m above the deck at the vehicle, with the vehicle hidden, filtered for roughness by `Prefilter` (GGX, PMREM layout) and set as `scene.environment`. Each face that sees the deck gets its own mirrored view, reusing one padded HDR target at the cube face resolution. The wet material resolves that view with its normal, roughness and Fresnel as it does for the film camera. Lamp proxies are composited only after the background is drawn, so they do not appear in the deck's mirror or in the vehicle's environment.
+
+The final tier also draws a small deck-free cube for broad first-bounce lighting. It supplies the fallback outside the planar view.
 
 Every standard and physical material under `world.root` and `vehicle.root` gets the `reflect-box` patch: the environment lookup is corrected to `world.reflectionBox`. Materials added later are picked up at the next `beginFrame`.
 
@@ -34,13 +36,13 @@ A world point `x` is found in the mirror image at `(reflectViewProjection * vec4
 
 ## Quality per tier
 
-`quality` in `index.ts` sets cube size, the bounce, planar resolution and how often the planar is redrawn. Measured at 16x9, frame 195, full world, against 11.2 s per sample without this part:
+`quality` in `index.ts` sets cube size, the broad first bounce, and the resolution and cadence of the camera's planar target.
 
-| Tier | Per sample | Per frame, once |
-| --- | --- | --- |
-| draft | 1 sample, 22 s against 12 s | capture 256 and one planar draw at quarter size |
-| review | +3.2 s | capture 512 and one planar draw, about 10 s |
-| final | +8 s | capture 1024 with bounce, about 17 s |
+| Tier | Cube face | Camera planar scale | Camera planar cadence |
+| --- | --- | --- | --- |
+| draft | 256 px | 0.25 | First sample |
+| review | 512 px | 0.5 | First sample |
+| final | 1024 px | 0.5 | Every sample |
 
 ## Diagnostics
 
