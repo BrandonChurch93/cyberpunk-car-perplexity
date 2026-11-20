@@ -342,7 +342,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const section = (at: number) => hinge(at - ridge, foldHalf) - returnFold * hinge(at - deckOut(s), foldHalf)
       const vane = section(x) - mix(section(inX), section(outside[0]), v)
       const ridgeV = T.MathUtils.clamp((ridge - inX) / (outside[0] - inX), .14, .86)
-      const turn = -.37 * smooth(s, .603, .653) * (1 - smooth(s, .900, .926))
+      const turn = -.37 * smooth(s, .614, .672) * smooth(ridge - inX, -.009, .055)
+        * (1 - smooth(s, .900, .926))
       const ridgeFold = turn * (section(ridge) - mix(section(inX), section(outside[0]), ridgeV))
       const fallAtRidge = T.MathUtils.clamp((inY - haunchRidgeY(s) + ridgeFold) / (inY - outside[1]), .085, .915)
       const reach = smooth(inY - haunchRidgeY(s), -.027, .020)
@@ -352,9 +353,9 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const high = Math.max(haunchCeiling(x), outside[1] + .005)
       const base = y + turn * vane
       const tBend = base - haunchFold(s)
-      const fade = smooth(s, .628, .667) * (1 - smooth(s, .711, .749))
+      const fade = smooth(s, .642, .677) * (1 - smooth(s, .711, .749))
         * (1 - smooth(Math.abs(tBend), .014, .105)) * Math.sin(Math.PI * v)
-      const shape = base + .32 * fade * (hinge(tBend, .006) - .5 * tBend)
+      const shape = base + .19 * fade * (hinge(tBend, .010) - .5 * tBend)
       const capBlend = smooth(s, .735, .782)
       const cap = hinge(shape - high + mix(.008, .004, capBlend), mix(.014, .004, capBlend))
       return [x, shape - cap * smooth(x, .695, .765), zAt(s)]
@@ -368,7 +369,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const outside = deckSection(s, 0)
       const roofX = mix(.486, inner[0], t)
       const roofStep = spine(.595) - roof(.595, .486 / roofWidth(.595))[1]
-      const roofEnd: Point = [roofX, spine(s) - roofStep * .50 * (1 - smooth(s, .595, .644)), zAt(s)]
+      const roofEnd: Point = [roofX, spine(s) - roofStep * (1 - smooth(s, .597, .658)) - .009 * t, zAt(s)]
       const next = deckSection(s, .006)
       const span = outside[0] - roofEnd[0]
       const slope = T.MathUtils.clamp((next[1] - outside[1]) / (next[0] - outside[0]), -1.20, .22)
@@ -423,14 +424,15 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       }, uSide, full ? 24 : 8, 4, 0)
       part(paint, (u, v) => {
         const p = archPanel(u, mix(0, .028, v))
-        return [side * Math.min(dimensions.bodyWidth / 2, Math.abs(p[0]) + .0025 * Math.sin(Math.PI * v)), p[1], p[2]]
-      }, uSide, columns, 6, .006)
+        const bead = rear ? .0025 * Math.sin(Math.PI * v) : .0016 * Math.sin(Math.PI * v) ** 2
+        return [side * Math.min(dimensions.bodyWidth / 2, Math.abs(p[0]) + bead), p[1], p[2]]
+      }, uSide, columns, 6, rear ? .006 : .003)
       const wellX = w.x - w.width / 2 - .025
       const well = (u: number, v: number): Point => {
         const angle = mix(theta0, theta1, u)
         const p = lower(angle)
         const depth = .012 * Math.sin(Math.PI * v)
-        const x = mix(Math.abs(p[0]) - .002, wellX, v), z = p[2] + depth * Math.cos(angle)
+        const x = mix(Math.abs(p[0]) - (rear ? .002 : .005), wellX, v), z = p[2] + depth * Math.cos(angle)
         const y = p[1] + depth * Math.sin(angle)
         const s = sAt(z)
         const ceiling = rear ? y + .01 : bonnet(s, Math.min(1, x / wingEdge(s).x))[1] - .010
@@ -509,7 +511,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     folded((u, v) => {
       const s = mix(first.after, Math.max(first.after, cutLeading(v) - gap), u)
       return cap(s, v)
-    }, uSide, [beltLine])
+    }, uSide, [beltLine], n, 0)
     folded((u, v) => {
       const y = mix(.136, intakeBottom, u)
       return sillPoint(mix(doorLeadAt(y) + gap, last.before, v), y)
