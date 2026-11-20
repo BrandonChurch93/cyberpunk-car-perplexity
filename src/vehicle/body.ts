@@ -298,9 +298,10 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const crossLine = (p: Point) => crossOffset(sAt(p[2]), p[1])
   const crossToe = (p: Point) => crossLine(p) - crossStepRun
   const gap = .00055
+  const bonnetGap = .00033
   const frontEnd = (v: number) => v <= .818 ? hoodShut(v / .818) : mix(hoodShut(1), .295, (v - .818) / .182)
   const bonnetSplit = .72
-  const splitEnd = frontEnd(bonnetSplit) - gap
+  const splitEnd = frontEnd(bonnetSplit) - bonnetGap
   const bonnetGrid = curve([[0, 0], [.4, .069], [.68, .154], [.84, .199], [1, splitEnd]])
   const bonnetLengthSteps = full ? 176 : 53
   for (const side of [1, -1]) {
@@ -309,14 +310,14 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const uSide: Point = [side, 0, 0]
     folded(sided((u, v) => {
       const q = bonnetSplit * v
-      return bonnet(bonnetGrid(u) * (frontEnd(q) - gap) / splitEnd, q)
+      return bonnet(bonnetGrid(u) * (frontEnd(q) - bonnetGap) / splitEnd, q)
     }), [0, 1, 0], hoodTraces, bonnetLengthSteps, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
     folded(sided((u, v) => {
       const q = mix(bonnetSplit, 1, v)
-      return bonnet(bonnetGrid(u) + (frontEnd(q) - gap - splitEnd) * fairStep(u, .81, 1), q)
+      return bonnet(bonnetGrid(u) + (frontEnd(q) - bonnetGap - splitEnd) * fairStep(u, .81, 1), q)
     }), [0, 1, 0], hoodTraces.slice(1), bonnetLengthSteps, 0, full ? [6, 15, 4] : [2, 6, 2])
     folded(sided((u, v) => {
-      const s = mix(frontEnd(mix(.817, 1, v)) + gap, .599, u * (.43 + .57 * u))
+      const s = mix(frontEnd(mix(.817, 1, v)) + bonnetGap, .599, u * (.43 + .57 * u))
       const q = mix(.817, 1, v)
       const front = bonnet(s, q)
       const inside = edgeGlass(s, 0)
@@ -328,7 +329,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const p = bonnet(s, v * .818)
       return [side * p[0], p[1] - drop * (1 - .67 * v * v), p[2]]
     }
-    part(paint, (u, v) => cowlFace(mix(hoodShut(v) + gap, cowlStep(v), u), v, mix(.00025, .0015, fairStep(u, .22, 1))),
+    part(paint, (u, v) => cowlFace(mix(hoodShut(v) + bonnetGap, cowlStep(v), u), v, mix(.00018, .0011, fairStep(u, .22, 1))),
       [0, 1, 0], 6, n)
     part(black, (u, v) => cowlFace(mix(cowlStep(v), cabFront(v) + gap, u), v, mix(.006, .0026, u)), [0, 1, 0], 7, n, .003)
     part(black, (u, v) => cowlFace(mix(hoodShut(v) - .004, cabFront(v) + .003, u), v, .009), [0, 1, 0], 4, n, .003)
@@ -336,7 +337,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const p = bonnet(mix(.234, .320, u), mix(.783, .912, v))
       return [p[0], p[1] - mix(.0018, .0045, smooth(u, .64, 1)), p[2]]
     }), [0, 1, 0], full ? 24 : 12, full ? 9 : 6, 0)
-    for (const [a, b] of [[.071, frontEnd(1) - gap], [frontEnd(1) + gap, .331]]) {
+    for (const [a, b] of [[.071, frontEnd(1) - bonnetGap], [frontEnd(1) + bonnetGap, .331]]) {
       part(paint, sided((u, v) => {
         const s = mix(a, b, u)
         const w = wingEdge(s)
@@ -354,7 +355,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       return [side * mix(.646, .646 - .14 * u, v), mix(.707, .800 + .030 * u, v), zAt(s)]
     }, uSide, 10, 4, 0)
 
-    const deckSection = (s: number, v: number): Point => {
+    const deckShape = (s: number, v: number): Point => {
       const inside = bayEdge(s, 1)
       const outside: Point = [shoulderX(s), shoulder(s), zAt(s)]
       const t = smooth(s, .677, .706)
@@ -387,7 +388,19 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const cap = hinge(shape - high + mix(.008, .004, capBlend), mix(.014, .004, capBlend))
       const crownTrim = .013 * smooth(s, .833, .874) * (1 - smooth(s, .895, .924))
         * smooth(x, .598, .705) * (1 - smooth(x, .758, .852))
-      return [x, shape - cap * smooth(x, .695, .765) - crownTrim, zAt(s)]
+      const sculpted = shape - cap * smooth(x, .695, .765) - crownTrim
+      const calm = mix(inY, outside[1], v * (.76 + .24 * v)) + .003 * Math.sin(Math.PI * v) ** 2
+      const fair = fairStep(s, .758, .791) * (1 - fairStep(s, .883, .924)) * (1 - fairStep(x, .571, .610))
+      return [x, mix(sculpted, calm, fair), zAt(s)]
+    }
+    const deckSection = (s: number, v: number): Point => {
+      const [x, y, z] = deckShape(s, v)
+      const mask = fairStep(s, .812, .840) * (1 - fairStep(s, .893, .919))
+        * fairStep(x, .588, .648) * (1 - fairStep(x, .878, .952))
+      if (mask === 0) return [x, y, z]
+      const faired = (deckShape(s - .030, v)[1] + 4 * deckShape(s - .015, v)[1] + 6 * y
+        + 4 * deckShape(s + .015, v)[1] + deckShape(s + .030, v)[1]) / 16
+      return [x, mix(y, faired, mask), z]
     }
     folded(sided((u, v) => deckSection(mix(.5984, .942 - .019 * v, u), v)),
       [0, 1, 0], [haunchLine, lateralTrace(deckIn), lateralTrace(deckOut)])
@@ -421,8 +434,13 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const lead = y + mix(-.020, .023, smooth(x, .21, .74))
       const sideY = mix(lead, y, u * (1.26 - .26 * u))
       const joinY = mix(spine(s) - .009, sideY, fairStep(x, .04, .47))
-      const deckY = mix(mix(joinY, tailDeckProfile(s), fairStep(s, .919, .938)), y, fairStep(u, .82, 1))
-      return [x, mix(deckY, sideY, fairStep(x, .28, .70)), zAt(s)]
+      const lift = fairStep(s, .919, .938) * (1 - fairStep(s, .970, .989))
+      const deckY = mix(mix(joinY, tailDeckProfile(s), lift), y, fairStep(u, .82, 1))
+      const skin = mix(deckY, sideY, fairStep(x, .28, .70))
+      const merge = fairStep(x, .102, .26) * (1 - fairStep(x, .795, .875)) * (1 - fairStep(u, .13, .55))
+      const inboard = bayEdge(s, 1)[0], outer = shoulderX(s)
+      const rim = deckSection(s, T.MathUtils.clamp((x - inboard) / (outer - inboard), 0, 1))[1]
+      return [x, mix(skin, rim - .00035, merge), zAt(s)]
     }), [0, 1, 0])
 
     const archEnds = (w: WheelSize) => {
@@ -492,7 +510,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       part(black, (u, v) => {
         const p = well(u, 1)
         return [p[0], mix(.126, p[1], v), p[2]]
-      }, uSide, columns, 3, .005)
+      }, uSide, columns, full ? 3 : 1, .005)
     }
     arch(frontWheel)
     arch(rearWheel)
@@ -571,10 +589,12 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const y = leftY(u)
       return sillPoint(mix(doorLeadAt(y) + gap, intakeLeft(u), v), y)
     }, uSide, [beltLine, heelLine, crossLine, crossToe], n, .002, full ? 4 : 1)
-    folded((u, v) => {
+    const rightFlank: Surface = (u, v) => {
       const y = rightY(v)
       return sillPoint(mix(intakeRight(v), last.before, u), y)
-    }, uSide, [heelLine])
+    }
+    const rightRows = foldRows(rightFlank, [heelLine], full ? 22 : 7)
+    paint.push(patch(rightFlank, n, rightRows.rows, uSide, .002, rightRows.at))
     for (const [a, b] of [
       [doorLeadAt(intakeTopLeft) + gap, slotStart],
       [slotStart, slotJoin],
@@ -598,7 +618,9 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const x = mix(cap(.926, rearCorner(1))[0] * side, .512, u) - .035 * (1 - v)
       const y = mix(low, high, v)
       const recess = .155 * smooth(u, .025, .70) * smooth(y, .472, .548)
-      return [side * x, y, limitTailZ(x, zAt(s) + recess)]
+      const seat = .018 * smooth(x, .614, .652) * (1 - smooth(x, .695, .737))
+        * smooth(y, .374, .403) * (1 - smooth(y, .477, .503))
+      return [side * x, y, limitTailZ(x, zAt(s) + recess + seat)]
     }, uSide, n, 5, .007)
     const throatDepth = .165
     const intake = (u: number, v: number, inset: number): Point => {
@@ -613,9 +635,13 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       return [p[0], p[1] - returnDepth * v, p[2] + returnDepth * u ** 2]
     }
     part(black, (u, v) => intake(u, v, throatDepth), uSide, 18, 20, 0)
-    part(black, (u, v) => roll(0, u, throatDepth * v), uSide, 20, 6, 0)
-    part(paint, (u, v) => roll(1, u, foldRadius * (1 - Math.cos(v * Math.PI / 2))), uSide, 20, 2, 0)
-    part(black, (u, v) => roll(1, u, mix(foldRadius, throatDepth, v)), uSide, 20, 6, 0)
+    const intakeDepth = (v: number) => v * (.60 + .40 * v)
+    part(black, (u, v) => roll(0, u, throatDepth * intakeDepth(v)), uSide, n, full ? 10 : 6, 0)
+    const intakeRows = (_: number, j: number) => rightRows.at(0, j)
+    paint.push(patch((u, v) => roll(1, v, foldRadius * (1 - Math.cos(u * Math.PI / 2))),
+      3, rightRows.rows, uSide, 0, intakeRows))
+    black.push(patch((u, v) => roll(1, v, mix(foldRadius, throatDepth, intakeDepth(u))),
+      full ? 9 : 7, rightRows.rows, uSide, 0, intakeRows))
     const slot = (s: number, v: number, d: number): Point => {
       const p = sillPoint(s, mix(slotLow(s), slotHigh(s), v))
       return [p[0] - side * d * mix(throatDepth, .054, smooth(s, slotJoin, slotEnd)), p[1], p[2]]
@@ -701,7 +727,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   part(black, (u, v) => {
     const s = mix(.057, .947, u)
     return [mix(-.71, .71, v), .159 + .051 * smooth(s, .909, .947), zAt(s)]
-  }, [0, -1, 0], 20, 9, .011)
+  }, [0, -1, 0], 20, full ? 9 : 1, .011)
   part(black, (u, v) => [mix(-.64, .64, v) * (1 - .2 * u), mix(.61, .819, u) + .017 * Math.sin(Math.PI * v), zAt(mix(.198, .304, u))], [0, 1, 0], 16, 12, .025)
   for (const side of [1, -1]) {
     const seatProfile = curve([[0, .36], [.29, .414], [.55, .404], [.68, .32], [.80, .209], [.95, .178], [1, .127]])

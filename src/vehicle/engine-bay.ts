@@ -42,9 +42,11 @@ function perforatedGrille(face: AirFace, up: T.Vector3, side: number, full: bool
   const vertices = points.flatMap(({ x, y }) => face(x, y))
   const normals = points.flatMap(() => up.toArray())
   const uv = points.flatMap(({ x, y }) => [x + a, y + b])
-  if (full) for (const hole of holes) {
+  const bevel = full ? .00045 : .00060
+  const setback = full ? .00036 : bevel / Math.cos(Math.PI / 6)
+  for (const hole of holes) {
     const center = hole[0].clone().lerp(hole[3], .5)
-    const throat = hole.map((point) => point.clone().lerp(center, .00036 / radius))
+    const throat = hole.map((point) => point.clone().lerp(center, setback / radius))
     for (const [i, p] of hole.entries()) {
       const j = (i + 1) % hole.length, q = hole[j]
       const inward = new T.Vector3(...face(q.x, q.y)).sub(new T.Vector3(...face(p.x, p.y))).cross(up).normalize()
@@ -58,8 +60,8 @@ function perforatedGrille(face: AirFace, up: T.Vector3, side: number, full: bool
         }
         indices.push(...(flip ? [at, at + 2, at + 1, at, at + 3, at + 2] : [at, at + 1, at + 2, at, at + 2, at + 3]))
       }
-      quad(hole, throat, 0, .00045, inward.clone().addScaledVector(up, .8).normalize())
-      quad(throat, throat, .00045, .0014, inward)
+      quad(hole, throat, 0, bevel, inward.clone().addScaledVector(up, full ? .8 : 1).normalize())
+      if (full) quad(throat, throat, bevel, .0014, inward)
     }
   }
   return new T.BufferGeometry().setIndex(indices)
@@ -80,9 +82,9 @@ function grilleRing(face: AirFace, inner: GrilleRect, outer: GrilleRect, normals
   })
 }
 
-function notchGrilleSeat(g: T.BufferGeometry, center: T.Vector3, across: T.Vector3) {
+function notchGrilleSeat(g: T.BufferGeometry, center: T.Vector3, across: T.Vector3, margin = grilleRim / 2) {
   const planes = [grilleAxis, grilleAxis.clone().negate(), across, across.clone().negate()].map((axis, i) => {
-    const offset = center.dot(axis) + (i < 2 ? grilleLength : grilleWidth) / 2 + grilleRim / 2
+    const offset = center.dot(axis) + (i < 2 ? grilleLength : grilleWidth) / 2 + margin
     return (p: number[]) => offset - axis.x * p[0] - axis.y * p[1] - axis.z * p[2]
   })
   const position = g.getAttribute('position'), normal = g.getAttribute('normal'), uv = g.getAttribute('uv')
@@ -154,7 +156,7 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   black.push(patch((u, v) => {
     const s = mix(.649, .913, u), [edge] = bayEdge(s, 1)
     return [(v * 2 - 1) * (edge + .033), mix(.876, .746, u), zAt(s)]
-  }, n, 10, [0, 1, 0], .022))
+  }, n, full ? 10 : 1, [0, 1, 0], .022))
   const coverSide = curve([[0, -.029], [.09, -.013], [.19, 0], [.76, 0], [.91, -.013], [1, -.037]])
   const cover = (side: number, u: number, v: number): Point => {
     const half = .072 + coverSide(u)
@@ -178,7 +180,7 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
       const p = frame(u, 1)
       return [p[0] + side * (.025 - .126 * v), p[1] - (.184 - .036 * u) * v, p[2]]
     }
-    black.push(patch(wall, n, 7, [0, 1, 0], .014))
+    black.push(notchGrilleSeat(patch(wall, n, full ? 7 : 1, [0, 1, 0], .014), center, across, grilleRim + .002))
     for (let i = 0; i < 4; i++) {
       const start = .350 + .155 * i
       const step = (u: number, v: number): Point => {
@@ -204,6 +206,12 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
     grilleFrames.push(...grilleRing(airFace, edge, rimTop, vertical.map(() => up.toArray())))
     grilleFrames.push(...grilleRing(airFace, opening, edge, inward))
     grilleFrames.push(...grilleRing(airFace, rimTop, shellFoot, vertical))
+    grilleFrames.push(patch((u, v) => {
+      const w = 2 * u - 1
+      const start = airFace(rimTop[0] + .0006, rimTop[1] * w, rimTop[2] + .0012)
+      const end = airFace(rimTop[0] + .079 - .021 * w ** 2, (rimTop[1] + .011) * w, .057)
+      return [mix(start[0], end[0], v), mix(start[1], end[1], v * (.33 + v * (1.34 - .67 * v))), mix(start[2], end[2], v)]
+    }, 10, 8, [0, 1, 0]))
     grilleFrames.push(patch((u, v) => airFace(mix(-shellFoot[0], shellFoot[0], u), mix(-shellFoot[1], shellFoot[1], v), shellDepth),
       1, 1, up.clone().negate().toArray()))
     grilleTrays.push(patch((u, v) => airFace(mix(-a, a, u), mix(-b, b, v), trayDepth), 1, 1, up.toArray()))

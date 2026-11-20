@@ -13,10 +13,11 @@ export const anchor = (position: Point, normal: Point, radius: number): Anchor =
 const diffuserProfile = [[.908, .159], [.929, .191], [.940, .203], [.960, .233], [.970, .265], [.975, .295], [.980, .325], [.990, .399], [.995, .430], [1, .470]] as const
 const diffuserRise = curve(diffuserProfile)
 const diffuserRun = curve(diffuserProfile.map(([s, y]) => [y, s]))
+const roundMax = (a: number, b: number, width: number): number =>
+  Math.max(a, b) + (width ? Math.max(0, width - Math.abs(a - b)) ** 2 / (4 * width) : 0)
 const diffuserZ = (x: number, y: number, z: number, blendWidth = 0): number => {
   const floor = zAt(diffuserRun(y))
-  const t = Math.max(0, blendWidth - Math.abs(z - floor))
-  return limitTailZ(x, Math.max(z, floor) + (blendWidth ? t * t / (4 * blendWidth) : 0))
+  return roundMax(limitTailZ(x, -3), roundMax(z, floor, blendWidth), blendWidth)
 }
 
 function ribbon(face: Face, knots: readonly XY[], width: number, depth: number, steps = 36): T.BufferGeometry {
@@ -91,6 +92,7 @@ function profileGuide(mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>, hu
       float guideRadiance() {
         float nearest = 1.0;
         float along = 0.0;
+        float facetStrength = 0.16;
         for (int i = 0; i < 3; ++i) {
           vec2 axis = guideRays[i];
           float t = clamp(dot(vGuidePlane, axis) / dot(axis, axis), 0.0, 1.0);
@@ -98,6 +100,7 @@ function profileGuide(mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>, hu
           if (dist < nearest) {
             nearest = dist;
             along = t * length(axis);
+            facetStrength = i == 2 ? 0.0 : 0.08;
           }
         }
         float crossSection = nearest / guideHalfWidth;
@@ -105,7 +108,7 @@ function profileGuide(mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>, hu
         float core = crossSection / 0.145;
         float pocket = smoothstep(0.28, 0.44, crossSection) * (1.0 - smoothstep(0.67, 0.91, crossSection));
         float pitch = along / 0.010;
-        float facets = 0.16 * pocket * cos(PI2 * pitch) * smoothstep(0.003, 0.014, along)
+        float facets = facetStrength * pocket * cos(PI2 * pitch) * smoothstep(0.003, 0.014, along)
           * (1.0 - smoothstep(0.12, 0.45, fwidth(pitch)));
         float resolve = 1.0 - smoothstep(0.065, 0.20, length(fwidth(vGuidePlane)) / guideHalfWidth);
         return mix(1.05, sleeve * (1.0 + facets) + 5.65 * exp(-0.5 * core * core), resolve);
@@ -267,15 +270,23 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const hub: XY = [.834, .429]
     const tips: XY[] = [[.877, .285], [.879, .644], [.470, .421]]
     const guideWidth = .015
+    const guideDepth = -.007
+    const upper = tips[1]
+    const hubZ = f(...hub, guideDepth)[2]
+    const upperZ = f(...upper, guideDepth)[2] + .0034
     const guideFace: Face = (x, y, depth) => {
       const p = f(x, y, depth)
-      const lift = .0105 * smooth(y, .505, .553) * (1 - smooth(y, .631, .652))
+      const t = Math.max(0, (y - hub[1]) / (upper[1] - hub[1]))
+      const center = f(mix(hub[0], upper[0], t), y, depth)[2]
+      const rise = mix(hubZ, upperZ, t) + .0148 * Math.sin(Math.PI * t) - center
+      const lift = rise * smooth(y, hub[1], .45)
       return [p[0], p[1], p[2] + lift]
     }
-    const guide = emit('front running guide', lightGuide(guideFace, hub, tips, guideWidth, -.007, outFront),
+    const guide = emit('front running guide', lightGuide(guideFace, hub, tips, guideWidth, guideDepth, outFront),
       false, false, f(...hub, -.008), 3.99)
     profileGuide(guide, hub, tips, guideWidth)
     const eyeStart = .495, eyeEnd = .919
+    const lensTuck = (x: number, y: number) => .021 * smooth(x, .895, .912) * smooth(y, .589, .625)
     const window = (u: number, v: number, d: number): Point => {
       const x = mix(eyeStart + .022 * (v - .5) ** 2, eyeEnd - .009 * v, u)
       const y = mix(eyeLow(x), eyeTop(x), v)
@@ -289,7 +300,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return [lower[0], mix(lower[1] - .005, y - .0008, v), mix(lower[2], upper[2] - .009, v)]
     }, 100, 8, outFront))
     black.push(patch((u, v) => window(u, v, .071), full ? 44 : 32, full ? 17 : 12, outFront, .009))
-    optical.push(patch((u, v) => window(u, v, -.008), 100, 20, outFront))
+    optical.push(patch((u, v) => {
+      const p = window(u, v, -.008)
+      return [p[0], p[1], p[2] - lensTuck(Math.abs(p[0]), p[1])]
+    }, 100, 20, outFront))
     black.push(patch((u, v) => {
       const x = mix(.462, .936, u)
       const edge = eyeLow(x)
@@ -302,7 +316,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 100, 16, outFront))
     for (const edge of [0, 1]) {
       const sign = 2 * edge - 1
-      black.push(patch((u, v) => window(edge + sign * mix(-.004, .012, v), u, mix(-.006, .005, v)), 14, 4, outFront, .003))
+      black.push(patch((u, v) => {
+        const p = window(edge + sign * mix(-.004, .012, v), u, mix(-.006, .005, v))
+        return [p[0], p[1], p[2] - 1.12 * lensTuck(Math.abs(p[0]), p[1])]
+      }, 14, 4, outFront, .003))
     }
     for (const [x, y, radius, lift, intensity] of [[.743, .526, .029, .002, 170], [.827, .560, .023, .008, 80]]) {
       const normal = new T.Vector3(side * .51, .12, .851).normalize()
@@ -342,6 +359,14 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const tailLower = curve([[0, .561], [.275, .561], [.424, .545], [.78, .535], [.914, .513], [.974, .468]])
     const bumperSweep = curve([[0, -2.466], [.210, -2.465], [.310, -2.459], [.414, -2.437], [.506, -2.392],
       [.608, -2.341], [.691, -2.269], [.758, -2.222], [.824, -2.167], [.910, -2.065], [.979, -1.873]])
+    const bumperSkin = (x: number, v: number) => {
+      const underMask = mix(.060, .008, smooth(x, .115, .665))
+      const cutoff = .0037 * (1 - smooth(x, .110, .610)) * (1 - v * v)
+      const z = bumperSweep(x) + cutoff + underMask * v * (1.10 - .10 * v)
+      const limit = limitTailZ(x, -3)
+      const offset = z - limit
+      return limit + .5 * (offset + Math.hypot(offset, .011))
+    }
     const tailSlot: XY[] = [[.345, .802], [.449, .817], [.698, .820], [.857, .865], [.889, .854], [.897, .809], [.895, .755], [.867, .718], [.743, .758], [.450, .763], [.353, .778]]
     const tailTopOfSlot = (x: number) => mix(maskHigh(x), .821 + .043 * smooth(x, .70, .86) - .045 * smooth(x, .86, .938), smooth(x, .396, .467))
     const tailUnderSlot = (x: number) => mix(maskLow(x), .756 - .041 * smooth(x, .73, .89) - .016 * smooth(x, .890, .978), smooth(x, .404, .490))
@@ -356,11 +381,14 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const x = (.979 - .024 * v) * u
       const low = tailLower(x), high = tailUnderSlot(x) + .002
       const y = mix(low, high, v)
-      const underMask = mix(.060, .008, smooth(x, .115, .665))
-      const z = bumperSweep(x) + underMask * v * (1.10 - .10 * v)
-      const limit = limitTailZ(x, -3)
-      const offset = z - limit
-      return [side * x, y, limit + .5 * (offset + Math.hypot(offset, .011))]
+      const local = smooth(x, .247, .377) * (1 - smooth(x, .593, .743))
+      const smoothRun = [1, 8, 28, 56, 70, 56, 28, 8, 1]
+        .reduce((z, w, i) => z + w * bumperSkin(x + (i - 4) * .034, v), 0) / 256
+      const fair = mix(bumperSkin(x, v), smoothRun + .003, local)
+      const d = x - .650
+      const shoulderRun = -2.288 + d * (.735 + .23 * d) + (.017 - .070 * d) * v + .002 * v * (1 - v)
+      const join = smooth(x, .485, .592) * (1 - smooth(x, .727, .842))
+      return [side * x, y, limitTailZ(x, mix(fair, shoulderRun, join))]
     }, 70, 16, outRear, .008))
     rearPaint.push(patch((u, v) => {
       const left = mix(.909, .887, smooth(v, .15, .89))
@@ -428,6 +456,13 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const y = .153 + .067 * v
       return [side * x, y, diffuserZ(x, y, zAt(s))]
     }, 25, 9, [0, -1, 0], .016))
+    dark.push(patch((u, v) => {
+      const x = .926 * u, flare = smooth(x, .38, .89)
+      const tuck = smooth(x, .711, .897)
+      const y = mix(.167 + .031 * flare + .030 * tuck, .325 + .061 * flare, v)
+      const z = mix(zAt(.877), rampEdge(u) + .038, v * (.53 + .47 * v)) + .070 * tuck
+      return [side * x, y, diffuserZ(x, y, z, .017)]
+    }, full ? 33 : 22, 7, outRear))
     const rampMouth = (u: number, v: number): Point => {
       const x = mix(0, .969, u)
       const diff = diffuser(u, 1)
@@ -459,25 +494,31 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const railZ = curve(inner
         ? [[0, -2.364], [.12, -2.407], [.255, -2.446], [.36, -2.445], [.70, -2.432], [1, -2.411]]
         : [[0, -2.292], [.14, -2.311], [.27, -2.306], [.42, -2.298], [.70, -2.286], [1, -2.274]])
+      const rows = full ? 36 : 24
       const edge: Surface = (u, v) => {
-        const w = 2 * u - 1
+        const angle = Math.PI * u
         const axis = fin + (inner ? .018 : .040) * v ** 1.28
         const half = .0067 - .0013 * v
         const y = tip - (inner ? .150 : .146) * v
-        const z = diffuserZ(axis + half, y - .010, railZ(v))
-        return [side * (axis + half * w), y, z - .0034 * Math.sin(Math.PI * u)]
+        const z = diffuserZ(axis + half, y - .010, railZ(v), .009)
+        return [side * (axis - half * Math.cos(angle)), y, z - .0034 * Math.sin(angle)]
       }
-      diffuserFins.push(patch(edge, 6, 24, outRear))
+      diffuserFins.push(patch(edge, 6, rows, outRear))
       const web = (u: number, v: number, face: number): Point => {
         const p = edge(face, v)
-        const x = mix(fin - .019 + .004 * (2 * face - 1), Math.abs(p[0]), u)
-        const y = mix(.237 - .071 * v, p[1], u ** 1.28)
-        return [side * x, y, diffuserZ(x, y - .010, mix(zAt(.833), p[2], u))]
+        const ease = u + u ** 3 * (1 - u)
+        const x = mix(fin - .019 + .004 * (2 * face - 1), Math.abs(p[0]), ease)
+        const y = mix(.237 - .071 * v, p[1], ease ** 1.28)
+        const rail = mix(zAt(.833), p[2], u)
+        const run = diffuserZ(x, y - .010, rail, .009)
+        return [side * x, y, mix(run, rail, smooth(u, .965, 1))]
       }
-      for (const face of [0, 1]) diffuserFins.push(patch((u, v) => web(u, v, face), 28, 13, [side * (2 * face - 1), 0, 0]))
-      for (const v of [0, 1]) diffuserFins.push(patch((u, b) => blend(web(u, v, 0), web(u, v, 1), b), 28, 2, [0, 1 - 2 * v, 0]))
+      const columns = full ? 25 : 16
+      for (const face of [0, 1]) diffuserFins.push(patch((u, v) => web(u, v, face), columns, rows, [side * (2 * face - 1), 0, 0]))
+      for (const v of [0, 1]) diffuserFins.push(patch((u, b) => blend(web(u, v, 0), web(u, v, 1), b), columns, 2, [0, 1 - 2 * v, 0]))
+      for (const v of [0, 1]) diffuserFins.push(patch((u, b) => blend(edge(u, v), blend(edge(0, v), edge(1, v), (1 - Math.cos(Math.PI * u)) / 2), b),
+        6, 1, [0, 1 - 2 * v, 0]))
     }
-    rearOptical.push(ribbon(r, [[.545, .434], [.654, .430]], .022, .012, 18))
   }
   diffuserShell.push(patch((u, v) => {
     const lateral = 2 * v - 1, side = Math.abs(lateral)

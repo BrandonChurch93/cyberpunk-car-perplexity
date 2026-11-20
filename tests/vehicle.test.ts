@@ -413,6 +413,13 @@ describe('vehicle geometry and state', () => {
       const backing = look(hole.clone().addScaledVector(normal, .4), hole)
       expect(backing.object.name).toBe('recessed airbox grille trays')
       expect(backing.distance).toBeCloseTo(.424, 5)
+      if (car === blockout) {
+        const chamfer = position.clone().addScaledVector(across.clone().normalize(), .0013)
+        const hit = look(chamfer.clone().addScaledVector(normal, .4), chamfer)
+        expect(hit.object).toBe(grille)
+        expect(hit.distance).toBeCloseTo(.4003, 5)
+        expect(hit.normal!.dot(normal)).toBeCloseTo(Math.SQRT1_2, 5)
+      }
       for (const [u, v] of [[1, 0], [0, 1], [-1, 0], [0, -1], [0, 0]]) {
         const eye = position.clone().addScaledVector(normal, .7)
           .addScaledVector(axis.clone().normalize(), .32 * u).addScaledVector(across.clone().normalize(), .32 * v)
@@ -422,6 +429,9 @@ describe('vehicle geometry and state', () => {
       }
       const duct = car.root.getObjectByName('flush airbox grille ducts') as T.Mesh
       const tray = backing.object as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
+      const obliqueEye = cameraAt(810 / config.film.fps, config.formats.master, car.anchors).position
+      const obliqueTarget = tray.localToWorld(new T.Vector3(-.39587, 1.00784, -1.06987))
+      expect([grille, tray]).toContain(look(obliqueEye, obliqueTarget).object)
       expect(tray.material.color.getHex()).toBe(0)
       expect(tray.material.specularIntensity).toBe(0)
       expect(tray.material.roughness).toBe(1)
@@ -637,9 +647,45 @@ describe('vehicle geometry and state', () => {
           .intersectObject(vehicle.root)[0].point.y
         expect(top(.95)).toBeGreaterThan(.915)
         expect(top(.95)).toBeLessThan(.924)
+        expect(top(.98)).toBeGreaterThan(.895)
+        expect(top(.98)).toBeLessThan(.900)
         expect(top(.985)).toBeGreaterThan(.889)
         expect(top(.995)).toBeGreaterThan(.570)
-        expect(top(.995)).toBeLessThan(.630)
+        expect(top(.995)).toBeLessThan(.595)
+      }
+    }
+  })
+
+  it('carries the inner rear deck reflection without a local crease', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      for (const x of [.46, .50, .52]) {
+        let previous: T.Vector3 | undefined
+        for (let i = 0; i <= 12; i++) {
+          const ray = new T.Raycaster(new T.Vector3(x, 2, zAt(.796 + i * .006)), new T.Vector3(0, -1, 0))
+          const hit = ray.intersectObject(vehicle.root, true)[0]
+          expect(hit?.object.name).toBe('closed body panels and returns')
+          expect(hit.normal!.y).toBeGreaterThan(.94)
+          if (previous) expect(previous.angleTo(hit.normal!)).toBeLessThan(.070)
+          previous = hit.normal!
+        }
+      }
+    }
+  })
+
+  it('fairs the deck behind the haunch without a second hard fold', () => {
+    const ray = new T.Raycaster(), down = new T.Vector3(0, -1, 0)
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const skin = vehicle.root.getObjectByName('closed body panels and returns')!
+      for (const x of [.75, .80, .85]) {
+        let previous: T.Vector3 | undefined
+        for (let i = 0; i <= 17; i++) {
+          ray.set(new T.Vector3(x, 2, zAt(.824 + .004 * i)), down)
+          const normal = ray.intersectObject(skin)[0].normal!
+          if (previous) expect(normal.angleTo(previous)).toBeLessThan(.17)
+          previous = normal
+        }
       }
     }
   })
@@ -713,6 +759,28 @@ describe('vehicle geometry and state', () => {
       }
     }
   }, 15_000)
+
+  it('keeps the outer diffuser fin ahead of its liner and backs the strake slots', () => {
+    const view = new T.PerspectiveCamera(28, config.formats.master.width / config.formats.master.height)
+    view.position.set(2.8, .75, -5.25)
+    view.lookAt(0, .515, -1.93)
+    view.updateMatrixWorld(true)
+    for (const vehicle of [full, blockout]) {
+      vehicle.update(stateAt(951 / config.film.fps))
+      vehicle.root.updateMatrixWorld(true)
+      const firstAt = (x: number, y: number) => {
+        const ray = new T.Raycaster()
+        ray.setFromCamera(new T.Vector2(2 * x - 1, 1 - 2 * y), view)
+        return ray.intersectObject(vehicle.root, true)[0]?.object.name
+      }
+      for (const [x, y] of [[.411, .542], [.409, .560], [.405, .579]]) {
+        expect(firstAt(x, y)).toBe('thin graphite diffuser blades')
+      }
+      expect(firstAt(.4167, .566)).not.toBe('rear optical lens shells')
+      expect(firstAt(.4344, .665)).toBe('recessed backing')
+      vehicle.update(stateAt(0))
+    }
+  })
 
   it('keeps the painted rear fascia in front of the internal liner', () => {
     for (const vehicle of [full, blockout]) {
@@ -801,6 +869,18 @@ describe('vehicle geometry and state', () => {
       }
     }
   }, 15_000)
+
+  it('keeps the outer lamp return behind the fender in the portrait macro', () => {
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      const { position } = cameraAt(600 / config.film.fps, config.formats.vertical, vehicle.anchors)
+      for (const p of [[.91272, .64982, 1.86923], [.91414, .64861, 1.87039], [.91514, .63917, 1.87650]]) {
+        const direction = new T.Vector3().fromArray(p).sub(position).normalize()
+        const hit = new T.Raycaster(position, direction).intersectObject(vehicle.root, true)[0]
+        expect(hit.object.name).toBe('nose blades, shield and lower lip')
+      }
+    }
+  })
 
   it('uses the same running-guide optical coordinates and emitted intensity on each side', () => {
     for (const vehicle of [blockout, full]) {
