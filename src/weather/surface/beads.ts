@@ -24,8 +24,12 @@ export const beadLayers: BeadLayer[] = [
   { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.55, steep: 0.35, lobes: 1 },
   { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.72, steep: 0.45, lobes: 1 },
   { cellMm: 10, minMm: 1.6, maxMm: 4.8, flat: 0.62, steep: 0.28, lobes: 1 },
-  { cellMm: 36, minMm: 6, maxMm: 13, flat: 0.3, steep: 0.04, lobes: 2 },
+  { cellMm: 36, minMm: 5, maxMm: 9, flat: 0.14, steep: 0.03, lobes: 2 },
 ]
+
+/** Points of the runner's track handed to the shader, and the half width it sweeps clear of beads. */
+export const trackPoints = 40
+export const trackClear = 0.0026
 
 /** Drops at or above this diameter are real geometry near the lens. Smaller ones stay in the shader at every distance. */
 export const geometryMinMm = 0.8
@@ -112,6 +116,24 @@ uniform float surfBeadSalt;
 uniform float surfBeadContact;
 uniform vec4 surfGeo;
 uniform vec3 surfVehicleCenter;
+uniform vec4 surfTrack[${trackPoints}];
+uniform vec4 surfTrackBox;
+uniform float surfTrackLen;
+
+/** Distance to the part of the runner's track it has already swept, where it took up every bead it touched. */
+float surfTrackDistance(vec3 p) {
+  float best = 1e9;
+  for (int i = 0; i + 1 < ${trackPoints}; i++) {
+    if (surfTrack[i].w >= surfTrackLen) break;
+    vec3 a = surfTrack[i].xyz;
+    vec3 b = surfTrack[i + 1].xyz;
+    float lim = clamp((surfTrackLen - surfTrack[i].w) / max(surfTrack[i + 1].w - surfTrack[i].w, 1e-6), 0.0, 1.0);
+    vec3 ab = b - a;
+    float h = clamp(dot(p - a, ab) / max(dot(ab, ab), 1e-12), 0.0, lim);
+    best = min(best, length(p - a - ab * h));
+  }
+  return best;
+}
 ${filmLightsGlsl.replaceAll("filmCompactBeamFalloff", "surfCompactBeamFalloff")}
 
 void surfLayer(int i, out float cellMm, out float minMm, out float maxMm, out float flatD, out float steepD, out int lobes) {
@@ -195,6 +217,7 @@ float surfMist = 0.0;
   float under = smoothstep(0.3, 0.9, -level);
   uint salt = uint(surfBeadSalt);
   float shake = surfVibration;
+  bool nearTrack = surfTrackLen > 0.0 && distance(surfWorldPos, surfTrackBox.xyz) < surfTrackBox.w && surfTrackDistance(surfWorldPos) < ${trackClear} + 0.007;
   for (int i = 0; i < ${beadLayers.length}; i++) {
     float cellMm, minMm, maxMm, flatD, steepD;
     int lobes;
@@ -232,6 +255,7 @@ float surfMist = 0.0;
     }
     float height = surfCapHeight(radius);
     vec3 worldCenter = surfWorldPos + (vec4(toView * d3, 0.0) * viewMatrix).xyz;
+    if (nearTrack && surfTrackDistance(worldCenter) < ${trackClear} + radius) continue;
     float geometry = surfGeo.w > 0.5 && i > 0 && dMm >= ${geometryMinMm.toFixed(2)} && distance(worldCenter, surfGeo.xyz) < surfGeo.w ? 1.0 : 0.0;
     float sizeBefore = surfHit.height;
     surfCap(surfHit, d3, radius, height, n, down, slope, pix, geometry);
