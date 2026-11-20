@@ -55,6 +55,9 @@ describe('full roof world', () => {
     const { durationSeconds } = config.film
     const emitter = world.lights.find(l => l.id === 'billboard')!
     const raking = world.lights.find(l => l.id === 'raking billboard')!
+    const originalBillboard = world.root.getObjectByName('billboard')!
+    expect(originalBillboard.position.toArray()).toEqual([4, 11.15, -46.77])
+    expect(raking.intensity).toBeGreaterThan(emitter.intensity * 3)
     const start = radiance(0)
     const end = radiance(durationSeconds)
     expect(end.position).toBeCloseTo(start.position, 12)
@@ -70,7 +73,7 @@ describe('full roof world', () => {
     expect(Math.abs(expected.position - start.position)).toBeGreaterThan(.025)
     const color = new THREE.Color()
     emitter.colorAt!(2, color)
-    expect(color.clone().multiplyScalar(4.5 * emitter.level(2)).b).toBeCloseTo(expected.color.b, 10)
+    expect(color.clone().multiplyScalar(emitter.level(2)).b).toBeCloseTo(expected.color.b, 10)
     world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
     expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
   })
@@ -90,6 +93,31 @@ describe('full roof world', () => {
     expect(triangles).toBeGreaterThan(120_000)
     expect(triangles).toBeLessThan(500_000)
     expect(world.signs.filter(s => config.signage.invented.includes(s)).sort()).toEqual(['BRINESCALE SUSHI', 'SHUTTER HUSH CLUB', 'VAPOR SILL HOTEL'])
+  })
+
+  it('sweeps the service flood deterministically and holds the wheel boost inside its beat', () => {
+    const service = world.lights.find(l => l.id === 'north deck pole')!
+    const wheel = world.lights.find(l => l.id === 'wheel deck pole')!
+    const detail = config.beats.find(b => b.id === 'detail')!
+    const wheelBeat = config.beats.find(b => b.id === 'wheel')!
+    const start = detail.start+.22, end = detail.end-.22
+    const state = () => {
+      const axis = new THREE.Vector3(0,0,1).applyQuaternion(service.object.getWorldQuaternion(new THREE.Quaternion()))
+      return [...axis.toArray(), service.angle, service.intensity]
+    }
+    world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
+    const resting = state()
+    world.beginSample({ timeSeconds: start } as SampleContext)
+    const first = state()
+    world.beginSample({ timeSeconds: end } as SampleContext)
+    expect(state()).not.toEqual(first)
+    expect(service.angle!).toBeLessThan(resting[3]!)
+    world.beginFrame({ frame: { timeSeconds: start } } as FrameContext)
+    expect(state()).toEqual(first)
+    world.beginSample({ timeSeconds: config.film.durationSeconds } as SampleContext)
+    expect(state()).toEqual(resting)
+    expect(wheel.level((wheelBeat.start+wheelBeat.end)/2)).toBeGreaterThan(wheel.level(0)*3)
+    expect(wheel.level(config.film.durationSeconds)).toBeCloseTo(wheel.level(0),12)
   })
 
   it('keeps supported traffic, navigation lights and roof beacons periodic in both hooks', () => {
