@@ -33,6 +33,8 @@ interface Source {
 
 const edgeCell = 0.02
 const foldCos = Math.cos(THREE.MathUtils.degToRad(60))
+/** Radiance ceiling on what the lens reads behind it, inside half float range. */
+const transmissionCeiling = 30000
 
 class EdgeGrid {
   private readonly cells = new Map<string, number[]>()
@@ -432,7 +434,10 @@ const lensFragment = /* glsl */ `
     // Water on clearcoat: a weak interface that turns into a mirror at grazing incidence.
     float graze = pow(1.0 - clamp(-t.y, 0.0, 1.0), 5.0);
     float mirror = 0.0035 + 0.9965 * graze;
-    seen = (1.0 - mirror) * getTransmissionSample(clip.xy / clip.w * 0.5 + 0.5, 0.0, 1.333).rgb;
+    vec3 back = getTransmissionSample(clip.xy / clip.w * 0.5 + 0.5, 0.0, 1.333).rgb;
+    // A highlight past half float range comes back infinite or NaN and would spread through the lens.
+    back = any(isnan(back)) ? vec3(0.0) : min(back, vec3(${transmissionCeiling.toFixed(1)}));
+    seen = (1.0 - mirror) * back;
     through = mirror;
     e = vec3(t.x, -t.y, t.z);
     vec3 fc = f - c;
