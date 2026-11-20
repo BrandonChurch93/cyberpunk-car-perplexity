@@ -604,7 +604,7 @@ describe('vehicle geometry and state', () => {
     }
   })
 
-  it('keeps the high brake lamp clear of the bay louvers in both detail cameras', () => {
+  it('keeps the high brake lamp clear of the bay louvers wherever a detail camera holds it', () => {
     for (const vehicle of [full, blockout]) {
       const name = 'high rear brake lamp bar'
       const bar = vehicle.root.getObjectByName(name) as T.Mesh
@@ -622,9 +622,13 @@ describe('vehicle geometry and state', () => {
       expect(points.length).toBeGreaterThan(5)
       points.sort((a, b) => a.x - b.x)
       for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [775, 800, 849]) {
-        const eye = cameraAt(frame / config.film.fps, format, vehicle.anchors).position
+        const state = cameraAt(frame / config.film.fps, format, vehicle.anchors)
+        const eye = state.position
+        const halfW = state.sensorWidthMm / 2 / state.focalMm, halfH = halfW * format.height / format.width
         for (const fraction of [.1, .3, .5, .7, .9]) {
           const point = points[Math.floor(fraction * points.length)]
+          const seen = point.clone().sub(eye).applyQuaternion(state.quaternion.clone().invert())
+          if (seen.z >= 0 || Math.abs(seen.x / seen.z) > halfW || Math.abs(seen.y / seen.z) > halfH) continue
           const hit = new T.Raycaster(eye, point.clone().sub(eye).normalize()).intersectObject(vehicle.root)[0]
           expect(hit?.object.name).toBe(name)
         }

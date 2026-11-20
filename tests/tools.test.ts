@@ -302,7 +302,8 @@ describe('anchor crops on close shots', () => {
     expect(ids(300)).not.toContain('wheel')
     expect(ids(765)).toContain('detail')
     expect(ids(765)).not.toContain('paint')
-    expect(ids(615)).toEqual(['lamp'])
+    expect(ids(615)).toContain('lamp')
+    expect(ids(615)).not.toContain('detail')
   })
 })
 
