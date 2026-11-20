@@ -21,8 +21,9 @@ interface RibbonField {
 const scatter = /* glsl */ `
 ${filmLightsGlsl}
 
-vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool local) {
+vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool local, out vec3 flash) {
   vec3 light = vec3(0.0);
+  flash = vec3(0.0);
   for (int i = 0; i < MAX_FILM_LIGHTS; ++i) {
     if (i >= filmLightCount) break;
     vec4 source = filmLightColor[i];
@@ -57,9 +58,14 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
     float rim = exp2(-(compact ? 26.0 : 55.0) * abs(mu - 0.774));
     float distantPanel = area ? smoothstep(8100.0, 40000.0, distance2) * smoothstep(0.7, 2.6, field) : 0.0;
     float forwardGain = area ? 2.55 : compact ? 3.45 : 2.16;
-    light += incident * (0.002 + (forwardGain + 4.85 * distantPanel) * forward + (area ? 0.17 : compact ? 0.16 : 0.095) * rim);
+    vec3 scattered = incident * (0.002 + (forwardGain + 4.85 * distantPanel) * forward + (area ? 0.17 : compact ? 0.16 : 0.095) * rim);
+    if (compact && field >= 0.0) flash += scattered;
+    else light += scattered;
   }
-  return light / (1.0 + max(max(light.r, light.g), light.b) * 0.21);
+  vec3 total = light + flash;
+  float response = 1.0 + max(max(total.r, total.g), total.b) * 0.21;
+  flash /= response;
+  return light / response;
 }
 `
 
@@ -182,8 +188,9 @@ void main() {
   float sigmaSide = sqrt(pow(length(normal * coc) * 0.5, 2.0) + sigma);
   float sigmaEnd = sqrt(pow(length(axis * coc) * 0.5, 2.0) + sigma);
   vec3 eye = uFilmView > 0.5 ? uOpticalEye : cameraPosition;
-  vec3 radiance = scatterRain(p, delta, normalize(eye - p), mist, uLayer, uLocalFine > 0.5);
-  if (all(equal(radiance, vec3(0.0)))) return;
+  vec3 flash;
+  vec3 radiance = scatterRain(p, delta, normalize(eye - p), mist, uLayer, uLocalFine > 0.5, flash);
+  if (all(equal(radiance + flash, vec3(0.0)))) return;
   float gain = uLayer < 0.0 ? (mist ? 1.0 : 0.64) : uGain;
   float coverage = min(1.0, diameter * 0.39894228 / sigmaSide) * min(1.0, max(len, diameter) / (1.35 * sigmaEnd));
   float frameTravel = len / max(uViewport.x, uViewport.y);
@@ -194,6 +201,9 @@ void main() {
   vTail = bp;
   vSigma = vec2(sigmaSide, sigmaEnd);
   vec3 peak = radiance * (amount * gain * coverage);
+  if (uLocalFine > 0.5) peak /= 1.0 + 25.0 * max(peak.r, max(peak.g, peak.b));
+  flash *= amount * gain * coverage;
+  peak += flash / (1.0 + 20.0 * max(flash.r, max(flash.g, flash.b)));
   if (uLayer < 0.0 && !mist) peak /= 1.0 + 32.0 * max(peak.r, max(peak.g, peak.b));
   vRadiance = veilHighlights(peak, veil);
   vVeil = veil;
@@ -338,7 +348,7 @@ export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLig
     { key: 'close', layer: 1, density: 5.4, fine: 2.2, size: new THREE.Vector3(21, 7.8, 21), fade: [2.25, 4.1, 7.6, 13.0], gain: 2.6 },
     { key: 'middle', layer: 2, density: 2.65, fine: 1.75, size: new THREE.Vector3(Math.min(deckSpan.x, 41), 11.6, Math.min(deckSpan.y, 40)), fade: [7.2, 11.25, 20, 29], gain: 5.15 },
     { key: 'distance', layer: 3, density: 0.17, fine: 1.6, size: new THREE.Vector3(Math.max(deckSpan.x, 66), 16.5, Math.max(deckSpan.y, 66)), fade: [17.4, 24, 28, 38], gain: 2.05 },
-    { key: 'beam', layer: 1, density: 15.0, fine: 3.7, size: new THREE.Vector3(12, 3.2, 14), fade: [1.05, 2.15, 9, 13], gain: 2.05, local: true },
+    { key: 'beam', layer: 1, density: 27.0, fine: 4.4, size: new THREE.Vector3(12, 3.2, 14), fade: [1.05, 2.15, 9, 13], gain: 1.38, local: true },
   ]
   return specs.map(({ key, layer, density, fine, size, fade, gain, local }) => {
     const rng = stream(`air-streaks-${key}`)
