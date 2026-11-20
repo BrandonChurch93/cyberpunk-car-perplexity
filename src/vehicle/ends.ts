@@ -490,6 +490,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 16, 12, outRear, .008))
     for (const fin of [.423, .650]) {
       const inner = fin < .5
+      const blendWidth = inner ? .009 : .016
       const tip = tailLower(fin) - .008
       const railZ = curve(inner
         ? [[0, -2.364], [.12, -2.407], [.255, -2.446], [.36, -2.445], [.70, -2.432], [1, -2.411]]
@@ -500,7 +501,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
         const axis = fin + (inner ? .018 : .040) * v ** 1.28
         const half = .0067 - .0013 * v
         const y = tip - (inner ? .150 : .146) * v
-        const z = diffuserZ(axis + half, y - .010, railZ(v), .009)
+        const z = diffuserZ(axis + half, y - .010, railZ(v), blendWidth)
         return [side * (axis - half * Math.cos(angle)), y, z - .0034 * Math.sin(angle)]
       }
       diffuserFins.push(patch(edge, 6, rows, outRear))
@@ -510,7 +511,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
         const x = mix(fin - .019 + .004 * (2 * face - 1), Math.abs(p[0]), ease)
         const y = mix(.237 - .071 * v, p[1], ease ** 1.28)
         const rail = mix(zAt(.833), p[2], u)
-        const run = diffuserZ(x, y - .010, rail, .009)
+        const run = diffuserZ(x, y - .010, rail, blendWidth)
         return [side * x, y, mix(run, rail, smooth(u, .965, 1))]
       }
       const columns = full ? 25 : 16
@@ -552,7 +553,12 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     color: 0x060607, roughness: .96, specularIntensity: .11, envMapIntensity: .4,
   }), 'none')
   add(parent, 'hexagonal outlet cavities', joined(outletCavities), outletFinish)
-  add(parent, 'channeled graphite rear diffuser', joined(diffuserShell), m.diffuser)
+  const channelFinish = m.diffuser.clone()
+  channelFinish.roughness = .73
+  channelFinish.metalness = .10
+  channelFinish.clearcoat = .08
+  channelFinish.specularIntensity = .45
+  add(parent, 'channeled graphite rear diffuser', joined(diffuserShell), m.tag(channelFinish, 'sheet'))
   const bladeFinish = m.tag(m.diffuser.clone(), 'sheet')
   bladeFinish.color.setHex(full ? 0x33363a : 0x3c3f42)
   bladeFinish.roughness = .74
