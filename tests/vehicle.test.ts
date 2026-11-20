@@ -361,25 +361,19 @@ describe('vehicle geometry and state', () => {
     }
   })
 
-  it('keeps both cam covers exposed and targets the dark gap in both LODs', () => {
+  it('keeps both cam covers and the dark center gap exposed in both LODs', () => {
     for (const car of [blockout, full]) {
-      const detail = car.anchors.detail.position
-      const topHit = (x: number, z = detail.z) => new T.Raycaster(
+      const topHit = (x: number, z = zAt(.784)) => new T.Raycaster(
         new T.Vector3(x, 2, z), new T.Vector3(0, -1, 0),
       ).intersectObject(car.root, true)[0]
-      expect(detail.x).toBe(0)
-      expect(topHit(0).object.name).toBe('dark intake plenum and engine hardware')
+      const gap = topHit(0)
+      expect(gap.object.name).toBe('dark intake plenum and engine hardware')
       for (const x of [-.125, .125]) {
         const hit = topHit(x)
         expect(hit.object.name).toBe('carbon cam covers with hex relief')
-        expect(Math.abs(hit.point.y - detail.y)).toBeLessThan(.005)
+        expect(Math.abs(hit.point.y - gap.point.y)).toBeLessThan(.005)
       }
       expect(car.root.getObjectByName('high rear brake lamp bar')).toBeDefined()
-      const grille = car.root.getObjectByName('front airbox hex grilles') as T.Mesh
-      const covers = car.root.getObjectByName('carbon cam covers with hex relief') as T.Mesh
-      grille.geometry.computeBoundingBox()
-      covers.geometry.computeBoundingBox()
-      expect(grille.geometry.boundingBox!.max.y).toBeLessThan(covers.geometry.boundingBox!.max.y)
       let previous = 0
       for (const s of [.853, .870, .887]) {
         const hit = topHit(0, zAt(s))
@@ -388,6 +382,41 @@ describe('vehicle geometry and state', () => {
         const color = (hit.object as T.Mesh).geometry.getAttribute('color')
         expect(color.getX(hit.face!.a)).toBeCloseTo(s === .887 ? .25 : .76)
         previous = hit.point.y
+      }
+    }
+  })
+
+  it('anchors the detail above a clear, perforated airbox on the right', () => {
+    for (const car of [blockout, full]) {
+      car.root.updateMatrixWorld(true)
+      const { position, normal, radius } = car.anchors.detail
+      const grille = car.root.getObjectByName('front airbox hex grilles') as T.Mesh
+      const p = grille.geometry.getAttribute('position')
+      const corners = Array.from({ length: 4 }, (_, i) => new T.Vector3().fromBufferAttribute(p, p.count / 2 + i))
+      const axis = corners[1].clone().sub(corners[0])
+      const across = corners[3].clone().sub(corners[0])
+      expect(axis.length()).toBeCloseTo(.420, 5)
+      expect(across.length()).toBeCloseTo(.184, 5)
+      expect(position.distanceTo(corners[0].clone().lerp(corners[2], .5))).toBeLessThan(.000001)
+      expect(position.x).toBeLessThan(0)
+      expect(normal.y).toBeGreaterThan(Math.cos(T.MathUtils.degToRad(25)))
+      expect(radius).toBe(.16)
+      const ray = new T.Raycaster()
+      const look = (eye: T.Vector3, at: T.Vector3) => {
+        ray.set(eye, at.clone().sub(eye).normalize())
+        return ray.intersectObject(car.root, true)[0]
+      }
+      const apothem = (car === full ? .0078 : .01175) * Math.sqrt(3) / 2
+      const hole = position.clone().addScaledVector(across.clone().normalize(), apothem)
+      const backing = look(hole.clone().addScaledVector(normal, .4), hole)
+      expect(backing.object.name).toBe('recessed airbox grille trays')
+      expect(backing.distance).toBeCloseTo(.424, 5)
+      for (const [u, v] of [[1, 0], [0, 1], [-1, 0], [0, -1], [0, 0]]) {
+        const eye = position.clone().addScaledVector(normal, .7)
+          .addScaledVector(axis.clone().normalize(), .32 * u).addScaledVector(across.clone().normalize(), .32 * v)
+        const hit = look(eye, position)
+        expect(hit.object).toBe(grille)
+        expect(hit.point.distanceTo(position)).toBeLessThan(.000001)
       }
     }
   })
