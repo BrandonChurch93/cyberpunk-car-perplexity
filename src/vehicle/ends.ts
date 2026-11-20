@@ -1,6 +1,6 @@
 import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
-import { fascia, frontHoodEdge, limitTailZ, sAt, tailLipY, zAt } from './body'
+import { fascia, frontHoodEdge, limitTailZ, sAt, tailCrestZ, tailLipY, zAt } from './body'
 import { add, blend, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
 import type { Palette } from './materials'
 import type { Anchor, VehicleModule } from './contract'
@@ -102,16 +102,13 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const eyeTop = curve([[.48, .474], [.58, .512], [.68, .552], [.79, .600], [.889, .649], [.918, .658]])
   const eyeLow = curve([[.48, .459], [.58, .462], [.69, .474], [.797, .497], [.865, .564], [.918, .635]])
   const outletZ = zAt(.995) + .006
-  const outletCenter = .18, outletHeight = .8, halfOutletHeight = .0525
+  const outletCenter = .18, outletHeight = .8, halfOutletHeight = .0545
   const outletRound = .055, outletPoint = .57
-  const halfOutletWidth = 2.6 * halfOutletHeight / (1 - (1 - outletPoint) * outletRound / 2)
+  const halfOutletWidth = 2.94 * halfOutletHeight / (1 - (1 - outletPoint) * outletRound / 2)
   const metalFace = (side: number, x: number, y: number, d = 0): Point =>
     [side * x, y, limitTailZ(x, outletZ + d + .017 * smooth(x, .12, .35))]
-  const rearBridge = (u: number, v: number): Point => {
-    const y = mix(.719, .861, v)
-    const x = mix(-.059, .059, u)
-    return [x, y, outletZ + .022]
-  }
+  const maskHigh = curve([[0, .873], [.18, .876], [.32, .870], [.407, .835], [.453, .821]])
+  const maskLow = curve([[0, .715], [.18, .716], [.327, .725], [.405, .755], [.453, .760]])
   let lens = anchor([0, 0, 0], outFront, .19)
   for (const side of [1, -1]) {
     const f: Face = (x, y, d = 0) => fascia(true, side, x, y, d)
@@ -120,25 +117,45 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const outline: XY[] = [[.474, .455], [.568, .501], [.685, .554], [.797, .609], [.884, .667], [.923, .675], [.931, .599], [.883, .471], [.912, .354], [.930, .283], [.858, .198], [.819, .179], [.520, .180], [.429, .245], [.405, .360]]
     const frontEdge = curve([[0, .981], [.40, .972], [.67, .939], [1, .953]])
     const outerY = curve([[0, .191], [.42, .37], [.70, .534], [1, .735]])
-    const outerX = curve([[0, .896], [.25, .926], [.51, .880], [.79, .918], [1, .958]])
+    const outerX = curve([[0, .835], [.25, .904], [.51, .872], [.79, .906], [1, .929]])
     const fPanel = (u: number, v: number): Point => {
       const x = mix(outerX(v), frontEdge(v), u)
-      return f(x, mix(outerY(v), mix(chin(x), noseTop(x), v), u), .003)
+      return f(x, mix(outerY(v), mix(chin(x), noseTop(x), v), u), mix(-.007, .011, u) - .005 * Math.sin(Math.PI * u))
     }
     frontPaint.push(patch(fPanel, 22, 28, outFront, .008))
     black.push(patch((u, v) => {
       const x = .487 * u
       const y = mix(lipY(x) + .020, noseTop(x) - .004, v)
-      return f(x, y, .126 - .045 * smooth(v, .76, 1))
+      return f(x, y, .149 - .045 * smooth(v, .76, 1) - .017 * smooth(x, .20, .46))
     }, 36, 16, outFront, .011))
     black.push(patch((u, v) => {
       const x = .48 * u
       return f(x, noseTop(x) - .007 - .029 * v, mix(.005, .129, v))
     }, 34, 6, [0, -1, 0], .004))
+    const shield: Surface = (u, v) => {
+      const x = u * mix(.240, .320, v)
+      const edge = frontHoodEdge(x)
+      const y = mix(.354 + .030 * u ** 2, edge[1] - .008, v)
+      const retreat = (.054 + .020 * u * u) * (1 - v) ** 1.22
+      return [side * x, y, edge[2] - .006 - retreat]
+    }
+    frontPaint.push(patch(shield, full ? 28 : 18, full ? 14 : 8, outFront, .004))
+    black.push(patch((u, v) => {
+      const p = shield(u, 0)
+      return [p[0], p[1] - .011 * v, p[2] - .039 * v]
+    }, full ? 28 : 18, 4, [0, -1, 1], .004))
+    black.push(patch((u, v) => {
+      const s = mix(.019 - .007 * v, .035, u)
+      return [side * .072, mix(.369, .411, v), zAt(s)]
+    }, 6, 5, [side, 0, 0], .004))
+    if (full) carbon.push(hexMesh((u, v) => {
+      const x = .438 * u
+      return f(x, mix(lipY(x) + .031, .304 + .055 * smooth(x, .17, .419), v), .132 - .020 * smooth(x, .20, .46))
+    }, .439, .149, .024, .00095))
     frontPaint.push(patch((u, v) => {
       const x = mix(0, .86, u)
       const edge = frontHoodEdge(x)
-      return [side * x, edge[1] - .014 * v, edge[2] - .003 * v]
+      return [side * x, edge[1] - (.009 + .004 * smooth(x, .48, .73)) * v, edge[2] - .005 * v * v]
     }, 84, 4, outFront, .004))
     black.push(mapped(f, outline, outFront, .025, .055))
     dark.push(mapped(f, points, outFront, .123, .036))
@@ -186,12 +203,6 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return f(x, lipY(x) - .012 + .095 * v, mix(.019, .154, v))
     }, 38, 7, [0, 1, 0], .005))
     dark.push(patch((u, v) => {
-      const x = mix(.012, .925, u)
-      const outer = frontHoodEdge(x)
-      const height = Math.min(outer[1] - .008, .484)
-      return [side * x * .48, mix(lipY(x) + .009, height, v), outer[2] - .002]
-    }, 44, 9, [side, 0, 1], .008))
-    dark.push(patch((u, v) => {
       const y = mix(.171, .446, u)
       return f(mix(.873, .727, v), y, mix(.012, .170, v))
     }, 18, 9, [side, 0, 1], .009))
@@ -205,6 +216,11 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const y = mix(eyeLow(x), eyeTop(x), v)
       return f(x, y, d - .013 * Math.sin(Math.PI * v) * Math.sin(Math.PI * u))
     }
+    black.push(patch((u, v) => {
+      const lower = window(u, 1, .023)
+      const upper = frontHoodEdge(Math.abs(lower[0]))
+      return [lower[0], mix(lower[1] - .002, Math.max(lower[1], upper[1] - .003), v), mix(lower[2], upper[2] - .010, v)]
+    }, 56, 5, outFront, 0))
     black.push(patch((u, v) => window(u, v, .071), 44, 17, outFront, .009))
     optical.push(patch((u, v) => window(u, v, -.008), 52, 20, outFront, .0034))
     for (const edge of [0, 1]) {
@@ -244,20 +260,29 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
 
     const tailLower = curve([[0, .561], [.275, .564], [.424, .541], [.78, .535], [.914, .513], [.974, .468]])
     const tailSlot: XY[] = [[.345, .802], [.449, .817], [.698, .820], [.857, .865], [.889, .854], [.897, .809], [.895, .755], [.867, .718], [.743, .758], [.450, .763], [.353, .778]]
-    const tailTopOfSlot = curve([[0, .844], [.12, .873], [.23, .873], [.32, .855], [.46, .820], [.70, .821], [.86, .864], [.90, .851], [.935, .814]])
-    const tailUnderSlot = curve([[0, .714], [.27, .712], [.34, .722], [.43, .758], [.70, .752], [.87, .713], [.90, .735], [.979, .697]])
+    const tailTopOfSlot = (x: number) => mix(maskHigh(x), .821 + .043 * smooth(x, .70, .86) - .045 * smooth(x, .86, .938), smooth(x, .396, .467))
+    const tailUnderSlot = (x: number) => mix(maskLow(x), .756 - .041 * smooth(x, .73, .89) - .016 * smooth(x, .890, .978), smooth(x, .404, .490))
     rearPaint.push(patch((u, v) => {
       const x = .935 * u
-      return r(x, mix(tailTopOfSlot(x), tailLipY(x), v), .020 * (1 - v) * (1 - smooth(x, .3, .44)) + .020 * v * (1 - smooth(x, .038, .131)))
-    }, 48, 5, outRear, .006))
+      const lowY = tailTopOfSlot(x) - .002
+      const lowerZ = Math.min(r(x, lowY, .012)[2], tailCrestZ(x) + .020)
+      const z = mix(lowerZ, tailCrestZ(x), Math.sin(Math.PI * v / 2))
+      return [side * x, mix(lowY, tailLipY(x), v), limitTailZ(x, z)]
+    }, full ? 56 : 48, full ? 11 : 7, outRear, full ? .003 : 0))
     rearPaint.push(patch((u, v) => {
-      const x = mix(0, .979 - .021 * v, u)
-      const center = mix(-.043, -.008, v), flank = mix(.011, -.017, v)
-      const ridge = mix(.360, .401, v)
-      const depth = mix(center, flank, smooth(x, ridge - .186, ridge + .162))
-      return r(x, mix(tailLower(x), tailUnderSlot(x), v), depth)
+      const x = (.979 - .024 * v) * u
+      const y = mix(tailLower(x), tailUnderSlot(x) + .002, v)
+      const wrap = .043 * (1 - smooth(x, .185, .435)) * smooth(y, .516, .580) * (1 - smooth(y, .595, .716))
+      const depth = mix(-.038, -.014, v) + .055 * smooth(x, .35, .89) * (1 - v) ** 1.20 - wrap
+      return r(x, y, depth)
     }, 70, 16, outRear, .008))
-    rearPaint.push(mapped(r, [[.891, .854], [.935, .872], [.972, .843], [1.006, .788], [.980, .468], [.914, .523], [.897, .735]], outRear, -.002, .008, .025))
+    rearPaint.push(patch((u, v) => {
+      const left = mix(.909, .887, smooth(v, .15, .89))
+      const right = .969 + .027 * Math.sin(Math.PI * v) ** 1.12
+      const x = mix(left, right, u)
+      const y = mix(.473 + .042 * (1 - u), .859 - .041 * u ** 2, v)
+      return r(x, y, mix(-.011, -.004, u) - .010 * Math.sin(Math.PI * v) * Math.sin(Math.PI * u))
+    }, full ? 24 : 16, full ? 31 : 16, outRear, full ? .004 : 0))
     black.push(mapped(r, tailSlot, outRear, .014, .028, .05))
     black.push(joinRim(tailSlot, 1.025, .92, r, -.009, .026, outRear))
     const tailHub: XY = [.741, .794]
@@ -267,7 +292,18 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const hex: XY[] = ([[1, 0], [outletPoint, 1], [-outletPoint, 1], [-1, 0], [-outletPoint, -1], [outletPoint, -1]] as const)
       .map(([x, y]) => [outletCenter + halfOutletWidth * x, outletHeight + halfOutletHeight * y])
     const outlet: Face = (x, y, d = 0) => metalFace(side, x, y, d)
-    black.push(joinRim(hex, 1.20, .999, outlet, .025, .001, outRear, outletRound))
+    const surround = 1.03, w = halfOutletWidth * surround, h = halfOutletHeight * surround
+    const cuts = [0, outletCenter - w, outletCenter - w * outletPoint, outletCenter + w * outletPoint, outletCenter + w, .453]
+    for (let i = 1; i < cuts.length; i++) for (const polarity of [-1, 1]) {
+      black.push(patch((u, v) => {
+        const x = mix(cuts[i - 1], cuts[i], u)
+        const boundary = Math.min(1, Math.max(0, (1 - Math.abs(x - outletCenter) / w) / (1 - outletPoint)))
+        const y = mix(outletHeight + polarity * h * boundary, (polarity > 0 ? maskHigh : maskLow)(x), v)
+        const z = mix(outlet(x, y, mix(.022, .020, smooth(x, .006, .070)))[2], r(x, y, .005)[2], smooth(x, .326, .453))
+        return [side * x, y, z]
+      }, full ? 12 : 7, 6, outRear, 0))
+    }
+    black.push(joinRim(hex, 1.065, .999, outlet, .019, .001, outRear, outletRound, 0))
     const hotRim = joinRim(hex, 1, .855, outlet, 0, .021, outRear, outletRound, 0)
     outletCavities.push(joinRim(hex, .855, .82, outlet, .021, .117, outRear, outletRound))
     const exhaust = add(parent, 'formed hexagonal outlet', hotRim, m.hot)
@@ -292,11 +328,13 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }
     diffuserShell.push(patch(diffuser, 64, 20, [0, -1, 0], .016))
     diffuserShell.push(patch((u, v) => {
-      const x = .915 * u
+      const x = .807 * u
+      const t = x / .915
       const upper = tailLower(x) - .002
       const p = r(x, upper, .022)
-      const lip = .521 - .065 * u ** 1.6
-      return [side * x, mix(upper, lip, v) + .004 * Math.sin(Math.PI * v), mix(p[2] + .022, rampEdge(u) + .008, v)]
+      const lip = .521 - .065 * t ** 1.6
+      const recess = .091 * smooth(x, .48, .57) * (1 - smooth(x, .79, .91)) * smooth(v, 0, .56)
+      return [side * x, mix(upper, lip, v) + .004 * Math.sin(Math.PI * v), mix(p[2] + .022, rampEdge(t) + .008, v) + recess + .054 * smooth(x, .735, .807)]
     }, 47, 6, [0, -1, 0], .012))
     dark.push(patch((u, v) => {
       const x = .885 * u
@@ -310,7 +348,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const low = diff[1] - .009 - .015 * smooth(u, .38, .49) * (1 - smooth(u, .62, .77))
       const center = 1 - smooth(x, .385, .447)
       const y = mix(low, tailLower(x), v)
-      const p = r(x, y, .020 + .022 * v + .081 * center * Math.sin(Math.PI * v) ** 1.45)
+      const recess = Math.sin(Math.PI * v) ** 1.16
+      const lane = smooth(x, .485, .538) * (1 - smooth(x, .754, .82))
+      const p = r(x, y, .029 + .017 * v + (.046 + .069 * center + .056 * lane) * recess)
       return [p[0], y, diffuserZ(x, y, mix(diff[2], p[2], smooth(v, 0, .78)))]
     }
     const mouthSplit = .454, lipStart = .84
@@ -329,17 +369,27 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 16, 12, outRear, .008))
     for (const fin of [.423, .650]) {
       const inner = fin < .5
-      const tip = tailLower(fin) + (inner ? .073 : .064)
-      diffuserFins.push(patch((u, v) => {
-        const x = fin + (inner ? .004 : .025) * smooth(u, .38, 1) * v
-        const trailingY = tip - .145 * v
-        const y = mix(.213 - .054 * v, trailingY, u ** 1.44)
-        const tipIn = .049 * (1 - smooth(v, 0, .18))
-        const recess = -.048 - (inner ? .013 * Math.sin(Math.PI * v) ** 2 : 0) + tipIn + .027 * smooth(v, .72, 1)
-        const trailingZ = r(x, trailingY, recess)[2]
-        const z = mix(zAt(.853), trailingZ, u)
-        return [side * x, y, diffuserZ(x, y - .016, z)]
-      }, 41, 12, [side, 0, 0], .010))
+      const tip = tailLower(fin) + (inner ? .076 : .073)
+      const railZ = curve(inner
+        ? [[0, -2.364], [.12, -2.407], [.255, -2.446], [.36, -2.445], [.70, -2.432], [1, -2.411]]
+        : [[0, -2.292], [.14, -2.311], [.27, -2.306], [.42, -2.298], [.70, -2.286], [1, -2.274]])
+      const edge: Surface = (u, v) => {
+        const w = 2 * u - 1
+        const axis = fin + (inner ? .018 : .040) * v ** 1.28
+        const half = .0067 - .0013 * v
+        const y = tip - (inner ? .232 : .225) * v
+        const z = diffuserZ(axis + half, y - .010, railZ(v))
+        return [side * (axis + half * w), y, z - .0034 * Math.sin(Math.PI * u)]
+      }
+      diffuserFins.push(patch(edge, 6, 24, outRear))
+      const web = (u: number, v: number, face: number): Point => {
+        const p = edge(face, v)
+        const x = mix(fin - .019 + .004 * (2 * face - 1), Math.abs(p[0]), u)
+        const y = mix(.237 - .071 * v, p[1], u ** 1.28)
+        return [side * x, y, diffuserZ(x, y - .010, mix(zAt(.833), p[2], u))]
+      }
+      for (const face of [0, 1]) diffuserFins.push(patch((u, v) => web(u, v, face), 28, 13, [side * (2 * face - 1), 0, 0]))
+      for (const v of [0, 1]) diffuserFins.push(patch((u, b) => blend(web(u, v, 0), web(u, v, 1), b), 28, 2, [0, 1 - 2 * v, 0]))
     }
     rearOptical.push(ribbon(r, [[.545, .434], [.654, .430]], .022, .012, 18))
   }
@@ -357,14 +407,13 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const y = mix(.713, tailLipY(Math.abs(x)) - .004, v)
     return [x, y, fascia(false, 1, Math.abs(x), y, .121)[2]]
   }, 49, 9, outRear, .013))
-  black.push(patch(rearBridge, 16, 18, outRear, .009))
   const stopBar = (u: number, v: number): Point => {
     const x = mix(-.169, .169, u), edge = Math.abs(x) / .169
-    return [x, .911 + .005 * edge ** 2 + .006 * v, zAt(.893 - .005 * edge) + .005 * v]
+    return [x, .919 + .005 * edge ** 2 + .007 * v, zAt(.898 - .005 * edge) + .008 * v]
   }
   black.push(patch((u, v) => {
-    const p = stopBar(u, mix(-.38, 1.38, v))
-    return [p[0], p[1], p[2] + .002]
+    const p = stopBar(u, mix(-1.24, 1.26, v))
+    return [p[0], p[1], p[2] + .005]
   }, 26, 3, outRear, .006))
   emit('high rear brake lamp bar', patch(stopBar, 32, 3, outRear, .002), true, false, undefined, .13, 23)
   add(parent, 'nose blades, shield and lower lip', joined(frontPaint), m.paint)
@@ -375,8 +424,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   add(parent, 'hexagonal outlet cavities', joined(outletCavities), m.dark)
   add(parent, 'channeled graphite rear diffuser', joined(diffuserShell), m.diffuser)
   const bladeFinish = m.tag(m.diffuser.clone(), 'sheet')
-  bladeFinish.color.setHex(full ? 0x46494e : 0x55575b)
-  bladeFinish.roughness = .55
+  bladeFinish.color.setHex(full ? 0x44474a : 0x4d5054)
+  bladeFinish.roughness = .66
+  bladeFinish.metalness = .19
   add(parent, 'thin graphite diffuser blades', joined(diffuserFins), bladeFinish)
   add(parent, 'machined projector collars', joined(projectorCollars), m.brushed)
   add(parent, 'smooth dark projector bowls', joined(projectorBowls), m.dark)
@@ -393,5 +443,5 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       part.mesh.material.emissiveIntensity = level * part.luminance
     }
   }
-  return { lamps, heatSources, lamp: lens, exhaust: anchor(rearBridge(.5, .5), outRear, .34), update }
+  return { lamps, heatSources, lamp: lens, exhaust: anchor([0, mix(.719, .861, .5), outletZ + .022], outRear, .34), update }
 }

@@ -120,9 +120,10 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
     }, full ? 24 : 14, 8, [0, 1, 0], .0045)
     const position = panel.getAttribute('position'), uv = panel.getAttribute('uv')
     for (let j = 0; j < uv.count; j++) uv.setXY(j, Math.abs(position.getX(j)), -position.getZ(j))
+    panel.setAttribute('color', new T.Float32BufferAttribute(new Float32Array(position.count * 3).fill(i === 2 ? .25 : .76), 3))
     rearLouvers.push(panel)
   }
-  add(parent, 'dark chevron rear bay louvers', joined(rearLouvers), m.ventCarbon)
+  add(parent, 'dark chevron rear bay louvers', joined(rearLouvers), m.rearVent)
   add(parent, 'thin carbon engine bay surround', joined(surround), m.carbon)
   add(parent, 'carbon cam covers with hex relief', joined(covers), m.bayCover)
   add(parent, 'stepped carbon bay vents', joined(steps), m.ventCarbon)
