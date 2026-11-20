@@ -1,16 +1,85 @@
 import * as T from 'three'
 import { bayEdge, zAt } from './body'
 import { anchor } from './ends'
-import { add, contour, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, type Point } from './geometry'
+import { add, contour, curve, joined, mix, patch, polygon, roundedPath, smooth, type Point } from './geometry'
 import type { Palette } from './materials'
 
 const coverStart = .684, coverEnd = .834
 const crown = (u: number) => mix(.974, .920, u) + .005 * Math.sin(u * Math.PI)
 const fore = .664, aft = .897
+const grilleLength = .420, grilleWidth = .184
+const grilleAxis = new T.Vector3(0, .045, -1).normalize()
+
+function grilleBasis(side: number) {
+  const center = new T.Vector3(side * .301, 1.008, zAt(.710))
+  const across = new T.Vector3(side, .235, 0)
+  across.addScaledVector(grilleAxis, -across.dot(grilleAxis)).normalize()
+  const up = new T.Vector3().crossVectors(grilleAxis, across).multiplyScalar(-side).normalize()
+  return { center, across, up }
+}
+
+function perforatedGrille(face: (u: number, v: number, recess?: number) => Point, up: T.Vector3, side: number, full: boolean) {
+  const a = grilleLength / 2, b = grilleWidth / 2
+  const cell = full ? .0078 : .01175, gauge = full ? .0015 : .0020
+  const radius = cell - gauge / Math.sqrt(3), apothem = radius * Math.sqrt(3) / 2
+  const dx = cell * 1.5, dy = cell * Math.sqrt(3)
+  const outline = [[-a, -b], [a, -b], [a, b], [-a, b]].map(([x, y]) => new T.Vector2(x, y))
+  const holes: T.Vector2[][] = []
+  for (let i = -Math.ceil(a / dx); i <= Math.ceil(a / dx); i++) for (let j = -Math.ceil(b / dy); j <= Math.ceil(b / dy); j++) {
+    const x = i * dx, y = (j + (i % 2 === 0 ? .5 : 0)) * dy
+    if (Math.abs(x) + radius + .0006 >= a || Math.abs(y) + apothem + .0006 >= b) continue
+    holes.push(Array.from({ length: 6 }, (_, k) => {
+      const angle = k * Math.PI / 3
+      return new T.Vector2(x + radius * Math.cos(angle), y + radius * Math.sin(angle))
+    }))
+  }
+  const flip = side > 0
+  const indices = T.ShapeUtils.triangulateShape(outline, holes).flatMap(([a, b, c]) => flip ? [a, c, b] : [a, b, c])
+  const points = outline.concat(...holes)
+  const vertices = points.flatMap(({ x, y }) => face(x, y))
+  const normals = points.flatMap(() => up.toArray())
+  const uv = points.flatMap(({ x, y }) => [x + a, y + b])
+  if (full) for (const hole of holes) for (const [i, p] of hole.entries()) {
+    const q = hole[(i + 1) % hole.length], at = vertices.length / 3
+    const normal = new T.Vector3(...face(q.x, q.y)).sub(new T.Vector3(...face(p.x, p.y))).cross(up).normalize()
+      .multiplyScalar(side)
+    vertices.push(...face(p.x, p.y), ...face(q.x, q.y), ...face(q.x, q.y, .0014), ...face(p.x, p.y, .0014))
+    for (let j = 0; j < 4; j++) normals.push(...normal.toArray())
+    uv.push(p.x + a, p.y + b, q.x + a, q.y + b, q.x + a, q.y + b, p.x + a, p.y + b)
+    indices.push(...(flip ? [at, at + 2, at + 1, at, at + 3, at + 2] : [at, at + 1, at + 2, at, at + 2, at + 3]))
+  }
+  return new T.BufferGeometry().setIndex(indices)
+    .setAttribute('position', new T.Float32BufferAttribute(vertices, 3))
+    .setAttribute('normal', new T.Float32BufferAttribute(normals, 3))
+    .setAttribute('uv', new T.Float32BufferAttribute(uv, 2))
+}
+
+function finishFaces(g: T.BufferGeometry, skin: number, wet: T.BufferGeometry[], dry: T.BufferGeometry[]): void {
+  const index = g.getIndex()
+  if (index) {
+    const top = g.clone()
+    top.setIndex(new T.BufferAttribute(index.array.slice(0, skin), 1))
+    g.setIndex(new T.BufferAttribute(index.array.slice(skin), 1))
+    wet.push(top)
+    dry.push(g)
+  } else {
+    const top = new T.BufferGeometry(), returnFaces = new T.BufferGeometry()
+    for (const name of ['position', 'normal', 'uv']) {
+      const a = g.getAttribute(name)
+      const split = skin * a.itemSize
+      top.setAttribute(name, new T.BufferAttribute(a.array.slice(0, split), a.itemSize))
+      returnFaces.setAttribute(name, new T.BufferAttribute(a.array.slice(split), a.itemSize))
+    }
+    wet.push(top)
+    dry.push(returnFaces)
+  }
+}
 
 export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   const surround: T.BufferGeometry[] = [], covers: T.BufferGeometry[] = [], steps: T.BufferGeometry[] = []
+  const returns: T.BufferGeometry[] = [], padWalls: T.BufferGeometry[] = []
   const mesh: T.BufferGeometry[] = [], ribs: T.BufferGeometry[] = [], internals: T.BufferGeometry[] = [], black: T.BufferGeometry[] = []
+  const grilleFrames: T.BufferGeometry[] = [], grilleTrays: T.BufferGeometry[] = []
   const rearLouvers: T.BufferGeometry[] = []
   const n = full ? 40 : 18
   black.push(patch((u, v) => {
@@ -31,7 +100,7 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
       const span = .071 + .034 * Math.sin(Math.PI * u)
       return [x + side * (.0008 - span * v), y + .0015 - .037 * v - .010 * v ** 3, z]
     }
-    surround.push(patch(frame, n, 7, [0, 1, 0], .0027))
+    finishFaces(patch(frame, n, 7, [0, 1, 0], .0027), n * 7 * 6, surround, returns)
     const wall = (u: number, v: number): Point => {
       const p = frame(u, 1)
       return [p[0] + side * (.025 - .126 * v), p[1] - (.184 - .036 * u) * v, p[2]]
@@ -47,23 +116,24 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
         const height = .015 + .058 * v ** 1.28 + .014 * i / 3
         return [p[0] - side * inner * v, p[1] - height - .010 * u + .005 * smooth(u, .77, 1), p[2]]
       }
-      steps.push(patch(step, full ? 18 : 9, full ? 12 : 8, [0, 1, 0], .004))
+      const columns = full ? 18 : 9, rows = full ? 12 : 8
+      finishFaces(patch(step, columns, rows, [0, 1, 0], .004), columns * rows * 6, steps, returns)
     }
-    const airFace = (u: number, v: number): Point => {
-      const s = mix(.673, .731, u)
-      const [x, y, z] = bayEdge(s, side)
-      return [x - side * (.106 + .100 * v), y - .120 - .028 * v + .006 * u, z - .016 * v]
+    const { center, across, up } = grilleBasis(side)
+    const airFace = (u: number, v: number, recess = 0): Point => center.clone()
+      .addScaledVector(grilleAxis, u).addScaledVector(across, v).addScaledVector(up, -recess).toArray()
+    const a = grilleLength / 2, b = grilleWidth / 2, rim = .0032, trayDepth = .024
+    mesh.push(perforatedGrille(airFace, up, side, full))
+    grilleTrays.push(patch((u, v) => airFace(mix(-a, a, u), mix(-b, b, v), trayDepth), 1, 1, up.toArray()))
+    for (const edge of [-1, 1]) {
+      grilleFrames.push(patch((u, v) => airFace(mix(-a - rim, a + rim, u), edge * (b + rim * v)), 1, 1, up.toArray()))
+      grilleFrames.push(patch((u, v) => airFace(edge * (a + rim * v), mix(-b, b, u)), 1, 1, up.toArray()))
+      grilleTrays.push(patch((u, v) => airFace(mix(-a, a, u), edge * b, trayDepth * v), 1, 1, across.clone().multiplyScalar(-edge).toArray()))
+      grilleTrays.push(patch((u, v) => airFace(edge * a, mix(-b, b, u), trayDepth * v), 1, 1, grilleAxis.clone().multiplyScalar(-edge).toArray()))
     }
-    black.push(patch((u, v) => {
-      const p = airFace(u, v)
-      return [p[0] + side * .012, p[1] - .022, p[2]]
-    }, 10, 6, [0, 1, 0], .014))
-    mesh.push(hexMesh((u, v) => airFace(mix(.035, .972, u), mix(.044, .985, v)), .270, .118,
-      full ? .0078 : .018, full ? .0008 : .0013))
-    const airBorder: Point[] = [airFace(0, 0), airFace(1, 0), airFace(1, 1), airFace(0, 1)]
-    surround.push(contour([...airBorder, airBorder[0]], .0038, false, 5))
 
-    covers.push(patch((u, v) => cover(side, u, v), n, full ? 18 : 12, [0, 1, 0], .038))
+    const rows = full ? 18 : 12
+    finishFaces(patch((u, v) => cover(side, u, v), n, rows, [0, 1, 0], .038), n * rows * 6, covers, returns)
     for (let tile = 0; tile < 5; tile++) {
       const at = .263 + tile * .116
       for (const lane of [0, 1]) {
@@ -73,7 +143,9 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
             const p = cover(side, centerU + du, centerV + dv)
             return [p[0], p[1] + .006, p[2]]
           })
-        covers.push(polygon(roundedPath(hex, 2, .16), [0, 1, 0], .007))
+        const outline = roundedPath(hex, 2, .16)
+        const pad = polygon(outline, [0, 1, 0], .007)
+        finishFaces(pad, (pad.getAttribute('position').count - outline.length * 6) / 2, covers, padWalls)
       }
     }
     const pad: Point[] = [[.325, .465], [.345, .435], [.614, .435], [.649, .469], [.649, .534], [.623, .569],
@@ -127,9 +199,20 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   add(parent, 'thin carbon engine bay surround', joined(surround), m.carbon)
   add(parent, 'carbon cam covers with hex relief', joined(covers), m.bayCover)
   add(parent, 'stepped carbon bay vents', joined(steps), m.ventCarbon)
-  add(parent, 'front airbox hex grilles', joined(mesh), m.carbon)
+  add(parent, 'dry carbon bay wall returns', joined(returns), m.dark)
+  const padEdge = m.dark.clone()
+  padEdge.color.setHex(full ? 0x272a2e : 0x414448)
+  padEdge.roughness = .72
+  add(parent, 'matte hex pad walls', joined(padWalls), m.tag(padEdge, 'none'))
+  const grilleMaterial = m.tag(new T.MeshStandardMaterial({
+    color: full ? 0x555c65 : 0x81868e, roughness: .60, metalness: .28,
+  }), 'none')
+  add(parent, 'front airbox hex grilles', joined(mesh), grilleMaterial)
+  add(parent, 'thin airbox grille frames', joined(grilleFrames), m.engine)
+  add(parent, 'recessed airbox grille trays', joined(grilleTrays), m.dark)
   add(parent, 'paired cam cover rib groups and blank pads', joined(ribs), m.diffuser)
   add(parent, 'dark intake plenum and engine hardware', joined(internals), m.engine)
   add(parent, 'recessed bay chamber and blank plate', joined(black), m.dark)
-  return anchor(plenum(2 / 3, .5), [0, 1, 0], .42)
+  const detail = grilleBasis(-1)
+  return anchor(detail.center.toArray(), detail.up.toArray(), .16)
 }
