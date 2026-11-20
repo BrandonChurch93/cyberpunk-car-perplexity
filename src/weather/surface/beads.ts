@@ -358,19 +358,21 @@ float surfMist = 0.0;
   }
   surfBeadOut = shaded;
   // A dome a few pixels across holds every normal inside one pixel: spread its highlight, as a prefiltered normal map would.
-  surfBeadRough = mix(0.26, 0.012, smoothstep(1.5 * pix, 9.0 * pix, surfHit.radius));
+  surfBeadRough = mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, surfHit.radius));
   surfDiagOut = vec4(vec3(1.0, 0.1, 0.9) * (0.15 + 0.85 * max(w, surfMist * 0.5)), 1.0);
 }
 `
 
+// Three's own floor on roughness is applied before this chunk; a tighter lobe under a compact light blows up into fireflies.
 const beadsSpecular = /* glsl */ `
+surfBeadRough = min(max(surfBeadRough, 0.045) + geometryRoughness, 1.0);
 #ifdef USE_CLEARCOAT
   material.clearcoat *= 1.0 - 0.6 * surfHalo * (1.0 - surfBeadOut);
   material.clearcoat = mix(material.clearcoat, 1.0, surfBeadOut);
   material.clearcoatRoughness = mix(material.clearcoatRoughness, surfBeadRough, surfBeadOut);
   material.clearcoatRoughness = mix(material.clearcoatRoughness, max(material.clearcoatRoughness, 0.16), surfMist * 0.5);
 #else
-  material.roughness = mix(material.roughness, max(0.03, surfBeadRough), surfBeadOut);
+  material.roughness = mix(material.roughness, surfBeadRough, surfBeadOut);
 #endif
 `
 
@@ -382,7 +384,7 @@ export function applyBeads(material: THREE.Material, uniforms: Uniforms, bead: B
       shader.vertexShader = surfaceVaryingsGlsl(true) + insertAfter(shader.vertexShader, '#include <project_vertex>', surfaceVertexGlsl(true))
       let f = shader.fragmentShader
       f = surfaceVaryingsGlsl(true) + surfaceCommonGlsl + beadsGlsl + f
-      f = insertBefore(f, '#include <map_fragment>', 'float surfBeadOut = 0.0;\nfloat surfBeadRough = 0.012;\nvec4 surfDiagOut = vec4(0.0);')
+      f = insertBefore(f, '#include <map_fragment>', 'float surfBeadOut = 0.0;\nfloat surfBeadRough = 0.045;\nvec4 surfDiagOut = vec4(0.0);')
       f = insertAfter(f, '#include <clearcoat_normal_fragment_maps>', beadsFragment)
       f = insertAfter(f, '#include <lights_physical_fragment>', beadsSpecular)
       f = insertBefore(f, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { outgoingLight = surfDiagOut.rgb; }')
