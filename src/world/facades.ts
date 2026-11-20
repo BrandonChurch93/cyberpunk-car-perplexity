@@ -8,14 +8,23 @@ const shell = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false }
 const roomWall = shell.clone()
 patchMaterial(roomWall, {
   id: 'recessed room bounce',
+  uniforms: { roomSeed: { value: streamSeed('world/city/room-wall-wash') / 4294967296 } },
   apply(shader) {
-    shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec2 vRoomUv;')
-    shader.vertexShader = insertAfter(shader.vertexShader, '#include <project_vertex>', 'vRoomUv = uv;')
-    shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'varying vec2 vRoomUv;')
+    shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec2 vRoomUv; flat varying float vRoomOffset; uniform float roomSeed;')
+    shader.vertexShader = insertAfter(shader.vertexShader, '#include <project_vertex>', `
+      vRoomUv = uv;
+      vRoomOffset = roomSeed;
+      #ifdef USE_INSTANCING
+        vRoomOffset = fract(roomSeed+float(gl_InstanceID)*.61803399);
+      #endif
+    `)
+    shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'varying vec2 vRoomUv; flat varying float vRoomOffset;')
     shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <color_fragment>', /* glsl */ `
-      float ceilingBounce = pow(clamp(vRoomUv.y,0.0,1.0),1.77);
-      float wallBounce = 1.0-.34*pow(abs(vRoomUv.x-.5)*2.0,2.0);
-      diffuseColor.rgb *= wallBounce*(.36+.64*ceilingBounce);
+      vec2 wash = (vRoomUv-vec2(.22+.56*vRoomOffset,.88))*vec2(1.60,1.24);
+      float downlight = exp(-dot(wash,wash)*2.6);
+      float ceilingBounce = pow(clamp(vRoomUv.y,0.0,1.0),2.4);
+      float wallBounce = 1.0-.40*pow(abs(vRoomUv.x-.5)*2.0,2.0);
+      diffuseColor.rgb *= wallBounce*(.17+.42*ceilingBounce+.58*downlight);
     `)
   },
 })
