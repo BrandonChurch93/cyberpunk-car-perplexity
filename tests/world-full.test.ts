@@ -22,6 +22,8 @@ describe('full roof world', () => {
     expect(map.format).toBe(THREE.RedFormat)
     expect(map.type).toBe(THREE.FloatType)
     expect(deckHeight(.92, 3.13)).toBeLessThan(0)
+    expect(deckHeight(1.21, 1.64)).toBeLessThan(-.003)
+    expect(deckHeight(.96, 1.285)).toBeGreaterThan(0)
     expect(deckHeight(.18, -3.71)).toBeLessThan(0)
     expect(deckHeight(0, 0)).toBeGreaterThan(0)
     const samples = map.image.data as Float32Array
@@ -121,15 +123,10 @@ describe('full roof world', () => {
     expect(state()[2]).toBeLessThan(-16)
     world.beginSample({ timeSeconds: config.film.durationSeconds } as SampleContext)
     expect(state()).toEqual(resting)
-    const sheen = world.root.getObjectByName('recessed wall light opal') as THREE.Mesh<THREE.PlaneGeometry,THREE.MeshBasicMaterial>
-    const sheenRest = sheen.material.color.b
     world.beginSample({ timeSeconds: wheelBeat.start+.7 } as SampleContext)
     const shoulderAim = axis(wheel.object).y
     world.beginSample({ timeSeconds: wheelBeat.end-.38 } as SampleContext)
     expect(axis(wheel.object).y).toBeLessThan(shoulderAim-.03)
-    expect(sheen.material.color.b).toBeGreaterThan(sheenRest*20)
-    world.beginSample({ timeSeconds: config.film.durationSeconds } as SampleContext)
-    expect(sheen.material.color.b).toBe(sheenRest)
     expect(wheel.level((wheelBeat.start+wheelBeat.end)/2)).toBeGreaterThan(wheel.level(0)*3)
     expect(wheel.level(config.film.durationSeconds)).toBeCloseTo(wheel.level(0),12)
   })

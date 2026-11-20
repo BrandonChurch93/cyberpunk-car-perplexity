@@ -418,24 +418,6 @@ function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE
   return { film, set }
 }
 
-function contactBounce(city: THREE.Group, metal: THREE.Material, frame: THREE.Material): (time: number) => void {
-  const bank = new THREE.Group()
-  bank.name = 'west corner service wall light'
-  bank.position.set(-38.8,7.97,-37.76)
-  city.getObjectByName('west corner slab')!.add(bank)
-  block(bank,'wall light enclosure',frame,[0,0,-.11],[12.42,.73,.37])
-  block(bank,'projecting cutoff brow',metal,[0,.365,.08],[12.47,.12,.63]).rotation.x = .10
-  const tint = new THREE.Color(.50,.71,.97)
-  const face = new THREE.MeshBasicMaterial({ color: tint.clone(), toneMapped: false })
-  plate(bank,'recessed wall light opal',face,[0,-.07,.082],12.1,.25)
-  const set = (t: number) => {
-    face.color.copy(tint).multiplyScalar(.035 + 12 * ease(t,wheelBeat.end-1.23,wheelBeat.end-.70) *
-      (1-ease(t,wheelBeat.end-.13,wheelBeat.end+.02)))
-  }
-  set(0)
-  return set
-}
-
 export interface RoofFixtures { lights: FilmLight[]; signs: string[]; steamSources: NonNullable<import('./contract').WorldModule['steamSources']>; set(t: number, cutTime?: number): void }
 
 const generic = (name: string): string => {
@@ -517,7 +499,6 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   const poleMats = new Map<string, THREE.MeshBasicMaterial>()
   const poles = roof.children.filter(o => o.name === 'deck light pole')
   const service = rearDeckPractical(poles[8]!,roof,metal,frame)
-  const setContact = contactBounce(city,metal,frame)
   let setWheel = (_t: number): void => undefined
   const wheelPeak = 330
   const lowerWheelAim = (t: number) => ease(t,wheelBeat.end-2.15,wheelBeat.end-.67)
@@ -579,7 +560,6 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
       raking.set(t)
       service.set(t, cutTime)
       setWheel(t)
-      setContact(t)
       poleMats.get('wheel deck pole')?.color.copy(cool).multiplyScalar((115+59*lampEnvelope(t,wheelBeat))*mild(t))
     },
   }
