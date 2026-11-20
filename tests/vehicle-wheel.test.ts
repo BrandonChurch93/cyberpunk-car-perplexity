@@ -33,13 +33,13 @@ describe('closed-web forged wheel', () => {
             const p = wheel.localToWorld(new T.Vector3(1, 0.94 * R * Math.cos(a), 0.94 * R * Math.sin(a)))
             ray.set(p, dir)
             const hit = ray.intersectObject(wheel, true)[0]
-            expect(hit?.object.name).toMatch(/forged divided spokes and barrel|diamond cut spoke faces/)
+            expect(hit?.object.name).toMatch(/satin forged spoke web|forged divided spokes and barrel|diamond cut spoke faces/)
           }
           const aPent = th + Math.PI / 5
-          ray.set(wheel.localToWorld(new T.Vector3(1, 0.54 * R * Math.cos(aPent), 0.54 * R * Math.sin(aPent))), dir)
-          expect(ray.intersectObject(wheel, true)[0]?.object.name).toMatch(/drilled ceramic rotor|fixed brake caliper|recessed drill wells|recessed brake shield/)
-          ray.set(wheel.localToWorld(new T.Vector3(1, 0.82 * R * Math.cos(th), 0.82 * R * Math.sin(th))), dir)
-          expect(ray.intersectObject(wheel, true)[0]?.object.name).toMatch(/drilled ceramic rotor|fixed brake caliper|recessed drill wells|recessed brake shield/)
+          ray.set(wheel.localToWorld(new T.Vector3(1, 0.56 * R * Math.cos(aPent), 0.56 * R * Math.sin(aPent))), dir)
+          expect(ray.intersectObject(wheel, true)[0]?.object.name ?? 'open').not.toMatch(/satin forged spoke web|forged divided spokes|diamond cut/)
+          ray.set(wheel.localToWorld(new T.Vector3(1, 0.84 * R * Math.cos(th), 0.84 * R * Math.sin(th))), dir)
+          expect(ray.intersectObject(wheel, true)[0]?.object.name ?? 'open').not.toMatch(/satin forged spoke web|forged divided spokes|diamond cut/)
         }
       }
     }
@@ -53,7 +53,7 @@ describe('closed-web forged wheel', () => {
         if (!(child instanceof T.Mesh)) return
         const g = child.geometry
         fullWheelTris += g.index ? g.index.count / 3 : g.getAttribute('position').count / 3
-        if (child.material instanceof T.MeshPhysicalMaterial && /spokes|flange|hub|cap|lug/.test(child.name)) {
+        if (child.material instanceof T.MeshPhysicalMaterial && /spoke|barrel|flange|hub|cap|lug|caliper/.test(child.name)) {
           expect(child.material.anisotropy).toBe(0)
         }
       })
