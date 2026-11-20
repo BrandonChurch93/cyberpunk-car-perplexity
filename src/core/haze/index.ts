@@ -31,6 +31,7 @@ export const atmosphere = {
   projectorBodyDistance: [0.46, 1.38],
   projectorBodyClearance: [1.0, 2.3],
   projectorFocus: [1.28, 2.1],
+  projectorGroundClearance: [0.145, 0.215],
 } as const
 
 const cloudSeed = (streamSeed('haze/cloud-underlight') / 4294967296 * 64).toFixed(8)
@@ -366,11 +367,10 @@ vec4 scatterToDepth(vec2 uv, float depth) {
         ? projectorPhase(cosine) * ${atmosphere.projectorScatterFraction} * smoothstep(0.1, 0.43, distanceToLight)
           + projectorBodyPhase(cosine, distanceToLight, dot(toLight, up), far - t)
         : phase(cosine, anisotropy) * scatterFraction;
-      float density = densityAt(t, p.y, layer, cityStart);
-      if (projector && t > layer.x && t < layer.y) {
-        float ground = 1.0 - smoothstep(0.055, 0.28, p.y);
-        density -= 0.85 * ground * deckDensity * exp(-max(p.y, 0.0) / layerHeight);
-      }
+      float density = projector
+        ? airDensity * exp(-max(p.y, 0.0) / airHeight)
+          * smoothstep(${atmosphere.projectorGroundClearance.join(', ')}, p.y) * (1.0 - step(localAirRange, t))
+        : densityAt(t, p.y, layer, cityStart);
       radiance += light * (visible * weight * density * scatteringPhase * exp(-opticalDepth) * foregroundScatter(t) * projectorGain);
     }
   }
