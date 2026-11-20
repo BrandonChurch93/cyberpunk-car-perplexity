@@ -10,6 +10,7 @@ type Face = (x: number, y: number, recess?: number) => Point
 export const anchor = (position: Point, normal: Point, radius: number): Anchor => ({ position: vec(position), normal: vec(normal).normalize(), radius })
 
 const diffuserProfile = [[.908, .159], [.929, .191], [.940, .203], [.960, .233], [.970, .265], [.975, .295], [.980, .325], [.990, .399], [.995, .430], [1, .470]] as const
+const diffuserRise = curve(diffuserProfile)
 const diffuserRun = curve(diffuserProfile.map(([s, y]) => [y, s]))
 const diffuserZ = (x: number, y: number, z: number): number => limitTailZ(x, Math.max(z, zAt(diffuserRun(y))))
 
@@ -251,13 +252,13 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 48, 5, outRear, .006))
     rearPaint.push(patch((u, v) => {
       const x = mix(0, .979 - .021 * v, u)
-      const ridge = mix(.34, .53, v)
-      const bevel = Math.max(0, 1 - Math.hypot(x - ridge, .003) / .225)
-      const dart = .044 * bevel * Math.sin(v * Math.PI) ** .75
-      const wedge = .069 * (1 - smooth(x, .235, .451)) * (1 - smooth(v, .15, .88))
-      const depth = mix(.014, -.010, v) + .020 * (1 - smooth(x, .22, .47)) - dart - wedge
+      const center = mix(-.055, -.008, v), side = mix(.013, -.018, v)
+      const ridge = mix(.345, .479, v)
+      const radius = Math.hypot(x - ridge, .005) - .005
+      const shoulder = .031 * Math.max(0, 1 - radius / .183) * smooth(v, 0, .31) * (1 - smooth(v, .72, 1))
+      const depth = mix(center, side, smooth(x, ridge - .097, ridge + .062)) - shoulder
       return r(x, mix(tailLower(x), tailUnderSlot(x), v), depth)
-    }, 50, 12, outRear, .008))
+    }, 70, 16, outRear, .008))
     rearPaint.push(mapped(r, [[.891, .854], [.935, .872], [.972, .843], [1.006, .788], [.980, .468], [.914, .523], [.897, .735]], outRear, -.002, .008, .025))
     black.push(mapped(r, tailSlot, outRear, .014, .028, .05))
     black.push(joinRim(tailSlot, 1.025, .92, r, -.009, .026, outRear))
@@ -344,6 +345,14 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }
     rearOptical.push(ribbon(r, [[.545, .434], [.654, .430]], .022, .012, 18))
   }
+  dark.push(patch((u, v) => {
+    const s = mix(.955, .99935, u)
+    const lateral = 2 * v - 1
+    const x = mix(.129, .047, smooth(u, .32, 1)) * lateral
+    const lower = diffuserRise(s) + .001
+    const y = mix(lower, Math.max(lower + .024, .545), lateral ** 2)
+    return [x, y, zAt(s)]
+  }, 30, 12, [0, -1, 0], .009))
   black.push(patch((u, v) => {
     const x = mix(-.912, .912, u)
     const y = mix(.713, tailLipY(Math.abs(x)) - .004, v)
@@ -351,8 +360,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   }, 49, 9, outRear, .013))
   black.push(patch(rearBridge, 16, 18, outRear, .009))
   const stopBar = (u: number, v: number): Point => {
-    const x = mix(-.226, .226, u), edge = Math.abs(x) / .226
-    return [x, .954 + .008 * edge ** 2 + .009 * v, zAt(.895 - .008 * edge ** 2) - .003 * v]
+    const x = mix(-.169, .169, u), edge = Math.abs(x) / .169
+    return [x, .911 + .005 * edge ** 2 + .006 * v, zAt(.893 - .005 * edge) + .005 * v]
   }
   black.push(patch((u, v) => {
     const p = stopBar(u, mix(-.38, 1.38, v))
