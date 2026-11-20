@@ -3,9 +3,9 @@ import type { FormatSpec } from '../config'
 import { FullscreenPass, passMaterial } from '../core/fullscreen'
 
 const BLOOM_LEVEL_WEIGHTS = [0.36, 0.24, 0.16, 0.10, 0.08, 0.06]
-export const BLOOM_WEIGHT = 0.027
-export const HALATION_WEIGHT = [0.020, 0.0045, 0.0015]
-export const STREAK_WEIGHT = [0.0012, 0.0028, 0.0055]
+export const BLOOM_WEIGHT = 0.020
+export const HALATION_WEIGHT = [0.012, 0.0032, 0.0010]
+export const STREAK_WEIGHT = [0.0009, 0.0021, 0.0040]
 const STREAK_TAPS = [1, 2, 4, 8, 16, 32]
 
 const firstFragment = /* glsl */ `
