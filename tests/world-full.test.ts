@@ -184,6 +184,82 @@ describe('full roof world', () => {
     world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
   })
 
+  it('keeps the reflection practicals out of both hero views and visible from the probe', () => {
+    const required = (name: string) => {
+      const match = world.root.getObjectByName(name)
+      expect(match,name).toBeDefined()
+      return match!
+    }
+    world.root.updateMatrixWorld(true)
+    const frontages = required('offscreen reflection frontages')
+    const riser = required('billboard upper media riser')
+    const uprights = new Set(['upper cyan facade lightwell','pale cyan lightwell core','west violet media blade','warm tower service floor',
+      'high amber rooftop wayfinding','high amber hotel wayfinding'])
+    const clear = [...frontages.children,riser]
+    const faces: THREE.Mesh[] = []
+    world.root.traverse(object => {
+      if (uprights.has(object.name)) clear.push(object)
+      if (!(object instanceof THREE.Mesh) || !object.material.isShaderMaterial) return
+      if (object.parent && uprights.has(object.parent.name)) faces.push(object)
+    })
+    for (const group of [riser,frontages]) group.traverse(object => {
+      if (object instanceof THREE.Mesh && object.material.isShaderMaterial) faces.push(object)
+    })
+    const bounds = clear.map(object => new THREE.Box3().setFromObject(object))
+    const emitters = faces.map(object => [object,new THREE.Box3().setFromObject(object)] as const)
+    const near = required('northeast roof access')
+    bounds.push(new THREE.Box3().setFromObject(near))
+    const pupil = config.film.shutterDegrees / (720*config.film.fps)
+    const camera = new THREE.PerspectiveCamera()
+    const frustum = new THREE.Frustum()
+    const matrix = new THREE.Matrix4()
+    const wakeEnd = config.beats.find(b=>b.id==='wake')!.end
+    const returnStart = config.beats.find(b=>b.id==='return')!.start
+    let min = Infinity
+    for (const format of [config.formats.master,config.formats.vertical]) {
+      for (let i=0;i<=frameCount;i++) {
+        const time = i/config.film.fps
+        for (const offset of [-pupil,0,pupil]) {
+          const state = cameraAt(time+offset,format,anchors,time)
+          for (const box of bounds) min = Math.min(min,box.distanceToPoint(state.position)-apertureRadius(state))
+        }
+        if (time >= wakeEnd && time < returnStart) continue
+        applyLens(camera,cameraAt(time,format,anchors,time),format.width,format.height,{pixel:[0,0],aperture:[0,0]},1)
+        camera.updateMatrixWorld(true)
+        frustum.setFromProjectionMatrix(matrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse))
+        for (const [object,box] of emitters) {
+          expect(frustum.intersectsBox(box),`${format.id} ${i} ${object.parent?.name}`).toBe(false)
+        }
+      }
+    }
+    expect(min).toBeGreaterThan(.10)
+    const probe = new THREE.Vector3(0,.6,0)
+    const visible = (name: string, aperture: string) => {
+      const fixture = required(name)
+      const face = fixture.getObjectByName(aperture)!
+      const ray = face.getWorldPosition(new THREE.Vector3()).sub(probe)
+      const caster = new THREE.Raycaster(probe,ray.clone().normalize(),0,ray.length()+.02)
+      expect(caster.intersectObject(world.root,true)[0]?.object,name).toBe(face)
+      return ray.normalize()
+    }
+    for (let i=1;i<=3;i++) {
+      const ray = visible('upper magenta violet screen '+i,'animated magenta violet tiles')
+      expect(ray.y).toBeGreaterThan(.40)
+      expect(ray.z).toBeLessThan(0)
+    }
+    const macro = visible('northwest animated LED wall','animated magenta violet tiles')
+    expect(THREE.MathUtils.radToDeg(Math.atan2(macro.x,macro.z))).toBeCloseTo(-49,0)
+    expect(visible('recessed amber service sign','diffusing cabinet face').z).toBeLessThan(0)
+    const tiles = riser.getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    const getFlow = (timeSeconds: number) => {
+      world.beginFrame({ frame: { timeSeconds } } as FrameContext)
+      return (tiles.material.uniforms.flow.value as THREE.Vector2).clone()
+    }
+    expect(getFlow(0).distanceTo(getFlow(config.film.durationSeconds))).toBeLessThan(1e-12)
+    expect(getFlow(0).distanceTo(getFlow(config.film.durationSeconds*.5))).toBeGreaterThan(1.5)
+    expect(world.lights).toHaveLength(8)
+  })
+
   it('exposes metric relief for the front puddle and an unchanged reflective plane', () => {
     const { deck } = world
     expect(deck.heightMap).toBeInstanceOf(THREE.DataTexture)

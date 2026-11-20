@@ -583,7 +583,19 @@ function rearRoofAccess(parent: THREE.Group, pole: THREE.Object3D, labels: Label
   block(core,'folded roof coping',metal,[0,3.36,-.03],[5.53,.16,3.39])
   block(core,'lift roof overrun',concrete,[1.14,3.65,-.61],[2.16,.52,1.37])
   block(core,'concrete left door pier',concrete,[-2.05,1.19,1.4],[1.30,2.38,.29])
-  block(core,'concrete right door pier',concrete,[1.41,1.19,1.4],[2.58,2.38,.29])
+  block(core,'concrete landing end pier',concrete,[2.28,1.19,1.4],[.84,2.38,.29])
+  block(core,'concrete landing lower sill',concrete,[1.04,.40,1.4],[1.66,.80,.29])
+  block(core,'lit stair landing back',vestibule,[1.04,1.61,.91],[1.66,1.66,.16])
+  const milk = new THREE.MeshBasicMaterial({ color: new THREE.Color(5.2,3.32,1.65), toneMapped: false })
+  const smoked = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(.082,.101,.116), side: THREE.DoubleSide, transparent: true, opacity: .29, depthWrite: false,
+  })
+  for (const x of [.21,.75,1.33,1.87]) block(core,'glazed landing mullion',frame,[x,1.60,1.59],[.064,1.60,.12])
+  for (const y of [.81,1.28,2.39]) block(core,'glazed landing crossrail',frame,[1.04,y,1.59],[1.71,.064,.12])
+  const rail = block(core,'visible interior stair handrail',metal,[1.04,1.43,1.18],[1.57,.048,.055])
+  rail.rotation.z = .14
+  plate(core,'stair landing ceiling return',milk,[1.04,2.22,1.07],1.54,.21).rotation.x = .48
+  plate(core,'smoked stair landing glazing',smoked,[1.04,1.62,1.624],1.60,1.53)
   block(core,'door reveal back',vestibule,[-.64,1.17,.60],[1.62,2.34,.17])
   for (const x of [-1.4,.12]) {
     block(core,'oxide door channel',metal,[x,1.18,1.38],[.089,2.35,.19])
@@ -599,7 +611,7 @@ function rearRoofAccess(parent: THREE.Group, pole: THREE.Object3D, labels: Label
   block(pay,'pay station pedestal',metal,[0,.57,0],[.20,1.0,.19])
   block(pay,'pay station cabinet',frame,[0,1.28,.015],[.46,.56,.27])
   block(pay,'coin and card housing',metal,[0,1.13,.169],[.235,.089,.075])
-  plate(pay,'pay station backlit screen',ice,[0,1.37,.154],.289,.154)
+  plate(pay,'pay station backlit screen',milk,[0,1.37,.154],.289,.154)
   labelFace(pay,generic('PAY HERE'),[0,1.56,.154],[.393,.10],labels,amber.color)
   pole.name = 'northeast access light pole'
   pole.position.set(16.2,0,11.1)
