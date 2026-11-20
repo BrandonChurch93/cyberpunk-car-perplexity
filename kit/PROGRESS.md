@@ -88,10 +88,11 @@ Chunking strategy:
 
 Vetted 2026-11-19. The ledger is `reference/controls.json` (URLs, licenses and scores, no images). The images stay in `reference/cache/controls/`, which git ignores. `npx tsx tools/controls.ts restore` downloads again any image the cache has lost.
 
-- Size: 57 kept of 60 candidates. 1 dropped. 2 candidates still wait on a late juror and stay out of the pool until their third vote arrives.
-- Mean vetting score: 92.5 (the mean of the kept medians). A control is kept when the median of its three juror likelihoods is at least `quality.blind.minControlMean`.
+- Size: 84 kept of 87 candidates. 1 dropped. 2 candidates still wait on a late juror and stay out of the pool until their third vote arrives.
+- Mean vetting score: 93.0 (the mean of the kept medians). A control is kept when the median of its three juror likelihoods is at least `quality.blind.minControlMean`.
 - How it was vetted: each candidate was prepared the way a judged frame is (centre crop to the master aspect, critic size, PNG, no metadata) and sent alone, with the C1 text, to three fresh jurors on three model families. Two families are fixed and the third rotates among four more.
-- Kept by kind: paint with water 8, front wheel 6, lit lamp 6, fine detail 5, rear and exhaust 5, wet supercar at night 9, empty deck at night 5, low wide single car in rain 6, rear with taillights in the wet 5.
+- Kept by kind: paint with water 8, front wheel 6, lit lamp 6, fine detail 5, rear and exhaust 5, wet supercar at night 10, empty deck at night 6, low wide single car in rain 6, rear with taillights in the wet 5, rain-wet neon street at night 27.
+- Neon controls (addendum 002): 27 photographs of rain-wet neon streets added 2026-11-20 and vetted in one pass with 81 one-image juror calls. All 27 kept, medians 85 to 98. `quality.blind.neonControls` asks for 15. Controls for wide frames are drawn from this kind first.
 - Dropped: `kb116048e`. One juror reported a driver behind the side glass, and the pool holds no people.
 - Rule kept from here on: a control whose jurors mention a person, a watermark or a caption is excluded by hand with `npx tsx tools/controls.ts exclude <id> <why>`.
 
