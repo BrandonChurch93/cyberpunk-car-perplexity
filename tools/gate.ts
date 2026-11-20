@@ -170,7 +170,13 @@ const checks: Record<string, Check> = {
     const bad: string[] = []
     for (const e of requiredExtensions) if (!caps.extensions.includes(e)) bad.push(e)
     for (const [k, v] of Object.entries(requiredLimits)) if (!(k in caps.limits) || caps.limits[k] < v) bad.push(`${k} ${v}`)
-    const src = execFileSync('grep', ['-rhoE', "getExtension\\(['\"][A-Za-z0-9_]+['\"]\\)", join(repoRoot, 'src')], { encoding: 'utf8' }).split('\n').filter(Boolean)
+    let found = ''
+    try {
+      found = execFileSync('grep', ['-rhoE', "getExtension\\(['\"][A-Za-z0-9_]+['\"]\\)", join(repoRoot, 'src')], { encoding: 'utf8' })
+    } catch (e) {
+      if ((e as { status?: number }).status !== 1) throw e
+    }
+    const src = found.split('\n').filter(Boolean)
     for (const hit of src) {
       const name = hit.replace(/getExtension\(['"]|['"]\)/g, '')
       if (!caps.extensions.includes(name)) bad.push(`${name} requested in src`)

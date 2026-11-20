@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { CapsView } from '../diagnostics/caps'
 import { config, paintById, type FormatSpec } from '../config'
 import { cameraAt } from '../director/shots'
 import { stateAt } from '../director/timeline'
@@ -21,7 +22,15 @@ const shadowMapSize = 2048
 const lensSqueeze = config.lens.anamorphic ? 1.5 : 1
 
 const normalsMaterial = new THREE.ShaderMaterial({
-  vertexShader: 'varying vec3 vN; void main() { vN = normalize(mat3(modelMatrix) * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  vertexShader: /* glsl */ `varying vec3 vN;
+void main() {
+  mat4 m = modelMatrix;
+  #ifdef USE_INSTANCING
+  m = m * instanceMatrix;
+  #endif
+  vN = normalize(mat3(m) * normal);
+  gl_Position = projectionMatrix * viewMatrix * m * vec4(position, 1.0);
+}`,
   fragmentShader: 'varying vec3 vN; void main() { gl_FragColor = vec4(normalize(vN) * 0.5 + 0.5, 1.0); }',
 })
 
@@ -135,6 +144,8 @@ export class FilmStage implements Stage {
   private format: FormatSpec = config.formats.master
   private frameSeconds = 0
   private diagnostic = 'beauty'
+  private caps: CapsView | null = null
+  private readonly veils: THREE.Mesh[] = []
   private readonly parts: StagePart[] = []
   private readonly passes: SamplePass[] = []
   private readonly bokeh = createBokeh(lensSqueeze)
@@ -205,6 +216,19 @@ export class FilmStage implements Stage {
   setDiagnostic(view: string): void {
     this.diagnostic = view
     this.scene.overrideMaterial = view === 'clay' ? this.clay : view === 'normals' ? normalsMaterial : null
+    if (view === 'normals') this.camera.layers.disable(layers.cameraOnly)
+    else this.camera.layers.enable(layers.cameraOnly)
+    for (const mesh of this.veils) mesh.visible = true
+    this.veils.length = 0
+    if (view === 'normals') {
+      this.scene.traverse((node) => {
+        const mesh = node as THREE.Mesh
+        if (!mesh.isMesh || !mesh.visible) return
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+        if (materials.every((m) => m.transparent && !m.depthWrite)) this.veils.push(mesh)
+      })
+      for (const mesh of this.veils) mesh.visible = false
+    }
     for (const system of this.systems()) system.setDiagnostic?.(view)
     for (const part of this.parts) part.setDiagnostic?.(view)
   }
@@ -293,6 +317,11 @@ export class FilmStage implements Stage {
   }
 
   renderSample(sample: SampleInfo, target: THREE.WebGLRenderTarget): void {
+    if (this.diagnostic === 'caps') {
+      this.caps ??= new CapsView()
+      this.caps.render(this.renderer, target, this.format.width, this.format.height)
+      return
+    }
     const timeSeconds = sample.timeSeconds
     this.setVehicle(timeSeconds)
     const state = this.cameraState(timeSeconds)
@@ -303,12 +332,17 @@ export class FilmStage implements Stage {
     this.rig.update(timeSeconds, sample.light)
     for (const part of this.parts) part.beforeSample?.(context)
     const passes = this.diagnostic === 'normals' ? [] : aperture ? [...this.passes, this.bokeh] : this.passes
-    const first = passes.length > 0 ? this.sceneTarget : target
+    const direct = passes.length === 0 && this.detail !== 'full'
+    const first = direct ? target : this.sceneTarget
     this.renderer.setRenderTarget(first)
     this.renderer.setClearColor(0x000000, 1)
     this.renderer.clear(true, true, false)
     this.renderer.render(this.scene, this.camera)
     let input = first.texture
+    if (passes.length === 0 && !direct) {
+      this.copy.material.uniforms.source.value = input
+      this.copy.render(this.renderer, target)
+    }
     passes.forEach((pass, i) => {
       const output = i === passes.length - 1 ? target : this.swap[i % 2]
       pass.render(this.renderer, { color: input, depth: this.sceneTarget.depthTexture as THREE.DepthTexture }, output, context)
