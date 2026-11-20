@@ -43,7 +43,7 @@ export const events = {
   lampStageOne: wake.start + 0.6,
   lampStageTwo: wake.start + 1.6,
   lampStageThree: wake.start + 3,
-  pushSettled: wake.start + 3.5,
+  pushSettled: wake.start + 2.4,
   engineStart: ignition.start + 1,
   engineRunning: ignition.start + 2,
   engineStop: finale.start + 1,
