@@ -4,6 +4,7 @@ import { expect, test } from 'vitest'
 import type { FormatSpec } from '../src/config'
 import type { BasicResolver } from '../src/post/resolve'
 import { launchBrowser } from '../tools/lib/browser'
+import { clayGain } from '../src/post/meter'
 
 function exercise(
   three: typeof THREE, Resolver: typeof BasicResolver, frameCount: number, fps: number, fmt: FormatSpec,
@@ -167,3 +168,14 @@ test('resolves on WebGL2 with dither, lens scatter, diagnostic passthrough and a
     await app.close()
   }
 }, 30_000)
+
+test('clay exposure never darkens and moves in thirds of a stop', () => {
+    expect(clayGain(1, 0.78)).toBe(1)
+    for (const key of [0.2, 0.05, 0.01, 0.002]) {
+      const gain = clayGain(key, 0.78)
+      expect(gain).toBeGreaterThanOrEqual(1)
+      expect(Math.abs(Math.log2(gain) * 3 - Math.round(Math.log2(gain) * 3))).toBeLessThan(1e-9)
+      expect(gain).toBeLessThanOrEqual(64)
+    }
+  expect(clayGain(0.01, 0.78)).toBeGreaterThan(clayGain(0.05, 0.78))
+})

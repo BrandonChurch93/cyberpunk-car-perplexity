@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { config, type FormatSpec } from '../config'
 import type { FrameInfo, Resolver } from '../core/engine'
 import { FullscreenPass, passMaterial } from '../core/fullscreen'
+import { LogMeter, clayGain } from './meter'
 import { hashInts, streamSeed } from '../core/random'
 import { FiniteSum } from './finite'
 import { opticsGlsl } from './optics'
@@ -106,6 +107,8 @@ export class BasicResolver implements Resolver {
   private readonly scatter = new Scatter()
   private readonly finiteSum = new FiniteSum()
   private treatment = 0
+  private clay = false
+  private readonly meter = new LogMeter()
 
   constructor(private readonly renderer: THREE.WebGLRenderer) {
     this.pass = new FullscreenPass(passMaterial(fragment, {
@@ -134,6 +137,7 @@ export class BasicResolver implements Resolver {
 
   setDiagnostic(view: string): void {
     this.treatment = view === 'beauty' ? 0 : view === 'normals' ? 2 : view === 'caps' ? 3 : 1
+    this.clay = view === 'clay'
   }
 
   /** Number of pixels with a non-finite RGB component in the last unresolved HDR sum. */
@@ -146,7 +150,8 @@ export class BasicResolver implements Resolver {
     const safeSum = this.finiteSum.render(this.renderer, sum, count)
     u.sum.value = safeSum
     u.inverseCount.value = 1 / count
-    u.exposurePerSample.value = FILM_EXPOSURE / count
+    const gain = this.clay ? clayGain(this.meter.key(this.renderer, safeSum, count), FILM_EXPOSURE) : 1
+    u.exposurePerSample.value = FILM_EXPOSURE * gain / count
     if (this.treatment === 0) {
       this.scatter.render(this.renderer, safeSum, u.exposurePerSample.value, config.lens.anamorphic)
       u.bloom.value = this.scatter.bloom
