@@ -440,8 +440,8 @@ describe('vehicle geometry and state', () => {
         expect(new T.Vector3(0, 0, 1).applyQuaternion(origin.quaternion).z).toBeLessThan(-.999)
         outlet.geometry.computeBoundingBox()
         const size = outlet.geometry.boundingBox!.getSize(new T.Vector3())
-        expect(size.x / size.y).toBeGreaterThan(2.53)
-        expect(size.x / size.y).toBeLessThan(2.63)
+        expect(size.x / size.y).toBeGreaterThan(2.87)
+        expect(size.x / size.y).toBeLessThan(2.97)
       }
     }
   })
@@ -456,6 +456,52 @@ describe('vehicle geometry and state', () => {
           const target = center.clone().add(new T.Vector3(x, y, 0))
           const ray = new T.Raycaster(position, target.sub(position).normalize())
           expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('hexagonal outlet cavities')
+        }
+      }
+    }
+  })
+
+  it('joins the rear outlet mask to the lamps and preserves the painted crest', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      for (const x of [-.42, -.36, -.15, 0, .15, .36, .42]) {
+        const y = Math.abs(x) === .15 ? .864 : .800
+        const ray = new T.Raycaster(new T.Vector3(x, y, -4), new T.Vector3(0, 0, 1))
+        expect(ray.intersectObject(vehicle.root)[0]?.object.name).toBe('lamp bezels and air ducts')
+      }
+      for (const x of [-.22, 0, .22]) {
+        const top = (s: number) => new T.Raycaster(new T.Vector3(x, 1.8, zAt(s)), new T.Vector3(0, -1, 0))
+          .intersectObject(vehicle.root)[0].point.y
+        expect(top(.985)).toBeGreaterThan(.889)
+        expect(top(.995)).toBeGreaterThan(.570)
+        expect(top(.995)).toBeLessThan(.630)
+      }
+    }
+  })
+
+  it('keeps the high brake lamp clear of the bay louvers in both detail cameras', () => {
+    for (const vehicle of [full, blockout]) {
+      const name = 'high rear brake lamp bar'
+      const bar = vehicle.root.getObjectByName(name) as T.Mesh
+      vehicle.root.updateMatrixWorld(true)
+      const position = bar.geometry.getAttribute('position')
+      const index = bar.geometry.getIndex()!
+      const face = new T.Triangle(), normal = new T.Vector3(), points: T.Vector3[] = []
+      for (let i = 0; i < index.count; i += 3) {
+        face.a.fromBufferAttribute(position, index.getX(i))
+        face.b.fromBufferAttribute(position, index.getX(i + 1))
+        face.c.fromBufferAttribute(position, index.getX(i + 2))
+        face.getNormal(normal)
+        if (normal.y > .4 && normal.z < -.4) points.push(bar.localToWorld(face.getMidpoint(new T.Vector3())))
+      }
+      expect(points.length).toBeGreaterThan(5)
+      points.sort((a, b) => a.x - b.x)
+      for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [775, 800, 849]) {
+        const eye = cameraAt(frame / config.film.fps, format, vehicle.anchors).position
+        for (const fraction of [.1, .3, .5, .7, .9]) {
+          const point = points[Math.floor(fraction * points.length)]
+          const hit = new T.Raycaster(eye, point.clone().sub(eye).normalize()).intersectObject(vehicle.root)[0]
+          expect(hit?.object.name).toBe(name)
         }
       }
     }
