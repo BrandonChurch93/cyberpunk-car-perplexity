@@ -452,7 +452,7 @@ describe('vehicle geometry and state', () => {
       const rib = position.clone().addScaledVector(axis.clone().normalize(), car === full ? .0468 : .052875)
         .addScaledVector(across.clone().normalize(), car === full ? apothem : 0)
       const raisedBacking = look(rib.clone().addScaledVector(normal, .4), rib)
-      expect(raisedBacking.object).toBe(backing.object)
+      expect(raisedBacking.object.name).toBe('low ribs in the airbox trays')
       expect(raisedBacking.distance).toBeCloseTo(.4178, 5)
       if (car === blockout) {
         const chamfer = position.clone().addScaledVector(across.clone().normalize(), .0013)
@@ -474,7 +474,7 @@ describe('vehicle geometry and state', () => {
       const obliqueTarget = position.clone().addScaledVector(across.clone().normalize(), .076)
       for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [750, 810, 869]) {
         const obliqueEye = cameraAt(frame / config.film.fps, format, car.anchors).position
-        expect([grille.name, tray.name]).toContain(look(obliqueEye, obliqueTarget).object.name)
+        expect([grille.name, tray.name, raisedBacking.object.name]).toContain(look(obliqueEye, obliqueTarget).object.name)
       }
       expect(tray.material.color.getHex()).toBeGreaterThan(0x101010)
       expect(tray.material.color.getHex()).toBeLessThan(0x303030)

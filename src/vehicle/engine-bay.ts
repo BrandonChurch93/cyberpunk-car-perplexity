@@ -150,7 +150,7 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   const surround: T.BufferGeometry[] = [], covers: T.BufferGeometry[] = [], steps: T.BufferGeometry[] = []
   const returns: T.BufferGeometry[] = [], padWalls: T.BufferGeometry[] = []
   const mesh: T.BufferGeometry[] = [], ribs: T.BufferGeometry[] = [], internals: T.BufferGeometry[] = [], black: T.BufferGeometry[] = []
-  const grilleFrames: T.BufferGeometry[] = [], grilleTrays: T.BufferGeometry[] = []
+  const grilleFrames: T.BufferGeometry[] = [], grilleTrays: T.BufferGeometry[] = [], grilleRibs: T.BufferGeometry[] = []
   const rearLouvers: T.BufferGeometry[] = []
   const n = full ? 40 : 18
   black.push(patch((u, v) => {
@@ -231,13 +231,13 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
     grilleFrames.push(patch((u, v) => airFace(mix(-shellFoot[0], shellFoot[0], u), mix(-shellFoot[1], shellFoot[1], v), shellDepth),
       1, 1, up.clone().negate().toArray()))
     grilleTrays.push(patch((u, v) => airFace(mix(-a, a, u), mix(-b, b, v), trayDepth), 1, 1, up.toArray()))
-    for (const at of [-.067, .049, .146]) {
+    for (const at of [-.078, -.020, .049]) {
       const profile = [[-.011, trayDepth + .0005], [-.007, .0196], [-.0048, .0178],
         [.0048, .0178], [.007, .0196], [.011, trayDepth + .0005]]
       for (let i = 1; i < profile.length; i++) {
         const [fromX, fromY] = profile[i - 1], [toX, toY] = profile[i]
         const normal = up.clone().multiplyScalar(toX - fromX).addScaledVector(grilleAxis, toY - fromY).normalize()
-        grilleTrays.push(patch((u, v) => {
+        grilleRibs.push(patch((u, v) => {
           const y = mix(-b, b, v)
           return airFace(at + mix(fromX, toX, u) + .094 * y, y, mix(fromY, toY, u))
         }, 1, 1, normal.toArray()))
@@ -327,9 +327,13 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   const trayFinish = new T.MeshPhysicalMaterial({
     color: 0x1a1d21, emissive: 0x050607, roughness: .94, specularIntensity: .08,
   })
+  const ribFinish = new T.MeshPhysicalMaterial({
+    color: 0x343b43, roughness: .86, specularIntensity: .12,
+  })
   add(parent, 'front airbox hex grilles', joined(mesh), m.tag(grilleFinish, 'none'))
   add(parent, 'flush airbox grille ducts', joined(grilleFrames), m.tag(ductFinish, 'none'))
   add(parent, 'recessed airbox grille trays', joined(grilleTrays), m.tag(trayFinish, 'none'))
+  add(parent, 'low ribs in the airbox trays', joined(grilleRibs), m.tag(ribFinish, 'none'))
   add(parent, 'paired cam cover rib groups and blank pads', joined(ribs), m.diffuser)
   add(parent, 'dark intake plenum and engine hardware', joined(internals), m.engine)
   add(parent, 'recessed bay chamber and blank plate', joined(black), m.dark)
