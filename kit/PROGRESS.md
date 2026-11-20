@@ -269,6 +269,9 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-20 | Sources are added where the paint mirrors them: full-height cyan strips on the left edge tower up to 45 degrees elevation from the car, and the stair core, amber wayfinding sign, pay station and pole behind and right of the hero camera | The paint owner measured that the bonnet and the right flank mirror directions where the cube held only haze, so a correct coat showed nothing | `src/world/` |
 | 2026-11-20 | The `clay` view sets its own exposure: the log average of the frame is brought to mid gray, in steps of a third of a stop, never below the film exposure. The lighting is unchanged | At frame 360 the clay view was near black, because a black glossy panel at night is lit almost only through reflections. C4 judges form in clay and could not read it | `src/post/meter.ts`, `src/post/resolve.ts` |
 | 2026-11-20 | The packs follow addendum 003. Every crop plan gains a `glass` point (the windscreen, found by name) beside the contract anchors, and the C3 pack refuses to build unless its crops show the paint, the glass, a lamp and a wheel. In Phase 3 the C4 pack adds `clay` and `zebra` views of frames 1060 (rear three quarter) and 0 (the wide front) to the hero frame, so the vehicle is judged in stripes from three angles | Addendum 003, Critics | `tools/lib/crops.ts`, `tools/lib/scene.ts`, `tools/lib/pack-build.ts` |
+| 2026-11-20 | The vehicle comparison of addendum 003 covers builds A, B (the film car), B2 (one-domain front), C and D, each at frames 195 (hero), 1060 (rear three quarter) and 0 (wide front) in `clay` and `zebra`, with native zebra crops. One fresh C4 scores every build from neutral file names. The route through a third-party model stays closed | Addendum 003. `reference/vehicle/MODELS.md` found no mesh that passes the license and origin rule | `out/work/compare/` |
+| 2026-11-20 | Agents push a branch as soon as it is green on any `dev/p3` head of the last hour. The Builder merges, builds and runs the suite on the integrated head | An agent re-tested three times in a row while the head moved | team |
+| 2026-11-20 | The cube capture gets the same analytic haze as the film picture, checked in 12 directions within 15 percent | The paint mirrored towers without air, so reflections on the body were harder and darker than the scene behind it | `src/core/reflect/probe.ts` on `dev/headlamp-haze` |
 
 - 2026-11-20, addendum 003 read at 884210a and merged from main (ee97e8e). The task message that announced it carried a `Vehicle:` line with no words after it, so nothing was appended to `kit/02-VEHICLE.md`. The file stays as it is: Lamborghini Revuelto.
 
@@ -343,10 +346,17 @@ Addendum 002: any issue that asks for less color, fewer signs, less reflection, 
 | 2026-11-20 | c5e3fff, 61bf9e1, 458a48c, 7769691, a1ccf74, 22fbd5e | pushed to main. Tall return margin, opening aim, merges of the world stop and drain, vehicle B projector housings and bay wall, grille cell water, caliper clocking. 22fbd5e is the round 7 build |
 | 2026-11-20 | the commit titled "Round 7 scorecards" | pushed to main. Round 7 scorecards |
 | 2026-11-20 | the commit titled "Phase 2 gate" | pushed to main with the merge of `dev/shots-r8`. Round 8 camera draft, addendum 001 applied, vehicle grille tray, vent slot and aft flange, surface drips, `out/preview.mp4` of build 4b976660b338b94b, Phase 2 gate evidence |
+| 2026-11-20 | 884210a, f10f926, 60e0969, 6d933d8, e5297cf, 6cd0249 | pushed to `dev/p3` (main stays at the addenda until the Phase 3 gate). Real-scale city, addendum 003 logged, real-scale haze, pack tooling for addendum 003, four facade families, zebra mirror fix, layered backlit rain, render profiler, clear coat peel at 0.07 degrees, four rays per pixel in the fairness audit. Suite 213 of 213 on 6cd0249, G15 green |
 
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-20, session 17
+
+- Done: merged on `dev/p3` the city at real scale, the real-scale haze with the deck-only billboard specular, four facade families with setbacks and beacons, the layered backlit rain, the render profiler (`npm run profile`), the clear coat peel and the four-ray fairness audit. Addendum 003 read, merged and queued. Pack tooling follows it (glass crop, three zebra angles). The comparison of every vehicle build (A, B, B2, C, D) started early on a free agent: `clay` and `zebra` at frames 195, 1060 and 0, one fresh C4 to score them.
+- Measured: suite 213 of 213 on 6cd0249. Region luma p50 ours against approved after the haze retune: left towers 57 / 72, far towers 77 / 96, right tower 59 / 82, hood 24 / 37, flank 14 / 32, deck near 62 / 61. Profile on a 4-core VM at 16x9 final: 44.7 s a sample at 195, 65.5 s at 360, the transmission prepass is 43 to 46 percent. The cube capture has no haze, so the paint mirrors towers without air. The gray apron under the nose comes from direct projector light on the low deck aerosol (HDR median .108 with it, .048 without).
+- Next: source-local haze color, the apron fix, haze in the cube, wider window bays and a matched skyline, water film and rivulets on the body. Then the vehicle work of addendum 003 (keep the cleanest build, at most three surface passes, the finish table), then round 8.
 
 ### 2026-11-20, session 16
 

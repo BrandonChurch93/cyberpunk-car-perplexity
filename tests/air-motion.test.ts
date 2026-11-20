@@ -15,7 +15,7 @@ describe('air rain motion', () => {
     expect(speeds[2]).toBeGreaterThan(7.9)
     expect(speeds[0]).toBeLessThan(speeds[1])
     expect(speeds[1]).toBeLessThan(speeds[2])
-    for (const diameter of diameters) for (const nominalHeight of [8.5, 9.4, 11.5]) {
+    for (const diameter of diameters) for (const nominalHeight of [7.8, 9.4, 11.6, 16.5]) {
       const { cycles, wrapHeight } = fallCycle(diameter, nominalHeight)
       expect(Number.isInteger(cycles)).toBe(true)
       expect(cycles * wrapHeight / config.film.durationSeconds).toBeCloseTo(terminalSpeed(diameter), 12)
@@ -24,7 +24,7 @@ describe('air rain motion', () => {
     }
   })
 
-  it('builds a repeatable field of mostly fine drops concentrated in the middle distance', () => {
+  it('builds repeatable fine drops in four overlapping depth fields', () => {
     const material = new THREE.MeshStandardMaterial()
     const world: WorldModule = {
       root: new THREE.Group(), lights: [], signs: [], surfaces: [], reflectionBox: new THREE.Box3(),
@@ -33,16 +33,18 @@ describe('air rain motion', () => {
       beginSample() {},
     }
     const light = new LightRig([], 1).uniforms
-    const geometries = rainMeshes(new RibbonView(), world, light).map((mesh) => mesh.geometry)
-    const [near, mid, far] = geometries
+    const meshes = rainMeshes(new RibbonView(), world, light)
+    expect(meshes.map((mesh) => mesh.name)).toEqual(['rain-near', 'rain-close', 'rain-middle', 'rain-distance'])
+    const [near, close, mid, far] = meshes.map((mesh) => mesh.geometry)
     const dropCount = (geometry: THREE.BufferGeometry): number =>
       geometry.getAttribute('aDrop').count / (geometry instanceof THREE.InstancedBufferGeometry ? 1 : 4)
     expect(dropCount(mid)).toBeGreaterThan(dropCount(far))
-    expect(dropCount(mid)).toBeGreaterThan(dropCount(near) * 2)
+    expect(dropCount(close)).toBeGreaterThan(dropCount(near) * 2)
     world.deck.bounds.max.x += 3
     const resized = rainMeshes(new RibbonView(), world, light).map((mesh) => mesh.geometry)
     expect(resized[0].getAttribute('aDrop').array).toEqual(near.getAttribute('aDrop').array)
-    expect(resized[2].getAttribute('aDrop').array).toEqual(far.getAttribute('aDrop').array)
+    expect(resized[1].getAttribute('aDrop').array).toEqual(close.getAttribute('aDrop').array)
+    expect(resized[3].getAttribute('aDrop').array).toEqual(far.getAttribute('aDrop').array)
     const drops = mid.getAttribute('aDrop')
     let fine = 0
     let rangeMatches = true
