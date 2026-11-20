@@ -79,7 +79,7 @@ const master: Record<string, ShotMaker> = {
     return {
       position: mixV(frontOf(openAngle, 6.6, 0.2), frontOf(wideAngle, 4.6, 0.2), u),
       target: mixV(center, v(0, 0.55, 0.2), u),
-      screen: [mix(-0.16, 0.14, u), mix(-0.12, -0.14, u)],
+      screen: [mix(-0.2, 0.14, u), mix(-0.12, -0.14, u)],
       focalMm: wideMm,
       focus: mixV(nose, a.lamp.position, u),
       tStop: 2,
@@ -148,7 +148,7 @@ const master: Record<string, ShotMaker> = {
     return {
       position: frontOf(mix(openAngle + 14, openAngle, q), mix(4.7, 6.6, q), mix(0.7, 0.2, q)),
       target: mixV(v(0, 0.55, 0.3), center, q),
-      screen: [mix(0, -0.16, q), mix(-0.2, -0.12, q)],
+      screen: [mix(0, -0.2, q), mix(-0.2, -0.12, q)],
       focalMm: wideMm,
       focus: mixV(a.lamp.position, nose, q),
       tStop: 2,
