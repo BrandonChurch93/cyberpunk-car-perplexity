@@ -7,6 +7,7 @@ The Builder's memory. Read this first in every task. Update it before every comm
 - Current phase: 3 · Look lock
 - Current round: 8 is the next round and the first of Phase 3. Addendum 002 (the approved look) is applied from 2026-11-20: step 1 now means matching the hero frame (195) to `reference/approved/hero.jpg` and finishing the macro frame (360)
 - Blocked: no
+- Vehicle work queued, addendum 003. It is the next step after the hero frame's camera and world work of addendum 002 and before round 8, the first judged round of Phase 3. Order: compare every vehicle build once with `clay` and `zebra` stills from the hero camera and two other angles, scored by one fresh C4; keep the cleanest; then at most `vehicle.maxSurfacePasses` (3) surface passes; then the finish table (paint, water, glass, lamps, wheels, under the vehicle, light). From the first update after it starts, show the vehicle alone from the hero camera in `beauty`, `clay` and `zebra` beside the approved image. C4 gets `zebra` views from three angles in every Phase 3 round, and C3 crops always include the paint, the glass, a lamp and a wheel
 - Last push: see the push log, 2026-11-20
 
 ## Phases
@@ -267,6 +268,8 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-20 | The front cheek, wing side and lamp surround are rebuilt as one continuous surface with the openings cut in | Nine seam trials in a row held C4 at 5 on the hero frame. The auditor's probes show separate surfaces with normal jumps of 4 to 100 degrees | `src/vehicle/body.ts` on `dev/vehicle-b` |
 | 2026-11-20 | Sources are added where the paint mirrors them: full-height cyan strips on the left edge tower up to 45 degrees elevation from the car, and the stair core, amber wayfinding sign, pay station and pole behind and right of the hero camera | The paint owner measured that the bonnet and the right flank mirror directions where the cube held only haze, so a correct coat showed nothing | `src/world/` |
 | 2026-11-20 | The `clay` view sets its own exposure: the log average of the frame is brought to mid gray, in steps of a third of a stop, never below the film exposure. The lighting is unchanged | At frame 360 the clay view was near black, because a black glossy panel at night is lit almost only through reflections. C4 judges form in clay and could not read it | `src/post/meter.ts`, `src/post/resolve.ts` |
+
+- 2026-11-20, addendum 003 read at 884210a and merged from main (ee97e8e). The task message that announced it carried a `Vehicle:` line with no words after it, so nothing was appended to `kit/02-VEHICLE.md`. The file stays as it is: Lamborghini Revuelto.
 
 ## Declined issues
 
