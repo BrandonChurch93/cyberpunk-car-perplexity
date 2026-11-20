@@ -298,9 +298,10 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const crossLine = (p: Point) => crossOffset(sAt(p[2]), p[1])
   const crossToe = (p: Point) => crossLine(p) - crossStepRun
   const gap = .00055
+  const bonnetGap = .00033
   const frontEnd = (v: number) => v <= .818 ? hoodShut(v / .818) : mix(hoodShut(1), .295, (v - .818) / .182)
   const bonnetSplit = .72
-  const splitEnd = frontEnd(bonnetSplit) - gap
+  const splitEnd = frontEnd(bonnetSplit) - bonnetGap
   const bonnetGrid = curve([[0, 0], [.4, .069], [.68, .154], [.84, .199], [1, splitEnd]])
   const bonnetLengthSteps = full ? 176 : 53
   for (const side of [1, -1]) {
@@ -309,14 +310,14 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const uSide: Point = [side, 0, 0]
     folded(sided((u, v) => {
       const q = bonnetSplit * v
-      return bonnet(bonnetGrid(u) * (frontEnd(q) - gap) / splitEnd, q)
+      return bonnet(bonnetGrid(u) * (frontEnd(q) - bonnetGap) / splitEnd, q)
     }), [0, 1, 0], hoodTraces, bonnetLengthSteps, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
     folded(sided((u, v) => {
       const q = mix(bonnetSplit, 1, v)
-      return bonnet(bonnetGrid(u) + (frontEnd(q) - gap - splitEnd) * fairStep(u, .81, 1), q)
+      return bonnet(bonnetGrid(u) + (frontEnd(q) - bonnetGap - splitEnd) * fairStep(u, .81, 1), q)
     }), [0, 1, 0], hoodTraces.slice(1), bonnetLengthSteps, 0, full ? [6, 15, 4] : [2, 6, 2])
     folded(sided((u, v) => {
-      const s = mix(frontEnd(mix(.817, 1, v)) + gap, .599, u * (.43 + .57 * u))
+      const s = mix(frontEnd(mix(.817, 1, v)) + bonnetGap, .599, u * (.43 + .57 * u))
       const q = mix(.817, 1, v)
       const front = bonnet(s, q)
       const inside = edgeGlass(s, 0)
@@ -328,7 +329,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const p = bonnet(s, v * .818)
       return [side * p[0], p[1] - drop * (1 - .67 * v * v), p[2]]
     }
-    part(paint, (u, v) => cowlFace(mix(hoodShut(v) + gap, cowlStep(v), u), v, mix(.00025, .0015, fairStep(u, .22, 1))),
+    part(paint, (u, v) => cowlFace(mix(hoodShut(v) + bonnetGap, cowlStep(v), u), v, mix(.00018, .0011, fairStep(u, .22, 1))),
       [0, 1, 0], 6, n)
     part(black, (u, v) => cowlFace(mix(cowlStep(v), cabFront(v) + gap, u), v, mix(.006, .0026, u)), [0, 1, 0], 7, n, .003)
     part(black, (u, v) => cowlFace(mix(hoodShut(v) - .004, cabFront(v) + .003, u), v, .009), [0, 1, 0], 4, n, .003)
@@ -336,7 +337,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const p = bonnet(mix(.234, .320, u), mix(.783, .912, v))
       return [p[0], p[1] - mix(.0018, .0045, smooth(u, .64, 1)), p[2]]
     }), [0, 1, 0], full ? 24 : 12, full ? 9 : 6, 0)
-    for (const [a, b] of [[.071, frontEnd(1) - gap], [frontEnd(1) + gap, .331]]) {
+    for (const [a, b] of [[.071, frontEnd(1) - bonnetGap], [frontEnd(1) + bonnetGap, .331]]) {
       part(paint, sided((u, v) => {
         const s = mix(a, b, u)
         const w = wingEdge(s)
