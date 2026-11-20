@@ -30,11 +30,11 @@ export function ease(t: number, start: number, end: number): number {
 }
 
 export function mix(a: number, b: number, u: number): number {
-  return a + (b - a) * u
+  return u === 1 ? b : a + (b - a) * u
 }
 
 export function mixV(a: THREE.Vector3, b: THREE.Vector3, u: number): THREE.Vector3 {
-  return a.clone().lerp(b, u)
+  return u === 1 ? b.clone() : a.clone().lerp(b, u)
 }
 
 export function sensorWidthMm(format: FormatSpec): number {
@@ -67,7 +67,8 @@ const channels: Wave[][] = (() => {
 
 function channel(index: number, t: number): number {
   let v = 0
-  for (const w of channels[index]) v += w.weight * Math.sin((2 * Math.PI * w.cycles * t) / duration + w.phase)
+  const turns = (t / duration) % 1
+  for (const w of channels[index]) v += w.weight * Math.sin(2 * Math.PI * w.cycles * turns + w.phase)
   return v
 }
 

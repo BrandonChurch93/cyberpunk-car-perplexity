@@ -1,0 +1,65 @@
+{
+  "critic": "C8",
+  "score": 7,
+  "pass": false,
+  "issues": [
+    {
+      "severity": "major",
+      "file": "set-C-05.png",
+      "where": "all 12 frames (also set-A-13 to A-15, set-B-13 to B-15)",
+      "what": "The lamp beat is a nearly static close-up of the whole lamp unit with a slight sideways drift. It never goes macro or into the lens: the two projector lenses stay tiny dots for all 5 s, and in the wide frame the move drifts outward rather than in",
+      "fix": "Start on the current framing and push continuously into one projector until the outer lens fills about a third of the frame. Use a slightly off-axis angle so the depth of the inner housing reads"
+    },
+    {
+      "severity": "major",
+      "file": "set-C-01.png",
+      "where": "whole frame, lower third (also set-A-01, set-A-24, set-C-02)",
+      "what": "Arrival and wake hold one front three-quarter angle from the first frame onward, so 9 s of push only magnifies the car with almost no parallax. The lower third of the opening and closing frame is flat, empty deck with no foreground object, so the wide shot does not show scale or depth",
+      "fix": "Place a near foreground element, such as a puddle edge, bollard or drain, low in the frame. Add a slight lateral or orbit component to the push so the background moves against the car, and let the angle come round to the front three-quarter by the end of wake"
+    },
+    {
+      "severity": "minor",
+      "file": "set-C-06.png",
+      "where": "all frames (also set-A-16 to A-18, set-B-16 to B-18)",
+      "what": "The detail pass is a near-frontal lateral truck over a flat hex plaque. It shows no grazing angle and no part of the car around it, so the mesh reads as wallpaper and its scale is unclear",
+      "fix": "Turn the camera 30 to 45 degrees off the surface normal so light can rake across it, and keep a body edge or panel line in frame to show scale"
+    },
+    {
+      "severity": "minor",
+      "file": "set-A-07.png",
+      "where": "whole frame (also set-A-08, frames 1 to 5 of set-C-03)",
+      "what": "In the wide format, the first half of the paint glide shows only soft panel and a faint crease, with no in-focus feature and no panel edge. The tall version (set-B-07) frames the wheel arch and composes much better",
+      "fix": "In the wide format, frame a panel edge or the arch lip so the focal plane has something to hold before the vent comes in"
+    },
+    {
+      "severity": "minor",
+      "file": "set-A-19.png",
+      "where": "bottom strip (also set-A-20, set-A-21, set-C-07)",
+      "what": "The low rear three-quarter keeps only a thin band of deck behind the exhaust, so the nearest puddle that the exhaust pulses must ripple has almost no room in the frame",
+      "fix": "Tilt down slightly or move the camera closer to the deck so the puddle behind the tail fills the lower quarter"
+    },
+    {
+      "severity": "minor",
+      "file": "set-B-01.png",
+      "where": "top and bottom (also set-B-24, set-B-03)",
+      "what": "The tall opening and closing frame is composed for vertical through the towers, but the car is small, with large empty sky above and about 27% empty deck below",
+      "fix": "Push the car slightly larger, or put a foreground puddle or reflection in the lower band so the bottom of the frame does work"
+    },
+    {
+      "severity": "minor",
+      "file": "set-C-04.png",
+      "where": "12 o'clock behind the spokes",
+      "what": "The caliper, which the wheel beat names, is barely visible behind a spoke and is never featured as the tilt moves from the arch to the tread",
+      "fix": "Rotate the wheel or offset the camera so the caliper sits clear between spokes during the middle of the tilt"
+    },
+    {
+      "severity": "minor",
+      "file": "set-B-22.png",
+      "where": "left edge",
+      "what": "The car's nose touches the left frame edge on the cut into the return beat in the tall format",
+      "fix": "Pan slightly left or start a little wider so the nose has breathing room"
+    }
+  ],
+  "reviewer": "reviewer_2602",
+  "family": "claude_opus_5_5"
+}

@@ -15,7 +15,8 @@ describe('camera', () => {
       const a = cameraAt(0, format, anchors)
       const b = cameraAt(duration, format, anchors)
       expect(b.position.distanceTo(a.position)).toBeLessThan(1e-9)
-      expect(b.quaternion.angleTo(a.quaternion)).toBeLessThan(1e-9)
+      const q = a.quaternion.toArray()
+      expect(Math.max(...b.quaternion.toArray().map((x, i) => Math.abs(x - q[i])))).toBeLessThan(1e-12)
       expect(b.focusDistance).toBeCloseTo(a.focusDistance, 9)
       expect(b.focalMm).toBe(a.focalMm)
     }

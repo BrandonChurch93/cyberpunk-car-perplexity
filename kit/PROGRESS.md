@@ -5,9 +5,9 @@ The Builder's memory. Read this first in every task. Update it before every comm
 ## Status
 
 - Current phase: 2 · Blockout in motion
-- Current round: 6 (Phase 2 blockout)
+- Current round: 7 (Phase 2 blockout)
 - Blocked: no
-- Last push: see the push log, 2026-11-19
+- Last push: see the push log, 2026-11-20
 
 ## Phases
 
@@ -215,6 +215,12 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | The round 5 draft sheets went to the same two development agents once more before the formal pack. Their severe and major notes (tire slice and cut arm on the wide lamp, tall wheel wedged in the frame, blank hood on the tall lamp, arch void on the tall paint, bezel slivers on the detail, tangent at the arch crown on the wide wheel) were answered in the camera data. No score was taken | Same reason as the earlier draft reviews: a formal pack costs about 50 minutes | `out/work/look/` |
 | 2026-11-19 | Round 6 shot plan. The wide paint glide is 0.26 m with a locked head, so the vent slot on the wing top enters at 12 s and crosses to the left third while the valley beside the bonnet comes in above. The tall paint shot has its own oblique path with the crest crease as a diagonal through the middle. The lamp slides close on the lens (2.08 to 1.75 m wide, 1.48 to 1.20 m tall). The wheel jib moves over the whole beat with a 2.2 s start, 1.55 to 1.6 m out, so the arch lip holds to about 17.6 s. The detail start is eased over 1.5 s. The tall push starts at 8.9 m, ends at 5.95 m and eases its aim onto the nose and the near lamp. The tall rear shot arcs from 42 to 32 degrees off the tail at 4.9 to 4.3 m. The crane lands on the last frame (`events.pullEnd` is the film end) with a 1.3 s stop, and the push starts over 1.15 s | Critic round 5: C5 8, C8 8 with one major issue. See `scorecards/round-005/SUMMARY.md` | `src/director/shots.ts`, `src/director/timeline.ts`, `cut/SHOTS.md` |
 | 2026-11-19 | The easing rule in `cut/SHOTS.md` reads: each end takes at least 15 percent of the move, the dolly and the crane keep each end to 25 percent or less, and the sliders and the jib may take longer over a start that follows a cut | The round 5 motion critic read a 25 percent start on the detail slider as abrupt and the wheel boom as leaving the arch too soon. A longer ease is always within what the rig can do. The board gives 15 to 25 percent as a working figure, not a limit of the hardware | `cut/SHOTS.md` |
+| 2026-11-20 | The scripted-model car (D) is stopped and stays unmerged on `dev/vehicle-d`. The film stays on vehicle B | The auditor scores the last D build 4 to 7 per view against 7 to 8 for B at the same cameras, and B is ahead on every view | `src/vehicle/` stays with the owner of B. One fewer development agent |
+| 2026-11-20 | Round 7 shot plan. The lamp beat is a dolly push into the larger projector lens: wide 1.66 m from 2.08 m to 0.43 m while coming round from 36 to 48 degrees, tall 0.79 m from 1.48 m to 0.62 m. The lamp anchor is the projector, so the lens fills a third of the frame at the end. The opening track is laid diagonally across the nose: wide from 40 degrees at 6.6 m to 26 degrees at 4.6 m, tall from 40 degrees at 7.2 m to 30 degrees at 5.95 m, and the crane returns to those openings. A wheel stop is placed on the near deck inside both opening frames. The detail pass looks along the grille 60 to 62 degrees off its normal with the edge of the panel and the bay behind it in frame, and the head roll is no longer used. The wide paint glide starts with the vent slot at the frame edge. The wide ignition head tilts down so the deck behind the tail fills the lower third. The tall return cut aims further toward the nose | Round 6: C8 7 with two major issues (the lamp never goes macro, the opening has no parallax and an empty near deck) and six minor. `kit/01-FILM.md` asks for a macro into a lit lamp | `src/director/shots.ts`, `cut/SHOTS.md`, the world deck props, the wheel clocking |
+| 2026-11-20 | The lamp move is classed as a dolly, with the dolly limits | A push of 0.8 to 1.7 m in five seconds is beyond a slider at 0.13 m per second. A short dolly track at 0.24 to 0.50 m per second is the real rig for it | `cut/SHOTS.md` conventions and checks |
+| 2026-11-20 | The opening of the wide format is 40 degrees off the nose with the vehicle left of center, and the aim pans to right of center during the push | At 44 degrees with the vehicle centered the billboard left the opening frame, which the world test and the kit do not allow. At 40 degrees with the vehicle at the left the billboard stands at the right of the frame as its counterweight | `openAngle`, `screen` on the wide establishing shot and the crane |
+| 2026-11-20 | The loop test compares the camera rotation at 0 and at the film length component by component to 1e-12, and the operator motion takes its phase from the time as a fraction of the film | The angle between two equal rotations comes out near 3e-8 when their length is one bit short of 1, so the old check failed on equal values. The new check is tighter | `tests/camera.test.ts`, `src/director/rig.ts` |
+| 2026-11-20 | The round 6 C5 answer of 10 is logged as given and is not carried over | The lamp, detail and opening moves are rebuilt, so C5 judges them in round 7 | `scorecards/round-006/` |
 
 ## Config changes
 
@@ -233,12 +239,14 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 3 | 2 | blockout | n/a | n/a | n/a | n/a | 10 | n/a | n/a | 6 | C8 major: the paint beat hardly moves over a blank panel, the wheel shot cuts off the contact patch, the detail beat is not a close pass | Paint as a grazing glide across the wing with a horizon, wheel whole on a 14 degree arc, detail as a forward track along the covers, tall lamp on a projector lens, return opens on the whole car from 1.25 m, tall wides further back, paint anchor moved forward, new wheel mounted |
 | 4 | 2 | blockout | n/a | n/a | n/a | n/a | 9 | n/a | n/a | 5 | C8 severe: the paint frame is mostly background, the detail pass misses the fine mesh, the wheel shot is not a macro | Plateau rung: lens and camera height changed on every insert. Paint from above at 100 mm, wheel at 85 mm with a boom down, detail over an enlarged hex grille at 85 mm, lamp holding the whole fork, longer tall arrival dolly, lower return start |
 | 5 | 2 | blockout | n/a | n/a | n/a | n/a | 8 | n/a | n/a | 8 | C8 major: the paint macro shows no panel landmark over the glide, and the tall paint crease sits low and flattens | Paint glide carried past a panel edge with an oblique tall path, tall ignition closer and further round, tall wake settles tighter, push added to the lamp slide, wheel boom holds on the arch then slows, longer detail ease-in, shorter stop at the loop seam |
+| 6 | 2 | blockout | n/a | n/a | n/a | n/a | 10 | n/a | n/a | 7 | C8 major: the lamp beat never goes macro or into the lens, and the opening push holds one angle with no parallax over an empty near deck | Lamp as a dolly push into one projector lens, opening track laid diagonally across the nose with a near deck object, detail pass at a grazing angle with the panel edge in frame, vent slot in the wide paint frame from the cut, wide ignition tilted down for the puddle, tall opening closer, caliper clocked clear of the spokes, margin at the tall return cut |
 
 ## Plateau log
 
 | Critic | Rounds without gain | Rung tried | Result |
 | --- | --- | --- | --- |
 | C8 | 3 (rounds 2, 3, 4: 6, 6, 5 after 5) | Composition and lighting design, rung 1: change the lens and the camera height | Round 5: C8 8, up from 5, no severe issue. Plateau broken. The count starts again |
+| C8 | 1 (round 6: 7 after 8) | none yet. The rule applies after 3 rounds without gain | Round 6 answered in the camera data. Count stands at 1 |
 
 ## QA gauntlet
 
@@ -267,10 +275,18 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | the commit titled "Round 3 scorecards and the round 4 shot plan" | pushed to main. Round 3 scorecards, new paint, wheel, lamp, detail and return shots in both formats, headlamp haze cones, vehicle B pass 5 rear with the moved paint anchor, the five spoke wheel |
 | 2026-11-19 | the commits titled "Round 4 scorecards and the round 5 shot plan" | pushed to main. Round 4 scorecards, every insert shot again as a macro in both formats, the hex grille anchor, vehicle B grille duct and lamp fixes, wheel pass, world poles and insert lighting, headlamp haze, the status rule |
 | 2026-11-19 | the commit titled "Round 6 shot plan" | pushed to main. Round 5 scorecards, the inline status tool, the round 6 cameras, vehicle B final-camera pass, wheel pass with the blockout triangle cut (380,930), world divider and pole, rivulet and drips for the round 5 cameras |
+| 2026-11-19 | 75752d2 | pushed to main. Merges of the wheel triangle cut, the world pole, the vehicle B vent slot (388,566 in the blockout) and the rivulet and drips for the round 6 cameras |
+| 2026-11-20 | the commit titled "Round 6 scorecards and the round 7 shot plan" | pushed to main. Round 6 scorecards, the round 7 cameras, `cut/SHOTS.md` |
 
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-20, session 11
+
+- Done: critic round 6 on the gray box (build 6df3fd5201954b77): C5 10 with no issue, C8 7 with two major issues (the lamp beat never goes macro, the opening push has no parallax and an empty near deck) and six minor. Scorecards written. Status posted inline. Vehicle D stopped. Every round 6 note answered in the camera data from fixed-pose probes in both formats, and `cut/SHOTS.md` updated in the same commit.
+- Measured: slider peaks 0.034 to 0.057 m per second, jib 0.18, dolly 0.21 to 0.50 (the lamp push is the fastest), crane 0.26 to 0.34. Lens clearance 0.44 m at the end of the wide lamp push, 0.57 m tall, 0.34 m over the bay on the detail pass, 0.20 m on the wide dolly.
+- Next: the world owner places the near deck object and checks every wide frame at the new angles, the wheel owner clocks the caliper clear of the spokes, the surface, light and vehicle owners check their work at the new cameras. Then the round 7 pack with fresh C5 and C8 reviewers, then the Phase 2 gate.
 
 ### 2026-11-19, session 10
 
