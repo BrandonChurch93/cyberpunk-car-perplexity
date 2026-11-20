@@ -7,6 +7,9 @@ export const atmosphere = {
   uniformExtinction: 0.0045,
   deckExtinction: 0.052,
   layerHeight: 0.27,
+  cityExtinction: 0.009,
+  cityLayerHeight: 13.0,
+  cityAirlight: [0.050, 0.111, 0.158],
   anisotropy: 0.58,
   scatterFraction: 0.56,
   projectorAnisotropy: 0.76,
@@ -39,6 +42,9 @@ ${filmLightsShadowGlsl}
 const float airDensity = ${atmosphere.uniformExtinction};
 const float deckDensity = ${atmosphere.deckExtinction};
 const float layerHeight = ${atmosphere.layerHeight};
+const float cityDensity = ${atmosphere.cityExtinction};
+const float cityLayerHeight = ${atmosphere.cityLayerHeight.toFixed(1)};
+const vec3 cityAirlight = vec3(${atmosphere.cityAirlight.join(', ')});
 const float anisotropy = ${atmosphere.anisotropy};
 const float scatterFraction = ${atmosphere.scatterFraction};
 const int steps = 8;
@@ -77,15 +83,19 @@ float foregroundScatter(float t) {
   return 1.0 - 0.85 * closeFocus * foreground;
 }
 
-vec2 layerInterval(vec3 origin, vec3 ray) {
+vec2 deckInterval(vec3 origin, vec3 ray) {
   vec2 d = ray.xz;
   vec2 inv = sign(d + 1e-12) / max(abs(d), vec2(1e-6));
   vec2 a = (deckBounds.xy - origin.xz) * inv;
   vec2 b = (deckBounds.zw - origin.xz) * inv;
   vec2 lo = min(a, b);
   vec2 hi = max(a, b);
-  float start = max(0.0, max(lo.x, lo.y));
-  float end = min(hi.x, hi.y);
+  return vec2(max(0.0, max(lo.x, lo.y)), min(hi.x, hi.y));
+}
+
+vec2 layerInterval(vec3 origin, vec3 ray, vec2 interval) {
+  float start = interval.x;
+  float end = interval.y;
   if (ray.y > 1e-6) start = max(start, -origin.y / ray.y);
   else if (ray.y < -1e-6) end = min(end, -origin.y / ray.y);
   else if (origin.y < 0.0) end = -1.0;
@@ -100,6 +110,17 @@ float layerOpticalDepth(float y, float dy, vec2 layer, float t) {
   float b = exp(-max(0.0, y + dy * end) / layerHeight);
   if (abs((end - start) * dy) < 0.003) return deckDensity * (end - start) * 0.5 * (a + b);
   return deckDensity * layerHeight * (a - b) / dy;
+}
+
+float cityOpticalDepth(float y, float dy, float distance) {
+  float end = y + dy * distance;
+  float lo = min(y, end);
+  float hi = max(y, end);
+  if (hi <= 0.0) return cityDensity * distance;
+  if (hi - lo < 0.003) return cityDensity * distance * exp(-max(0.0, 0.5 * (lo + hi)) / cityLayerHeight);
+  float a = exp(-max(0.0, lo) / cityLayerHeight);
+  float b = exp(-hi / cityLayerHeight);
+  return cityDensity * (max(0.0, -lo) + cityLayerHeight * (a - b)) / abs(dy);
 }
 
 float densityAt(float t, float y, vec2 layer) {
@@ -145,12 +166,24 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   vec3 ray = mat3(cameraWorld) * (eyePoint / far);
   vec3 origin = cameraWorld[3].xyz;
   vec3 hit = origin + far * ray;
-  vec2 layer = layerInterval(origin, ray);
+  vec2 footprint = deckInterval(origin, ray);
+  vec2 layer = layerInterval(origin, ray, footprint);
   float layerDepth = layerOpticalDepth(origin.y, ray.y, layer, far);
   float airDepth = far * airDensity;
-  float transmission = exp(-airDepth - layerDepth);
+  float cityStart = footprint.y >= footprint.x ? footprint.y : 0.0;
+  float cityDistance = max(0.0, far - cityStart);
+  float cityDepth = cityDistance > 0.0 ? cityOpticalDepth(origin.y + ray.y * cityStart, ray.y, cityDistance) : 0.0;
+  float transmission = exp(-airDepth - layerDepth - cityDepth);
   vec3 skyGlow = mix(vec3(0.032, 0.076, 0.103), vec3(0.019, 0.036, 0.054), smoothstep(0.02, 0.48, ray.y));
-  vec3 radiance = skyGlow * (1.0 - exp(-airDepth)) * foregroundScatter(far * 0.5);
+  vec3 airlight = skyGlow * (1.0 - exp(-airDepth));
+  if (cityDepth > 1e-6) {
+    float farAirDepth = cityDistance * airDensity;
+    float farDepth = farAirDepth + cityDepth;
+    vec3 farGlow = mix(skyGlow, cityAirlight, cityDepth / farDepth);
+    airlight += exp(-cityStart * airDensity - layerDepth)
+      * (farGlow * (1.0 - exp(-farDepth)) - skyGlow * (1.0 - exp(-farAirDepth)));
+  }
+  vec3 radiance = airlight * foregroundScatter(far * 0.5);
   vec2 pixel = floor(uv * vec2(textureSize(sceneDepth, 0)));
   float pixelNoise = fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
 
