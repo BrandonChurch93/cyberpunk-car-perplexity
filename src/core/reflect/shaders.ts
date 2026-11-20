@@ -97,12 +97,25 @@ vec3 reflectEnvironment( vec3 dir, float roughness ) {
   #endif
 }
 
+vec3 planarRay( vec3 v, vec3 normal ) {
+  vec3 r = reflect( - v, normal );
+  r.y = abs( r.y );
+  return r;
+}
+
+float planarLuma( vec3 c ) {
+  return dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );
+}
+
 // GGX lobe sampled per sub-render with the distance to the reflected object read from the mirror depth.
 // The lobe's footprint on screen comes out long and vertical at grazing view, and grows with that distance.
 vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
   if ( reflectOn < 0.5 ) return fallback;
   vec3 p = vReflectWorld;
   vec3 n = normalize( transformDirectionByInverseViewMatrix( normalView, viewMatrix ) );
+  #ifdef REFLECT_DECK_DETAIL
+    if ( abs( p.y ) > 0.02 || n.y < 0.7 ) return fallback;
+  #endif
   vec3 v = normalize( cameraPosition - p );
   vec2 uv0 = reflectUv( p );
   float depth = texture( reflectDepth, uv0 ).r;
@@ -112,10 +125,21 @@ vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
   vec3 t = cross( n, v );
   t = dot( t, t ) > 1e-8 ? normalize( t ) : normalize( cross( n, vec3( 0.0, 0.0, 1.0 ) ) );
   vec3 b = cross( t, n );
-  vec2 uvCenter = reflectUv( p + reflect( - v, n ) * dist );
-  vec2 uvSide = reflectUv( p + reflect( - v, normalize( n + a * t ) ) * dist );
+  vec2 uvCenter = reflectUv( p + planarRay( v, n ) * dist );
+  vec2 uvSide = reflectUv( p + planarRay( v, normalize( n + a * t ) ) * dist );
   float minor = length( ( uvSide - uvCenter ) * reflectSize );
   float lod = clamp( log2( max( minor * REFLECT_FILTER, 1.0 ) ), 0.0, reflectLodMax );
+  vec2 centerEdge = min( uvCenter, 1.0 - uvCenter );
+  float fireflyBlend = smoothstep( REFLECT_FIREFLY_START, REFLECT_FIREFLY_END, roughness )
+    * smoothstep( 0.0, 0.02, min( centerEdge.x, centerEdge.y ) );
+  float tapLimit = 0.0;
+  if ( fireflyBlend > 0.0 ) {
+    vec2 uvLong = reflectUv( p + planarRay( v, normalize( n + a * b ) ) * dist );
+    float major = length( ( uvLong - uvCenter ) * reflectSize );
+    float refLod = clamp( log2( max( max( minor, major ) * REFLECT_FILTER, 1.0 ) ), 0.0, reflectLodMax );
+    vec3 center = textureLod( reflectMap, uvCenter, refLod ).rgb;
+    tapLimit = REFLECT_FIREFLY_FLOOR + REFLECT_FIREFLY_RATIO * planarLuma( center );
+  }
   vec2 jitter = vec2( reflectHash( gl_FragCoord.xy ), reflectHash( gl_FragCoord.yx + 71.0 ) );
   vec3 sum = vec3( 0.0 );
   float count = 0.0;
@@ -134,6 +158,7 @@ vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
     float inside = smoothstep( 0.0, 0.02, min( edge.x, edge.y ) );
     vec3 env = inside < 1.0 ? reflectEnvironment( r, roughness * 0.5 ) : vec3( 0.0 );
     vec3 mirror = inside > 0.0 ? textureLod( reflectMap, clamp( uv, 0.0, 1.0 ), clamp( max( lod, log2( max( spread, 1.0 ) ) ), 0.0, reflectLodMax ) ).rgb : vec3( 0.0 );
+    if ( fireflyBlend > 0.0 ) mirror *= mix( 1.0, min( 1.0, tapLimit / max( 1e-5, planarLuma( mirror ) ) ), fireflyBlend );
     sum += mix( env, mirror, inside );
     count += 1.0;
   }
@@ -156,13 +181,17 @@ export interface PlanarTuning {
   roughEnd: number
   far: number
   tail: number
+  fireflyStart: number
+  fireflyEnd: number
+  fireflyRatio: number
+  fireflyFloor: number
 }
 
 /** Replaces the specular environment term of the deck with the planar reflection. Must follow `boxPatch` on the same material. */
-export function planarPatch(uniforms: PlanarUniforms, tuning: PlanarTuning): MaterialPatch {
+export function planarPatch(uniforms: PlanarUniforms, tuning: PlanarTuning, deckDetail = false): MaterialPatch {
   const f = (x: number): string => x.toFixed(4)
   return {
-    id: 'reflect-planar',
+    id: deckDetail ? 'reflect-planar-deck-detail' : 'reflect-planar',
     uniforms: uniforms as unknown as Record<string, THREE.IUniform>,
     defines: {
       REFLECT_TAPS: tuning.taps,
@@ -171,6 +200,11 @@ export function planarPatch(uniforms: PlanarUniforms, tuning: PlanarTuning): Mat
       REFLECT_ROUGH_END: f(tuning.roughEnd),
       REFLECT_FAR: f(tuning.far),
       REFLECT_TAIL: f(tuning.tail),
+      REFLECT_FIREFLY_START: f(tuning.fireflyStart),
+      REFLECT_FIREFLY_END: f(tuning.fireflyEnd),
+      REFLECT_FIREFLY_RATIO: f(tuning.fireflyRatio),
+      REFLECT_FIREFLY_FLOOR: f(tuning.fireflyFloor),
+      ...(deckDetail ? { REFLECT_DECK_DETAIL: 1 } : {}),
     },
     apply(shader) {
       shader.fragmentShader = insertBefore(shader.fragmentShader, 'void main() {', planarPars)
