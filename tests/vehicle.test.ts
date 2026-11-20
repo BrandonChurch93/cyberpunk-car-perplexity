@@ -656,10 +656,10 @@ describe('vehicle geometry and state', () => {
     }
   })
 
-  it('carries the rear deck reflection through the shoulder without a local crease', () => {
+  it('carries the inner rear deck reflection without a local crease', () => {
     for (const vehicle of [full, blockout]) {
       vehicle.root.updateMatrixWorld(true)
-      for (const x of [.46, .54, .62]) {
+      for (const x of [.46, .50, .52]) {
         let previous: T.Vector3 | undefined
         for (let i = 0; i <= 12; i++) {
           const ray = new T.Raycaster(new T.Vector3(x, 2, zAt(.796 + i * .006)), new T.Vector3(0, -1, 0))

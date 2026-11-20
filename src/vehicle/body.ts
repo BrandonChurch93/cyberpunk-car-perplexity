@@ -386,11 +386,11 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const shape = base + .22 * fade * (hinge(tBend, .006) - .5 * tBend)
       const capBlend = smooth(s, .735, .782)
       const cap = hinge(shape - high + mix(.008, .004, capBlend), mix(.014, .004, capBlend))
-      const crownTrim = .009 * fairStep(s, .807, .885) * (1 - fairStep(s, .898, .939))
-        * fairStep(x, .572, .704) * (1 - fairStep(x, .759, .899))
+      const crownTrim = .013 * smooth(s, .833, .874) * (1 - smooth(s, .895, .924))
+        * smooth(x, .598, .705) * (1 - smooth(x, .758, .852))
       const sculpted = shape - cap * smooth(x, .695, .765) - crownTrim
       const calm = mix(inY, outside[1], v * (.76 + .24 * v)) + .003 * Math.sin(Math.PI * v) ** 2
-      const fair = fairStep(s, .766, .798) * (1 - fairStep(s, .876, .924)) * (1 - fairStep(v, .76, .96))
+      const fair = fairStep(s, .758, .791) * (1 - fairStep(s, .883, .924)) * (1 - fairStep(x, .571, .610))
       return [x, mix(sculpted, calm, fair), zAt(s)]
     }
     folded(sided((u, v) => deckSection(mix(.5984, .942 - .019 * v, u), v)),
