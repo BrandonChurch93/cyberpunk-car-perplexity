@@ -359,6 +359,14 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const tailLower = curve([[0, .561], [.275, .561], [.424, .545], [.78, .535], [.914, .513], [.974, .468]])
     const bumperSweep = curve([[0, -2.466], [.210, -2.465], [.310, -2.459], [.414, -2.437], [.506, -2.392],
       [.608, -2.341], [.691, -2.269], [.758, -2.222], [.824, -2.167], [.910, -2.065], [.979, -1.873]])
+    const bumperSkin = (x: number, v: number) => {
+      const underMask = mix(.060, .008, smooth(x, .115, .665))
+      const cutoff = .0037 * (1 - smooth(x, .110, .610)) * (1 - v * v)
+      const z = bumperSweep(x) + cutoff + underMask * v * (1.10 - .10 * v)
+      const limit = limitTailZ(x, -3)
+      const offset = z - limit
+      return limit + .5 * (offset + Math.hypot(offset, .011))
+    }
     const tailSlot: XY[] = [[.345, .802], [.449, .817], [.698, .820], [.857, .865], [.889, .854], [.897, .809], [.895, .755], [.867, .718], [.743, .758], [.450, .763], [.353, .778]]
     const tailTopOfSlot = (x: number) => mix(maskHigh(x), .821 + .043 * smooth(x, .70, .86) - .045 * smooth(x, .86, .938), smooth(x, .396, .467))
     const tailUnderSlot = (x: number) => mix(maskLow(x), .756 - .041 * smooth(x, .73, .89) - .016 * smooth(x, .890, .978), smooth(x, .404, .490))
@@ -373,12 +381,14 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const x = (.979 - .024 * v) * u
       const low = tailLower(x), high = tailUnderSlot(x) + .002
       const y = mix(low, high, v)
-      const underMask = mix(.060, .008, smooth(x, .115, .665))
-      const cutoff = .0037 * (1 - smooth(x, .110, .610)) * (1 - v * v)
-      const z = bumperSweep(x) + cutoff + underMask * v * (1.10 - .10 * v)
-      const limit = limitTailZ(x, -3)
-      const offset = z - limit
-      return [side * x, y, limit + .5 * (offset + Math.hypot(offset, .011))]
+      const local = smooth(x, .247, .377) * (1 - smooth(x, .593, .743))
+      const smoothRun = [1, 8, 28, 56, 70, 56, 28, 8, 1]
+        .reduce((z, w, i) => z + w * bumperSkin(x + (i - 4) * .034, v), 0) / 256
+      const fair = mix(bumperSkin(x, v), smoothRun + .003, local)
+      const d = x - .650
+      const shoulderRun = -2.288 + d * (.735 + .23 * d) + (.017 - .070 * d) * v + .002 * v * (1 - v)
+      const join = smooth(x, .485, .592) * (1 - smooth(x, .727, .842))
+      return [side * x, y, limitTailZ(x, mix(fair, shoulderRun, join))]
     }, 70, 16, outRear, .008))
     rearPaint.push(patch((u, v) => {
       const left = mix(.909, .887, smooth(v, .15, .89))
