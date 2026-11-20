@@ -129,12 +129,32 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     black.push(patch((u, v) => {
       const x = .487 * u
       const y = mix(lipY(x) + .020, noseTop(x) - .004, v)
-      return f(x, y, .126 - .045 * smooth(v, .76, 1))
+      return f(x, y, .149 - .045 * smooth(v, .76, 1) - .017 * smooth(x, .20, .46))
     }, 36, 16, outFront, .011))
     black.push(patch((u, v) => {
       const x = .48 * u
       return f(x, noseTop(x) - .007 - .029 * v, mix(.005, .129, v))
     }, 34, 6, [0, -1, 0], .004))
+    const shield: Surface = (u, v) => {
+      const x = u * mix(.169, .310, v)
+      const edge = frontHoodEdge(x)
+      const y = mix(.306 + .014 * u ** 2, edge[1] - .011, v)
+      const retreat = (.093 + .018 * u * u) * (1 - v) ** 1.36
+      return [side * x, y, edge[2] - .006 - retreat]
+    }
+    frontPaint.push(patch(shield, full ? 28 : 18, full ? 14 : 8, outFront, .004))
+    black.push(patch((u, v) => {
+      const p = shield(u, 0)
+      return [p[0], p[1] - .011 * v, p[2] - .039 * v]
+    }, full ? 28 : 18, 4, [0, -1, 1], .004))
+    black.push(patch((u, v) => {
+      const s = mix(.019 - .007 * v, .035, u)
+      return [side * .072, mix(.369, .411, v), zAt(s)]
+    }, 6, 5, [side, 0, 0], .004))
+    if (full) carbon.push(hexMesh((u, v) => {
+      const x = .438 * u
+      return f(x, mix(lipY(x) + .031, .304 + .055 * smooth(x, .17, .419), v), .132 - .020 * smooth(x, .20, .46))
+    }, .439, .149, .024, .00095))
     frontPaint.push(patch((u, v) => {
       const x = mix(0, .86, u)
       const edge = frontHoodEdge(x)
@@ -185,12 +205,6 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const x = .969 * u
       return f(x, lipY(x) - .012 + .095 * v, mix(.019, .154, v))
     }, 38, 7, [0, 1, 0], .005))
-    dark.push(patch((u, v) => {
-      const x = mix(.012, .925, u)
-      const outer = frontHoodEdge(x)
-      const height = Math.min(outer[1] - .008, .484)
-      return [side * x * .48, mix(lipY(x) + .009, height, v), outer[2] - .002]
-    }, 44, 9, [side, 0, 1], .008))
     dark.push(patch((u, v) => {
       const y = mix(.171, .446, u)
       return f(mix(.873, .727, v), y, mix(.012, .170, v))

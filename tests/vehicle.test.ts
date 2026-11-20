@@ -121,6 +121,25 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('keeps the bonnet skin over its backing and separates the shield from the low opening', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      for (const side of [-1, 1]) {
+        for (const x of [.119, .162, .216]) for (const s of [.027, .031, .035]) {
+          const ray = new T.Raycaster(new T.Vector3(side * x, .9, zAt(s)), new T.Vector3(0, -1, 0))
+          expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('closed body panels and returns')
+        }
+        const sight = (y: number) => {
+          const ray = new T.Raycaster(new T.Vector3(side * .120, y, 3), new T.Vector3(0, 0, -1))
+          return ray.intersectObject(vehicle.root, true)[0]
+        }
+        const shield = sight(.362), opening = sight(.256)
+        expect(shield?.object.name).toBe('nose blades, shield and lower lip')
+        expect(shield.point.z - opening.point.z).toBeGreaterThan(.065)
+      }
+    }
+  })
+
   it('carries the upper haunch fold across the deck and clears the quarter at the rear arch', () => {
     for (const vehicle of [full, blockout]) {
       vehicle.root.updateMatrixWorld(true)
