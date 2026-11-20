@@ -277,7 +277,7 @@ function panelPractical(
   return { id: name, kind: 'area', object: anchor, color, intensity: width*height*radiance*.78*delivery, size, range, shadow, beam: false, level: () => 1 }
 }
 
-function frontageRibbon(parent: THREE.Object3D, shell: THREE.Material, name: string, at: Tuple, yaw: number, size: [number, number], gain: number): THREE.Group {
+function frontageRibbon(parent: THREE.Object3D, shell: THREE.Material, name: string, at: Tuple, yaw: number, size: [number, number], gain: number, inset = false): THREE.Group {
   const housing = new THREE.Group()
   housing.name = name
   housing.position.set(...at)
@@ -286,10 +286,11 @@ function frontageRibbon(parent: THREE.Object3D, shell: THREE.Material, name: str
   const [width,height] = size
   block(housing, 'ribbon casing', shell, [0,0,-.18], [width+.16,height+.14,.35]).castShadow = false
   plate(housing, 'feathered LED ribbon', new THREE.ShaderMaterial({
-    uniforms: { gain: { value: gain } }, toneMapped: false,
-    vertexShader: 'varying vec2 faceUV; void main(){faceUV=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    uniforms: { gain: { value: gain } }, defines: inset ? { WORLD_INSET_LOUVRE: 1 } : {}, toneMapped: false,
+    vertexShader: 'varying vec2 faceUV; varying vec3 faceWorld; void main(){faceUV=uv;faceWorld=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
     fragmentShader: /* glsl */ `
       varying vec2 faceUV;
+      varying vec3 faceWorld;
       uniform float gain;
       void main(){
         vec2 p=faceUV;
@@ -301,7 +302,11 @@ function frontageRibbon(parent: THREE.Object3D, shell: THREE.Material, name: str
         float pitch=abs(fract(p.x*6.)-.5);
         float joins=mix(.91,1.,1.-smoothstep(.475,.495,pitch));
         vec3 cool=mix(vec3(.20,.93,1.65),vec3(.62,1.72,2.35),smoothstep(.05,.86,p.x));
-        gl_FragColor=vec4(vec3(.014,.021,.028)+gain*lengthMask*joins*(cool*cyan+red*vec3(1.03,.045,.087)),1.);
+        float beam=1.;
+        #ifdef WORLD_INSET_LOUVRE
+          beam=smoothstep(.136,.204,normalize(cameraPosition-faceWorld).y);
+        #endif
+        gl_FragColor=vec4(vec3(.014,.021,.028)+beam*gain*lengthMask*joins*(cool*cyan+red*vec3(1.03,.045,.087)),1.);
       }`,
   }), [0,0,.003], width,height)
   return housing
@@ -313,7 +318,7 @@ function paintPracticals(roof: THREE.Group, city: THREE.Group, shell: THREE.Mate
     block(east,'traffic ribbon frame',metal,[x,-.35,-.2],[.093,.55,.28])
     block(east,'traffic ribbon bolted shoe',shell,[x,-.556,-.2],[.34,.124,.47])
   }
-  frontageRibbon(roof,shell,'flush bay approach guide',[1.64,.004,2.27],-.26,[.91,.18],3.5).rotateX(-Math.PI/2)
+  frontageRibbon(roof,shell,'flush bay approach guide',[1.64,.004,2.27],-.26,[.91,.18],3.5,true).rotateX(-Math.PI/2)
   const west = city.getObjectByName('west low block')!
   const westRibbon = frontageRibbon(west,shell,'west roof wayfinding crown',[-51.55,23.0,23.1],Math.PI/2,[17.4,3.55],8.2)
   for (const x of [-6,0,6]) {
