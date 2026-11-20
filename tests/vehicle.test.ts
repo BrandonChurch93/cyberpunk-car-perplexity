@@ -893,6 +893,20 @@ describe('vehicle geometry and state', () => {
     }
   }, 15_000)
 
+  it('keeps the four LED dies separated by a dark substrate in each projector', () => {
+    for (const vehicle of [blockout, full]) {
+      const sources = vehicle.root.getObjectsByProperty('name', 'main beam projector') as T.Mesh<T.BufferGeometry, T.Material>[]
+      expect(sources).toHaveLength(4)
+      for (const { geometry, material } of sources) {
+        const gain = geometry.getAttribute('sourceGain')
+        const values = Array.from(gain.array)
+        expect(values.filter(value => value > .1)).toHaveLength(16)
+        expect(values.filter(value => value < .001)).toHaveLength(4)
+        expect(patchesOf(material)).toContain('projector-source')
+      }
+    }
+  })
+
   it('closes the projector socket behind the emitter and seats the lens continuously', () => {
     for (const vehicle of [blockout, full]) {
       vehicle.root.updateMatrixWorld(true)
