@@ -30,6 +30,22 @@ export const beadLayers: BeadLayer[] = [
   { cellMm: 36, minMm: 5, maxMm: 10, flat: 0.3, steep: 0.05, lobes: 2, sparse: 0.1, dense: 2.4 },
 ]
 
+/**
+ * The water on the coat between resolved drops, seen from a distance. Sheets where drifts of drops merge, as octaves of
+ * wavelength in meters and slope; detail finer than the footprint folds into roughness. Runs on steep faces: tracks of a width
+ * and length in meters drawn down the fall line, one to a spacing in meters across it,, standing a height in meters proud of the coat.
+ */
+/** Fresnel of a water sphere averaged over its disk. */
+const sphereFresnel = 0.066
+const coatFilm = [
+  [0.003, 0.08],
+  [0.008, 0.055],
+  [0.02, 0.035],
+]
+const runTrack = { spacing: 0.03, ridge: 0.12, width: 0.004, length: 0.3, height: 0.0004 }
+/** Footprints in meters over which the distant film takes over from the drops the macro lens resolves. */
+const coatFade = [0.0014, 0.0026]
+
 /** Rain leaves the beads in drifts: a slow coverage field thins some patches to mist and packs others with large drops. */
 const coverageCm = [6, 2.2]
 const coverageSalt = 40
@@ -212,6 +228,49 @@ vec3 surfLift(vec2 d, int axis, vec3 n) {
   return o;
 }
 
+vec3 surfGradNoise(vec2 p, int z, uint salt) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  vec2 du = 6.0 * f * (1.0 - f);
+  ivec2 c = ivec2(i);
+  float a = surfHash3(ivec3(c, z), salt).x;
+  float b = surfHash3(ivec3(c + ivec2(1, 0), z), salt).x;
+  float d = surfHash3(ivec3(c + ivec2(0, 1), z), salt).x;
+  float e = surfHash3(ivec3(c + ivec2(1, 1), z), salt).x;
+  return vec3(mix(mix(a, b, u.x), mix(d, e, u.x), u.y), du.x * mix(b - a, e - d, u.y), du.y * mix(d - a, e - b, u.x));
+}
+
+float surfCoatVar = 0.0;
+
+/** Slope of the water on the coat, in object space on the tangent plane. coverage: the drift field, 1 where drops pack densest. */
+vec3 surfCoatSlope(vec3 p, vec3 n, vec3 down, float slope, float pix, float coverage, uint salt) {
+  vec3 a = slope > 0.05 ? down : normalize(cross(n, abs(n.x) < 0.9 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 0.0, 1.0)));
+  vec3 b = normalize(cross(n, a));
+  vec2 q = vec2(dot(p, b), dot(p, a));
+  vec2 s = vec2(0.0);
+  surfCoatVar = 0.0;
+  float sheet = mix(0.4, 1.0, smoothstep(0.3, 0.9, coverage));
+  ${coatFilm.map(([w, amp], i) => `{
+    vec3 g = surfGradNoise(q / ${w.toFixed(4)}, ${60 + i}, salt);
+    float filt = exp(-2.0 * pow(pix / ${w.toFixed(4)}, 2.0));
+    s += sheet * ${amp.toFixed(3)} * filt * g.yz;
+    surfCoatVar += sheet * sheet * ${(amp * amp * 0.4).toFixed(6)} * (1.0 - filt * filt);
+  }`).join('\n  ')}
+  float steep = smoothstep(0.3, 0.8, slope);
+  if (steep > 0.0) {
+    vec2 scale = vec2(${runTrack.spacing.toFixed(4)}, ${runTrack.length.toFixed(4)});
+    vec3 t = surfGradNoise(q / scale, 63, salt);
+    float live = smoothstep(0.45, 0.7, surfGradNoise(q / (scale * vec2(2.0, 1.5)), 64, salt).x);
+    float d = (t.x - 0.5) / ${runTrack.ridge.toFixed(3)};
+    vec2 grad = live * ${runTrack.height.toFixed(5)} * step(abs(d), 1.0) * (-2.0 * d / ${runTrack.ridge.toFixed(3)}) * t.yz / scale;
+    float filt = exp(-2.0 * pow(pix / ${runTrack.width.toFixed(4)}, 2.0));
+    s += steep * filt * grad;
+    surfCoatVar += steep * steep * live * ${(((2 * runTrack.height) / runTrack.width) ** 2 * 0.5).toFixed(6)} * (1.0 - filt * filt);
+  }
+  return b * s.x + a * s.y;
+}
+
 /** Contact shadow just outside the foot of the drops near this fragment: the meniscus blocks the low sky. */
 float surfHalo = 0.0;
 
@@ -343,6 +402,14 @@ float surfGlint = 0.0;
     }
   }
   surfMist = clamp(surfMist, 0.0, 1.0) * (1.0 - surfLane);
+  float coatFar = smoothstep(${coatFade[0].toFixed(4)}, ${coatFade[1].toFixed(4)}, pix) * (1.0 - 0.7 * surfLane);
+  vec3 coatTilt = coatFar > 0.0 ? toView * surfCoatSlope(p, n, down, slope, pix, surfCoverage(uv, axis, salt), salt) * coatFar : vec3(0.0);
+  surfCoatVar *= coatFar * coatFar;
+  #ifdef USE_CLEARCOAT
+    clearcoatNormal = normalize(clearcoatNormal - coatTilt);
+  #else
+    normal = normalize(normal - coatTilt);
+  #endif
   // Out of focus, the samples of a frame land a defocus cell apart; a highlight tighter than that sums to separate copies.
   float surfCell = surfPupil * surfCocScale * abs(1.0 / surfFocus - 1.0 / max(vViewPosition.z, 1e-3)) / surfSampleRoot;
   float surfSpread = surfCell * pix / max(surfHit.radius, 1e-6);
@@ -392,6 +459,10 @@ float surfGlint = 0.0;
       float vh = clamp(dot(vW, hw), 0.0, 1.0);
       glint += e * (0.02 + 0.98 * pow(1.0 - vh, 5.0)) * smoothstep(0.0, 0.25, nh);
     }
+    #ifdef USE_ENVMAP
+      // A sphere sends out r^2 / 4 of everything that falls on it, each direction weighted by its Fresnel.
+      glint += ${(2 * sphereFresnel).toFixed(4)} * getIBLIrradiance(normalize(toView * n));
+    #endif
     totalEmissiveRadiance += glint * surfGlint * (1.0 - surfLane);
   }
   surfBeadOut = shaded;
@@ -411,7 +482,9 @@ surfBeadRough = min(max(surfBeadRough, 0.045) + geometryRoughness, 1.0);
   material.clearcoatRoughness = mix(material.clearcoatRoughness, surfBeadRough, surfBeadOut);
   material.clearcoatRoughness = mix(material.clearcoatRoughness, max(material.clearcoatRoughness, 0.16), surfMist * 0.5);
   material.clearcoatRoughness = mix(material.clearcoatRoughness, min(material.clearcoatRoughness, 0.03), surfLane);
+  material.clearcoatRoughness = sqrt(sqrt(pow(material.clearcoatRoughness, 4.0) + 2.0 * surfCoatVar));
 #else
+  material.roughness = sqrt(sqrt(pow(material.roughness, 4.0) + 2.0 * surfCoatVar));
   material.roughness = mix(material.roughness, surfBeadRough, surfBeadOut);
 #endif
 `

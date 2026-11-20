@@ -17,9 +17,10 @@ export type Uniforms = Record<string, THREE.IUniform>
 const sheet = { baseMm: 11.5, farMm: 8, broadMm: 16, patchMm: 5, low: [-2.6, -0.5, 3.0, 5.4], fallMeters: 2.5 }
 /** Undulation of the slab below a puddle's scale: wavelengths in meters and slope amplitude of each. */
 const undulation = [
-  [0.045, 0.03],
-  [0.11, 0.022],
-  [0.27, 0.014],
+  [0.045, 0.045],
+  [0.11, 0.033],
+  [0.27, 0.02],
+  [0.62, 0.012],
 ]
 
 const porousGlsl = /* glsl */ `
@@ -143,7 +144,7 @@ const porousFragment = /* glsl */ `
   surfDark *= mix(1.0, mix(0.85, 0.65, smoothstep(0.0, 3.0, surfDepth)), surfWater * mix(0.3, 1.0, surfPorosity));
   float surfL = surfLuma(diffuseColor.rgb);
   diffuseColor.rgb = max(mix(vec3(surfL), diffuseColor.rgb, 1.0 + 0.15 * surfDamp), 0.0) * surfDark;
-  float surfRoughWet = mix(0.28, 0.42, smoothstep(0.35, 0.75, surfAgg));
+  float surfRoughWet = mix(0.18, 0.32, smoothstep(0.35, 0.75, surfAgg));
   roughnessFactor = mix(roughnessFactor, min(roughnessFactor, surfRoughWet), surfDamp);
   roughnessFactor = mix(roughnessFactor, mix(0.26, 0.08, smoothstep(3.0, 10.0, surfDepth)), surfWater);
   roughnessFactor = sqrt(sqrt(pow(roughnessFactor, 4.0) + 2.0 * surfSlopeVar));
