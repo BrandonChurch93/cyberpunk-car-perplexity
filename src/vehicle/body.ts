@@ -338,20 +338,23 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const inY = mix(deckInnerY(s), inside[1], t)
       const x = mix(inX, outside[0], v)
       const ridge = deckIn(s)
-      const returnFold = 1 - smooth(s, .840, .860)
+      const returnFold = 1 - smooth(s, .794, .874)
       const section = (at: number) => hinge(at - ridge, foldHalf) - returnFold * hinge(at - deckOut(s), foldHalf)
       const vane = section(x) - mix(section(inX), section(outside[0]), v)
       const ridgeV = T.MathUtils.clamp((ridge - inX) / (outside[0] - inX), .14, .86)
       const turn = -.37 * smooth(s, .614, .672) * smooth(ridge - inX, -.009, .055)
-        * (1 - smooth(s, .900, .926))
+        * (1 - smooth(s, .905, .937))
       const ridgeFold = turn * (section(ridge) - mix(section(inX), section(outside[0]), ridgeV))
-      const fallAtRidge = T.MathUtils.clamp((inY - haunchRidgeY(s) + ridgeFold) / (inY - outside[1]), .085, .915)
+      const fairCrest = smooth(s, .813, .880)
+      const correction = ridgeFold * fairCrest
+      const fallAtRidge = T.MathUtils.clamp((inY - haunchRidgeY(s) + ridgeFold - correction) / (inY - outside[1]), .085, .915)
       const reach = smooth(inY - haunchRidgeY(s), -.027, .020)
       const fall = mix(1, ridgeV * (1 - fallAtRidge) / (fallAtRidge * (1 - ridgeV)),
-        reach * smooth(s, .635, .695) * (1 - smooth(s, .902, .930)))
+        reach * smooth(s, .635, .695) * (1 - smooth(s, .915, .939)))
       const y = mix(inY, outside[1], v / (fall + (1 - fall) * v))
       const high = Math.max(haunchCeiling(x), outside[1] + .005)
-      const base = y + turn * vane
+      const crestBlend = smooth(v, 0, ridgeV) * (1 - smooth(v, ridgeV, 1))
+      const base = y + turn * vane - correction * crestBlend
       const tBend = base - haunchFold(s)
       const fade = smooth(s, .631, .654) * (1 - smooth(s, .715, .752))
         * (1 - smooth(Math.abs(tBend), .014, .105)) * Math.sin(Math.PI * v)
@@ -379,8 +382,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const fair = mix(roofEnd[1], outside[1], v)
         + v * (1 - v) * ((1 - v) * (start - delta) + v * (delta - end))
       const tBend = fair - haunchRidgeY(s)
-      const fade = smooth(s, .621, .644) * (1 - smooth(s, .656, .674)) * Math.sin(Math.PI * v) ** 2
-      const y = fair - .39 * fade * (hinge(tBend, .004) - .5 * tBend)
+      const fade = smooth(s, .609, .638) * (1 - smooth(s, .651, .673)) * Math.sin(Math.PI * v) ** 2
+      const y = fair - .66 * fade * (hinge(tBend, .004) - .5 * tBend)
       return [mix(roofEnd[0], outside[0], v), y, zAt(s)]
     }), [0, 1, 0], n, full ? 37 : 16, 0)
     part(paint, sided((u, v) => {
