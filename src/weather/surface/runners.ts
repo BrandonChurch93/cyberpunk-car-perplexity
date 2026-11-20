@@ -142,7 +142,7 @@ export class Runners {
       const at = this.pointAt(s)
       const side = this.sideAt(s)
       const n = this.normalAt(s)
-      const r = random.range(0.0006, 0.0011)
+      const r = random.range(0.0008, 0.0013)
       const offset = random.range(-1, 1) * 0.0005
       const p = at.clone().addScaledVector(side, offset)
       const down = new THREE.Vector3().crossVectors(n, side)
