@@ -432,7 +432,21 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       }
       const face: Surface = (u, v) => archPanel(u, mix(.028, 1, v))
       const columns = full ? n * 2 : n + 12
-      folded(face, uSide, rear ? [beltLine, haunchLine, trace] : [beltLine, trace, wingDraftLine], columns)
+      if (rear) folded(face, uSide, [beltLine, haunchLine, trace], columns)
+      else {
+        const { rows, at } = foldRows(face, [beltLine, trace, wingDraftLine], full ? 6 : 3)
+        paint.push(patch(face, columns, rows, uSide, .002, at))
+        const height = shoulder(before) - floorY
+        const topRows = Array.from({ length: rows + 1 }, (_, j) => (face(0, at(0, j))[1] - floorY) / height)
+        const bottomRows = Array.from({ length: 5 }, (_, j) => topRows[0] * j / 5)
+        const stations = [...new Set([...bottomRows, ...topRows])]
+        paint.push(patch((u, v) => {
+          const s = mix(.141, before, u)
+          const y = mix(floorY, shoulder(s), v)
+          const p = sidePoint(s, y, side)
+          return [p[0] + side * wingDraft(s, shoulder(s) - y), y, p[2]]
+        }, n, stations.length - 1, uSide, .002, (_, j) => stations[j]))
+      }
       for (const [start, end] of [[theta0, 0], [Math.PI, theta1]]) part(paint, (u, v) => {
         const p = lower(mix(start, end, u))
         const y = mix(floorY, p[1], v)
@@ -525,11 +539,6 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const p = sillPoint(s, mix(.542, shoulder(s) - .006, v))
       return [side * (Math.abs(p[0]) * .62), p[1], Math.max(p[2], zAt(mix(.948, .989, smooth(p[1], .713, .746))))]
     }, uSide, full ? 24 : 16, full ? 7 : 5, .008)
-    part(paint, (u, v) => {
-      const s = mix(.141, first.before, u)
-      const p = cap(s, v - .085 * Math.sin(tau * v))
-      return [p[0] + side * wingDraft(s, shoulder(s) - p[1]), p[1], p[2]]
-    }, uSide, n, k)
     folded((u, v) => {
       const s = mix(first.after, Math.max(first.after, cutLeading(v) - gap), u)
       return cap(s, v)

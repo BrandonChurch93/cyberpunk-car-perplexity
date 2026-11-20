@@ -280,7 +280,7 @@ describe('vehicle geometry and state', () => {
       for (const y of [.715, .725, .735, .745]) {
         const ahead = hit(y, archStart + .001), behind = hit(y, archStart - .001)
         expect(Math.abs(ahead.point.x - behind.point.x)).toBeLessThan(.0006)
-        expect(T.MathUtils.radToDeg(ahead.normal!.angleTo(behind.normal!))).toBeLessThan(2.5)
+        expect(T.MathUtils.radToDeg(ahead.normal!.angleTo(behind.normal!))).toBeLessThan(.5)
       }
       for (const y of [.745, .753, .757]) {
         let previous: T.Vector3 | undefined
