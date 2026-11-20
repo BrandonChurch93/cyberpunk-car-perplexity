@@ -1,7 +1,7 @@
 import * as body from '../../src/vehicle/body'
 import { mix, vec, type Point, type Surface } from '../../src/vehicle/geometry'
 
-export interface SkinProbe {
+interface SkinProbe {
   name: string
   surface: Surface
   crease?: (p: Point) => boolean
@@ -36,16 +36,25 @@ export function samplePatchFairness(probe: SkinProbe) {
   const { surface, crease } = probe
   return ([0, 1] as const).map((axis) => {
     const samples: number[] = []
+    let max = 0
+    let at: Point | undefined
     for (let row = 1; row < 12; row++) {
       const along = (s: number): [number, number] => axis === 0 ? [s, row / 12] : [row / 12, s]
       const line = Array.from({ length: 101 }, (_, i) => along(i / 100))
       const normals = line.map(([u, v]) => crease?.(surface(u, v)) ? null : normal(surface, u, v))
       for (let i = 2; i < normals.length - 2; i++) {
         const [a, b, c] = [normals[i - 1], normals[i], normals[i + 1]]
-        if (a && b && c) samples.push(a.clone().add(c).addScaledVector(b, -2).length())
+        if (a && b && c) {
+          const difference = a.clone().add(c).addScaledVector(b, -2).length()
+          samples.push(difference)
+          if (difference > max) {
+            max = difference
+            at = surface(...line[i])
+          }
+        }
       }
     }
     samples.sort((a, b) => a - b)
-    return { count: samples.length, p95: samples[Math.floor((samples.length - 1) * .95)], max: samples.at(-1) }
+    return { count: samples.length, p95: samples[Math.floor((samples.length - 1) * .95)], max, at }
   })
 }

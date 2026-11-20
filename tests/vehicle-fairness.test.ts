@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fairCurve, type Knot } from '../src/vehicle/geometry'
-import { samplePatchFairness, skinProbes } from '../tools/vehicle/fairness'
+import { samplePatchFairness, skinProbes } from '../tools/vehicle/skin-fairness'
 
 describe('fair body splines', () => {
   it('fits a reduced control net, pins the profile and is C2 through its interior knots', () => {
@@ -28,16 +28,17 @@ describe('fair body splines', () => {
   })
 })
 
-const frontLimits = new Map<string, readonly [number, number]>([
+const skinLimits = new Map<string, readonly [number, number]>([
   ['bonnet', [.016, .0045]],
   ['foredeck', [.016, .0030]],
   ['front wing', [.015, .0050]],
   ['fascia', [.006, .0010]],
+  ['door and flank', [.09, .020]],
 ])
 
 describe('vehicle skin normal fairness outside creases', () => {
-  it.each(skinProbes().filter(({ name }) => frontLimits.has(name)))('bounds second differences along both axes of $name', (probe) => {
-    const limits = frontLimits.get(probe.name)!
+  it.each(skinProbes())('bounds second differences along both axes of $name', (probe) => {
+    const limits = skinLimits.get(probe.name)!
     samplePatchFairness(probe).forEach(({ count, max }, axis) => {
       expect(count).toBeGreaterThan(850)
       expect(max).toBeLessThan(limits[axis])
