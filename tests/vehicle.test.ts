@@ -164,6 +164,22 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('keeps the outer bonnet normals continuous past the lamp fold and profile taper', () => {
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      const skin = vehicle.root.getObjectByName('closed body panels and returns')!
+      const ray = new T.Raycaster()
+      const down = new T.Vector3(0, -1, 0)
+      const normal = (x: number, s: number) => {
+        ray.set(new T.Vector3(x, 1.5, zAt(s)), down)
+        return ray.intersectObject(skin)[0].normal!
+      }
+      for (const s of [.182, .209]) for (const x of [.82, .86, .90, .94]) {
+        expect(T.MathUtils.radToDeg(normal(x, s - .0005).angleTo(normal(x, s + .0005)))).toBeLessThan(.65)
+      }
+    }
+  })
+
   it('carries the upper haunch fold across the deck and clears the quarter at the rear arch', () => {
     for (const vehicle of [full, blockout]) {
       vehicle.root.updateMatrixWorld(true)

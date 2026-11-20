@@ -44,7 +44,7 @@ const hoodLine = curve([[0, .431], [.028, .466], [.06, .523], [.105, .608], [.16
 const hoodDome = curve([[0, .003], [.033, .046], [.074, .095], [.111, .101], [.159, .060], [.207, .009], [.235, 0]])
 const bonnetProfileFall = curve([
   [0, .027], [.005, .025], [.010, .015], [.015, .008], [.024, -.001], [.040, .006], [.056, .023], [.065, .028],
-  [.085, .032], [.102, .035], [.121, .035], [.150, .024], [.170, .012], [.188, .004], [.209, 0],
+  [.085, .032], [.102, .035], [.121, .035], [.150, .024], [.170, .012], [.188, .004], [.209, 0], [.225, 0],
 ])
 const noseCornerFall = curve([[0, .025], [.005, .020], [.010, .013], [.019, .009], [.028, .009], [.050, .006], [.065, .0015], [.073, 0]])
 const spine = curve([
@@ -56,7 +56,7 @@ const hoodTipX = .472
 const hoodInner = (s: number) => hoodTipX - 1.425 * (s - hoodTipS)
 const hoodOuter = curve([[hoodTipS, hoodTipX], [.104, .557], [.140, .627], [.171, .688], [.211, .766], [.237, .758], [.290, .748]])
 const hoodFoldStrength = .90
-const lampFold = curve([[.044, .470], [.0875, .647], [.102, .7022], [.1292, .797], [.1709, .942], [.182, .963]])
+const lampFold = curve([[.044, .470], [.0875, .647], [.102, .7022], [.1292, .797], [.1709, .942], [.182, .963], [.205, .963]])
 const hoodShut = (v: number) => .166 + .089 * v ** 2.10
 const cabFront = (v: number) => .194 + .067 * v ** 2.40
 const cowlStep = (v: number) => mix(hoodShut(v), cabFront(v), .62)
@@ -170,8 +170,9 @@ function bonnet(s: number, v: number): Point {
   return [x, base + across + crown + wingCrown - cowlDrop - profileFall, zAt(s)]
 }
 
-function foldRows(surface: Surface, traces: ((p: Point) => number)[], broad: number) {
-  const rows = (traces.length + 1) * broad + traces.length * 4
+function foldRows(surface: Surface, traces: ((p: Point) => number)[], broad: number | readonly number[]) {
+  const counts = typeof broad === 'number' ? traces.map(() => broad).concat(broad) : broad
+  const rows = counts.reduce((total, count) => total + count, 0) + traces.length * 4
   const cache = new Map<number, number[]>()
   return { rows, at: (u: number, j: number) => {
     let marks = cache.get(u)
@@ -198,8 +199,8 @@ function foldRows(surface: Surface, traces: ((p: Point) => number)[], broad: num
         const start = marks!.at(-1)!
         for (let i = 1; i <= count; i++) marks!.push(mix(start, Math.max(start, end), i / count))
       }
-      for (const [a, b] of spans) { stride(a, broad); stride(b, 4) }
-      stride(1, broad)
+      spans.forEach(([a, b], i) => { stride(a, counts[i]); stride(b, 4) })
+      stride(1, counts[spans.length])
       cache.set(u, marks)
     }
     return marks[j]
@@ -280,7 +281,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const part = (to: T.BufferGeometry[], surface: Surface, out: Point, length = n, width = k, thickness = .002) => {
     to.push(patch(surface, length, width, out, thickness))
   }
-  const folded = (surface: Surface, out: Point, traces: ((p: Point) => number)[], length = n, thickness = .002, broad = full ? 6 : 3) => {
+  const folded = (surface: Surface, out: Point, traces: ((p: Point) => number)[], length = n, thickness = .002,
+    broad: number | readonly number[] = full ? 6 : 3) => {
     const { rows, at } = foldRows(surface, traces, broad)
     paint.push(patch(surface, length, rows, out, thickness, at))
   }
@@ -293,14 +295,21 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const crossToe = (p: Point) => crossLine(p) - crossStepRun
   const gap = .00055
   const frontEnd = (v: number) => v <= .818 ? hoodShut(v / .818) : mix(hoodShut(1), .295, (v - .818) / .182)
+  const bonnetSplit = .72
+  const splitEnd = frontEnd(bonnetSplit) - gap
+  const bonnetGrid = curve([[0, 0], [.4, .069], [.68, .154], [.84, .199], [1, splitEnd]])
   for (const side of [1, -1]) {
     const mirror = (p: Point): Point => [p[0] * side, p[1], p[2]]
     const sided = (f: Surface): Surface => (u, v) => mirror(f(u, v))
     const uSide: Point = [side, 0, 0]
     folded(sided((u, v) => {
-      const s = mix(0, frontEnd(v) - gap, u * (.51 + .49 * u))
-      return bonnet(s, v)
-    }), [0, 1, 0], hoodTraces, full ? 148 : 45, 0, full ? 14 : 5)
+      const q = bonnetSplit * v
+      return bonnet(bonnetGrid(u) * (frontEnd(q) - gap) / splitEnd, q)
+    }), [0, 1, 0], hoodTraces, full ? 148 : 45, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
+    folded(sided((u, v) => {
+      const q = mix(bonnetSplit, 1, v)
+      return bonnet(bonnetGrid(u) + (frontEnd(q) - gap - splitEnd) * fairStep(u, .81, 1), q)
+    }), [0, 1, 0], hoodTraces.slice(1), full ? 148 : 45, 0, full ? [6, 15, 4] : [2, 6, 2])
     folded(sided((u, v) => {
       const s = mix(frontEnd(mix(.817, 1, v)) + gap, .599, u * (.43 + .57 * u))
       const q = mix(.817, 1, v)
