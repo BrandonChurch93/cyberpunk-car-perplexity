@@ -29,13 +29,13 @@ export interface ShowcaseConfig {
   paint: { locked: string | null; candidates: PaintSpec[] }
   signage: { generic: string[]; invented: string[] }
   reference: { minSourcesPerElement: number; minObservationsPerSource: number }
-  keyframes: { directions: number; minImageModels: number }
+  keyframes: { directions: number; minImageModels: number; maxTakes: number }
   quality: {
     passScore: number; blockoutCompositionPass: number; plateauRounds: number; judgedFramesPerBeat: number; loopSeamMinSsim: number
     compressionStressMbps: number
     stress: { seconds: number; beats: string[]; tier: string; confirmTier: string }
     blind: {
-      jurors: number; controlsPerRender: number; minControlPool: number; maxInvalidRuns: number
+      jurors: number; controlsPerRender: number; minControlPool: number; neonControls: number; maxInvalidRuns: number
       maxGapPoints: number; minControlMean: number; minRenderMedian: number
     }
   }
@@ -67,13 +67,13 @@ const required: Array<[string, Kind]> = [
   ['paint.locked', 'nullable-string'], ['paint.candidates', 'array'],
   ['signage.generic', 'array'], ['signage.invented', 'array'],
   ['reference.minSourcesPerElement', 'number'], ['reference.minObservationsPerSource', 'number'],
-  ['keyframes.directions', 'number'], ['keyframes.minImageModels', 'number'],
+  ['keyframes.directions', 'number'], ['keyframes.minImageModels', 'number'], ['keyframes.maxTakes', 'number'],
   ['quality.passScore', 'number'], ['quality.blockoutCompositionPass', 'number'], ['quality.plateauRounds', 'number'], ['quality.judgedFramesPerBeat', 'number'],
   ['quality.loopSeamMinSsim', 'number'], ['quality.compressionStressMbps', 'number'],
   ['quality.stress.seconds', 'number'], ['quality.stress.beats', 'array'], ['quality.stress.tier', 'string'],
   ['quality.stress.confirmTier', 'string'],
   ['quality.blind.jurors', 'number'], ['quality.blind.controlsPerRender', 'number'],
-  ['quality.blind.minControlPool', 'number'], ['quality.blind.maxInvalidRuns', 'number'],
+  ['quality.blind.minControlPool', 'number'], ['quality.blind.neonControls', 'number'], ['quality.blind.maxInvalidRuns', 'number'],
   ['quality.blind.maxGapPoints', 'number'], ['quality.blind.minControlMean', 'number'],
   ['quality.blind.minRenderMedian', 'number'],
   ['critics.maxImageLongEdgePx', 'number'], ['critics.contactSheetFrames', 'number'],
