@@ -855,18 +855,46 @@ describe('vehicle geometry and state', () => {
         .filter((node): node is T.Mesh => node instanceof T.Mesh && node.position.x > 0)
       expect(cores).toHaveLength(2)
       vehicle.root.updateMatrixWorld(true)
-      for (const frame of [610, 690]) {
-        const { position } = cameraAt(frame / config.film.fps, config.formats.preview, vehicle.anchors)
+      for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [610, 700, 725, 749]) {
+        const { position } = cameraAt(frame / config.film.fps, format, vehicle.anchors)
         for (const core of cores) {
           core.geometry.computeBoundingBox()
           const size = core.geometry.boundingBox!.getSize(new T.Vector3()).multiplyScalar(.31)
-          for (const [x, y] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          const samples = frame === 749 ? [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]] : [[0, 0]]
+          for (const [x, y] of samples) {
             const p = core.localToWorld(new T.Vector3(size.x * x, size.y * y, 0))
             const ray = new T.Raycaster(position, p.sub(position).normalize())
-            expect(ray.intersectObject(vehicle.root, true).slice(0, 3).map(({ object }) => object.name)).toEqual([
+            expect(ray.intersectObject(vehicle.root, true).slice(0, 3).map(({ object }) => object.name),
+              `${format.id} f${frame} projector at ${core.position.x} sample ${x},${y}`).toEqual([
               'front optical lens shells', 'convex projector lenses', 'main beam projector',
             ])
           }
+        }
+      }
+    }
+  }, 15_000)
+
+  it('closes the projector socket behind the emitter and seats the lens continuously', () => {
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      const axis = new T.Vector3(.51, .12, .851).normalize()
+      const orient = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), axis)
+      const glass = vehicle.root.getObjectByName('convex projector lenses')!
+      const bowl = vehicle.root.getObjectByName('ribbed dark projector bowls')!
+      const collar = vehicle.root.getObjectByName('machined projector collars')!
+      const cores = vehicle.root.getObjectsByProperty('name', 'main beam projector').filter((node) => node.position.x > 0)
+      for (const [i, core] of cores.entries()) {
+        const radius = i === 0 ? .029 : .023
+        const center = core.getWorldPosition(new T.Vector3())
+        for (const r of [0, .4, .8, .90, .94, 1.02]) for (const sector of [.16, .39, .82]) {
+          const a = sector * Math.PI * 2
+          const p = new T.Vector3(radius * r * Math.cos(a), radius * r * .84 * Math.sin(a), .08)
+            .applyQuaternion(orient).add(center)
+          const ray = new T.Raycaster(p, axis.clone().negate())
+          const hits = ray.intersectObjects([glass, bowl, collar])
+          if (r < .90) expect(hits.map(({ object }) => object)).toEqual([glass, bowl])
+          else if (r === .90) expect(hits[0]?.object).toBe(glass)
+          else expect(hits[0]?.object).toBe(collar)
         }
       }
     }
