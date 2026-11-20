@@ -308,6 +308,26 @@ export function frontHoodEdge(x: number): Point {
   return [x, p[1], p[2]]
 }
 
+function noseReturn([x, y, z]: Point, v: number): Point {
+  const aft = z - .012 * v
+  const s = sAt(aft), skin = bonnet(s, x / wingEdge(s).x)
+  const drop = .020 * v ** 3 * (4 - 3 * v)
+  return [x, mix(skin[1], y, fairStep(v, 0, .26)) - drop, aft]
+}
+
+export function frontBezelSeat(edge: Point): Point {
+  const [x, , z] = edge
+  const apron = noseReturn(edge, .45)
+  let lo = Math.max(0, sAt(z) - .014), hi = sAt(z)
+  for (let i = 0; i < 18; i++) {
+    const s = (lo + hi) / 2
+    if (plan(s) < x) lo = s
+    else hi = s
+  }
+  const s = (lo + hi) / 2
+  return blend(apron, [x, noseShoulder(s), zAt(s)], fairStep(x, .809, .874))
+}
+
 const cowl = (v: number): Point => bonnet(cabFront(v), v * .818)
 const roofWidth = curve([[.417, .625], [.46, .620], [.51, .621], [.56, .597], [.595, .550], [.625, .49]])
 const roofHeight = curve([[.417, 1.122], [.445, 1.14], [.472, 1.157], [.5, 1.16], [.545, 1.16], [.578, 1.153], [.595, 1.15]])
@@ -459,12 +479,6 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const q = bonnetSplit * v
       return bonnet(bonnetGrid(sampleGrid(bonnetStations, u)) * (frontEnd(q) - bonnetGap) / splitEnd, q)
     }), [0, 1, 0], hoodTraces, bonnetStations.length - 1, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
-    const noseReturn = ([x, y, z]: Point, v: number): Point => {
-      const aft = z - .012 * v
-      const s = sAt(aft), skin = bonnet(s, x / wingEdge(s).x)
-      const drop = .020 * v ** 3 * (4 - 3 * v)
-      return [x, mix(skin[1], y, fairStep(v, 0, .26)) - drop, aft]
-    }
     part(paint, sided((u, v) => noseReturn(bonnet(bonnetGrid(sampleGrid(noseStations, u)), 1), v)),
       [0, 0, 1], noseStations.length - 1, 5, 0)
     part(paint, sided((u, v) => noseReturn(bonnet(0, u), v)), [0, 0, 1], 6, 5, 0)
@@ -652,8 +666,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const section = hinge(offset, foldHalf) - mix(hinge(bottom, foldHalf), hinge(top, foldHalf), v)
         const span = (s - before) / (after - before)
         const arc = section * smooth(span, 0, .10) * (1 - smooth(span, .90, 1))
-        const runIn = rear ? 0 : (1 - fairStep(span, .26, .43)) * (1 - fairStep(p[1], .680, .732))
-        const round = runIn ? (fairPositive(offset, .016) - mix(fairPositive(bottom, .016), fairPositive(top, .016), v))
+        const runIn = rear ? 0 : (1 - fairStep(span, .25, .46)) * (1 - fairStep(p[1], .675, .732))
+        const round = runIn ? (fairPositive(offset, .032) - mix(fairPositive(bottom, .032), fairPositive(top, .032), v))
           * fairStep(span, 0, .16) : arc
         const crown = (rear ? .35 : .32) * mix(arc, round, runIn)
         const drop = high[1] - p[1]
@@ -664,7 +678,13 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       if (rear) folded(face, uSide, [beltLine, haunchLine, trace], columns)
       else {
         const { rows, at } = foldRows(face, [beltLine, trace, wingDraftLine], full ? 6 : 3)
-        paint.push(patch(face, columns, rows, uSide, .002, at))
+        const lipRows = 6
+        const skin = (u: number, v: number): Point => {
+          const p = archPanel(u, v), bead = v < .028 ? .0016 * Math.sin(Math.PI * v / .028) ** 4 : 0
+          return [p[0] + side * bead, p[1], p[2]]
+        }
+        paint.push(patch(skin, columns, rows + lipRows, uSide, .002, (u, j) => j < lipRows
+          ? .028 * j / lipRows : mix(.028, 1, at(u, j - lipRows))))
         const height = shoulder(before) - floorY
         const topRows = Array.from({ length: rows + 1 }, (_, j) => (face(0, at(0, j))[1] - floorY) / height)
         const bottomRows = Array.from({ length: 5 }, (_, j) => topRows[0] * j / 5)
@@ -685,11 +705,11 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const tuck = rear && start === Math.PI ? .041 * (1 - smooth(y, .282, .405)) : 0
         return [skin[0] - side * tuck, y, skin[2]]
       }, uSide, full ? 24 : 8, 4, 0)
-      part(paint, (u, v) => {
+      if (rear) part(paint, (u, v) => {
         const p = archPanel(u, mix(0, .028, v))
-        const bead = rear ? .0025 * Math.sin(Math.PI * v) : .0016 * Math.sin(Math.PI * v) ** 2
+        const bead = .0025 * Math.sin(Math.PI * v)
         return [side * Math.min(dimensions.bodyWidth / 2, Math.abs(p[0]) + bead), p[1], p[2]]
-      }, uSide, columns, 6, rear ? .006 : .003)
+      }, uSide, columns, 6, .006)
       const wellX = w.x - w.width / 2 - .025
       const well = (u: number, v: number): Point => {
         const angle = mix(theta0, theta1, u)
