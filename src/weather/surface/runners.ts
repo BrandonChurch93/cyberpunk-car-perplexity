@@ -21,6 +21,9 @@ export const archDrips = [wheel.start + 1.2, wheel.start + 2.9, wheel.start + 4.
 const pendantGrowSeconds = 1.4
 /** A drop leaving a lip carries the water that gathered along it, so it is larger than a drop hanging off a flat edge. */
 const dripRadius = 0.0038
+/** Arch drips seen from farther than this grow with the distance, up to the cap, so one still reads as a drop on a long lens. */
+const dripReadDistance = 1.4
+const dripGrowCap = 1.7
 /** The arch drips hang, fall and ripple only inside this window, which the pendant growth and the wheel beat fit in. */
 const archWindow = { start: archDrips[0] - pendantGrowSeconds - 0.2, end: wheel.end + 1 }
 const pathStep = 0.002
@@ -43,6 +46,7 @@ export interface Drip {
   release: number
   period: number
   floorY: number
+  radius: number
 }
 
 function closestOnTriangle(p: THREE.Vector3, t: Tri, out: THREE.Vector3): void {
@@ -357,7 +361,10 @@ export class Runners {
         const total = score - 0.5 * Math.max(Math.abs(ndc.x), Math.abs(ndc.y)) + (role === 'deck' && floor === 0 ? 2 : 0) + Math.min(height, 0.3)
         if (best && total <= best.score) continue
         if (!seen(p.clone().setY(p.y - 0.004), release) || !seen(land, landing)) continue
-        if (!best || total > best.score) best = { drip: { at: p.clone().setY(p.y - 0.0005), release, period: 0, floorY: floor }, score: total }
+        if (!best || total > best.score) {
+          const grow = THREE.MathUtils.clamp(film(release).position.distanceTo(p) / dripReadDistance, 1, dripGrowCap)
+          best = { drip: { at: p.clone().setY(p.y - 0.0005), release, period: 0, floorY: floor, radius: dripRadius * grow }, score: total }
+        }
       }
       return best?.drip ?? null
     }
@@ -410,7 +417,7 @@ export class Runners {
     for (let i = 0; i < 14 && pool.length > 0; i++) {
       const c = pool[random.int(pool.length)]
       const period = config.film.durationSeconds / (5 + random.int(9))
-      this.drips.push({ at: c.p.clone(), release: random.range(0, period), period, floorY: 0 })
+      this.drips.push({ at: c.p.clone(), release: random.range(0, period), period, floorY: 0, radius: dripRadius })
     }
   }
 
@@ -423,7 +430,7 @@ export class Runners {
     } else {
       age = t - d.release
     }
-    const full = dripRadius
+    const full = d.radius
     if (age < 0) {
       const grow = THREE.MathUtils.smoothstep(age, -pendantGrowSeconds, 0)
       return { radius: 0.0004 + (full - 0.0004) * grow, fall: 0, stretch: 1 + 0.35 * grow }
@@ -448,7 +455,7 @@ export class Runners {
       const last = d.period > 0 ? Math.floor((t1 - fallTime - d.release) / d.period) : 0
       for (let k = first; k <= last; k++) {
         const hit = d.release + k * d.period + fallTime
-        if (hit >= t0 && hit <= t1) out.push({ x: d.at.x, z: d.at.z, timeSeconds: hit, diameter: 2 * dripRadius })
+        if (hit >= t0 && hit <= t1) out.push({ x: d.at.x, z: d.at.z, timeSeconds: hit, diameter: 2 * d.radius })
       }
     }
     return out
