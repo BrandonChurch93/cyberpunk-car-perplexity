@@ -396,8 +396,37 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const noseReturnEnd = gridU(frontHoodStation(.86)), noseTipEnd = gridU(.035)
   const upperNoseStart = .114, noseStart = gridU(upperNoseStart)
   const frontArchStart = sAt(frontWheel.z + frontWheel.arch), archStart = gridU(frontArchStart)
+  const outerS = (u: number, q: number) => bonnetGrid(u) + (frontEnd(q) - bonnetGap - splitEnd) * fairStep(u, .81, 1)
+  const ventQ = (s: number, v: number) => {
+    const t = T.MathUtils.clamp(s, wingVentFront, wingVentBack)
+    return 1 - (.083 + (1 - 2 * v) * mix(.015, .011, fairStep(t, wingVentFront, wingVentBack))) / wingEdge(t).x
+  }
+  const ventIn = (s: number) => ventQ(s, 0), ventOut = (s: number) => ventQ(s, 1)
+  const crossings: number[] = []
+  const crossingEnd = gridU(.203)
+  for (const boundary of [ventIn, ventOut]) for (const offset of [-foldHalf, 0, foldHalf]) {
+    const value = (u: number) => {
+      const q = boundary(bonnetGrid(u)), s = outerS(u, q)
+      return wingEdge(s).x * q - lampFold(s) - offset
+    }
+    let last = mouthEnd, sample = value(last)
+    for (let i = 1; i <= 48; i++) {
+      const u = mix(mouthEnd, crossingEnd, i / 48), next = value(u)
+      if (sample * next < 0) {
+        let lo = last, hi = u
+        for (let j = 0; j < 21; j++) {
+          const mid = (lo + hi) / 2
+          if (sample * value(mid) > 0) lo = mid
+          else hi = mid
+        }
+        crossings.push((lo + hi) / 2)
+      }
+      last = u
+      sample = next
+    }
+  }
   const baseStations = [...Array.from({ length: bonnetLengthSteps + 1 }, (_, i) => i / bonnetLengthSteps),
-    noseReturnEnd, rollStart, noseStart, archStart].sort((a, b) => a - b)
+    noseReturnEnd, rollStart, noseStart, archStart, ...crossings].sort((a, b) => a - b)
   const stations = baseStations.flatMap((u, i) => {
     const next = baseStations[i + 1]
     const segments = full && next <= noseReturnEnd ? (next <= noseTipEnd ? 3 : 2) : 1
@@ -413,11 +442,6 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const p = u * (samples.length - 1), i = Math.min(Math.floor(p), samples.length - 2)
     return mix(samples[i], samples[i + 1], p - i)
   }
-  const ventQ = (s: number, v: number) => {
-    const t = T.MathUtils.clamp(s, wingVentFront, wingVentBack)
-    return 1 - (.083 + (1 - 2 * v) * mix(.015, .011, smooth(t, wingVentFront, wingVentBack))) / wingEdge(t).x
-  }
-  const ventIn = (s: number) => ventQ(s, 0), ventOut = (s: number) => ventQ(s, 1)
   for (const side of [1, -1]) {
     const mirror = (p: Point): Point => [p[0] * side, p[1], p[2]]
     const sided = (f: Surface): Surface => (u, v) => mirror(f(u, v))
@@ -426,7 +450,6 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const q = bonnetSplit * v
       return bonnet(bonnetGrid(sampleGrid(bonnetStations, u)) * (frontEnd(q) - bonnetGap) / splitEnd, q)
     }), [0, 1, 0], hoodTraces, bonnetStations.length - 1, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
-    const outerS = (u: number, q: number) => bonnetGrid(u) + (frontEnd(q) - bonnetGap - splitEnd) * fairStep(u, .81, 1)
     const noseReturn = ([x, y, z]: Point, v: number): Point => {
       const aft = z - .012 * v
       const s = sAt(aft), skin = bonnet(s, x / wingEdge(s).x)
