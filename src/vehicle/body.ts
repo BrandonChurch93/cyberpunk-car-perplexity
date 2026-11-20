@@ -355,7 +355,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       return [side * mix(.646, .646 - .14 * u, v), mix(.707, .800 + .030 * u, v), zAt(s)]
     }, uSide, 10, 4, 0)
 
-    const deckSection = (s: number, v: number): Point => {
+    const deckShape = (s: number, v: number): Point => {
       const inside = bayEdge(s, 1)
       const outside: Point = [shoulderX(s), shoulder(s), zAt(s)]
       const t = smooth(s, .677, .706)
@@ -392,6 +392,15 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const calm = mix(inY, outside[1], v * (.76 + .24 * v)) + .003 * Math.sin(Math.PI * v) ** 2
       const fair = fairStep(s, .758, .791) * (1 - fairStep(s, .883, .924)) * (1 - fairStep(x, .571, .610))
       return [x, mix(sculpted, calm, fair), zAt(s)]
+    }
+    const deckSection = (s: number, v: number): Point => {
+      const [x, y, z] = deckShape(s, v)
+      const mask = fairStep(s, .812, .840) * (1 - fairStep(s, .893, .919))
+        * fairStep(x, .588, .648) * (1 - fairStep(x, .878, .952))
+      if (mask === 0) return [x, y, z]
+      const faired = (deckShape(s - .030, v)[1] + 4 * deckShape(s - .015, v)[1] + 6 * y
+        + 4 * deckShape(s + .015, v)[1] + deckShape(s + .030, v)[1]) / 16
+      return [x, mix(y, faired, mask), z]
     }
     folded(sided((u, v) => deckSection(mix(.5984, .942 - .019 * v, u), v)),
       [0, 1, 0], [haunchLine, lateralTrace(deckIn), lateralTrace(deckOut)])

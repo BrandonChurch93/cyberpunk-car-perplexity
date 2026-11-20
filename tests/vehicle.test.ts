@@ -673,6 +673,23 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('fairs the deck behind the haunch without a second hard fold', () => {
+    const ray = new T.Raycaster(), down = new T.Vector3(0, -1, 0)
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const skin = vehicle.root.getObjectByName('closed body panels and returns')!
+      for (const x of [.75, .80, .85]) {
+        let previous: T.Vector3 | undefined
+        for (let i = 0; i <= 17; i++) {
+          ray.set(new T.Vector3(x, 2, zAt(.824 + .004 * i)), down)
+          const normal = ray.intersectObject(skin)[0].normal!
+          if (previous) expect(normal.angleTo(previous)).toBeLessThan(.17)
+          previous = normal
+        }
+      }
+    }
+  })
+
   it('keeps the high brake lamp clear of the bay louvers wherever a detail camera holds it', () => {
     for (const vehicle of [full, blockout]) {
       const name = 'high rear brake lamp bar'
