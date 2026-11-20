@@ -26,7 +26,7 @@ describe('closed-web forged wheel', () => {
         const R = spec.rim
         const ray = new T.Raycaster()
         const dir = new T.Vector3(-1, 0, 0)
-        const th0 = name === 'front wheel' ? 0.98 : 0.22
+        const th0 = name === 'front wheel' ? 1.18 : 0.22
         for (let k = 0; k < 5; k++) {
           const th = th0 + (k * Math.PI * 2) / 5
           for (const sign of [-1, 1]) {
