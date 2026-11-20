@@ -1,6 +1,6 @@
 # 003 · The vehicle's finish
 
-Added November 20, 2026. Brandon's note: the vehicle in the current frames looks far worse than the one in the approved image. From here the vehicle comes first in Phase 3.
+Added November 20, 2026. Brandon's note: the vehicle in the current frames looks far worse than the one in the approved image. The work below is queued. It does not interrupt the work in hand.
 
 ## Scope
 
@@ -37,9 +37,13 @@ Take the vehicle's finish from the approved image: how glossy it is, how wet, ho
 
 ## Showing it
 
-In the next update and every update after it, show the vehicle alone from the hero camera in `beauty`, `clay` and `zebra`, beside the approved image.
+From the first update after the vehicle work starts, show the vehicle alone from the hero camera in `beauty`, `clay` and `zebra`, beside the approved image.
 
 ## Order of work
 
-- Start the comparison of vehicle builds now, in parallel with the camera and world work in addendum 002. They are in different folders.
+- Do not stop, switch or re-plan the work in hand. Finish the step you are on.
+- The vehicle work is the next step after the hero frame's camera and world work in addendum 002, and before the first judged round of Phase 3.
+- A supporting agent that is free may start the comparison of vehicle builds earlier. The lead does not switch to it.
+- Anything a `Vehicle:` line asks for is queued the same way.
+- Write "Vehicle work queued, addendum 003" under Status in `kit/PROGRESS.md` when you read this, so it survives a compaction.
 - Nothing else in addendum 001 or 002 changes.
