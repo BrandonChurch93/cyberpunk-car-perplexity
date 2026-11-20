@@ -111,6 +111,16 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('keeps the haunch crown inside the front projection envelope', () => {
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      for (const side of [-1, 1]) for (const [x, y] of [[.82, .964], [.86, .952], [.94, .936]]) {
+        const ray = new T.Raycaster(new T.Vector3(side * x, y, 3), new T.Vector3(0, 0, -1))
+        expect(ray.intersectObject(vehicle.root, true)).toHaveLength(0)
+      }
+    }
+  })
+
   it.each(['blockout', 'full'] as const)('rests at the origin and meets factory dimensions in %s', (detail) => {
     const vehicle = detail === 'full' ? full : blockout
     const whole = setFrom(vehicle.root)
