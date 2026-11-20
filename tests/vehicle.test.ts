@@ -413,6 +413,13 @@ describe('vehicle geometry and state', () => {
       const backing = look(hole.clone().addScaledVector(normal, .4), hole)
       expect(backing.object.name).toBe('recessed airbox grille trays')
       expect(backing.distance).toBeCloseTo(.424, 5)
+      if (car === blockout) {
+        const chamfer = position.clone().addScaledVector(across.clone().normalize(), .0013)
+        const hit = look(chamfer.clone().addScaledVector(normal, .4), chamfer)
+        expect(hit.object).toBe(grille)
+        expect(hit.distance).toBeCloseTo(.4003, 5)
+        expect(hit.normal!.dot(normal)).toBeCloseTo(Math.SQRT1_2, 5)
+      }
       for (const [u, v] of [[1, 0], [0, 1], [-1, 0], [0, -1], [0, 0]]) {
         const eye = position.clone().addScaledVector(normal, .7)
           .addScaledVector(axis.clone().normalize(), .32 * u).addScaledVector(across.clone().normalize(), .32 * v)
@@ -422,6 +429,9 @@ describe('vehicle geometry and state', () => {
       }
       const duct = car.root.getObjectByName('flush airbox grille ducts') as T.Mesh
       const tray = backing.object as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
+      const obliqueEye = cameraAt(810 / config.film.fps, config.formats.master, car.anchors).position
+      const obliqueTarget = tray.localToWorld(new T.Vector3(-.39587, 1.00784, -1.06987))
+      expect([grille, tray]).toContain(look(obliqueEye, obliqueTarget).object)
       expect(tray.material.color.getHex()).toBe(0)
       expect(tray.material.specularIntensity).toBe(0)
       expect(tray.material.roughness).toBe(1)

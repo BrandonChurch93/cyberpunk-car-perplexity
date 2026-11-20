@@ -493,7 +493,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       part(black, (u, v) => {
         const p = well(u, 1)
         return [p[0], mix(.126, p[1], v), p[2]]
-      }, uSide, columns, 3, .005)
+      }, uSide, columns, full ? 3 : 1, .005)
     }
     arch(frontWheel)
     arch(rearWheel)
@@ -708,7 +708,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   part(black, (u, v) => {
     const s = mix(.057, .947, u)
     return [mix(-.71, .71, v), .159 + .051 * smooth(s, .909, .947), zAt(s)]
-  }, [0, -1, 0], 20, 9, .011)
+  }, [0, -1, 0], 20, full ? 9 : 1, .011)
   part(black, (u, v) => [mix(-.64, .64, v) * (1 - .2 * u), mix(.61, .819, u) + .017 * Math.sin(Math.PI * v), zAt(mix(.198, .304, u))], [0, 1, 0], 16, 12, .025)
   for (const side of [1, -1]) {
     const seatProfile = curve([[0, .36], [.29, .414], [.55, .404], [.68, .32], [.80, .209], [.95, .178], [1, .127]])
