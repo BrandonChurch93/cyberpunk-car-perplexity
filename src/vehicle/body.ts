@@ -641,9 +641,14 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const s = sAt(a[2])
         const p = sidePoint(s, mix(a[1], shoulder(s), v), side)
         const high = sidePoint(s, shoulder(s), side)
-        const section = hinge(trace(p), foldHalf) - mix(hinge(trace(a), foldHalf), hinge(trace(high), foldHalf), v)
+        const [offset, bottom, top] = [trace(p), trace(a), trace(high)]
+        const section = hinge(offset, foldHalf) - mix(hinge(bottom, foldHalf), hinge(top, foldHalf), v)
         const span = (s - before) / (after - before)
-        const crown = (rear ? .35 : .32) * section * smooth(span, 0, .10) * (1 - smooth(span, .90, 1))
+        const arc = section * smooth(span, 0, .10) * (1 - smooth(span, .90, 1))
+        const runIn = rear ? 0 : (1 - fairStep(span, .26, .43)) * (1 - fairStep(p[1], .680, .732))
+        const round = runIn ? (fairPositive(offset, .016) - mix(fairPositive(bottom, .016), fairPositive(top, .016), v))
+          * fairStep(span, 0, .16) : arc
+        const crown = (rear ? .35 : .32) * mix(arc, round, runIn)
         const drop = high[1] - p[1]
         return [p[0] + side * (crown + (rear ? 0 : wingDraft(s, drop))), p[1], p[2]]
       }
