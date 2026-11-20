@@ -68,7 +68,7 @@ function tireShell(w: WheelSize) {
   return { place }
 }
 
-function tireGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
+function tireGeometry(w: WheelSize, full: boolean, hero = w === frontWheel): T.BufferGeometry {
   const { place } = tireShell(w)
   const front = w === frontWheel
   const grooves = [.346, .452, .558, .658]
@@ -108,7 +108,7 @@ function tireGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
         .672, .684, .694, .700, .707, .716, .728, .744, .766, .792,
         .833, .855, .885, .913, .948, .966, .981,
       ]
-    : front
+    : hero
       ? [
           0, .276,
           ...grooves.flatMap((v) => [v - .0148, v, v + .0148]),
@@ -116,7 +116,7 @@ function tireGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
         ]
       : [0, .22, .36, .50, .64, .74, .84, .94, 1],
   )].sort((a, b) => a - b)
-  const uSteps = full ? (front ? 480 : 288) : (front ? 128 : 28)
+  const uSteps = full ? (front ? 480 : 288) : (hero ? 128 : 36)
   const geom = patch((u, v) => place(u, v, depth(u, v)), uSteps, rows.length - 1, [0, -1, 0], 0, (_, i) => rows[i])
   const cavity = new Float32Array((uSteps + 1) * rows.length)
   const tireUv = new Float32Array((uSteps + 1) * rows.length * 2)
@@ -136,9 +136,9 @@ function tireGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
   return geom
 }
 
-function sidewallReliefGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
+function sidewallReliefGeometry(w: WheelSize, full: boolean, hero = w === frontWheel): T.BufferGeometry {
   const { place } = tireShell(w)
-  const uSteps = full ? (w === frontWheel ? 360 : 240) : (w === frontWheel ? 72 : 28)
+  const uSteps = full ? (w === frontWheel ? 360 : 240) : (hero ? 72 : 28)
   const bandKnots: Profile = full
     ? [
         [.833, -.0008], [.837, .00160], [.843, .00160], [.847, .00065],
@@ -167,10 +167,10 @@ function sidewallReliefGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
   return joined([buildBand(bandKnots), buildBand(beadKnots)])
 }
 
-function rotor(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, T.BufferGeometry, T.BufferGeometry] {
+function rotor(w: WheelSize, full: boolean, axis: number, hero = w === frontWheel): [T.BufferGeometry, T.BufferGeometry, T.BufferGeometry] {
   const front = w === frontWheel
   const face = new T.Shape()
-  const segments = full ? 180 : (front ? 96 : 40)
+  const segments = full ? 180 : (hero ? 96 : 36)
   const radius = w.disc, ring = .104, lip = radius - .0018
   face.moveTo(lip, 0)
   for (let i = 1; i < segments; i++) {
@@ -188,10 +188,10 @@ function rotor(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, T.
   face.holes.push(center)
   const bevels: T.BufferGeometry[] = []
   const wells: T.BufferGeometry[] = []
-  const count = (full || front) ? 24 : 8
-  const drillRows = (full || front) ? 4 : 2
-  const edges = full ? (front ? 14 : 10) : (front ? 10 : 5)
-  const qOuter = (full || front) ? .0043 : .0036
+  const count = (full || hero) ? 24 : 8
+  const drillRows = (full || hero) ? 4 : 2
+  const edges = full ? (front ? 14 : 10) : (hero ? 10 : 5)
+  const qOuter = (full || hero) ? .0043 : .0036
   const qInner = .0032
   for (let i = 0; i < count; i++) for (let j = 0; j < drillRows; j++) {
     const a = (i / count) * tau + .043 * j + .0105 * j ** 2
@@ -204,7 +204,7 @@ function rotor(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, T.
     }
     drill.closePath()
     face.holes.push(drill)
-    if (full || front) {
+    if (full || hero) {
       bevels.push(patch((u, v) => {
         const phi = -u * tau, q = mix(qOuter, qInner, v)
         return [axis + .00002 - .00095 * v, y + q * Math.sin(phi), z - q * Math.cos(phi)]
@@ -216,8 +216,8 @@ function rotor(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, T.
     }, edges, 1, [1, 0, 0]))
   }
   const rear = axis - w.discDepth, cheek = .0090
-  const back = lathe([[rear, ring], [rear, lip], [rear + .0018, radius], [rear + cheek, radius], [rear + cheek, ring]], full ? segments : (front ? 56 : 32))
-  const vaneCount = full ? 40 : (front ? 32 : 12)
+  const back = lathe([[rear, ring], [rear, lip], [rear + .0018, radius], [rear + cheek, radius], [rear + cheek, ring]], full ? segments : 16)
+  const vaneCount = full ? 40 : (hero ? 32 : 10)
   const edgeVanes: T.BufferGeometry[] = []
   for (let i = 0; i < vaneCount; i++) {
     const a = tau * i / vaneCount + .04
@@ -241,11 +241,11 @@ function rotor(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, T.
   const slotFloor = lathe([
     [rear + cheek, .122], [rear + cheek, radius - .0148],
     [axis - cheek, radius - .0148], [axis - cheek, .122],
-  ], full ? 80 : (front ? 36 : 20))
+  ], full ? 80 : (hero ? 36 : 16))
   return [ceramic, joined([...wells, slotFloor]), lathe([
     [axis - .008, .115], [axis - .004, .112], [axis - .004, .105], [axis - .015, .104],
     [axis - .015, .098], [axis - .009, .088], [axis - .005, .081], [axis - .005, .047],
-  ], full ? segments / 2 : (front ? 40 : 24))]
+  ], full ? segments / 2 : (hero ? 40 : 20))]
 }
 
 function filletConvexCCW(pts: readonly Pt2[], radii: readonly number[], cornerSegs: number, maxEdge = .0075): LoopSample[] {
@@ -429,7 +429,7 @@ function buildPlanarSurface(
   return g
 }
 
-function forgedWheelAssembly(w: WheelSize, full: boolean): {
+function forgedWheelAssembly(w: WheelSize, full: boolean, hero = w === frontWheel): {
   satinWeb: T.BufferGeometry
   forging: T.BufferGeometry
   barrel: T.BufferGeometry
@@ -439,7 +439,7 @@ function forgedWheelAssembly(w: WheelSize, full: boolean): {
   cap: T.BufferGeometry
   lugs: T.BufferGeometry
 } {
-  const front = w === frontWheel
+  const front = hero
   const H = w.width / 2, R = w.rim
   const face = H - .008, hubPlane = face - .030, hubFace = hubPlane + .0018
   const rCap = .148 * R, rCollar = .161 * R
@@ -668,7 +668,7 @@ function forgedWheelAssembly(w: WheelSize, full: boolean): {
   }
 }
 
-function caliper(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, T.BufferGeometry, T.BufferGeometry] {
+function caliper(w: WheelSize, full: boolean, axis: number, hero = w === frontWheel): [T.BufferGeometry, T.BufferGeometry, T.BufferGeometry] {
   const rear = w === rearWheel
   const middle = rear ? 1.18 : -.86
   const half = rear ? .735 : 1.05
@@ -717,7 +717,7 @@ function caliper(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, 
     return placeArch(u, x - .0030 * topWindow, t - .0060 * topWindow, (.0017 * boss - .0018 * flutes) * cheekMask)
   }
   const sections = full ? (rear ? nPts : nPts * 2) : nPts
-  const uSpan = full ? (rear ? 36 : 72) : (rear ? 12 : 34)
+  const uSpan = full ? (rear ? 36 : 72) : (hero ? 34 : 12)
   const cast: T.BufferGeometry[] = [patch(body, uSpan, sections, [-1, 0, 0])]
   for (const end of [0, 1]) {
     const a = middle + half * (2 * end - 1)
@@ -1046,23 +1046,31 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
     const H = w.width / 2
     const axis = H - .058, face = H - .008, hubPlane = face - .030, hubFace = hubPlane + .0018
     const rotorFinish = makeRotorFinish(w, axis, axleLabel)
-    const tire = tireGeometry(w, full)
-    const { satinWeb, forging, barrel, machinedSpokes, flange, hub, cap, lugs } = forgedWheelAssembly(w, full)
-    const [brake, apertures, hat] = rotor(w, full, axis)
-    const [castCaliper, clips, fasteners] = caliper(w, full, axis)
     const pins = joined(Array.from({ length: 10 }, (_, i) => {
       const [, y, z] = axisRoll(0, .1065, tau * i / 10 + .134)
       return lathe([
         [axis - .0035, .0064], [axis + .0018, .0058], [axis + .0018, .0031], [axis - .0030, .0027],
       ], full ? (w === frontWheel ? 16 : 10) : 6).translate(0, y, z)
     }))
-    const sidewall = sidewallReliefGeometry(w, full)
+    const buildSet = (hero: boolean) => ({
+      tire: tireGeometry(w, full, hero),
+      wheel: forgedWheelAssembly(w, full, hero),
+      brakeSet: rotor(w, full, axis, hero),
+      caliperSet: caliper(w, full, axis, hero),
+      sidewall: sidewallReliefGeometry(w, full, hero),
+    })
+    const primary = buildSet(w === frontWheel)
+    const farSide = (!full && w === frontWheel) ? buildSet(false) : primary
     for (const side of [1, -1]) {
+      const set = side === 1 ? primary : farSide
+      const { satinWeb, forging, barrel, machinedSpokes, flange, hub, cap, lugs } = set.wheel
+      const [brake, apertures, hat] = set.brakeSet
+      const [castCaliper, clips, fasteners] = set.caliperSet
       const group = new T.Group()
       group.name = w === frontWheel ? 'front wheel' : 'rear wheel'
       group.position.set(w.x * side, w.loaded, w.z)
       group.scale.x = side
-      add(group, 'loaded rubber and tread', tire, tireRubber)
+      add(group, 'loaded rubber and tread', set.tire, tireRubber)
       add(group, 'satin forged spoke web', satinWeb, wheelSatinFace)
       add(group, 'forged divided spokes and barrel', forging, wheelDeepGloss)
       add(group, 'connected rim barrel', barrel, wheelBarrel)
@@ -1075,11 +1083,11 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
       add(group, 'recessed drill wells and rotor vents', apertures, m.dark)
       add(group, 'floating rotor hat', hat, hatFinish)
       add(group, 'rotor hat bobbins', pins, wheelHardware)
-      add(group, 'recessed brake shield', disk(w.disc - .004, .008, -.054, full ? 64 : 32), m.dark)
+      add(group, 'recessed brake shield', disk(w.disc - .004, .008, -.054, full ? 64 : 16), m.dark)
       add(group, 'fixed brake caliper', castCaliper, caliperFinish)
       add(group, 'caliper pin seats', clips, m.matte)
       add(group, 'caliper pin heads', fasteners, wheelHardware)
-      add(group, 'molded sidewall relief', sidewall, sidewallBand)
+      add(group, 'molded sidewall relief', set.sidewall, sidewallBand)
       parent.add(group)
     }
     if (w === frontWheel) anchor = [w.x + hubFace, w.loaded, w.z]
