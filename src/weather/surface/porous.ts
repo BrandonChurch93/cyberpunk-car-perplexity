@@ -10,8 +10,17 @@ export type Uniforms = Record<string, THREE.IUniform>
  * aggregate keeps 5 to 20 mm patches rougher. Board 02: standing water is a level near-mirror with F0 0.02 and roughness
  * 0.02 to 0.05 once it is deep, rougher where a thin sheet follows the aggregate, a 2 to 5 mm meniscus, a darker damp halo outside it, and depth that hides the aggregate over the first 3 mm.
  */
-/** The rain sheet on the deck: mean depth over the slab's resting level and the spread of its broad and small dry crowns. */
-const sheet = { baseMm: 11.5, broadMm: 16, patchMm: 5 }
+/**
+ * The rain sheet on the deck: mean depth over the slab's resting level near the car and away from it, the spread of its broad and
+ * small dry crowns, and the low fall around the car that holds it, in world X and Z meters with its falloff.
+ */
+const sheet = { baseMm: 11.5, farMm: 8, broadMm: 16, patchMm: 5, low: [-2.6, -0.5, 3.0, 5.4], fallMeters: 2.5 }
+/** Undulation of the slab below a puddle's scale: wavelengths in meters and slope amplitude of each. */
+const undulation = [
+  [0.045, 0.03],
+  [0.11, 0.022],
+  [0.27, 0.014],
+]
 
 const porousGlsl = /* glsl */ `
 uniform float surfDiag;
@@ -36,7 +45,37 @@ float surfFineRelief(vec2 p, float detail) {
 float surfSheetLift(vec2 p) {
   float broad = surfNoise2(p / 1.3 + 17.0, 31u) - 0.5;
   float patchy = surfNoise2(p / 0.42 + 5.0, 32u) - 0.5;
-  return ${sheet.baseMm.toFixed(2)} + ${sheet.broadMm.toFixed(2)} * broad + ${sheet.patchMm.toFixed(2)} * patchy;
+  vec2 o = max(max(vec2(${sheet.low[0].toFixed(2)}, ${sheet.low[1].toFixed(2)}) - p, p - vec2(${sheet.low[2].toFixed(2)}, ${sheet.low[3].toFixed(2)})), vec2(0.0));
+  float low = 1.0 - smoothstep(0.0, ${sheet.fallMeters.toFixed(2)}, length(o));
+  return mix(${sheet.farMm.toFixed(2)}, ${sheet.baseMm.toFixed(2)}, low) + ${sheet.broadMm.toFixed(2)} * broad + ${sheet.patchMm.toFixed(2)} * patchy;
+}
+
+vec3 surfNoiseGrad(vec2 p, uint salt) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  vec2 du = 6.0 * f * (1.0 - f);
+  ivec2 c = ivec2(i);
+  float a = surfHash2(c, salt).x;
+  float b = surfHash2(c + ivec2(1, 0), salt).x;
+  float d = surfHash2(c + ivec2(0, 1), salt).x;
+  float e = surfHash2(c + ivec2(1, 1), salt).x;
+  return vec3(mix(mix(a, b, u.x), mix(d, e, u.x), u.y), du.x * mix(b - a, e - d, u.y), du.y * mix(d - a, e - b, u.x));
+}
+
+float surfUndulationVar;
+
+/** Slope of the slab's undulation. Octaves finer than the footprint leave the slope and add their variance to surfUndulationVar. */
+vec2 surfUndulation(vec2 p, float foot) {
+  vec2 slope = vec2(0.0);
+  surfUndulationVar = 0.0;
+  ${undulation.map(([w, a], i) => `{
+    vec3 n = surfNoiseGrad(p / ${w.toFixed(3)} + ${(3.7 * i).toFixed(1)}, ${51 + i}u);
+    float filt = exp(-2.0 * pow(foot / ${w.toFixed(3)}, 2.0));
+    slope += ${a.toFixed(3)} * filt * n.yz;
+    surfUndulationVar += ${(a * a * 0.4).toFixed(6)} * (1.0 - filt * filt);
+  }`).join('\n  ')}
+  return slope;
 }
 
 /** Height of the surface against the water line in millimeters. Negative is under water. */
@@ -73,32 +112,41 @@ const porousFragment = /* glsl */ `
   vec2 surfSlope = vec2(0.0);
   #ifdef SURF_STANDING
     float surfH = surfDeckHeight(surfXZ, surfDetail);
-    surfWater = surfUp * surfCover * smoothstep(0.0, -0.35, surfH);
+    float surfGround = 1.0;
+    #ifdef SURF_GROUNDED
+      surfGround = 1.0 - smoothstep(0.01, 0.03, abs(surfWorldPos.y));
+    #endif
+    surfWater = surfGround * surfUp * surfCover * smoothstep(0.0, -0.35, surfH);
     surfDepth = max(-surfH, 0.0);
-    surfFringe = surfUp * surfCover * (1.0 - smoothstep(0.0, 1.6, surfH)) * (1.0 - surfWater);
+    surfFringe = surfGround * surfUp * surfCover * (1.0 - smoothstep(0.0, 1.6, surfH)) * (1.0 - surfWater);
     if (abs(surfH) < 1.2 && surfDetail > 0.0) {
       float e = 0.006;
       float hx = surfDeckHeight(surfXZ + vec2(e, 0.0), surfDetail);
       float hz = surfDeckHeight(surfXZ + vec2(0.0, e), surfDetail);
       vec2 g = vec2(hx - surfH, hz - surfH) / e;
-      float rim = exp(-pow(surfH / 0.22, 2.0)) * surfDetail;
+      float rim = exp(-pow(surfH / 0.22, 2.0)) * surfDetail * surfGround;
       surfSlope -= rim * 0.00028 * g;
     }
   #else
     float surfH = 3.0 + surfFineRelief(surfXZ, surfDetail);
   #endif
   float surfDeep = surfWater * (0.6 + 0.4 * smoothstep(1.5, 3.0, surfDepth));
-  surfSlope += surfRipples(surfXZ, min(surfDeep, 1.0), surfWet * surfUp * (1.0 - surfWater) * 0.6, 0.0) * surfDetail;
+  surfSlope += surfRipples(surfXZ, min(surfDeep, 1.0), surfWet * surfUp * (1.0 - surfWater) * 0.6, 0.0, surfFoot);
+  float surfSlab = surfUp * (1.0 - surfWater * smoothstep(0.5, 4.0, surfDepth));
+  surfSlope += surfSlab * surfUndulation(surfXZ, surfFoot);
+  float surfSlopeVar = surfRingVar + surfSlab * surfSlab * surfUndulationVar;
 
   float surfDamp = clamp(surfWet + surfFringe * 0.6, 0.0, 1.0);
-  float surfDark = mix(1.0, mix(0.9, mix(0.5, 0.6, surfAgg), surfPorosity), surfDamp);
+  float surfStain = 0.6 * surfNoise2(surfXZ / 0.35 + 9.0, 41u) + 0.4 * surfNoise2(surfXZ / 0.09 + 2.0, 42u);
+  float surfDark = mix(1.0, mix(0.9, mix(0.46, 0.74, surfStain) * mix(0.92, 1.08, surfAgg), surfPorosity), surfDamp);
   surfDark *= mix(1.0, 0.82, surfFringe);
-  surfDark *= mix(1.0, mix(0.55, 0.3, smoothstep(0.0, 3.0, surfDepth)), surfWater);
+  surfDark *= mix(1.0, mix(0.85, 0.65, smoothstep(0.0, 3.0, surfDepth)), surfWater * mix(0.3, 1.0, surfPorosity));
   float surfL = surfLuma(diffuseColor.rgb);
   diffuseColor.rgb = max(mix(vec3(surfL), diffuseColor.rgb, 1.0 + 0.15 * surfDamp), 0.0) * surfDark;
-  float surfRoughWet = mix(0.16, 0.3, smoothstep(0.35, 0.75, surfAgg));
+  float surfRoughWet = mix(0.28, 0.42, smoothstep(0.35, 0.75, surfAgg));
   roughnessFactor = mix(roughnessFactor, min(roughnessFactor, surfRoughWet), surfDamp);
-  roughnessFactor = mix(roughnessFactor, mix(0.09, 0.035, smoothstep(0.5, 2.5, surfDepth)), surfWater);
+  roughnessFactor = mix(roughnessFactor, mix(0.26, 0.08, smoothstep(3.0, 10.0, surfDepth)), surfWater);
+  roughnessFactor = sqrt(sqrt(pow(roughnessFactor, 4.0) + 2.0 * surfSlopeVar));
   vec3 surfFlat = mix(surfN, vec3(0.0, 1.0, 0.0), surfWater);
   vec3 surfWorldN = normalize(surfFlat + vec3(-surfSlope.x, 0.0, -surfSlope.y));
   normal = surfToView(surfWorldN);
@@ -120,13 +168,16 @@ if (surfDiag > 0.5) {
 }
 `
 
-/** Sealed or painted ground carries `userData.wetPorosity` below 1: it darkens less when wet and still turns glossy. */
+/**
+ * Sealed or painted ground carries `userData.wetPorosity` below 1: it darkens less when wet and still turns glossy. Anything else
+ * that lies on the deck plane, such as the bay lines, floods with the deck.
+ */
 export function applyPorous(material: THREE.Material, uniforms: Uniforms, deck: boolean): void {
   const porosity = typeof material.userData.wetPorosity === 'number' ? THREE.MathUtils.clamp(material.userData.wetPorosity, 0, 1) : 1
   patchMaterial(material, {
     id: deck ? 'surface water deck' : 'surface water porous',
     uniforms: { ...uniforms, surfPorosity: { value: porosity } },
-    defines: deck ? { SURF_DECK: 1, SURF_STANDING: 1 } : {},
+    defines: deck ? { SURF_DECK: 1, SURF_STANDING: 1 } : { SURF_DECK: 1, SURF_STANDING: 1, SURF_GROUNDED: 1 },
     apply(shader) {
       shader.vertexShader = surfaceVaryingsGlsl(false) + insertAfter(shader.vertexShader, '#include <project_vertex>', surfaceVertexGlsl(false))
       let f = shader.fragmentShader

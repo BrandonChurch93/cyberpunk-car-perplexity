@@ -182,6 +182,25 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('closes the upper lamp bezel without exposing the wheelhouse or cockpit', () => {
+    const timeSeconds = config.film.heroFrameSeconds
+    const { lampStage, engine, vibration } = stateAt(timeSeconds)
+    const ray = new T.Raycaster()
+    for (const vehicle of [blockout, full]) {
+      vehicle.update({ timeSeconds, lampStage, engine, vibration })
+      vehicle.root.updateMatrixWorld(true)
+      for (const format of [config.formats.master, config.formats.vertical]) {
+        const eye = cameraAt(timeSeconds, format, vehicle.anchors, timeSeconds).position
+        for (const point of [[.8731, .6783, 1.9343], [.8838, .6829, 1.9158], [.8915, .6781, 1.9094], [.8638, .6461, 1.9889]]) {
+          ray.set(eye, new T.Vector3().fromArray(point).sub(eye).normalize())
+          const hit = ray.intersectObject(vehicle.root, true)[0]
+          expect(hit, `${format.id} ${point.join(',')}`).toBeDefined()
+          expect(hit.point.z).toBeGreaterThan(point[2] - .05)
+        }
+      }
+    }
+  })
+
   it('keeps the front cheek return fair without hiding the lower running guide', () => {
     for (const vehicle of [blockout, full]) {
       vehicle.root.updateMatrixWorld(true)
@@ -426,6 +445,25 @@ describe('vehicle geometry and state', () => {
           previous = normal
         }
         expect(sweep / 32).toBeLessThan(.42)
+      }
+    }
+  }, 30_000)
+
+  it('fairs the front arch shoulder without an abrupt change in reflected direction', () => {
+    const step = .006
+    const z = frontWheel.z + frontWheel.arch + .024
+    const ray = new T.Raycaster()
+    const across = new T.Vector3(-1, 0, 0)
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      const skin = vehicle.root.getObjectByName('closed body panels and returns')!
+      const normals = Array.from({ length: 29 }, (_, i) => {
+        ray.set(new T.Vector3(1.1, .66, z - i * step), across)
+        return ray.intersectObject(skin)[0].normal!.normalize()
+      })
+      for (let i = 1; i < normals.length - 1; i++) {
+        const change = normals[i - 1].clone().add(normals[i + 1]).addScaledVector(normals[i], -2)
+        expect(change.length() / step ** 2).toBeLessThan(2500)
       }
     }
   }, 30_000)

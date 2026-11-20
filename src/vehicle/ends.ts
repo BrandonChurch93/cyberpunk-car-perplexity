@@ -1,7 +1,7 @@
 import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
 import { insertAfter, patchMaterial } from '../materials/patch'
-import { fascia, frontFascia, frontHoodEdge, limitTailZ, sAt, tailCrestZ, tailLipY, zAt } from './body'
+import { fascia, frontBezelSeat, frontFascia, frontHoodEdge, limitTailZ, sAt, tailCrestZ, tailLipY, zAt } from './body'
 import { add, blend, curve, fairCurve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
 import type { Palette } from './materials'
 import type { Anchor, VehicleModule } from './contract'
@@ -340,9 +340,15 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     black.push(patch((u, v) => {
       const lower = window(u, 1, -.002)
       const x = Math.abs(lower[0])
-      const upper = frontHoodEdge(x)
-      const y = lower[1] + .5 * ((upper[1] - lower[1]) + Math.hypot(upper[1] - lower[1], .008))
-      return [lower[0], mix(lower[1] - .005, y - .0008, v), mix(lower[2], upper[2] - .009, v)]
+      const edge = frontHoodEdge(x), seat = frontBezelSeat(edge)
+      const rise = edge[1] - lower[1]
+      const outer = lower[1] + .5 * (rise + Math.hypot(rise, .008))
+      const low = lower[1] - .005, clearance = seat[1] - .0015 - low
+      const seatedY = low + .5 * (clearance + Math.hypot(clearance, .005))
+      const cover = fair(x, .797, .873)
+      const upperY = mix(seatedY, outer - .0008, cover)
+      const upperZ = mix(seat[2] - .0015, edge[2] - .009, cover)
+      return [lower[0], mix(low, upperY, v), mix(lower[2], upperZ, v)]
     }, 100, 8, outFront))
     black.push(patch((u, v) => window(u, v, .071), full ? 44 : 32, full ? 17 : 12, outFront, .009))
     optical.push(patch((u, v) => {

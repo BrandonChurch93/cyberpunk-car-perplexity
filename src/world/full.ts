@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { config } from '../config'
 import { buildCity } from './city'
 import { cityPracticals } from './city-practicals'
 import type { WorldModule } from './contract'
@@ -9,6 +10,9 @@ import { Forms, group } from './forms'
 import { addApprovedHeroLayout } from './hero-layout'
 import { finishRoof } from './roof-look'
 
+const wake = config.beats.find(beat => beat.id === 'wake')!
+const returnShot = config.beats.find(beat => beat.id === 'return')!
+
 export async function createFullWorld(): Promise<WorldModule> {
   const labels = await loadLabels()
   const root = new THREE.Group()
@@ -18,7 +22,7 @@ export async function createFullWorld(): Promise<WorldModule> {
   const forms = new Forms()
   const deck = buildDeck(forms, roof)
   buildCity(forms, city, true)
-  const surfaces = finishRoof(deck, roof)
+  const { surfaces, materials } = finishRoof(deck, roof)
   const cityColors = new Map<THREE.Material, THREE.Material>()
   city.traverse(o => {
     if (!(o instanceof THREE.Mesh) || !(o.material instanceof THREE.MeshStandardMaterial)) return
@@ -35,15 +39,27 @@ export async function createFullWorld(): Promise<WorldModule> {
   const fixtures = roofFixtures(root, roof, city, labels, surfaces)
   const updateCity = cityPracticals(city, labels, fixtures.signs)
   detailFacades(city)
-  const hero = addApprovedHeroLayout(root, labels)
+  const hero = addApprovedHeroLayout(root, labels, materials)
+  const slots = fixtures.lights.map(original => {
+    const wide = hero.lights.get(original.id)
+    return { original, wide, output: wide ? { ...wide } : original }
+  })
   const set = (timeSeconds: number, cutTime = timeSeconds) => {
-    fixtures.set(timeSeconds, cutTime)
+    const wide = cutTime < wake.end || cutTime >= returnShot.start
+    fixtures.set(timeSeconds, cutTime, wide)
     updateCity(timeSeconds)
+    hero.set(timeSeconds)
+    for (const slot of slots) {
+      if (!slot.wide) continue
+      const source = wide ? slot.wide : slot.original
+      Object.assign(slot.output, source, { id: slot.wide.id, colorAt: source.colorAt })
+    }
   }
+  set(0)
   const { min, max } = deck.bounds
   return {
     root,
-    lights: fixtures.lights,
+    lights: slots.map(slot => slot.output),
     signs: [...new Set([...fixtures.signs, ...hero.signs])],
     deck,
     reflectionBox: new THREE.Box3(new THREE.Vector3(min.x, 0, min.y), new THREE.Vector3(max.x, 81, max.y)),
