@@ -500,7 +500,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const intakeShift = .035 / dimensions.length
     const intakeFront = curve([[0, .617], [.20, .597], [.49, .570], [1, .538]])
     const intakeBack = curve([[0, .617], [.27, .651], [.55, .635], [1, .590]])
-    const intakeTaper = curve([[0, 0], [.12, 0], [.29, .025], [.55, .035], [.73, .030], [.88, .012], [1, 0]])
+    const intakeTaper = curve([[0, 0], [.40, 0], [.46, .004], [.55, .018], [.65, .028],
+      [.77, .032], [.87, .027], [.93, .019], [1, 0]])
     const intakeLeft = (v: number) => intakeFront(v) + intakeShift
     const intakeRight = (v: number) => intakeBack(v) + intakeShift - intakeTaper(v) / dimensions.length
     const intakeBottom = .208, intakeTopLeft = .686, intakeTopRight = .708

@@ -227,8 +227,8 @@ describe('vehicle geometry and state', () => {
           expect((b.point.x - toe.point.x) * side).toBeLessThan(.011)
         }
         expect(profile(.617, .230).object.name).toBe('closed body panels and returns')
-        expect(profile(.632, .460).object.name).toBe('stowage, seals and wheelhouse liners')
-        expect(profile(.640, .460).object.name).toBe('closed body panels and returns')
+        expect(profile(.623, .530).object.name).toBe('stowage, seals and wheelhouse liners')
+        expect(profile(.630, .530).object.name).toBe('closed body panels and returns')
         for (const [s, y] of [[.624, .230], [.625, .400], [.583, .650]]) {
           const mouth = profile(s, y), panel = profile(s - .05, y)
           expect(mouth.object.name).toBe('stowage, seals and wheelhouse liners')
