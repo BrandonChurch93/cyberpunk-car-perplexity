@@ -285,7 +285,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     folded(sided((u, v) => {
       const s = mix(0, frontEnd(v) - gap, u * (.51 + .49 * u))
       return bonnet(s, v)
-    }), [0, 1, 0], hoodTraces, full ? 112 : n, .002, full ? 12 : 3)
+    }), [0, 1, 0], hoodTraces, full ? 148 : 45, 0, full ? 14 : 5)
     folded(sided((u, v) => {
       const s = mix(frontEnd(mix(.817, 1, v)) + gap, .599, u * (.43 + .57 * u))
       const q = mix(.817, 1, v)

@@ -157,9 +157,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     frontPaint.push(patch((u, v) => {
       const x = mix(0, .86, u)
       const edge = frontHoodEdge(x)
-      const t = v * Math.PI * .5
-      return [side * x, edge[1] - (.007 + .003 * smooth(x, .49, .71)) * (1 - Math.cos(t)), edge[2] - .006 * Math.sin(t)]
-    }, 84, 4, outFront, .004))
+      const t = v * Math.PI * .64
+      const depth = .006 * Math.sin(t) + .006 * smooth(v, .65, 1)
+      return [side * x, edge[1] - (.007 + .003 * smooth(x, .49, .71)) * (1 - Math.cos(t)), edge[2] - depth]
+    }, 84, 5, outFront))
     black.push(mapped(f, outline, outFront, .025, .055))
     dark.push(mapped(f, points, outFront, .123, .036))
     black.push(joinRim(points, 1.035, .88, f, -.002, .085, outFront))
@@ -226,17 +227,24 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return [lower[0], mix(lower[1] - .002, y - .003, v), mix(lower[2], upper[2] - .0075, v)]
     }, 56, 5, outFront, 0))
     black.push(patch((u, v) => window(u, v, .071), 44, 17, outFront, .009))
-    optical.push(patch((u, v) => window(u, v, -.008), 52, 20, outFront, .0034))
+    optical.push(patch((u, v) => window(u, v, -.008), full ? 76 : 61, 20, outFront, .0034))
     const browLow = curve([[.473, .418], [.578, .418], [.709, .420], [.820, .424], [.874, .438], [.918, .571]])
     black.push(patch((u, v) => {
       const x = mix(.474, .918, u)
-      const y = mix(browLow(x), eyeLow(x) + .004, v)
-      const d = mix(.033, -.004, v) + .009 * Math.sin(Math.PI * v)
+      const y = mix(browLow(x), eyeLow(x) + .0015, v)
+      const depth = mix(-.0105, .001, smooth(x, .824, .856))
+      const d = mix(.033, depth, v) + .009 * Math.sin(Math.PI * v)
       return f(x, y, d)
     }, 76, 10, outFront))
+    black.push(patch((u, v) => {
+      const a = window(u, 1, -.008)
+      const b = window(u, .96, -.008)
+      const q = mix(.82, 1.92, v)
+      const x = Math.abs(mix(b[0], a[0], q)), y = mix(b[1], a[1], q)
+      return f(x, y, mix(-.012, .021, v ** 2.25))
+    }, 76, 6, outFront))
     for (const edge of [0, 1]) {
       const sign = 2 * edge - 1
-      if (edge === 1) black.push(patch((u, v) => window(u, 1 + mix(-.030, .053, v), mix(-.006, .005, v)), 68, 4, outFront, .003))
       black.push(patch((u, v) => window(edge + sign * mix(-.004, .012, v), u, mix(-.006, .005, v)), 14, 4, outFront, .003))
     }
     for (const [x, y, radius, lift, intensity] of [[.743, .526, .029, .002, 170], [.827, .560, .023, .008, 80]]) {
