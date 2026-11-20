@@ -12,13 +12,16 @@ import type { ExtraImpact } from './ripples'
 const gravity = 9.81
 const paint = beatById('paint')
 const wheel = beatById('wheel')
-/** The hero rivulet lets go just before the macro frame. */
-const breakLoose = config.film.macroFrameSeconds - 0.25
+/** The hero rivulet lets go a little before the macro frame, so a short cleared track already trails it there. */
+const breakLoose = config.film.macroFrameSeconds - 1.3
 /** Drips leave the wheel arch lip at these times, in the wheel beat. */
 export const archDrips = [wheel.start + 1.2, wheel.start + 2.9, wheel.start + 4.1]
 const pendantGrowSeconds = 1.4
 const pathStep = 0.002
 const pathSteps = 160
+const trailAcross = 9
+/** Behind the head the trail stays a continuous neck this long, then pinches off into a line of small drops, as it does on wax. */
+const trailNeck = 0.012
 
 interface Tri {
   a: THREE.Vector3
@@ -45,7 +48,7 @@ export class Runners {
   readonly group = new THREE.Group()
   private readonly path: THREE.Vector3[] = []
   private readonly pathNormals: THREE.Vector3[] = []
-  private readonly runner: THREE.Mesh
+  private readonly runner: THREE.InstancedMesh
   private readonly trail: THREE.Mesh
   private readonly trailBeads: THREE.InstancedMesh
   private readonly trailBeadAt: number[] = []
@@ -94,27 +97,29 @@ export class Runners {
       }
     })
     this.tracePath(tris, start)
-    this.runner = new THREE.Mesh(capTemplate(100, 9, 22), this.material)
+    // Instanced like every other drop: the lens shader shares one program variant across all of them.
+    this.runner = new THREE.InstancedMesh(capTemplate(100, 9, 22), this.material, 1)
     this.runner.layers.set(layers.cameraOnly)
-    this.runner.matrixAutoUpdate = false
     this.runner.frustumCulled = false
     this.trail = new THREE.Mesh(this.trailGeometry(), plain)
     this.trail.layers.set(layers.cameraOnly)
     this.trail.frustumCulled = false
     const random = stream('surface trail beads')
-    const beadCount = 90
-    this.trailBeads = new THREE.InstancedMesh(capTemplate(100, 4, 10), this.material, beadCount)
+    const length = Math.max(0, this.path.length - 1) * pathStep
+    const stations: number[] = []
+    for (let at = trailNeck * 0.5; at < length && stations.length < 220; at += random.range(0.0026, 0.0048)) stations.push(at)
+    this.trailBeads = new THREE.InstancedMesh(capTemplate(100, 5, 12), this.material, Math.max(1, stations.length))
     this.trailBeads.layers.set(layers.cameraOnly)
     this.trailBeads.frustumCulled = false
+    this.trailBeads.count = 0
     const m = new THREE.Matrix4()
-    const stations = Array.from({ length: beadCount }, () => random.range(0.004, 1) * Math.max(0, this.path.length - 1) * pathStep).sort((a, b) => a - b)
-    for (let i = 0; i < beadCount && this.path.length > 1; i++) {
+    for (let i = 0; i < stations.length && this.path.length > 1; i++) {
       const s = stations[i]
       const at = this.pointAt(s)
       const side = this.sideAt(s)
       const n = this.normalAt(s)
-      const r = random.range(0.00012, 0.0003)
-      const offset = random.range(-1, 1) * 0.0011
+      const r = random.range(0.0006, 0.0011)
+      const offset = random.range(-1, 1) * 0.0005
       const p = at.clone().addScaledVector(side, offset)
       const down = new THREE.Vector3().crossVectors(n, side)
       m.makeBasis(down.multiplyScalar(r), n.clone().multiplyScalar(capHeight(r, 100)), side.clone().multiplyScalar(r)).setPosition(p)
@@ -219,8 +224,8 @@ export class Runners {
     const normals: number[] = []
     const index: number[] = []
     const width = 0.0017
-    const height = 0.0007
-    const across = 5
+    const height = 0.0012
+    const across = trailAcross
     for (let i = 0; i < this.path.length; i++) {
       const s = i * pathStep
       const p = this.path[i]
@@ -230,7 +235,7 @@ export class Runners {
         const u = (k / (across - 1)) * 2 - 1
         const h = height * Math.sqrt(Math.max(0, 1 - u * u))
         positions.push(p.x + side.x * u * width + n.x * h, p.y + side.y * u * width + n.y * h, p.z + side.z * u * width + n.z * h)
-        const tilt = n.clone().addScaledVector(side, u * 0.5).normalize()
+        const tilt = n.clone().multiplyScalar(width * Math.sqrt(Math.max(0.02, 1 - u * u))).addScaledVector(side, u * height).normalize()
         normals.push(tilt.x, tilt.y, tilt.z)
       }
     }
@@ -321,7 +326,7 @@ export class Runners {
   travel(t: number): number {
     const age = t - breakLoose
     if (age <= 0 || t > paint.end + 6) return 0
-    const speed = 0.03
+    const speed = 0.05
     const ramp = Math.min(age, 0.6)
     const base = 0.5 * (speed / 0.6) * ramp * ramp + speed * Math.max(0, age - 0.6)
     const surge = 0.0025 * Math.sin(age * 9) * Math.min(1, age)
@@ -333,20 +338,21 @@ export class Runners {
     if (this.active && this.path.length > 1) {
       const s = this.travel(t)
       const grow = 1 + 0.25 * THREE.MathUtils.smoothstep(t, paint.start, breakLoose)
-      const r = 0.0024 * grow
+      const r = 0.0023 * grow
       const p = this.pointAt(s)
       const n = this.normalAt(s)
       const down = this.downAt(s)
       const side = new THREE.Vector3().crossVectors(down, n).normalize()
-      const moving = s > 0 ? 1.45 : 1.1
+      const moving = s > 0 ? 1.6 : 1.1
       p.addScaledVector(down, -r * (moving - 1) * 0.5)
       m.makeBasis(down.clone().multiplyScalar(r * moving), n.clone().multiplyScalar(capHeight(r, 100)), side.multiplyScalar(r)).setPosition(p)
-      this.runner.matrix.copy(m)
-      this.runner.matrixWorldNeedsUpdate = true
+      this.runner.setMatrixAt(0, m)
+      this.runner.instanceMatrix.needsUpdate = true
       const steps = Math.floor(s / pathStep)
-      this.trail.geometry.setDrawRange(0, Math.max(0, steps - 1) * 4 * 6)
+      const from = Math.max(0, Math.floor((s - trailNeck) / pathStep))
+      this.trail.geometry.setDrawRange(from * (trailAcross - 1) * 6, Math.max(0, steps - 1 - from) * (trailAcross - 1) * 6)
       let beads = 0
-      for (let i = 0; i < this.trailBeadAt.length; i++) if (this.trailBeadAt[i] < s - 0.004) beads = i + 1
+      for (let i = 0; i < this.trailBeadAt.length; i++) if (this.trailBeadAt[i] < s - trailNeck) beads = i + 1
       this.trailBeads.count = beads
     }
     for (let i = 0; i < this.drips.length; i++) {

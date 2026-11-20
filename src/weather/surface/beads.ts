@@ -29,7 +29,7 @@ export const beadLayers: BeadLayer[] = [
 
 /** Points of the runner's track handed to the shader, and the half width it sweeps clear of beads. */
 export const trackPoints = 40
-export const trackClear = 0.0026
+export const trackClear = 0.0045
 
 /** Drops at or above this diameter are real geometry near the lens. Smaller ones stay in the shader at every distance. */
 export const geometryMinMm = 0.8
@@ -115,6 +115,7 @@ uniform float surfRefill;
 uniform float surfBeadSalt;
 uniform float surfBeadContact;
 uniform vec4 surfGeo;
+uniform float surfGeoAngle;
 uniform vec3 surfVehicleCenter;
 uniform vec4 surfTrack[${trackPoints}];
 uniform vec4 surfTrackBox;
@@ -256,9 +257,12 @@ float surfMist = 0.0;
     float height = surfCapHeight(radius);
     vec3 worldCenter = surfWorldPos + (vec4(toView * d3, 0.0) * viewMatrix).xyz;
     if (nearTrack && surfTrackDistance(worldCenter) < ${trackClear} + radius) continue;
-    float geometry = surfGeo.w > 0.5 && i > 0 && dMm >= ${geometryMinMm.toFixed(2)} && distance(worldCenter, surfGeo.xyz) < surfGeo.w ? 1.0 : 0.0;
-    float sizeBefore = surfHit.height;
-    surfCap(surfHit, d3, radius, height, n, down, slope, pix, geometry);
+    float geometry = surfGeo.w > 0.5 && i > 0 && dMm >= ${geometryMinMm.toFixed(2)} && distance(worldCenter, surfGeo.xyz) < surfGeo.w && dMm * 0.001 >= surfGeoAngle * distance(worldCenter, surfGeo.xyz) ? 1.0 : 0.0;
+    // Drops under a couple of pixels alias into glitter: they join the mist sheen instead of drawing a sharp lens.
+    float resolved = smoothstep(0.9 * pix, 2.6 * pix, radius);
+    if (resolved < 1.0) surfMist += density * (1.0 - resolved) * 0.6 * (dMm / cellMm) * (dMm / cellMm);
+    if (resolved <= 0.0) continue;
+    surfCap(surfHit, d3, radius, height * resolved, n, down, slope, pix, geometry);
     if (lobes > 1) {
       vec3 lh = surfHash3(ivec3(c, axis * 4 + i), salt + 1u);
       float angle = lh.x * 6.2831853;

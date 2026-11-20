@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import type { CameraState } from '../../core/lens'
+import { patchFilmLighting } from '../../core/lights'
 import { layers } from '../../core/contract'
 import { insertAfter, patchMaterial, replaceOnce } from '../../materials/patch'
 import { type BeadClass, beadLayers, cellDrops, dominantAxis, geometryMinMm } from './beads'
@@ -9,6 +10,13 @@ import { surfHash3 } from './hash'
 export const geometryRange = 1.7
 const maxInstances = 40000
 const chunk = 4096
+/** A drop becomes geometry only when it spans this many pixels; smaller ones stay in the shader field. */
+const minPixels = 5
+
+/** Smallest diameter over distance that is drawn as geometry for this lens and frame width. */
+export function geometryAngle(camera: CameraState, widthPx: number): number {
+  return (minPixels * camera.sensorWidthMm) / camera.focalMm / widthPx
+}
 
 interface Source {
   mesh: THREE.Mesh
@@ -149,7 +157,7 @@ export class DropGeometry {
   }
 
   /** `swept` says whether a drop of this radius at this world point has been taken up by the runner. */
-  update(camera: CameraState, aspect: number, swept: (world: THREE.Vector3, radius: number) => boolean = () => false): void {
+  update(camera: CameraState, widthPx: number, aspect: number, swept: (world: THREE.Vector3, radius: number) => boolean = () => false): void {
     const film = new THREE.PerspectiveCamera(
       THREE.MathUtils.radToDeg(2 * Math.atan(camera.sensorWidthMm / aspect / 2 / camera.focalMm)), aspect, camera.near, camera.far)
     film.position.copy(camera.position)
@@ -167,6 +175,7 @@ export class DropGeometry {
     const n = new THREE.Vector3(), gObj = new THREE.Vector3(), down = new THREE.Vector3(), side = new THREE.Vector3()
     const center = new THREE.Vector3(), world = new THREE.Vector3()
     this.count = 0
+    const angle = geometryAngle(camera, widthPx)
     for (const src of this.sources) {
       const { mesh, bead } = src
       mesh.updateWorldMatrix(true, false)
@@ -234,6 +243,7 @@ export class DropGeometry {
                   world.copy(center).divideScalar(scale).applyMatrix4(mesh.matrixWorld)
                   if (world.distanceTo(camera.position) > geometryRange) continue
                   if (swept(world, drop.radius)) continue
+                  if (drop.diameterMm * 0.001 < angle * world.distanceTo(camera.position)) continue
                   if (!frustum.intersectsSphere(sphere.set(world, drop.radius * 3 + 0.004))) continue
                   const up = 1 + 1.1 * slope, dn = 1 + 0.2 * slope
                   const along = (drop.radius * (up + dn)) / 2
@@ -383,6 +393,7 @@ function dropMaterial(uniforms: Record<string, THREE.IUniform>, contact: number 
       }
     },
   })
+  patchFilmLighting(material)
   return material
 }
 
