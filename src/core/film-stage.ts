@@ -176,7 +176,7 @@ export class FilmStage implements Stage {
     this.scene.background = new THREE.Color(0x23262c)
     this.scene.fog = new THREE.Fog(0x23262c, 60, 420)
     const sun = new THREE.DirectionalLight(0xffffff, 2.2)
-    sun.position.set(-14, 22, 9)
+    sun.position.set(16, 13, 12)
     sun.castShadow = true
     sun.shadow.mapSize.set(4096, 4096)
     const s = sun.shadow.camera
