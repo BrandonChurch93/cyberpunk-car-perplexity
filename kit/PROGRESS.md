@@ -88,10 +88,11 @@ Chunking strategy:
 
 Vetted 2026-11-19. The ledger is `reference/controls.json` (URLs, licenses and scores, no images). The images stay in `reference/cache/controls/`, which git ignores. `npx tsx tools/controls.ts restore` downloads again any image the cache has lost.
 
-- Size: 57 kept of 60 candidates. 1 dropped. 2 candidates still wait on a late juror and stay out of the pool until their third vote arrives.
-- Mean vetting score: 92.5 (the mean of the kept medians). A control is kept when the median of its three juror likelihoods is at least `quality.blind.minControlMean`.
+- Size: 84 kept of 87 candidates. 1 dropped. 2 candidates still wait on a late juror and stay out of the pool until their third vote arrives.
+- Mean vetting score: 93.0 (the mean of the kept medians). A control is kept when the median of its three juror likelihoods is at least `quality.blind.minControlMean`.
 - How it was vetted: each candidate was prepared the way a judged frame is (centre crop to the master aspect, critic size, PNG, no metadata) and sent alone, with the C1 text, to three fresh jurors on three model families. Two families are fixed and the third rotates among four more.
-- Kept by kind: paint with water 8, front wheel 6, lit lamp 6, fine detail 5, rear and exhaust 5, wet supercar at night 9, empty deck at night 5, low wide single car in rain 6, rear with taillights in the wet 5.
+- Kept by kind: paint with water 8, front wheel 6, lit lamp 6, fine detail 5, rear and exhaust 5, wet supercar at night 10, empty deck at night 6, low wide single car in rain 6, rear with taillights in the wet 5, rain-wet neon street at night 27.
+- Neon controls (addendum 002): 27 photographs of rain-wet neon streets added 2026-11-20 and vetted in one pass with 81 one-image juror calls. All 27 kept, medians 85 to 98. `quality.blind.neonControls` asks for 15. Controls for wide frames are drawn from this kind first.
 - Dropped: `kb116048e`. One juror reported a driver behind the side glass, and the pool holds no people.
 - Rule kept from here on: a control whose jurors mention a person, a watermark or a caption is excluded by hand with `npx tsx tools/controls.ts exclude <id> <why>`.
 
@@ -323,6 +324,13 @@ Addendum 002: any issue that asks for less color, fewer signs, less reflection, 
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-20, session 15
+
+- Done: neon street controls vetted in one pass (81 one-image juror calls, 27 of 27 kept, pool now 84). C9 match pack added to the pack builder (target and current hero at one size, three crop pairs: near deck, sign groups, sky with billboard) and C1 draws wide frame controls from the neon streets first. Merged on `dev/p3`: radiator sight line check for the fitted camera, lamp emitters in cube captures, the gray layout of the city restage (parapet, rail, billboard right of center, cyan group left, amber group right), the wide standing water sheet with streak breakup. Key frames 01 arrival and 08 return received and posted.
+- Measured: suite 190 of 190 on the restage merge. C4 re-baselined by the auditor at the new hero camera: 195 master 5, tall 5 (haunch, near wing top and side lead the cost); 360 stays 8 and 8.
+- Found: lamp emitters in the cube put tail lamp red on the door and roof edge at 195, because the cube is captured from inside the hidden body. Fix in work: a lamp-free filtered cube for the vehicle and the deck fallback, the full cube for other receivers. The glitter under the nose is planar reflection taps catching the running light; a firefly clamp in `src/core/reflect` is assigned.
+- Next: world detail (windows, billboard image, sky), sign and billboard light on the deck and body, the reflect fixes, fairing of haunch and near wing, remaining key frames, then round 8.
 
 ### 2026-11-20, session 14
 

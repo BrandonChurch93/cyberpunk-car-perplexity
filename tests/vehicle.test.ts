@@ -165,22 +165,19 @@ describe('vehicle geometry and state', () => {
       const fins = vehicle.root.getObjectByName('recessed front radiator fins')!
       for (const format of [config.formats.master, config.formats.vertical]) {
         const { position } = cameraAt(config.film.heroFrameSeconds, format, vehicle.anchors)
-        const hitAt = (x: number, y: number) => {
-          const aim = new T.Vector3(...fascia(true, 1, x, y, .140))
-          return new T.Raycaster(position, aim.sub(position).normalize()).intersectObject(vehicle.root, true)[0]
+        const hitRadiator = (side: number, aim: T.Vector3) => {
+          const hit = new T.Raycaster(position, aim.sub(position).normalize()).intersectObject(vehicle.root, true)[0]
+          expect([backing.uuid, fins.uuid], hit?.object.name).toContain(hit?.object.uuid)
+          const { x, y, z } = hit.point
+          expect(fascia(true, side, Math.abs(x), y)[2] - z).toBeGreaterThan(.110)
+          return hit.object
         }
         for (const [x, y] of [[.58, .264], [.63, .335], [.69, .365]]) {
-          const hit = hitAt(x, y)
-          expect([backing.uuid, fins.uuid], hit.object.name).toContain(hit.object.uuid)
-          expect(fascia(true, 1, hit.point.x, hit.point.y)[2] - hit.point.z).toBeGreaterThan(.110)
+          hitRadiator(1, new T.Vector3(...fascia(true, 1, x, y, .140)))
         }
-        if (vehicle === full) expect(hitAt(.63, .300).object.uuid).toBe(fins.uuid)
-      }
-      const { position } = cameraAt(config.film.heroFrameSeconds, config.formats.master, vehicle.anchors)
-      for (const y of [.275, .292]) {
-        const aim = new T.Vector3(-.735, y, 2.065)
-        const hit = new T.Raycaster(position, aim.sub(position).normalize()).intersectObject(vehicle.root, true)[0]
-        expect(hit?.object.uuid, hit?.object.name).toBe(backing.uuid)
+        if (vehicle === full) expect(hitRadiator(1, new T.Vector3(...fascia(true, 1, .63, .275, .140)))).toBe(fins)
+        expect(hitRadiator(-1, new T.Vector3(-.735, .275, 2.065))).toBe(vehicle === full ? fins : backing)
+        expect(hitRadiator(-1, new T.Vector3(-.735, .292, 2.065))).toBe(backing)
       }
     }
   })
