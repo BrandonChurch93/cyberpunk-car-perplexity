@@ -553,7 +553,7 @@ describe('vehicle geometry and state', () => {
           const corner = position.clone().addScaledVector(long, run).addScaledVector(out, lateral).addScaledVector(normal, -depth)
           const surface = look(skim, corner)
           const flange = ray.intersectObject(duct)[0]
-          expect([duct, chamber]).toContain(surface.object)
+          expect([duct.uuid, chamber.uuid], surface.object.name).toContain(surface.object.uuid)
           expect(Math.abs(flange.distance - skim.distanceTo(corner))).toBeLessThan(.012)
           if (surface.object === chamber) expect(flange.distance - surface.distance).toBeLessThan(.050)
         }
@@ -990,7 +990,7 @@ describe('vehicle geometry and state', () => {
             .applyQuaternion(orient).add(center)
           const ray = new T.Raycaster(p, axis.clone().negate())
           const hits = ray.intersectObjects([glass, bowl, collar])
-          if (r < .90) expect(hits.map(({ object }) => object)).toEqual([glass, bowl])
+          if (r < .90) expect(hits.map(({ object }) => object.uuid)).toEqual([glass.uuid, bowl.uuid])
           else if (r === .90) expect(hits[0]?.object.uuid).toBe(glass.uuid)
           else expect(hits[0]?.object.uuid).toBe(collar.uuid)
         }

@@ -180,7 +180,7 @@ export function sidePoint(s: number, y: number, side: number): Point {
   const run = shoulder(s) - doorBelt(s)
   const peak = .0018 + .32 * thickness
   const crest = (t: number) => peak - .137 * t + .378 * hinge(t, foldHalf)
-  const close = (thickness - crest(run)) * fairStep(rise, run - .018 - fairPositive(run - .014, .018), run)
+  const close = (thickness - crest(run)) * fairStep(rise, .003, .0031 + fairPositive(run - .003, .012))
   const flank = fairStep(s, .572, .644) * (1 - fairStep(s, .898, .926))
     * (1 - fairStep(-rise, .048, .152))
   const diagonal = crossOffset(s, y)
@@ -222,7 +222,9 @@ export function bonnet(s: number, v: number): Point {
   const fair = mix(weight, v, smooth(v, .73, .95))
   const across = -hoodFoldStrength * foldSlope * (section(x) - mix(section(0), section(w.x), fair))
   const base = mix(w.center, w.y, weight + .05 * v ** 6 * (1 - v))
-  const crown = hoodDome(s) * Math.max(0, 1 - (x / .675) ** 2) ** 2
+  const crownWidth = mix(.675, .642, fairStep(s, .090, .132))
+  const dome = Math.max(0, 1 - (x / crownWidth) ** 2)
+  const crown = hoodDome(s) * dome ** 2 * (1 - (1 - Math.min(1, dome / .36)) ** 3)
   const wingCrown = .005 * fairStep(s, .143, .223) * (1 - fairStep(s, .243, .315))
     * fairStep(v, .60, .84) * (1 - fairStep(v, .92, 1))
   const cowlDrop = .021 * fairStep(s, .127, .236) * (1 - v ** 3)

@@ -33,7 +33,7 @@ const skinLimits = new Map<string, readonly [number, number]>([
   ['foredeck', [.016, .0030]],
   ['front wing', [.015, .0050]],
   ['fascia', [.006, .0010]],
-  ['door and flank', [.09, .020]],
+  ['door and flank', [.050, .020]],
 ])
 
 describe('vehicle skin normal fairness outside creases', () => {
