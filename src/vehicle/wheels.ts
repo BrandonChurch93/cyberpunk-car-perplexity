@@ -1,10 +1,21 @@
 import * as T from 'three'
 import { frontWheel, rearWheel, type WheelSize } from './body'
-import { add, blend, curve, joined, mix, patch, polygon, roundedPath, smooth, tau, type Point } from './geometry'
+import { add, curve, joined, mix, patch, polygon, smooth, tau, type Point } from './geometry'
 import type { Palette } from './materials'
 
 type Profile = ReadonlyArray<readonly [number, number]>
+type Pt2 = readonly [number, number]
+interface LoopSample {
+  readonly p: Pt2
+  readonly n: Pt2
+}
+
 const axisRoll = (axis: number, radius: number, theta: number): Point => [axis, Math.cos(theta) * radius, Math.sin(theta) * radius]
+const polar2 = (radius: number, theta: number): Pt2 => [Math.cos(theta) * radius, Math.sin(theta) * radius]
+const local2 = (theta: number, radial: number, tangent: number): Pt2 => [
+  Math.cos(theta) * radial - Math.sin(theta) * tangent,
+  Math.sin(theta) * radial + Math.cos(theta) * tangent,
+]
 
 function lathe(profile: Profile, segments: number): T.BufferGeometry {
   return new T.LatheGeometry(profile.map(([a, r]) => new T.Vector2(r, a)), segments).rotateZ(-Math.PI / 2)
@@ -55,7 +66,8 @@ function tireGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
     ...grooves.flatMap((v) => [v - .014, v - .004, v + .004, v + .014]),
     .745, .773, .797,
   ])].sort((a, b) => a - b)
-  return patch(position, full ? 576 : 96, rows.length - 1, [0, -1, 0], 0, (_, i) => rows[i])
+  // At u=0.5, v=0.5 the contact flatten + center bulge flip toNormal upward, so [0, 1, 0] keeps the rubber shell outward.
+  return patch(position, full ? 576 : 64, rows.length - 1, [0, 1, 0], 0, (_, i) => rows[i])
 }
 
 function rotor(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, T.BufferGeometry, T.BufferGeometry] {
@@ -109,58 +121,462 @@ function rotor(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, T.
   return [ceramic, joined([...wells, ...ventRibs]), lathe([
     [axis - .008, .115], [axis - .004, .112], [axis - .004, .105], [axis - .015, .104],
     [axis - .015, .098], [axis - .009, .088], [axis - .005, .081], [axis - .005, .047],
-  ], full ? segments / 2 : 36)]
+  ], full ? segments / 2 : 48)]
 }
 
-function spoke(w: WheelSize, theta: number, axial: number, full: boolean): [T.BufferGeometry, T.BufferGeometry] {
-  const rr = w.rim
-  const faceAt = (r: number) => axial - .034 + .034 * smooth(r, .045, rr) - .004 * smooth(r, rr * .8, rr)
-  const local: readonly [number, number][] = [[.042, -.024], [.103, -.0275], [.149, -.0275], [rr * .83, -.076],
-    [rr * .95, -.077], [rr * .99, -.069], [rr * .99, -.037], [rr * .92, -.035], [.183, -.011],
-    [.173, .004], [.185, .020], [rr * .93, .047], [rr * .99, .058], [rr * .99, .093], [rr * .91, .090],
-    [.151, .034], [.103, .0275], [.044, .023]]
-  const point = (r: number, t: number, depth: number): Point => {
-    r = Math.min(r, Math.sqrt((rr - .006) ** 2 - t ** 2))
-    const a = theta + .15 * (r / rr - .48)
-    return [faceAt(Math.hypot(r, t)) - depth,
-      Math.cos(a) * r - Math.sin(a) * t, Math.sin(a) * r + Math.cos(a) * t]
+function filletConvexCCW(pts: readonly Pt2[], radii: readonly number[], cornerSegs: number, maxEdge = .0075): LoopSample[] {
+  const m = pts.length
+  const corners: { s1: Pt2; s2: Pt2; arc: LoopSample[] }[] = []
+  for (let i = 0; i < m; i++) {
+    const prev = pts[(i - 1 + m) % m], cur = pts[i], next = pts[(i + 1) % m]
+    let d1x = cur[0] - prev[0], d1y = cur[1] - prev[1]
+    let d2x = next[0] - cur[0], d2y = next[1] - cur[1]
+    const l1 = Math.hypot(d1x, d1y), l2 = Math.hypot(d2x, d2y)
+    d1x /= l1; d1y /= l1; d2x /= l2; d2y /= l2
+    const cross = d1x * d2y - d1y * d2x
+    if (cross < 1e-4 || radii[i] <= 1e-5) {
+      const nx = (d1y + d2y) * .5, ny = -(d1x + d2x) * .5, nl = Math.hypot(nx, ny) || 1
+      corners.push({ s1: cur, s2: cur, arc: [{ p: cur, n: [nx / nl, ny / nl] }] })
+      continue
+    }
+    const dot = T.MathUtils.clamp(-d1x * d2x - d1y * d2y, -.999, .999)
+    const halfA = .5 * Math.acos(dot)
+    const maxTan = .42 * Math.min(l1, l2)
+    const rad = Math.min(radii[i], maxTan * Math.tan(halfA))
+    const tanLen = rad / Math.tan(halfA)
+    const s1: Pt2 = [cur[0] - d1x * tanLen, cur[1] - d1y * tanLen]
+    const s2: Pt2 = [cur[0] + d2x * tanLen, cur[1] + d2y * tanLen]
+    const cx = s1[0] - d1y * rad, cy = s1[1] + d1x * rad
+    const a0 = Math.atan2(s1[1] - cy, s1[0] - cx)
+    let a1 = Math.atan2(s2[1] - cy, s2[0] - cx)
+    while (a1 < a0) a1 += tau
+    const arc: LoopSample[] = []
+    for (let j = 0; j <= cornerSegs; j++) {
+      const a = mix(a0, a1, j / cornerSegs)
+      const nx = Math.cos(a), ny = Math.sin(a)
+      arc.push({ p: [cx + nx * rad, cy + ny * rad], n: [nx, ny] })
+    }
+    corners.push({ s1, s2, arc })
   }
-  const outline = roundedPath(local.map(([r, t]) => point(r, t, 0)), full ? 4 : 2, .10)
-  const side = Math.sign(outline.reduce((sum, p, i) => {
-    const [, y, z] = outline[(i + 1) % outline.length]
-    return sum + p[1] * z - p[2] * y
-  }, 0))
-  const normalYZ = (a: Point, b: Point) => new T.Vector2(b[2] - a[2], a[1] - b[1]).normalize().multiplyScalar(side)
-  const inner = outline.map((p, i): Point => {
-    const a = normalYZ(outline[(i - 1 + outline.length) % outline.length], p)
-    const b = normalYZ(p, outline[(i + 1) % outline.length])
-    const m = a.clone().add(b).normalize()
-    const bevel = Math.min(.006, .0042 / Math.max(.65, m.dot(b)))
-    const y = p[1] - m.x * bevel, z = p[2] - m.y * bevel
-    const scale = Math.min(1, (rr - .006) / Math.hypot(y, z))
-    return [faceAt(Math.hypot(y, z) * scale), y * scale, z * scale]
+  const out: LoopSample[] = []
+  for (let i = 0; i < m; i++) {
+    const cur = corners[i], next = corners[(i + 1) % m]
+    out.push(...cur.arc)
+    const ex = next.s1[0] - cur.s2[0], ey = next.s1[1] - cur.s2[1]
+    const elen = Math.hypot(ex, ey)
+    const steps = Math.max(1, Math.ceil(elen / maxEdge))
+    if (steps > 1 && elen > 1e-5) {
+      const nx = ey / elen, ny = -ex / elen
+      for (let k = 1; k < steps; k++) {
+        const t = k / steps
+        out.push({ p: [cur.s2[0] + ex * t, cur.s2[1] + ey * t], n: [nx, ny] })
+      }
+    }
+  }
+  return out
+}
+
+function circleLoopCCW(center: Pt2, radius: number, segments: number): LoopSample[] {
+  return Array.from({ length: segments }, (_, i) => {
+    const a = (i / segments) * tau
+    const nx = Math.cos(a), ny = Math.sin(a)
+    return { p: [center[0] + nx * radius, center[1] + ny * radius], n: [nx, ny] }
   })
-  const skin = polygon(inner, [1, 0, 0])
-  const pos = skin.getAttribute('position'), normal = skin.getAttribute('normal')
-  const n = new T.Vector3()
-  for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i), z = pos.getZ(i), r = Math.hypot(y, z)
-    const slope = (faceAt(r + .001) - faceAt(r - .001)) / .002
-    n.set(1, -slope * y / r, -slope * z / r).normalize()
-    normal.setXYZ(i, n.x, n.y, n.z)
+}
+
+function sweepLoopRibbon(
+  loop: readonly LoopSample[],
+  stations: ReadonlyArray<readonly [number, number]>,
+  baseX: (y: number, z: number) => number,
+): T.BufferGeometry {
+  const m = loop.length, rows = stations.length
+  const pos: number[] = [], uv: number[] = [], idx: number[] = []
+  const arcU: number[] = [0]
+  for (let i = 1; i <= m; i++) {
+    const a = loop[i - 1].p, b = loop[i % m].p
+    arcU.push(arcU[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1]))
   }
-  const part = (arr: Point[], u: number) => {
-    const phase = u * arr.length
-    return blend(arr[Math.floor(phase) % arr.length], arr[(Math.floor(phase) + 1) % arr.length], phase % 1)
+  for (let j = 0; j < rows; j++) {
+    const [offset, dx] = stations[j]
+    for (let i = 0; i <= m; i++) {
+      const { p, n } = loop[i % m]
+      const y = p[0] + n[0] * offset, z = p[1] + n[1] * offset
+      pos.push(baseX(y, z) + dx, y, z)
+      uv.push(arcU[i], offset)
+    }
   }
-  const bevel = patch((u, v) => {
-    const outer = part(outline, u)
-    const q = blend(part(inner, u), outer, Math.sin(Math.PI * .5 * Math.min(1, v * 3)))
-    const depth = .0045 * Math.min(1, v * 3) + .015 * Math.max(0, (v - 1 / 3) * 1.5)
-    return [q[0] - depth, q[1], q[2]]
-  }, inner.length, full ? 6 : 3, [1, 0, 0])
-  const interior = polygon(outline.map(([x, y, z]) => [x - .0195, y, z]), [-1, 0, 0])
-  return [skin, joined([bevel, interior])]
+  const stride = m + 1
+  for (let j = 0; j < rows - 1; j++) {
+    for (let i = 0; i < m; i++) {
+      const a = j * stride + i, b = a + 1, c = a + stride, d = c + 1
+      idx.push(a, c, d, a, d, b)
+    }
+  }
+  const g = new T.BufferGeometry()
+  g.setAttribute('position', new T.Float32BufferAttribute(pos, 3))
+  g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2))
+  g.setIndex(idx)
+  g.computeVertexNormals()
+  return g
+}
+
+function refineInterior2D(verts: Pt2[], tris: [number, number, number][], maxEdge: number, passes: number): void {
+  const edgeKey = (a: number, b: number) => (a < b ? `${a}:${b}` : `${b}:${a}`)
+  for (let pass = 0; pass < passes; pass++) {
+    const counts = new Map<string, [number, number, number]>()
+    for (const [a, b, c] of tris) {
+      for (const [u, v] of [[a, b], [b, c], [c, a]] as const) {
+        const k = edgeKey(u, v)
+        const cur = counts.get(k)
+        if (cur) cur[2]++
+        else counts.set(k, [u, v, 1])
+      }
+    }
+    const mids = new Map<string, number>()
+    for (const [k, [u, v, count]] of counts) {
+      if (count !== 2) continue
+      const pu = verts[u], pv = verts[v]
+      if (Math.hypot(pu[0] - pv[0], pu[1] - pv[1]) <= maxEdge) continue
+      mids.set(k, verts.length)
+      verts.push([(pu[0] + pv[0]) * .5, (pu[1] + pv[1]) * .5])
+    }
+    if (mids.size === 0) break
+    const next: [number, number, number][] = []
+    for (const [a, b, c] of tris) {
+      const mab = mids.get(edgeKey(a, b)), mbc = mids.get(edgeKey(b, c)), mca = mids.get(edgeKey(c, a))
+      if (mab !== undefined && mbc !== undefined && mca !== undefined) {
+        next.push([a, mab, mca], [mab, b, mbc], [mca, mbc, c], [mab, mbc, mca])
+      } else if (mab !== undefined && mbc !== undefined) {
+        next.push([a, mab, c], [mab, mbc, c], [mab, b, mbc])
+      } else if (mbc !== undefined && mca !== undefined) {
+        next.push([a, b, mbc], [a, mbc, mca], [mca, mbc, c])
+      } else if (mca !== undefined && mab !== undefined) {
+        next.push([a, mab, mca], [mab, b, c], [mab, c, mca])
+      } else if (mab !== undefined) {
+        next.push([a, mab, c], [mab, b, c])
+      } else if (mbc !== undefined) {
+        next.push([a, b, mbc], [a, mbc, c])
+      } else if (mca !== undefined) {
+        next.push([a, b, mca], [mca, b, c])
+      } else {
+        next.push([a, b, c])
+      }
+    }
+    tris.length = 0
+    tris.push(...next)
+  }
+}
+
+function buildPlanarSurface(
+  outer: readonly Pt2[],
+  holes: ReadonlyArray<readonly Pt2[]>,
+  heightAt: (y: number, z: number) => number,
+  outwardSign: 1 | -1,
+  maxInteriorEdge: number,
+  passes = 2,
+): T.BufferGeometry {
+  const contour = outer.map(([y, z]) => new T.Vector2(y, z))
+  const holeVecs = holes.map((h) => h.map(([y, z]) => new T.Vector2(y, z)))
+  const rawFaces = T.ShapeUtils.triangulateShape(contour, holeVecs)
+  const verts: Pt2[] = [...contour, ...holeVecs.flat()].map((v) => [v.x, v.y])
+  const tris: [number, number, number][] = rawFaces.map(([a, b, c]) => {
+    const pa = verts[a], pb = verts[b], pc = verts[c]
+    const area2 = (pb[0] - pa[0]) * (pc[1] - pa[1]) - (pb[1] - pa[1]) * (pc[0] - pa[0])
+    return (area2 * outwardSign > 0 ? [a, b, c] : [a, c, b]) as [number, number, number]
+  })
+  if (maxInteriorEdge > 0) refineInterior2D(verts, tris, maxInteriorEdge, passes)
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = []
+  const eps = .0006
+  for (const [y, z] of verts) {
+    const x = heightAt(y, z)
+    const dxdy = (heightAt(y + eps, z) - heightAt(y - eps, z)) / (2 * eps)
+    const dxdz = (heightAt(y, z + eps) - heightAt(y, z - eps)) / (2 * eps)
+    const nx = outwardSign, ny = -dxdy * outwardSign, nz = -dxdz * outwardSign
+    const nl = Math.hypot(nx, ny, nz) || 1
+    pos.push(x, y, z)
+    nrm.push(nx / nl, ny / nl, nz / nl)
+    uv.push(y, z)
+  }
+  const g = new T.BufferGeometry()
+  g.setAttribute('position', new T.Float32BufferAttribute(pos, 3))
+  g.setAttribute('normal', new T.Float32BufferAttribute(nrm, 3))
+  g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2))
+  g.setIndex(tris.flat())
+  return g
+}
+
+function forgedWheelAssembly(w: WheelSize, full: boolean): {
+  forging: T.BufferGeometry
+  machinedSpokes: T.BufferGeometry
+  flange: T.BufferGeometry
+  hub: T.BufferGeometry
+  cap: T.BufferGeometry
+  lugs: T.BufferGeometry
+} {
+  const H = w.width / 2, R = w.rim
+  const face = H - .008, hubPlane = face - .030, hubFace = hubPlane + .0018
+  const rCap = .130 * R, rCollar = .154 * R, rWebOuter = R - .0026
+  const rWinOuter = R - .0142
+  const theta0 = .22
+  const branchSpan = .468
+  const stemRootHalf = .072 * R
+  const stemForkHalf = .078 * R
+  const branchBaseHalf = .056 * R
+  const rPentInner = .192 * R
+  const rFork = .578 * R
+  const rForkJoin = .956 * R
+  const tDraft = .0026, tChamfer = .0036, tSeam = tDraft + tChamfer
+
+  const f0 = polar2(rFork, 0), j0 = polar2(rForkJoin, branchSpan)
+  const bdx = j0[0] - f0[0], bdy = j0[1] - f0[1], blen = Math.hypot(bdx, bdy)
+  const bux = bdx / blen, buy = bdy / blen
+  const nInX = buy, nInY = -bux
+  const triEdgePt: Pt2 = [f0[0] + nInX * branchBaseHalf, f0[1] + nInY * branchBaseHalf]
+  const crotchR = triEdgePt[0] - (triEdgePt[1] / buy) * bux
+  const triB = 2 * crotchR * bux, triC = crotchR * crotchR - rWinOuter * rWinOuter
+  const sTri = (-triB + Math.sqrt(Math.max(0, triB * triB - 4 * triC))) * .5
+  const triHalfAngle = Math.atan2(sTri * buy, crotchR + sTri * bux)
+
+  const pentOuterPt: Pt2 = [f0[0] - nInX * branchBaseHalf, f0[1] - nInY * branchBaseHalf]
+  const sElbow = (stemForkHalf - pentOuterPt[1]) / buy
+  const elbowX = pentOuterPt[0] + sElbow * bux
+  const pDot = pentOuterPt[0] * bux + pentOuterPt[1] * buy
+  const pC = pentOuterPt[0] * pentOuterPt[0] + pentOuterPt[1] * pentOuterPt[1] - rWinOuter * rWinOuter
+  const sPentOuter = -pDot + Math.sqrt(Math.max(0, pDot * pDot - pC))
+  const pentBranchOuterAngle = Math.atan2(pentOuterPt[1] + sPentOuter * buy, pentOuterPt[0] + sPentOuter * bux)
+
+  const windowLoops: LoopSample[][] = []
+  const pocketLoops: LoopSample[][] = []
+  const rimSlotLoops: LoopSample[][] = []
+  const lugCenters: Pt2[] = []
+  const lugLoops: LoopSample[][] = []
+  const rLug = .220 * R, rLugWell = .0072, tLugSeam = .0018
+  const cornerSegs = full ? 5 : 2
+  const maxLoopEdge = full ? .0095 : .026
+
+  for (let k = 0; k < 5; k++) {
+    const th = theta0 + (k / 5) * tau
+    const thNext = th + tau / 5
+
+    const pentArcSteps = full ? 4 : 2
+    const aPent0 = th + pentBranchOuterAngle
+    const aPent1 = thNext - pentBranchOuterAngle
+    const pentPts: Pt2[] = [
+      local2(th, rPentInner, stemRootHalf),
+      local2(th, elbowX, stemForkHalf),
+    ]
+    for (let j = 0; j <= pentArcSteps; j++) {
+      pentPts.push(polar2(rWinOuter, mix(aPent0, aPent1, j / pentArcSteps)))
+    }
+    pentPts.push(
+      local2(thNext, elbowX, -stemForkHalf),
+      local2(thNext, rPentInner, -stemRootHalf),
+    )
+    const pentRadii = [
+      .0042, .0062, .0046,
+      ...Array.from({ length: pentArcSteps - 1 }, () => 0),
+      .0046, .0062, .0042,
+    ]
+    windowLoops.push(filletConvexCCW(pentPts, pentRadii, cornerSegs, maxLoopEdge))
+
+    const triArcSteps = full ? 8 : 4
+    const triPts: Pt2[] = [polar2(crotchR, th)]
+    for (let j = 0; j <= triArcSteps; j++) {
+      triPts.push(polar2(rWinOuter, th + mix(-triHalfAngle, triHalfAngle, j / triArcSteps)))
+    }
+    const triRadii = [.0052, .0046, ...Array.from({ length: triArcSteps - 1 }, () => 0), .0046]
+    windowLoops.push(filletConvexCCW(triPts, triRadii, cornerSegs, maxLoopEdge))
+
+    const pR0 = .290 * R, pR1 = .515 * R, pTip = .560 * R, pHalf0 = .0145 * R, pHalf1 = .0180 * R
+    const pocketPts: Pt2[] = [
+      local2(th, pR0, -pHalf0),
+      local2(th, pR1, -pHalf1),
+      local2(th, pTip, 0),
+      local2(th, pR1, pHalf1),
+      local2(th, pR0, pHalf0),
+    ]
+    pocketLoops.push(filletConvexCCW(pocketPts, [.0020, .0030, .0016, .0030, .0020], full ? 3 : 1, maxLoopEdge))
+
+    const sA0 = aPent0 + .018, sA1 = aPent1 - .018
+    if (sA1 - sA0 > .035) {
+      const sR0 = R - .0062, sR1 = R - .0044
+      const slotPts: Pt2[] = [
+        polar2(sR0, sA0), polar2(sR1, sA0), polar2(sR1, sA1), polar2(sR0, sA1),
+      ]
+      rimSlotLoops.push(filletConvexCCW(slotPts, [.0006, .0006, .0006, .0006], full ? 2 : 1, maxLoopEdge))
+    }
+
+    const lugCenter = polar2(rLug, th)
+    lugCenters.push(lugCenter)
+    lugLoops.push(circleLoopCCW(lugCenter, rLugWell, full ? 18 : 8))
+  }
+
+  const ridgeTent = (d: number, halfW: number): number => {
+    if (d >= halfW) return 0
+    const u = d / halfW
+    return 1 - Math.sqrt(u * u + .025) / Math.sqrt(1.025)
+  }
+  const dishAt = (r: number): number => {
+    const t = T.MathUtils.clamp((r - rCap) / (rWebOuter - rCap), 0, 1)
+    const innerDrop = (1 - smooth(r, rCap, .52 * R)) * .0175
+    const outerRise = smooth(r, .46 * R, rWebOuter) * .0105
+    return face - .0135 - innerDrop + outerRise + .0030 * t
+  }
+  const spokeCrown = (y: number, z: number): number => {
+    let crown = 0
+    for (let k = 0; k < 5; k++) {
+      const th = theta0 + (k / 5) * tau
+      const ct = Math.cos(th), st = Math.sin(th)
+      const rx = y * ct + z * st
+      const ay = Math.abs(-y * st + z * ct)
+      if (rx > rCollar && rx < rFork + .022) {
+        const railOffset = mix(.034 * R, .048 * R, T.MathUtils.clamp((rx - rCollar) / (rFork - rCollar), 0, 1))
+        const wAx = smooth(rx, rCollar + .004, rCollar + .022) * (1 - smooth(rx, rFork - .012, rFork + .018))
+        crown += .0020 * wAx * ridgeTent(Math.abs(ay - railOffset), .028 * R)
+      }
+      const px = rx - f0[0], py = ay - f0[1]
+      const s = T.MathUtils.clamp(px * bux + py * buy, 0, blen)
+      const dB = Math.hypot(px - s * bux, py - s * buy)
+      const wBr = smooth(s, 0, .016) * (1 - smooth(s, blen - .014, blen))
+      crown += .0025 * wBr * ridgeTent(dB, .052 * R)
+    }
+    return Math.min(.0030, crown)
+  }
+  const backAt = (r: number): number => {
+    const midClear = smooth(r, .46 * R, .56 * R) * (1 - smooth(r, .86 * R, .94 * R))
+    return dishAt(r) - (.0195 - .0032 * midClear)
+  }
+  const webHeight = (y: number, z: number): number => dishAt(Math.hypot(y, z)) + spokeCrown(y, z)
+  const backHeight = (y: number, z: number): number => backAt(Math.hypot(y, z))
+
+  const collarVerts = Array.from({ length: 5 }, (_, k) => polar2(rCollar, theta0 + (k / 5) * tau))
+  const collarLoop = filletConvexCCW(collarVerts, [.0085, .0085, .0085, .0085, .0085], full ? 6 : 3, maxLoopEdge)
+  const collarSeamOffset = .0022
+  const collarSeamPts = collarLoop.map(({ p, n }) => [p[0] + n[0] * collarSeamOffset, p[1] + n[1] * collarSeamOffset] as Pt2)
+
+  const outerCount = full ? 100 : 60
+  const outerWebPts = Array.from({ length: outerCount }, (_, i) => polar2(rWebOuter, (i / outerCount) * tau))
+  const windowSeamHoles = windowLoops.map((loop) => loop.map(({ p, n }) => [p[0] + n[0] * tSeam, p[1] + n[1] * tSeam] as Pt2))
+  const pocketSeamOffset = .0018
+  const pocketSeamHoles = pocketLoops.map((loop) => loop.map(({ p, n }) => [p[0] + n[0] * pocketSeamOffset, p[1] + n[1] * pocketSeamOffset] as Pt2))
+  const slotSeamOffset = .0006
+  const slotSeamHoles = rimSlotLoops.map((loop) => loop.map(({ p, n }) => [p[0] + n[0] * slotSeamOffset, p[1] + n[1] * slotSeamOffset] as Pt2))
+  const lugSeamHoles = lugLoops.map((loop) => loop.map(({ p, n }) => [p[0] + n[0] * tLugSeam, p[1] + n[1] * tLugSeam] as Pt2))
+
+  const frontWeb = buildPlanarSurface(
+    outerWebPts,
+    [collarSeamPts, ...lugSeamHoles, ...pocketSeamHoles, ...slotSeamHoles, ...windowSeamHoles],
+    webHeight,
+    1,
+    full ? .0090 : .024,
+    2,
+  )
+  const backCollarPts = collarLoop.map(({ p }) => p)
+  const backWindowHoles = windowLoops.map((loop) => loop.map(({ p, n }) => [p[0] + n[0] * .0008, p[1] + n[1] * .0008] as Pt2))
+  const backWeb = buildPlanarSurface(outerWebPts, [backCollarPts, ...backWindowHoles], backHeight, -1, 0)
+
+  const forgedParts: T.BufferGeometry[] = [frontWeb, backWeb]
+  const machinedParts: T.BufferGeometry[] = []
+
+  for (const loop of windowLoops) {
+    const sidewall: Profile = full
+      ? [[.0008, -.0195], [0, -.0186], [.0014, -.0092], [tDraft, -.0019]]
+      : [[.0008, -.0195], [0, -.0186], [tDraft, -.0019]]
+    const chamfer: Profile = [[tDraft, -.0019], [tSeam, 0]]
+    forgedParts.push(sweepLoopRibbon(loop, sidewall, webHeight))
+    machinedParts.push(sweepLoopRibbon(loop, chamfer, webHeight))
+  }
+
+  for (const loop of pocketLoops) {
+    const floorDepth = -.0046
+    forgedParts.push(
+      sweepLoopRibbon(loop, [[0, floorDepth], [.0007, -.0012]], webHeight),
+      polygon(loop.map(({ p }) => [webHeight(p[0], p[1]) + floorDepth, p[0], p[1]] as Point), [1, 0, 0]),
+    )
+    machinedParts.push(sweepLoopRibbon(loop, [[.0007, -.0012], [pocketSeamOffset, 0]], webHeight))
+  }
+
+  for (const loop of rimSlotLoops) {
+    const slotDepth = -.0026
+    forgedParts.push(
+      sweepLoopRibbon(loop, [[0, slotDepth], [slotSeamOffset, 0]], webHeight),
+      polygon(loop.map(({ p }) => [webHeight(p[0], p[1]) + slotDepth, p[0], p[1]] as Point), [1, 0, 0]),
+    )
+  }
+
+  const bezelFloorX = hubPlane - .0015
+  machinedParts.push(sweepLoopRibbon(collarLoop, [
+    [0, bezelFloorX - dishAt(rCollar)],
+    [.0011, .0012],
+    [collarSeamOffset, 0],
+  ], webHeight))
+
+  const lugFloorX = hubPlane + .0012
+  for (let k = 0; k < 5; k++) {
+    const loop = lugLoops[k]
+    const base = webHeight(lugCenters[k][0], lugCenters[k][1])
+    forgedParts.push(
+      sweepLoopRibbon(loop, [[0, lugFloorX - base], [.0012, -.0016]], webHeight),
+      polygon(loop.map(({ p }) => [lugFloorX, p[0], p[1]] as Point), [1, 0, 0]),
+    )
+    machinedParts.push(sweepLoopRibbon(loop, [[.0012, -.0016], [tLugSeam, 0]], webHeight))
+  }
+
+  const barrelCount = full ? 108 : 36
+  // Closed connected stepped barrel: decreasing axial coordinates keep inner barrel and lip steps facing outward/inward toward the lens.
+  const barrel = lathe([
+    [face - .012, R + .007], [face - .0015, R + .0058], [face + .0008, R + .0030],
+    [face + .0008, R + .0004], [face - .0002, R - .0026], [face - .0042, R - .0038],
+    [face - .0062, R - .0068], [face - .0125, R - .0076], [face - .0152, R - .0128],
+    [face - .0240, R - .0142], [face - .036, R - .0178], [.020, R - .0204],
+    [-.028, R - .0220], [-.078, R - .0220], [-w.rimWidth / 2 + .014, R - .0150],
+    [-w.rimWidth / 2, R + .004], ...(full ? [[-w.rimWidth / 2, R + .0075], [face - .012, R + .0075], [face - .012, R + .007]] as const : []),
+  ], barrelCount)
+  forgedParts.push(barrel)
+
+  const flange = lathe([
+    [face + .0009, R + .0005], [face - .0001, R - .0025], [face - .0040, R - .0037],
+  ], barrelCount)
+
+  const ringSegs = full ? 60 : 28
+  const hub = lathe([
+    [hubPlane - .0035, rCollar + .003], [hubPlane, rCollar], [hubPlane, rCap - .002],
+    [hubPlane - .0020, rCap - .003], [hubPlane - .0020, .0002],
+  ], ringSegs)
+
+  const capRing = lathe([
+    [hubPlane - .0018, rCap + .0006], [hubPlane + .0013, rCap - .0008], [hubPlane + .0014, rCap - .0038],
+    [hubPlane + .0005, rCap - .0052], [hubPlane + .0005, rCap * .56],
+  ], ringSegs)
+  const pentCapPts: Point[] = Array.from({ length: 5 }, (_, i) => axisRoll(hubFace, rCap * .44, (i / 5) * tau + theta0))
+  const pentCapBase: Point[] = Array.from({ length: 5 }, (_, i) => axisRoll(hubPlane + .0005, rCap * .58, (i / 5) * tau + theta0))
+  const capFacets: T.BufferGeometry[] = [polygon(pentCapPts, [1, 0, 0])]
+  for (let i = 0; i < 5; i++) {
+    const j = (i + 1) % 5
+    capFacets.push(polygon([pentCapBase[i], pentCapBase[j], pentCapPts[j], pentCapPts[i]], [
+      1, (pentCapBase[i][1] + pentCapBase[j][1]) * .35, (pentCapBase[i][2] + pentCapBase[j][2]) * .35,
+    ]))
+  }
+  const cap = joined([capRing, ...capFacets])
+
+  const lugGeoms: T.BufferGeometry[] = []
+  for (const [ly, lz] of lugCenters) {
+    const bolt = lathe([
+      [lugFloorX, .0058], [lugFloorX + .0016, .0054], [lugFloorX + .0052, .0047],
+      [lugFloorX + .0056, .0042], [lugFloorX + .0056, .0026], [lugFloorX + .0022, .0022],
+      [lugFloorX + .0022, .0002],
+    ], full ? 12 : 8).translate(0, ly, lz)
+    lugGeoms.push(bolt)
+  }
+
+  return {
+    forging: joined(forgedParts),
+    machinedSpokes: joined(machinedParts),
+    flange,
+    hub,
+    cap,
+    lugs: joined(lugGeoms),
+  }
 }
 
 function caliper(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, T.BufferGeometry, T.BufferGeometry] {
@@ -208,36 +624,52 @@ function caliper(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, 
 }
 
 export function createWheels(parent: T.Group, m: Palette, full: boolean): Point {
+  const wheelGloss = m.tag(new T.MeshPhysicalMaterial({
+    color: full ? 0x22252b : 0x383d46,
+    metalness: full ? .64 : .44,
+    roughness: full ? .19 : .25,
+    clearcoat: full ? .94 : .72,
+    clearcoatRoughness: .10,
+    specularIntensity: .92,
+    envMapIntensity: 1.45,
+  }), 'none')
+  const wheelMachined = m.tag(new T.MeshPhysicalMaterial({
+    color: full ? 0x6a707a : 0x6a707a,
+    metalness: full ? .76 : .52,
+    roughness: .22,
+    clearcoat: .86,
+    clearcoatRoughness: .10,
+    envMapIntensity: 1.55,
+  }), 'none')
+  const wheelHardware = m.tag(new T.MeshPhysicalMaterial({
+    color: full ? 0x727a86 : 0x646b76,
+    metalness: full ? .86 : .55,
+    roughness: .22,
+    clearcoat: .60,
+    envMapIntensity: 1.40,
+  }), 'none')
+  const hatFinish = m.tag(new T.MeshPhysicalMaterial({
+    color: full ? 0x1c1f24 : 0x2c3037,
+    metalness: full ? .68 : .45,
+    roughness: .32,
+    clearcoat: .35,
+  }), 'none')
+
   let anchor: Point = [0, 0, 0]
   for (const w of [frontWheel, rearWheel]) {
     const H = w.width / 2, R = w.rim
     const axis = H - .058, face = H - .008, hubPlane = face - .030, hubFace = hubPlane + .0018
-    const count = full ? 144 : 72
+    const count = full ? 144 : 48
     const tire = tireGeometry(w, full)
-    const barrel = lathe([
-      [-w.rimWidth / 2, R + .004], [-w.rimWidth / 2 + .010, R - .013], [-.039, R - .021],
-      [-.006, R - .021], [.025, R - .017], [face - .019, R - .010], [face - .006, R - .007],
-      [face - .001, R - .002], [face, R + .003], [face - .007, R + .006],
-    ], count)
-    const hub = disk(.084, .023, hubPlane - .0115, count)
-    const cap = disk(.028, .006, hubFace - .003, 64)
-    const forging: T.BufferGeometry[] = [barrel, lathe([
-      [hubPlane - .010, .089], [hubPlane - .005, .093], [hubPlane - .001, .087], [hubPlane, .084],
-    ], count)]
-    const faces: T.BufferGeometry[] = []
-    for (let i = 0; i < 5; i++) {
-      const [skin, side] = spoke(w, (i / 5) * tau + .10, face, full)
-      faces.push(skin)
-      forging.push(side)
-    }
-    const faceBits: T.BufferGeometry[] = [
-      lathe([[face - .001, R - .003], [face + .001, R + .001], [face - .0002, R + .0034]], count),
-    ]
-    const lugs: T.BufferGeometry[] = []
-    for (let i = 0; i < 5; i++) {
-      const [, y, z] = axisRoll(0, .051, tau * i / 5 + .33)
-      lugs.push(disk(.0106, .010, hubPlane - .001, 6).translate(0, y, z))
-    }
+    const { forging, machinedSpokes, flange, hub, cap, lugs } = forgedWheelAssembly(w, full)
+    const [brake, apertures, hat] = rotor(w, full, axis)
+    const [castCaliper, clips, fasteners] = caliper(w, full, axis)
+    const pins = joined(Array.from({ length: 10 }, (_, i) => {
+      const [, y, z] = axisRoll(0, .1065, tau * i / 10 + .134)
+      return lathe([
+        [axis - .0035, .0064], [axis + .0018, .0058], [axis + .0018, .0031], [axis - .0030, .0027],
+      ], full ? 16 : 10).translate(0, y, z)
+    }))
     const relief: T.BufferGeometry[] = []
     {
       const outerSidewall = curve([
@@ -245,39 +677,32 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
         [w.radius - .010, .93], [w.radius, .67],
       ])
       const sideX = (r: number) => outerSidewall(r) * H - treadInset(w, r)
-      for (const [r, half, rise] of [[R + .017, .0022, .0015], [w.radius - .044, .0014, .0012], [w.radius - .037, .0013, .0014]]) {
-        relief.push(lathe([[sideX(r + half) - .001, r + half], [sideX(r) + rise, r], [sideX(r - half) - .001, r - half]], full ? count : 56))
+      for (const [r, half, rise] of [[R + .015, .0038, .0018], [w.radius - .044, .0015, .0011], [w.radius - .036, .0014, .0012]]) {
+        relief.push(lathe([[sideX(r + half) - .0012, r + half], [sideX(r) + rise, r], [sideX(r - half) - .0012, r - half]], count))
       }
     }
-    const forged = joined(forging), milled = joined(faces), hardware = joined(faceBits), [brake, apertures, hat] = rotor(w, full, axis)
-    const [castCaliper, clips, fasteners] = caliper(w, full, axis)
-    const pins = joined(Array.from({ length: 10 }, (_, i) => {
-      const [, y, z] = axisRoll(0, .1095, tau * i / 10 + .134)
-      return disk(.0037, .003, axis - .004, full ? 12 : 6).translate(0, y, z)
-    }))
-    const lugNuts = joined(lugs)
-    const sidewall = relief.length > 0 ? joined(relief) : null
+    const sidewall = joined(relief)
     for (const side of [1, -1]) {
       const group = new T.Group()
       group.name = w === frontWheel ? 'front wheel' : 'rear wheel'
       group.position.set(w.x * side, w.loaded, w.z)
       group.scale.x = side
       add(group, 'loaded rubber and tread', tire, m.tire)
-      add(group, 'forged divided spokes and barrel', forged, m.forged)
-      add(group, 'diamond cut spoke faces', milled, m.spoke)
-      add(group, 'machined flange', hardware, m.brushed)
-      add(group, 'flat recessed hub plate', hub, m.forged)
-      add(group, 'flat center cap', cap, m.forged)
-      add(group, 'five lug nuts', lugNuts, m.brushed)
+      add(group, 'forged divided spokes and barrel', forging, wheelGloss)
+      add(group, 'diamond cut spoke faces', machinedSpokes, wheelMachined)
+      add(group, 'machined flange', flange, wheelMachined)
+      add(group, 'flat recessed hub plate', hub, wheelGloss)
+      add(group, 'flat center cap', cap, wheelGloss)
+      add(group, 'five lug nuts', lugs, wheelHardware)
       add(group, 'drilled ceramic rotor', brake, m.brake)
       add(group, 'recessed drill wells and rotor vents', apertures, m.dark)
-      add(group, 'floating rotor hat', hat, m.forged)
-      add(group, 'rotor hat bobbins', pins, m.brushed)
+      add(group, 'floating rotor hat', hat, hatFinish)
+      add(group, 'rotor hat bobbins', pins, wheelHardware)
       add(group, 'recessed brake shield', disk(R - .018, .008, -.054, full ? 64 : 32), m.dark)
       add(group, 'fixed brake caliper', castCaliper, m.caliper)
       add(group, 'caliper pin seats', clips, m.matte)
-      add(group, 'caliper pin heads', fasteners, m.brushed)
-      if (sidewall) add(group, 'molded sidewall relief', sidewall, m.tire)
+      add(group, 'caliper pin heads', fasteners, wheelHardware)
+      add(group, 'molded sidewall relief', sidewall, m.tire)
       parent.add(group)
     }
     if (w === frontWheel) anchor = [w.x + hubFace, w.loaded, w.z]
