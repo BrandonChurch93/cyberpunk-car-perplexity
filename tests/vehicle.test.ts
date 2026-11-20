@@ -121,6 +121,33 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('carries the upper haunch fold across the deck and clears the quarter at the rear arch', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const body = vehicle.root.getObjectByName('closed body panels and returns')!
+      const hit = (y: number, z: number) => new T.Raycaster(new T.Vector3(2, y, z), new T.Vector3(-1, 0, 0))
+        .intersectObject(body)[0]
+      for (const [s, y] of [[.697, 1.047], [.750, 1.015], [.808, .975]]) {
+        const a = hit(y - .004, zAt(s)), b = hit(y + .004, zAt(s))
+        const turn = T.MathUtils.radToDeg(a.normal!.angleTo(b.normal!))
+        expect(turn).toBeGreaterThan(15)
+        expect(turn).toBeLessThan(25)
+      }
+      const tangent = rearWheel.z + rearWheel.arch
+      expect(hit(rearWheel.loaded, tangent - .012)).toBeUndefined()
+      expect(hit(rearWheel.loaded, tangent + .006).point.x).toBeGreaterThan(rearWheel.x)
+      const inside = hit(.622, tangent - .002), outside = hit(.622, tangent + .002)
+      expect(T.MathUtils.radToDeg(inside.normal!.angleTo(outside.normal!))).toBeLessThan(8)
+      for (const [s, y] of [[.629, .766], [.646, .790], [.670, .824]]) {
+        const ray = new T.Raycaster(new T.Vector3(2, y, zAt(s)), new T.Vector3(-1, 0, 0))
+        const throat = ray.intersectObject(vehicle.root, true)[0]
+        expect(throat.object.name).toBe('stowage, seals and wheelhouse liners')
+        expect(hit(y - .032, zAt(s)).point.x - throat.point.x).toBeGreaterThan(.045)
+        expect(hit(y + .040, zAt(s)).point.x - throat.point.x).toBeGreaterThan(.045)
+      }
+    }
+  })
+
   it.each(['blockout', 'full'] as const)('rests at the origin and meets factory dimensions in %s', (detail) => {
     const vehicle = detail === 'full' ? full : blockout
     const whole = setFrom(vehicle.root)
