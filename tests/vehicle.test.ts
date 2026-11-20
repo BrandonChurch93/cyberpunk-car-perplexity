@@ -549,16 +549,19 @@ describe('vehicle geometry and state', () => {
     }
   })
 
-  it('keeps full-height rear-facing edges on all four diffuser blades', () => {
+  it('keeps rear-facing diffuser blade edges below the bumper lip', () => {
     for (const vehicle of [full, blockout]) {
       vehicle.root.updateMatrixWorld(true)
+      const blades = vehicle.root.getObjectByName('thin graphite diffuser blades') as T.Mesh
+      blades.geometry.computeBoundingBox()
+      expect(blades.geometry.boundingBox!.max.y).toBeLessThan(.538)
       const { position } = cameraAt(950 / config.film.fps, config.formats.preview, vehicle.anchors)
       for (const eye of [position, new T.Vector3(2.8, .75, -5.25)]) for (const side of [-1, 1]) {
         for (const [x, y, z] of [
-          [.4237, .5977, -2.3979], [.4254, .5687, -2.4420], [.4281, .5300, -2.4343],
-          [.4312, .4914, -2.4283], [.4346, .4527, -2.4256], [.4391, .4044, -2.4206],
-          [.6517, .5918, -2.3011], [.6554, .5636, -2.2975], [.6614, .5261, -2.2927],
-          [.6682, .4886, -2.2885], [.6757, .4511, -2.2844], [.6858, .4043, -2.2781],
+          [.42741, .48303, -2.43442], [.42963, .46428, -2.42908], [.43203, .44553, -2.42565],
+          [.43546, .42053, -2.42315], [.43817, .40178, -2.42050],
+          [.65166, .51733, -2.29931], [.65537, .49909, -2.29570], [.65980, .48084, -2.29209],
+          [.67768, .42000, -2.28149], [.68372, .40175, -2.27774],
         ]) {
           const ray = new T.Raycaster(eye, new T.Vector3(side * x, y, z).sub(eye).normalize())
           const hit = ray.intersectObject(vehicle.root, true)[0]

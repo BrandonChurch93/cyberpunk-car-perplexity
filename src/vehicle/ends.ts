@@ -290,10 +290,12 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, full ? 56 : 48, full ? 11 : 7, outRear, full ? .003 : 0))
     rearPaint.push(patch((u, v) => {
       const x = (.979 - .024 * v) * u
-      const y = mix(tailLower(x), tailUnderSlot(x) + .002, v)
-      const wrap = .043 * (1 - smooth(x, .185, .435)) * smooth(y, .516, .580) * (1 - smooth(y, .595, .716))
-      const depth = mix(-.038, -.014, v) + .055 * smooth(x, .35, .89) * (1 - v) ** 1.20 - wrap
-      return r(x, y, depth)
+      const low = tailLower(x), high = tailUnderSlot(x) + .002
+      const y = mix(low, high, v)
+      const depth = mix(-.038, -.014, v) + .055 * smooth(x, .35, .89) * (1 - v) ** 1.20
+      const shell = r(x, y, depth)
+      const sweep = mix(zAt(.997) + .0015 * smooth(x, .12, .37), r(x, high, -.014)[2], v * (.24 + .76 * v))
+      return [shell[0], y, limitTailZ(x, mix(sweep, shell[2], smooth(x, .23, .51)))]
     }, 70, 16, outRear, .008))
     rearPaint.push(patch((u, v) => {
       const left = mix(.909, .887, smooth(v, .15, .89))
@@ -324,7 +326,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }
     black.push(joinRim(hex, 1.065, .999, outlet, .019, .001, outRear, outletRound, 0))
     const hotRim = joinRim(hex, 1, .855, outlet, 0, .021, outRear, outletRound, 0)
-    outletCavities.push(joinRim(hex, .855, .82, outlet, .021, .117, outRear, outletRound))
+    outletCavities.push(joinRim(hex, .855, .80, outlet, .021, .154, outRear, outletRound))
     const exhaust = add(parent, 'formed hexagonal outlet', hotRim, m.hot)
     const source = new T.Object3D()
     source.name = 'exhaust rim heat origin'
@@ -332,7 +334,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     source.rotation.y = Math.PI
     exhaust.add(source)
     heatSources.push({ object: source, strength: 1 })
-    outletCavities.push(mapped(outlet, hex, outRear, .123, .011, outletRound))
+    outletCavities.push(mapped(outlet, hex, outRear, .158, .011, outletRound))
     const rampEdge = (u: number) => {
       const x = .915 * u
       return limitTailZ(x, zAt(sAt(r(x, .27, .009)[2]) + .029 * (1 - u)))
@@ -388,7 +390,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     }, 16, 12, outRear, .008))
     for (const fin of [.423, .650]) {
       const inner = fin < .5
-      const tip = tailLower(fin) + (inner ? .076 : .073)
+      const tip = tailLower(fin) - .008
       const railZ = curve(inner
         ? [[0, -2.364], [.12, -2.407], [.255, -2.446], [.36, -2.445], [.70, -2.432], [1, -2.411]]
         : [[0, -2.292], [.14, -2.311], [.27, -2.306], [.42, -2.298], [.70, -2.286], [1, -2.274]])
@@ -396,7 +398,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
         const w = 2 * u - 1
         const axis = fin + (inner ? .018 : .040) * v ** 1.28
         const half = .0067 - .0013 * v
-        const y = tip - (inner ? .232 : .225) * v
+        const y = tip - (inner ? .150 : .146) * v
         const z = diffuserZ(axis + half, y - .010, railZ(v))
         return [side * (axis + half * w), y, z - .0034 * Math.sin(Math.PI * u)]
       }
@@ -440,12 +442,15 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   if (carbon.length) add(parent, 'radiator mesh', joined(carbon), m.carbon)
   add(parent, 'lamp bezels and air ducts', joined(black), m.matte)
   add(parent, 'recessed backing', joined(dark), m.dark)
-  add(parent, 'hexagonal outlet cavities', joined(outletCavities), m.dark)
+  const outletFinish = m.tag(new T.MeshPhysicalMaterial({
+    color: 0x060607, roughness: .96, specularIntensity: .11, envMapIntensity: .4,
+  }), 'none')
+  add(parent, 'hexagonal outlet cavities', joined(outletCavities), outletFinish)
   add(parent, 'channeled graphite rear diffuser', joined(diffuserShell), m.diffuser)
   const bladeFinish = m.tag(m.diffuser.clone(), 'sheet')
-  bladeFinish.color.setHex(full ? 0x44474a : 0x4d5054)
-  bladeFinish.roughness = .66
-  bladeFinish.metalness = .19
+  bladeFinish.color.setHex(full ? 0x33363a : 0x3c3f42)
+  bladeFinish.roughness = .74
+  bladeFinish.metalness = .12
   add(parent, 'thin graphite diffuser blades', joined(diffuserFins), bladeFinish)
   add(parent, 'machined projector collars', joined(projectorCollars), m.brushed)
   add(parent, 'ribbed dark projector bowls', joined(projectorBowls), m.dark)

@@ -247,8 +247,8 @@ const bayWidth = curve([[.60, .36], [.641, .431], [.68, .477], [.75, .452], [.82
 export const bayEdge = (s: number, side: number): Point => [side * bayWidth(s), spine(s) - .009, zAt(s)]
 const deckInnerX = curve([[.5984, edgeGlass(.5984, 0)[0]], [.616, .687], [.638, .608], [.657, .537], [.678, .486], [.706, bayWidth(.706)]])
 const deckInnerY = curve([[.5984, edgeGlass(.5984, 0)[1]], [.617, .950], [.641, .993], [.666, 1.044], [.683, 1.066], [.696, 1.071], [.706, bayEdge(.706, 1)[1]]])
-export const tailLipY = (x: number): number => .898 - .038 * smooth(x, .295, .935)
-export const tailCrestZ = (x: number): number => limitTailZ(x, zAt(.9878 - .007 * smooth(x, .24, .48)))
+export const tailLipY = (x: number): number => .903 - .043 * smooth(x, .22, .935)
+export const tailCrestZ = (x: number): number => limitTailZ(x, zAt(.989 - .0082 * smooth(x, .18, .54)))
 
 export function frontFascia(side: number, x: number, y: number, recess: number, radius = 0): Point {
   const s = frontWidth(x) + .002 * smooth(y, .2, .48) - .0008
@@ -392,8 +392,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const y = tailLipY(x)
       const s1 = sAt(tailCrestZ(x))
       const s = mix(Math.min(s0, s1 - .014), s1, u)
-      const lead = y + mix(-.024, .026, smooth(x, .26, .69))
-      return [x, mix(lead, y, 1 - (1 - u) ** 1.38), zAt(s)]
+      const lead = y + mix(-.020, .023, smooth(x, .21, .74))
+      return [x, mix(lead, y, u * (1.26 - .26 * u)), zAt(s)]
     }), [0, 1, 0])
 
     const archEnds = (w: WheelSize) => {
