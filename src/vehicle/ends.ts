@@ -277,7 +277,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       lens = anchor(p, normal.toArray(), .20)
     }
 
-    const tailLower = curve([[0, .561], [.275, .564], [.424, .541], [.78, .535], [.914, .513], [.974, .468]])
+    const tailLower = curve([[0, .561], [.275, .561], [.424, .545], [.78, .535], [.914, .513], [.974, .468]])
+    const bumperSweep = curve([[0, -2.466], [.210, -2.465], [.310, -2.459], [.414, -2.437], [.506, -2.392],
+      [.608, -2.341], [.691, -2.269], [.758, -2.222], [.824, -2.167], [.910, -2.065], [.979, -1.873]])
     const tailSlot: XY[] = [[.345, .802], [.449, .817], [.698, .820], [.857, .865], [.889, .854], [.897, .809], [.895, .755], [.867, .718], [.743, .758], [.450, .763], [.353, .778]]
     const tailTopOfSlot = (x: number) => mix(maskHigh(x), .821 + .043 * smooth(x, .70, .86) - .045 * smooth(x, .86, .938), smooth(x, .396, .467))
     const tailUnderSlot = (x: number) => mix(maskLow(x), .756 - .041 * smooth(x, .73, .89) - .016 * smooth(x, .890, .978), smooth(x, .404, .490))
@@ -292,11 +294,11 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const x = (.979 - .024 * v) * u
       const low = tailLower(x), high = tailUnderSlot(x) + .002
       const y = mix(low, high, v)
-      const depth = mix(-.038, -.014, v) + .055 * smooth(x, .35, .89) * (1 - v) ** 1.20
-      const shell = r(x, y, depth)
-      const heel = zAt(.9981) + .006 * (x / .72) ** 2
-      const sweep = mix(heel, r(x, high, -.014)[2], v * (1.10 - .10 * v))
-      return [shell[0], y, limitTailZ(x, mix(sweep, shell[2], smooth(x, .35, .68)))]
+      const z = bumperSweep(x) + .080 * v * (1.10 - .10 * v) * (1 - smooth(x, .23, .57))
+        + .008 * v * smooth(x, .54, .90)
+      const limit = limitTailZ(x, -3)
+      const offset = z - limit
+      return [side * x, y, limit + .5 * (offset + Math.hypot(offset, .011))]
     }, 70, 16, outRear, .008))
     rearPaint.push(patch((u, v) => {
       const left = mix(.909, .887, smooth(v, .15, .89))
