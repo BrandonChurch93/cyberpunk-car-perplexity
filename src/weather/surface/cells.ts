@@ -16,13 +16,13 @@ interface Cell {
 /**
  * Water held by the perforated grille at the detail anchor. The plate has no wetness class of its own, so its open cells are
  * found by drawing its top faces into a bitmap, and drops are set into a share of them: a drop bridging a downhill corner,
- * a few cells spanned by a thin pane, and small beads on the nodes where three bars meet.
+ * and small beads on the nodes where three bars meet. No drop spans a whole cell, as a cell is wider than water can bridge.
  */
 export class CellDrops {
   readonly group = new THREE.Group()
   private readonly anchor: THREE.Vector3
 
-  constructor(vehicle: VehicleModule, lens: THREE.Material, plain: THREE.Material) {
+  constructor(vehicle: VehicleModule, lens: THREE.Material) {
     this.group.name = 'surface water grille cells'
     this.group.visible = false
     const { position, normal } = vehicle.anchors.detail
@@ -42,17 +42,13 @@ export class CellDrops {
     const world = (q: THREE.Vector2, lift: number) => this.anchor.clone().addScaledVector(along, q.x).addScaledVector(across, q.y).addScaledVector(n, lift)
     const m = new THREE.Matrix4()
     const corners: THREE.Matrix4[] = []
-    const panes: THREE.Matrix4[] = []
     const nodes: THREE.Matrix4[] = []
     const seenNodes = new Set<string>()
     const basis = (q: THREE.Vector2, lift: number, r: number, h: number) => m.clone().makeBasis(along.clone().multiplyScalar(r), n.clone().multiplyScalar(h), across.clone().multiplyScalar(r)).setPosition(world(q, lift))
     for (const cell of cells) {
       const radius = (2 * cell.apothem) / Math.sqrt(3)
       const roll = random.next()
-      if (roll < 0.1) {
-        const r = cell.apothem * random.range(1.04, 1.12)
-        panes.push(basis(cell.center, -0.0004, r, r * random.range(0.1, 0.18)))
-      } else if (roll < 0.52) {
+      if (roll < 0.45) {
         const ranked = Array.from({ length: 6 }, (_, k) => corner + (k * Math.PI) / 3)
           .map((a) => ({ a, d: Math.cos(a) * down2.x + Math.sin(a) * down2.y + random.range(-0.6, 0.6) }))
           .sort((x, y) => y.d - x.d)
@@ -82,7 +78,6 @@ export class CellDrops {
     }
     instanced(capTemplate(100, 8, 20), lens, corners)
     instanced(capTemplate(100, 5, 12), lens, nodes)
-    instanced(capTemplate(35, 6, 24), plain, panes)
   }
 
   /** Shown only while the lens is close enough to resolve the cells. */
