@@ -409,7 +409,7 @@ function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE
     film.size[0] = active ? .85 : 1.42
     film.size[1] = active ? .10 : .35
     film.penumbra = active ? .64 : .39
-    film.intensity = active ? 2520 : resting
+    film.intensity = active ? 2950 : resting
     if (active) film.color.setRGB(.69,.83,1)
     else film.color.copy(tint)
     graze.color.copy(film.color).multiplyScalar(active ? 14 : .26)
@@ -421,7 +421,7 @@ function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE
 function contactBounce(city: THREE.Group, metal: THREE.Material, frame: THREE.Material): (time: number) => void {
   const bank = new THREE.Group()
   bank.name = 'west corner service wall light'
-  bank.position.set(-38.8,5.72,-37.76)
+  bank.position.set(-38.8,7.97,-37.76)
   city.getObjectByName('west corner slab')!.add(bank)
   block(bank,'wall light enclosure',frame,[0,0,-.11],[12.42,.73,.37])
   block(bank,'projecting cutoff brow',metal,[0,.365,.08],[12.47,.12,.63]).rotation.x = .10
@@ -519,9 +519,9 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   const service = rearDeckPractical(poles[8]!,roof,metal,frame)
   const setContact = contactBounce(city,metal,frame)
   let setWheel = (_t: number): void => undefined
-  const wheelPeak = 264
+  const wheelPeak = 330
   const lowerWheelAim = (t: number) => ease(t,wheelBeat.end-2.15,wheelBeat.end-.67)
-  const wheelLevel = (t: number) => mild(t) * (31+(207+26*lowerWheelAim(t))*lampEnvelope(t,wheelBeat))/wheelPeak
+  const wheelLevel = (t: number) => mild(t) * (31+(246+53*lowerWheelAim(t))*lampEnvelope(t,wheelBeat))/wheelPeak
   for (const [i, pole] of poles.entries()) {
     if (i === 8) { lights.push(service.film); continue }
     const key = i === 5 ? 'wheel deck pole' : 'auxiliary pole'
