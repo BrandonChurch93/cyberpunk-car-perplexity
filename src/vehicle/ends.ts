@@ -294,8 +294,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const y = mix(low, high, v)
       const depth = mix(-.038, -.014, v) + .055 * smooth(x, .35, .89) * (1 - v) ** 1.20
       const shell = r(x, y, depth)
-      const sweep = mix(zAt(.997) + .0015 * smooth(x, .12, .37), r(x, high, -.014)[2], v * (.24 + .76 * v))
-      return [shell[0], y, limitTailZ(x, mix(sweep, shell[2], smooth(x, .23, .51)))]
+      const heel = zAt(.9981) + .006 * (x / .72) ** 2
+      const sweep = mix(heel, r(x, high, -.014)[2], v * (1.10 - .10 * v))
+      return [shell[0], y, limitTailZ(x, mix(sweep, shell[2], smooth(x, .35, .68)))]
     }, 70, 16, outRear, .008))
     rearPaint.push(patch((u, v) => {
       const left = mix(.909, .887, smooth(v, .15, .89))

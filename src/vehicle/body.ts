@@ -426,7 +426,10 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       folded(face, uSide, rear ? [beltLine, haunchLine, trace] : [beltLine, trace, wingDraftLine], columns)
       for (const [start, end] of [[theta0, 0], [Math.PI, theta1]]) part(paint, (u, v) => {
         const p = lower(mix(start, end, u))
-        return sidePoint(sAt(p[2]), mix(floorY, p[1], v), side)
+        const y = mix(floorY, p[1], v)
+        const skin = sidePoint(sAt(p[2]), y, side)
+        const tuck = rear && start === Math.PI ? .041 * (1 - smooth(y, .282, .405)) : 0
+        return [skin[0] - side * tuck, y, skin[2]]
       }, uSide, full ? 24 : 8, 4, 0)
       part(paint, (u, v) => {
         const p = archPanel(u, mix(0, .028, v))
