@@ -44,6 +44,7 @@ export interface ReflectionsPart extends StagePart {
 }
 
 interface ReflectionDeps extends Pick<StageDeps, 'renderer' | 'scene'> {
+  rig?: StageDeps['rig']
   world: Pick<StageDeps['world'], 'root' | 'reflectionBox'> & {
     deck: Pick<StageDeps['world']['deck'], 'material' | 'meshes'>
   }
@@ -106,6 +107,9 @@ function deckDetails(root: THREE.Object3D) {
 
 export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const { renderer, scene, world, vehicle } = deps
+  const billboardSpot = deps.rig?.group.children.find((object): object is THREE.SpotLight =>
+    object instanceof THREE.SpotLight && object.name === 'magenta violet tower screen')
+  const billboardPosition = new THREE.Vector3()
   const seed = streamSeed('reflect')
   let format = config.formats.master
   let tier: TierId = 'final'
@@ -124,6 +128,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     reflectLodMax: { value: lodMax(size) },
     reflectSeed: { value: 0 },
     reflectOn: { value: 0 },
+    reflectBillboard: { value: new THREE.Vector4() },
   }
   const box: BoxUniforms = {
     reflectBoxMin: { value: world.reflectionBox.min.clone() },
@@ -265,6 +270,10 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     beforeSample(sample: SampleContext) {
       planar.reflectOn.value = 0
       if (diagnostic !== 'beauty' && diagnostic !== 'wetness') return
+      if (billboardSpot) {
+        billboardSpot.getWorldPosition(billboardPosition)
+        planar.reflectBillboard.value.set(billboardPosition.x, billboardPosition.y, billboardPosition.z, 1)
+      }
       planar.reflectSeed.value = hash01(seed, sample.sample.frame.frameKey, sample.sample.sampleIndex)
       if (sample.sample.sampleIndex > 0 && !quality[tier].planarEverySample) {
         planar.reflectOn.value = 1

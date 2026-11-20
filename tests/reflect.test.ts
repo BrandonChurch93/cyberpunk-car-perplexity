@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { createServer } from 'vite'
 import { describe, expect, it } from 'vitest'
 import { config } from '../src/config'
+import { LightRig } from '../src/core/lights'
 import { createReflections, quality } from '../src/core/reflect'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
 import { patchesOf } from '../src/materials/patch'
@@ -83,6 +84,12 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   const scene = new THREE.Scene()
   const world = new THREE.Group()
   const body = new THREE.Group()
+  const emitter = new THREE.Object3D()
+  emitter.position.set(2, 6, -31)
+  const rig = new LightRig([{
+    id: 'magenta violet tower screen', kind: 'area', object: emitter, color: new THREE.Color(1, 0, 1),
+    intensity: 2, range: 60, size: [4, 6], shadow: false, beam: false, level: () => 1,
+  }], 32)
   const dark = new THREE.MeshStandardMaterial()
   const zinc = new THREE.MeshStandardMaterial()
   const floor = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial())
@@ -98,7 +105,7 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   slot.name = 'recessed slot bed'
   grate.add(rim, slot)
   world.add(floor, stripe, rail, grate)
-  scene.add(world, body)
+  scene.add(world, body, emitter, rig.group)
   const visibility: boolean[][] = []
   const renderer = {
     coordinateSystem: THREE.WebGLCoordinateSystem,
@@ -111,13 +118,14 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
     render: () => visibility.push([floor.visible, stripe.visible, rim.visible, slot.visible, rail.visible]),
   } as unknown as THREE.WebGLRenderer
   const part = createReflections({
-    renderer, scene,
+    renderer, scene, rig,
     vehicle: { root: body, lamps: [] },
     world: { root: world, deck: { material: floor.material, meshes: [floor] }, reflectionBox: new THREE.Box3() },
   })
   const fmt = config.formats.preview
   const eye = camera()
   const state = { position: eye.position, quaternion: eye.quaternion, focalMm: 35, sensorWidthMm: 36, focusDistance: 4, fNumber: 2, near: .1, far: 50 }
+  rig.update(0, [.75, .25])
   part.beforeSample!({
     camera: eye, state, timeSeconds: 0,
     sample: {
@@ -126,6 +134,7 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
     },
   })
   expect(visibility).toEqual([[false, false, false, false, true]])
+  expect(part.planar.reflectBillboard.value.toArray()).toEqual([3, 4.5, -31, 1])
   expect([floor.visible, stripe.visible, rim.visible, slot.visible, rail.visible]).toEqual([true, true, true, true, true])
   expect(patchesOf(floor.material)).toEqual(['reflect-box', 'reflect-planar'])
   expect(patchesOf(stripe.material)).toEqual(['reflect-box', 'reflect-planar-deck-detail'])
