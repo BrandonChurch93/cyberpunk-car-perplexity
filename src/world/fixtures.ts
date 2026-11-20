@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { config } from '../config'
 import type { FilmLight, WetSurface } from '../core/contract'
-import { stream } from '../core/random'
+import { stream, streamSeed } from '../core/random'
 import { type Tuple } from './forms'
 
 const tau = Math.PI * 2
@@ -73,20 +73,34 @@ export function labelFace(parent: THREE.Object3D, name: string, at: Tuple, size:
 export function addSky(root: THREE.Group): void {
   const sky = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, toneMapped: false,
+    uniforms: { cloudSeed: { value: streamSeed('world/city/cloud-base') / 4294967296 * 37 } },
     vertexShader: /* glsl */ `varying vec3 skyDirection; void main() { skyDirection = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */ `
       varying vec3 skyDirection;
+      uniform float cloudSeed;
+      float cloudHash(vec2 p) {
+        vec3 q = fract(vec3(p.xyx+cloudSeed)*.1031);
+        q += dot(q,q.yzx+33.33);
+        return fract((q.x+q.y)*q.z);
+      }
+      float cloudNoise(vec2 p) {
+        vec2 i=floor(p), f=fract(p);
+        vec2 q=f*f*(3.0-2.0*f);
+        return mix(mix(cloudHash(i),cloudHash(i+vec2(1,0)),q.x),mix(cloudHash(i+vec2(0,1)),cloudHash(i+1.0),q.x),q.y);
+      }
       void main() {
         vec3 d = normalize(skyDirection);
         float horizon = exp(-max(d.y, 0.0)*4.2);
         float south = pow(max(0.0, dot(d, normalize(vec3(.18,.16,-1.0)))), 5.0);
         float north = pow(max(0.0, dot(d, normalize(vec3(-.62,.13,1.0)))), 9.0);
         float warm = pow(max(0.0, dot(d, normalize(vec3(-1.0,.13,-.1)))), 10.0);
-        float cloud = .77+.16*sin(d.x*11.0+d.z*5.8+d.y*12.0)+.11*sin(d.x*25.0-d.z*9.0+d.y*20.0);
+        vec2 bank = vec2(d.x*10.0+d.z*4.0,d.y*18.0-d.z*3.0);
+        float coarse = cloudNoise(bank);
+        float cloud = .52+.39*coarse+.19*cloudNoise(bank*2.22+coarse*1.53);
         vec3 c = mix(vec3(.0038,.008,.019),vec3(.011,.022,.041), horizon);
         c += horizon*cloud*(south*vec3(.014,.034,.071)+north*vec3(.013,.031,.047)+warm*vec3(.019,.012,.009));
         float canopy = pow(max(0.0,dot(d,normalize(vec3(-.68,.54,-.34)))), 5.2);
-        float cloudBase = smoothstep(.03,.34,d.y)*(.68+.32*cloud);
+        float cloudBase = smoothstep(.05,.32,d.y+.05*(coarse-.5))*(.48+.55*cloud);
         c += cloudBase*(vec3(.003,.007,.012)+canopy*vec3(.017,.030,.052));
         gl_FragColor = vec4(c, 1.0);
       }
@@ -182,6 +196,10 @@ function addBillboard(sign: THREE.Object3D, metal: THREE.Material, key: boolean,
           float rail = (uv.y-.635-.025*sin(uv.x*6.28-centerX*3.0))/.077;
           float softBar = exp(-rail*rail)*edgeX;
           rgb = vec3(.008,.013,.021) + softBar * mix(vec3(.46,1.83,3.15),vec3(.73,2.68,4.6),band) * (.86+.14*wave);
+        #else
+          float lipShadow = smoothstep(.002,.018,min(uv.y,1.0-uv.y));
+          float moduleWake = 1.0-smoothstep(0.0,.019,abs(uv.x-.811+.003*sin(uv.y*23.0)));
+          rgb *= mix(.77,1.0,lipShadow)*(1.0-.17*moduleWake*(1.0-smoothstep(.03,.33,uv.y)));
         #endif
         gl_FragColor = vec4(rgb * grid * seams,1.0);
       }
@@ -192,6 +210,10 @@ function addBillboard(sign: THREE.Object3D, metal: THREE.Material, key: boolean,
   sign.add(anchor)
   for (const x of [-width / 2 - .07, width / 2 + .07]) block(sign, 'cabinet edge extrusion', metal, [x, 0, .09], [.12, height + .18, .42])
   for (const y of [-height / 2 - .045, height / 2 + .045]) block(sign, 'cabinet weather strip', metal, [0, y, .12], [width + .25, .085, .38])
+  if (!key) for (const x of [-width*.414,-width*.143,width*.143,width*.414]) {
+    block(sign, 'cabinet rain shed lip', metal, [x,height*.5+.064,.13], [width*.224,.044,.49])
+    block(sign, 'cabinet lower weep slot', metal, [x,-height*.5-.082,.23], [.116,.014,.072])
+  }
   for (const x of [-3.45, 3.45]) block(sign, 'cabinet maintenance rung', metal, [x, -2.63, -.14], [.68, .12, .76])
   const color = new THREE.Color()
   const scratch = new THREE.Color(), scratchCool = new THREE.Color(), scratchLight = new THREE.Color()
@@ -454,8 +476,7 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   }
   install('red sign', generic('BAR'), 2.3, 1, new THREE.Color(1, .28, .31), 9.8)
   install('wide cool panel', generic('ARCADE'), 4.4, 1.5, new THREE.Color(.73, .85, 1), 4.8)
-  install('wide warm panel', generic('HOTEL'), 3.1, 1.22, new THREE.Color(1, .82, .63), 3.8)
-  for (const name of ['vertical cool panel', 'small cool panel', 'corner cool panel', 'vertical warm panel', 'small warm panel']) {
+  for (const name of ['vertical cool panel', 'small cool panel', 'corner cool panel', 'vertical warm panel', 'wide warm panel', 'small warm panel']) {
     const blank = city.getObjectByName(name)?.getObjectByName('blank unlit face')
     if (blank instanceof THREE.Mesh) blank.material = frame
   }

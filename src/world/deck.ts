@@ -9,6 +9,7 @@ const north = 19
 const slabDepth = 0.28
 const ramp = { x0: -24, width: 3.66, topZ: -11.5, endZ: 17.4, endY: -2.71 }
 export const deckJoint = { z: 6.8, width: 0.05, startX: ramp.x0 + ramp.width }
+export const heroDrain = [1.75, 2.6] as const
 const coreX = 7.6
 const coreZ = -16.6
 
@@ -256,7 +257,7 @@ export function buildDeck(forms: Forms, roof: THREE.Group): DeckSurface {
   stripePattern(forms, roof)
   foregroundStop(forms, roof, 0.6, 4.45)
   foregroundStop(forms, roof, 3.36, 4.18)
-  for (const [x, z] of [[-1.7, 3.7], [1.75, 2.6], [-12.5, -15.7], [15.45, 11.4], [20.1, -14.6]]) drain(forms, roof, x, z)
+  for (const [x, z] of [[-1.7, 3.7], heroDrain, [-12.5, -15.7], [15.45, 11.4], [20.1, -14.6]]) drain(forms, roof, x, z)
   drain(forms, roof, 0.1, -2.89, 1.5)
   rampAndControl(forms, roof)
   coreAndServices(forms, roof)
