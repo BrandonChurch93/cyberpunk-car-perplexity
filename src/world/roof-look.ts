@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { streamSeed } from '../core/random'
 import { insertAfter, patchMaterial } from '../materials/patch'
 import type { DeckSurface } from './contract'
-import { deckJoint } from './deck'
+import { deckJoint, heroDrain } from './deck'
 
 const basins = [
   [0.92, 3.13, 4.12, 1.38, 0.016, -0.16],
@@ -15,6 +15,7 @@ const basins = [
   [14.5, -9.7, 3.3, 1.4, 0.009, 0.08],
 ] as const
 const deckSeed = streamSeed('world/deck/height') / 4294967296
+const portraitShore = new THREE.Vector2(.89, -.45).normalize()
 
 export function deckHeight(x: number, z: number): number {
   let y = 0.011 + 0.0016 * Math.sin(x * 0.86 + z * 0.41 + deckSeed * 6) + 0.0014 * Math.sin(x * -0.69 + z * 1.14)
@@ -22,8 +23,24 @@ export function deckHeight(x: number, z: number): number {
     const u = (x - cx + (z - cz) * slant) / a
     const v = (z - cz - (x - cx) * slant) / b
     const r = u * u + v * v
-    if (r < 1) y -= drop * (1 - r) * (1 + 0.14 * Math.sin(9 * u + 7 * v) + 0.09 * Math.sin(19 * u - 13 * v))
+    if (r < 1) {
+      const shelf = 0.19 * Math.sin(8 * u + 9 * v) + 0.12 * Math.sin(17 * u - 13 * v)
+      y -= drop * (1 - r) * (1 + shelf)
+    }
   }
+  const poolX = x - 2.03, poolZ = z - 4.02
+  const u = (poolX * portraitShore.x + poolZ * portraitShore.y) / 1.58
+  const v = (poolZ * portraitShore.x - poolX * portraitShore.y) / 1.03
+  const r = Math.hypot(u, v)
+  if (r < 1.24) {
+    const shore = r + r * (.043 * Math.sin(u * 19 + v * 8) + .023 * Math.sin(u * 33 - v * 21))
+    const bottom = -.005 + .00065 * Math.sin(u * 5 - v * 4)
+    y = THREE.MathUtils.lerp(Math.min(y, bottom), y, THREE.MathUtils.smoothstep(shore, .81, 1.16))
+  }
+  const dx = x - heroDrain[0], dz = z - heroDrain[1]
+  const gutterU = dx * 0.94 + dz * 0.34
+  const gutterV = dz * 0.94 - dx * 0.34
+  y -= 0.0041 * Math.exp(-((gutterU / .81) ** 2 + (gutterV / .18) ** 2))
   const joint = Math.abs(z - deckJoint.z)
   if (joint < 0.14 && x > deckJoint.startX) y += 0.004 * (1 - joint / 0.14)
   return y
@@ -45,11 +62,12 @@ function relief(bounds: THREE.Box2): THREE.DataTexture {
   return texture
 }
 
-type Type = 'deck' | 'concrete' | 'zinc' | 'stripe'
+type Type = 'deck' | 'concrete' | 'parapet' | 'zinc' | 'stripe'
 
 const fields = /* glsl */ `
   varying vec3 vRoofWorld;
   uniform float roofSeed;
+  uniform vec2 roofDrain;
   float roofHash(vec2 p) {
     vec3 q = fract(vec3(p.xyx + roofSeed) * .1031);
     q += dot(q, q.yzx + 33.33);
@@ -69,7 +87,10 @@ const fields = /* glsl */ `
 function textureMaterial(material: THREE.MeshStandardMaterial, type: Type): void {
   patchMaterial(material, {
     id: `world-roof-${type}`,
-    uniforms: { roofSeed: { value: streamSeed(`world/roof/${type}`) / 4294967296 * 37 } },
+    uniforms: {
+      roofSeed: { value: streamSeed(`world/roof/${type}`) / 4294967296 * 37 },
+      roofDrain: { value: new THREE.Vector2(...heroDrain) },
+    },
     defines: { ['ROOF_' + type.toUpperCase()]: 1 },
     apply(shader) {
       shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec3 vRoofWorld;')
@@ -86,18 +107,31 @@ function textureMaterial(material: THREE.MeshStandardMaterial, type: Type): void
         float roofFine = roofGrain(roofP * 79.0);
         float roofMottle = roofNoise(roofP * 3.1);
         #ifdef ROOF_DECK
-          float patchSide = max(abs(roofP.x + 2.45) / 2.35, abs(roofP.y - 5.13 + roofP.x*.13) / .87);
-          float patchInside = 1.0 - smoothstep(.97, 1.0, patchSide + roofFine*.038);
-          float scuff = 0.0;
+          vec2 cut = vec2((roofP.x+2.45)/2.35,(roofP.y-5.13+roofP.x*.13)/.87);
+          float patchSide = max(abs(cut.x+roofMottle*.039),abs(cut.y+roofMottle*.075)) + roofFine*.038;
+          float patchInside = 1.0-smoothstep(.97,1.015,patchSide);
+          float patchSeal = (1.0-smoothstep(.014,.039,abs(patchSide-1.013)))*(.45+.55*roofMottle);
           float scuffLine = roofP.x + .52 - .16*roofP.y*roofP.y;
-          scuff += (1.0-smoothstep(.11,.33,abs(scuffLine))) * (1.0-smoothstep(1.0,3.0,abs(roofP.y-2.5)));
-          scuff += (1.0-smoothstep(.16,.34,abs(scuffLine+1.38))) * (1.0-smoothstep(1.0,3.0,abs(roofP.y-2.5)));
+          float tread = 1.0-smoothstep(1.0,3.0,abs(roofP.y-2.5));
+          float scuff = tread*(2.0-smoothstep(.11,.33,abs(scuffLine))-smoothstep(.16,.34,abs(scuffLine+1.38)));
+          scuff *= .56+.44*roofGrain(roofP*vec2(17.0,4.1));
           float oil = (1.0-smoothstep(.16,.9,length((roofP-vec2(.45,-.53))*vec2(2.1,1.0)) + .24*roofMottle));
-          float repairs = .89 + .19 * patchInside - scuff*.24 - oil*.34;
-          diffuseColor.rgb *= repairs * (.61 + .53*roofFine + .24*roofMottle + .15*roofNoise(roofP*.61));
+          vec2 drain = (roofP-roofDrain)*vec2(4.3,3.0);
+          float silt = (1.0-smoothstep(.27,1.31,length(drain)+roofFine*.54))*(.42+.58*roofMottle);
+          float repairs = .86+.22*patchInside-.23*patchSeal-.25*scuff-.34*oil+.29*silt;
+          diffuseColor.rgb *= repairs*(.67+.33*roofFine+.31*roofMottle+.19*roofNoise(roofP*.61));
         #elif defined(ROOF_STRIPE)
           float paintLoss = smoothstep(.42,.77,roofNoise(roofP*13.0)*.48 + roofFine*.52);
           diffuseColor.rgb *= mix(.48,1.1,paintLoss) * (.8 + .32 * roofMottle);
+        #elif defined(ROOF_PARAPET)
+          vec2 wallP = vec2(vRoofWorld.x+vRoofWorld.z*.79,vRoofWorld.y);
+          float board = wallP.x*.46;
+          float seam = (1.0-smoothstep(.004,.018+fwidth(board),abs(fract(board+.5)-.5)));
+          float trail = roofNoise(wallP*vec2(10.2,.62))*roofNoise(wallP*vec2(3.9,.84));
+          float lip = smoothstep(.49,.60,wallP.y);
+          float splash = (1.0-smoothstep(.036,.21,wallP.y))*(.47+.53*roofNoise(wallP*9.0));
+          float wallLook = .71+.26*roofGrain(wallP*24.0)+.26*roofNoise(vec2(floor(board),1.0));
+          diffuseColor.rgb *= wallLook-.27*seam-.47*trail-.17*splash+.16*lip;
         #elif defined(ROOF_CONCRETE)
           vec2 wallP = vec2(vRoofWorld.x + vRoofWorld.z*.79, vRoofWorld.y);
           float wallGrain = roofGrain(wallP*24.0);
@@ -114,12 +148,12 @@ function textureMaterial(material: THREE.MeshStandardMaterial, type: Type): void
         #endif
       `)
       if (type === 'deck') shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <normal_fragment_maps>', /* glsl */ `
-        float grit = roofFine*.52 + roofGrain(roofP*24.0)*.15;
+        float grit = roofFine*.37 + roofGrain(roofP*24.0)*.22;
         vec3 roofDx = dFdx(vViewPosition), roofDy = dFdy(vViewPosition);
         vec3 roofR1 = cross(roofDy, normal), roofR2 = cross(normal, roofDx);
         float roofDet = dot(roofDx, roofR1);
         vec3 roofGrad = (dFdx(grit)*roofR1 + dFdy(grit)*roofR2) * sign(roofDet);
-        normal = normalize(max(abs(roofDet), 1e-9)*normal - .00065*roofGrad);
+        normal = normalize(max(abs(roofDet), 1e-9)*normal - .00047*roofGrad);
       `)
     },
   })
@@ -128,11 +162,12 @@ function textureMaterial(material: THREE.MeshStandardMaterial, type: Type): void
 export function finishRoof(deck: DeckSurface, roof: THREE.Group): { material: THREE.MeshStandardMaterial; wetness: 'porous' | 'sheet' }[] {
   const floor = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(.12, .129, .141), roughness: .73, metalness: 0 })
   const concrete = new THREE.MeshStandardMaterial({ color: new THREE.Color(.116, .133, .15), roughness: .83 })
+  const parapet = new THREE.MeshStandardMaterial({ color: new THREE.Color(.111, .128, .145), roughness: .79 })
   const zinc = new THREE.MeshStandardMaterial({ color: new THREE.Color(.30, .33, .37), roughness: .49, metalness: .88 })
   const stripe = new THREE.MeshStandardMaterial({ color: new THREE.Color(.47, .46, .39), roughness: .69 })
   stripe.userData.wetPorosity = .23
   const tar = new THREE.MeshStandardMaterial({ color: new THREE.Color(.021, .026, .032), roughness: .88 })
-  for (const [mat, type] of [[floor, 'deck'], [concrete, 'concrete'], [zinc, 'zinc'], [stripe, 'stripe']] as const) textureMaterial(mat, type)
+  for (const [mat, type] of [[floor, 'deck'], [concrete, 'concrete'], [parapet, 'parapet'], [zinc, 'zinc'], [stripe, 'stripe']] as const) textureMaterial(mat, type)
   for (const mesh of deck.meshes) mesh.material = floor
   deck.material = floor
   deck.heightMap = relief(deck.bounds)
@@ -140,10 +175,11 @@ export function finishRoof(deck: DeckSurface, roof: THREE.Group): { material: TH
     if (!(o instanceof THREE.Mesh) || o.material === floor) return
     const n = o.name
     if (/stripes|arrow paint|blank wayfinding/.test(n)) o.material = stripe
+    else if (n === 'solid concrete' || n === 'concrete piers') o.material = parapet
     else if (/slot bed|joint seal|underside|doorway back/.test(n)) o.material = tar
     else if (/rail|steel|posts|rim|flange|grate bars|frame|conduit|plate|enclosure|housing|lamp head|camera bracket|louvres|riser|arm$|security camera body/.test(n)) o.material = zinc
     else o.material = concrete
     if (/stripes|arrow paint|joint nosing/.test(n)) o.castShadow = false
   })
-  return [{ material: floor, wetness: 'porous' }, { material: concrete, wetness: 'porous' }, { material: zinc, wetness: 'sheet' }, { material: stripe, wetness: 'porous' }]
+  return [{ material: floor, wetness: 'porous' }, { material: concrete, wetness: 'porous' }, { material: parapet, wetness: 'porous' }, { material: zinc, wetness: 'sheet' }, { material: stripe, wetness: 'porous' }]
 }

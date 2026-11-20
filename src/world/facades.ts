@@ -5,6 +5,37 @@ import { mesh } from './fixtures'
 import type { Tuple } from './forms'
 
 const shell = new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false })
+const cladding = shell.clone()
+patchMaterial(cladding, {
+  id: 'facade cladding and rain trails',
+  uniforms: { cladSeed: { value: streamSeed('world/city/cladding') / 4294967296 * 47 } },
+  apply(shader) {
+    shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec2 vClad; flat varying float vCladOffset; uniform float cladSeed;')
+    shader.vertexShader = insertAfter(shader.vertexShader, '#include <project_vertex>', /* glsl */ `
+      mat4 cladModel = modelMatrix * instanceMatrix;
+      vec3 cladSize = vec3(length(cladModel[0].xyz),length(cladModel[1].xyz),length(cladModel[2].xyz));
+      vClad = vec2(mix(position.x*cladSize.x,position.z*cladSize.z,abs(normal.x)),position.y*cladSize.y);
+      vCladOffset = fract(cladSeed + dot(cladModel[3].xyz,vec3(.173,.091,.237)));
+    `)
+    shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', /* glsl */ `
+      varying vec2 vClad; flat varying float vCladOffset;
+      float cladHash(float p) { p = fract(p*.1031); p *= p+33.33; return fract(p*(p+p)); }
+    `)
+    shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <color_fragment>', /* glsl */ `
+      float panelWidth = mix(1.42,2.1,vCladOffset);
+      float panel = vClad.x/panelWidth + vCladOffset*13.0;
+      float cell = floor(panel);
+      float edge = abs(fract(panel+.5)-.5);
+      float reveal = 1.0-smoothstep(.007,.026+fwidth(panel),edge);
+      float dripX = vClad.x*4.3+vCladOffset*11.0;
+      float dripKey = cladHash(floor(dripX)+cell*13.1+vCladOffset*33.0);
+      float track = exp(-pow((fract(dripX)-.5)*3.4,2.0)) * smoothstep(.24,.92,dripKey);
+      track *= smoothstep(-.51,.11,vClad.y+dripKey*.19) * (1.0-smoothstep(.13,.46,fwidth(dripX)));
+      float lift = mix(.79,1.19,cladHash(cell+vCladOffset*19.0));
+      diffuseColor.rgb *= lift*(1.0-.27*track-.29*reveal);
+    `)
+  },
+})
 const roomWall = shell.clone()
 patchMaterial(roomWall, {
   id: 'recessed room bounce',
@@ -48,7 +79,7 @@ function flush(parent: THREE.Object3D, name: string, items: Piece[], plane = fal
     if (roll) m.multiply(tilt.makeRotationZ(roll))
     m.multiply(sized.makeScale(...size)).setPosition(...at)
     instances.setMatrixAt(i, m)
-    if (material === shell || material === roomWall) instances.setColorAt(i, color)
+    if (material !== glazing) instances.setColorAt(i, color)
   })
   instances.instanceMatrix.needsUpdate = true
   if (instances.instanceColor) instances.instanceColor.needsUpdate = true
@@ -114,10 +145,20 @@ function wideFacade(tone: number, level: DetailLevel): THREE.Material {
         #ifdef CITY_NEAR
           bright *= 1.0 - smoothstep(-10.0, 1.0, vTowerOrigin.y + vTowerGrid.y);
         #endif
-        float horizon = 1.0-smoothstep(42.0,128.0,vTowerOrigin.y+vTowerGrid.y);
-        diffuseColor.rgb *= (.68 + .23*horizon + .32*facadeId) * mix(1.0,softStripes,vTowerWall*.64);
+        float elevation = vTowerOrigin.y + vTowerGrid.y;
+        float reach = length(vTowerOrigin.xz);
+        float horizon = 1.0-smoothstep(42.0,128.0,elevation);
+        float depthVeil = smoothstep(84.0,390.0,reach);
+        float belt = sin((floor(cell.y/3.0)+facadeId*5.0)*1.75)*.5+.5;
+        float spandrel = 1.0-smoothstep(.032,.075+footprint.y,abs(field.y-.09));
+        float pilaster = 1.0-smoothstep(.045,.10+footprint.x,abs(fract(coord.x/3.0+.5)-.5));
+        float skin = mix(.76,1.19,style)*mix(.90,1.07,belt) + spandrel*.14 - pilaster*.15;
+        diffuseColor.rgb *= (.66 + .22*horizon + .37*facadeId) * mix(1.0,softStripes,vTowerWall*.64);
+        diffuseColor.rgb *= mix(1.0,skin,vTowerWall*readable*(1.0-depthVeil));
         vec3 distantWash = mix(vec3(.015,.026,.044),vec3(.029,.041,.058),district);
-        diffuseColor.rgb += vTowerWall*towerDepth*mix(distantWash,glass*windows*bright*on,readable);
+        vec3 fenestration = glass*windows*bright*on * mix(1.09,.73,depthVeil);
+        diffuseColor.rgb += vTowerWall*towerDepth*mix(distantWash,fenestration,readable);
+        diffuseColor.rgb = mix(diffuseColor.rgb,vec3(.027,.044,.066),depthVeil*mix(.32,.12,horizon));
       `)
     },
   })
@@ -139,7 +180,7 @@ function retone(city: THREE.Group): void {
 }
 
 function roomedTower(building: THREE.Object3D, signBounds: THREE.Box3[]): void {
-  const pieces: Piece[] = [], backs: Piece[] = [], interiors: Piece[] = [], panes: Piece[] = []
+  const pieces: Piece[] = [], skin: Piece[] = [], backs: Piece[] = [], interiors: Piece[] = [], panes: Piece[] = []
   const masses = building.children.filter(o => o.name === 'building mass' && o.scale.y > 8.1 && Math.min(o.scale.x, o.scale.z) > 7)
   if (!masses.length) return
   const base = stream(`world/city/tower/${building.name}`)
@@ -149,6 +190,8 @@ function roomedTower(building: THREE.Object3D, signBounds: THREE.Box3[]): void {
   const module = residential ? base.range(1.56, 1.89) : base.range(1.55, 2.05)
   const wall = c(.008, .016, .029).multiplyScalar(base.range(.76, 1.27))
   const metal = c(.019, .029, .044).multiplyScalar(base.range(.7, 1.4))
+  const fabric = stream(`world/city/cladding/${building.name}`)
+  const tile = fabric.pick([c(.021,.031,.046), c(.016,.024,.037), c(.029,.032,.035), c(.017,.031,.039)])
   const buildingUse = base.range(.23, .82)
   const isHero = Math.abs(masses[0].position.z) > 40
   const candidates = [0, Math.PI / 2, Math.PI, -Math.PI / 2].map((turn, k) => ({ turn, k, view: -masses[0].position.x*Math.sin(turn)-masses[0].position.z*Math.cos(turn) })).sort((a,b) => b.view-a.view)
@@ -175,16 +218,17 @@ function roomedTower(building: THREE.Object3D, signBounds: THREE.Box3[]): void {
         target.push({ at: world(x, y, z), size: [w, h, dep], turn, color })
       }
       const facadeH = levels * height
-      for (const x of [x0-.31, -x0+.31]) put(pieces, x, bottom+facadeH/2, depth/2, .62, facadeH, depth, wall)
+      for (const x of [x0-.31, -x0+.31]) put(skin, x, bottom+facadeH/2, depth/2, .62, facadeH, depth, wall)
       const party = rng.range(.18, .48)
       for (let j=0; j<levels; j++) {
         const yy = bottom + j*height
         const floor = stream(`world/city/tower/${building.name}/${m}/${k}/floor/${j}`)
-        const stripColor = metal.clone().multiplyScalar(floor.range(.62, 1.23))
+        const stripColor = tile.clone().multiplyScalar(floor.range(.62, 1.23))
         const band = height * (residential ? .38 : .3) * style
         const windowH = height-band-.15
         const use = THREE.MathUtils.clamp(buildingUse + floor.range(-.32,.29), .08, .93)
-        put(pieces, 0, yy+band*.43, depth/2, -2*x0, band, depth, stripColor)
+        put(skin, 0, yy+band*.43, depth/2, -2*x0, band, depth, stripColor)
+        if ((j+1)%3===0 && fabric.next()>.23) put(pieces, .03, yy+band*.83, depth+.032, -2*x0+.29, .065, .13, metal)
         let sequence = 0, fill = 0
         for (let i=0; i<count; i++) {
           const xx = x0 + (i+.5)*module
@@ -253,6 +297,7 @@ function roomedTower(building: THREE.Object3D, signBounds: THREE.Box3[]): void {
       }
     }
   }
+  flush(building, 'weathered cladding panels and spandrels', skin, false, cladding)
   flush(building, 'solid mullions, slotted balconies, room contents and escape rails', pieces)
   flush(building, 'recessed room walls with ceiling bounce', backs, true, roomWall)
   flush(building, 'occluding roller shades, blinds and panel joints', interiors, true)

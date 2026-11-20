@@ -4,8 +4,8 @@ The Builder's memory. Read this first in every task. Update it before every comm
 
 ## Status
 
-- Current phase: 2 · Blockout in motion
-- Current round: 7 was the last blockout round (addendum 001). Phase 2 gate in work on the round 8 camera draft
+- Current phase: 3 · Look lock
+- Current round: 8 is the next round and the first of Phase 3. Step 1 in work: finishing the hero frame (195) and the macro frame (360)
 - Blocked: no
 - Last push: see the push log, 2026-11-20
 
@@ -15,8 +15,8 @@ The Builder's memory. Read this first in every task. Update it before every comm
 | --- | --- | --- | --- |
 | 0 · Ground truth | done | Push c74357a and 97ddecb succeeded. `npm run gate -- --phase 0` on build 33fa88298cbaea4f: G1 PASS (build clean), G2 PASS (29 tests), G3 PASS (5 frames identical across fresh loads and reverse order, frame 195 identical when chunked across 3 page loads), G4 PASS (3 stills match their formats, frameCount 1350). Workspace record, pinned versions and render budget are below | see push log |
 | 1 · Reference and key frames | done | `npm run gate -- --phase 1`: G1 PASS, G2 PASS, R1 PASS (`reference/BOARD.md`: 13 elements, 150 sources, every element at or above `reference.minSourcesPerElement` and every source at or above `reference.minObservationsPerSource`), R2 PASS (55 vetted controls kept, the pool needs 30, every kept id is on the board), R3 PASS (3 directions, 8 beat key frames, K1 scores logged below), R4 PASS (`cut/SHOTS.md` has a row for every beat in both formats), G12 PASS, G13 PASS | see push log |
-| 2 · Blockout in motion | in progress | | |
-| 3 · Look lock | not started | | |
+| 2 · Blockout in motion | done | Gate as changed by `kit/addenda/001-phase-2-gate-and-updates.md`. `npx tsx tools/gate.ts --phase 2` on build 4b976660b338b94b, blockout detail: G1 PASS, G2 PASS (169 tests), G3 PASS (frame 1349 across fresh loads and a different order, frame 195 chunked across 3 page loads), G4 PASS, G5 PASS (1350 preview frames clean), G6 PASS (SSIM frame 0 to 1350 is 1.0000, seam difference 1.748 against 2.282 inside the last second), G7 PASS, G8 PASS (1350 frames, 30 fps, 960 x 540, 15.2 MB), G9 PASS (30 frames, lowest PSNR 41.2 dB). Memory test flat (heap +0.1 MB over 150 frames). C5 blockout 10 with no issue open and C8 blockout 7 with no severe issue open, both in round 7. The judged frame list is below and the control pool (55 kept) covers it. `out/preview.mp4` committed | see push log |
+| 3 · Look lock | in progress | | |
 | 4 · Full build | not started | | |
 | 5 · Capture and cut | not started | | |
 
@@ -233,6 +233,10 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-20 | The tall opening and return are left as they are and carried into Phase 3 | The tall frame limits the vehicle to about 70 percent of the width. Two draft readers call the lower band dead in gray. Reflections, lit signs and rain decide that in Phase 3, and the dolly moves closer if they do not | `cut/SHOTS.md` section "Carried into Phase 3" |
 | 2026-11-20 | Thread updates follow addendum 001 from here: an update after every critic round, at every phase gate and when a phase starts, with the phase and round, every score, the top issue, what changes next, and images. Phase 2 images are the contact sheets. From Phase 3 they are the hero frame, the macro frame and the two judged frames that changed most since the last update. The earlier standing rule stays: a picture status also goes out when a numbered step of the phase is finished. Updates are shown inline with the gallery tool, the Builder posts and keeps working | Addendum 001 and the owner's earlier messages in the thread | every round and gate |
 | 2026-11-20 | The round 6 C5 answer of 10 is logged as given and is not carried over | The lamp, detail and opening moves are rebuilt, so C5 judges them in round 7 | `scorecards/round-006/` |
+| 2026-11-20 | `npm run keep` at the Phase 2 gate kept the preview film and no stills | The Phase 2 gate asks for the film, not for stills, and G5 in Phase 2 reads the preview frames. The 33 judged frames at the final tier on the gray box would cost about an hour of rendering and are replaced by lit stills in Phases 3 and 4 | `out/preview.mp4`, `tools/keep.ts` |
+| 2026-11-20 | Phase 3 starts with the body surfaces. Every traced table in `src/vehicle/body.ts` is refitted as a fair C2 curve with few control points, and a fairness test bounds ripple per panel | Studio zebra at frame 195 shows stripes that ripple and comb over the bonnet, nose, fascia, door and flank, and in the lit frame the bonnet reads as draped cloth. Cause: `curve()` is a C1 monotone Hermite through 20 to 35 traced knots per table, so every knot is a curvature jump. This is the geometry rung "rebuild the part with a different modeling method", taken before the first round because C4 judges zebra | `src/vehicle/geometry.ts`, `src/vehicle/body.ts`, owner of vehicle B |
+| 2026-11-20 | The paint block of `src/vehicle/materials.ts` has its own owner (`dev/paint`) | Flake is not visible at native size in the macro frame, and the paint choice needs three finished candidates in the first round. The body owner is on the fairing | `src/vehicle/materials.ts` paint stack |
+| 2026-11-20 | `stageDetail` is `full` from the start of Phase 3 | The look lock judges the lit film | `src/core/detail.ts` |
 
 ## Config changes
 
@@ -294,10 +298,17 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-20 | the commit titled "Round 6 scorecards and the round 7 shot plan" | pushed to main. Round 6 scorecards, the round 7 cameras, `cut/SHOTS.md` |
 | 2026-11-20 | c5e3fff, 61bf9e1, 458a48c, 7769691, a1ccf74, 22fbd5e | pushed to main. Tall return margin, opening aim, merges of the world stop and drain, vehicle B projector housings and bay wall, grille cell water, caliper clocking. 22fbd5e is the round 7 build |
 | 2026-11-20 | the commit titled "Round 7 scorecards" | pushed to main. Round 7 scorecards |
+| 2026-11-20 | the commit titled "Phase 2 gate" | pushed to main with the merge of `dev/shots-r8`. Round 8 camera draft, addendum 001 applied, vehicle grille tray, vent slot and aft flange, surface drips, `out/preview.mp4` of build 4b976660b338b94b, Phase 2 gate evidence |
 
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-20, session 13
+
+- Done: third round 8 camera draft read twice by two draft readers and chosen over the round 7 cameras (addendum 001), `cut/SHOTS.md` updated with every open composition issue under "Carried into Phase 3", vehicle grille tray, vent slot and aft flange, surface drips and grille drops merged. Phase 2 step 9 on build 4b976660b338b94b: preview film (1350 frames, draft, 31 minutes), export proof, memory test, keep, gate G1 to G9 green. Phase 2 closed. Phase 3 opened: first lit drafts of frames 195 and 360 in both formats read, team set on the two frames.
+- Measured: 169 tests pass. Preview frame on the gray box 1.35 s. Full-detail draft frame 51 to 79 s at 16x9, 58 to 77 s at 9x16, in a 4 core machine. Export proof lowest PSNR 41.2 dB. Memory flat over 150 frames.
+- Next: Phase 3 step 1. Fair the body surfaces (zebra), paint stack with visible flake for three candidates, rain streaks near the lens, city depth and deck water in the tall hero, practical reflection on the wing in the master macro, lamp interior at hero distance. Then the diagnostic views check, the paint choice round, and rounds with C1, C2, C3, C4 and C8.
 
 ### 2026-11-20, session 12
 
