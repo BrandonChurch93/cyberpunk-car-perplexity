@@ -10,6 +10,7 @@ export interface Box {
 }
 
 export const streetY = -28
+export const heroCityYaw = THREE.MathUtils.degToRad(25.1)
 
 export function group(parent: Parent, name: string, at: Tuple = [0, 0, 0]): THREE.Group {
   const assembly = new THREE.Group()
