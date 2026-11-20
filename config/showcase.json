@@ -63,7 +63,7 @@
     "anamorphic": true
   },
   "paint": {
-    "locked": null,
+    "locked": "black-pearl",
     "candidates": [
       { "id": "black-pearl", "base": "#0b0b10", "flake": "#6f5bd6", "finish": "gloss black with a fine violet pearl" },
       { "id": "ember-orange", "base": "#e2520f", "flake": "#ffd08a", "finish": "saturated metallic orange" },
@@ -80,7 +80,8 @@
   },
   "keyframes": {
     "directions": 3,
-    "minImageModels": 2
+    "minImageModels": 2,
+    "maxTakes": 4
   },
   "quality": {
     "passScore": 9,
@@ -99,6 +100,7 @@
       "jurors": 3,
       "controlsPerRender": 1,
       "minControlPool": 30,
+      "neonControls": 15,
       "maxInvalidRuns": 2,
       "maxGapPoints": 10,
       "minControlMean": 60,
