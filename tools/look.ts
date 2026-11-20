@@ -23,7 +23,7 @@ void runTool(async () => {
       if (probes) {
         const page = await session.pageFor(spec)
         await page.evaluate(`(() => {
-          const [x, y, z, yaw, pitch, mm, focus] = ${JSON.stringify(probes[i])}
+          const [x, y, z, yaw, pitch, mm, focus, roll] = ${JSON.stringify(probes[i])}
           const stage = window.filmStage
           stage.cameraOverride = null
           const camera = stage.cameraState(${frame / config.film.fps})
@@ -31,6 +31,7 @@ void runTool(async () => {
           const [sy, cy, sx, cx] = [Math.sin(half(yaw + 180)), Math.cos(half(yaw + 180)), Math.sin(half(pitch)), Math.cos(half(pitch))]
           camera.position.set(x, y, z)
           camera.quaternion.set(cy * sx, sy * cx, -sy * sx, cy * cx)
+          if (roll) camera.quaternion.multiply(camera.quaternion.clone().set(0, 0, Math.sin(half(roll)), Math.cos(half(roll))))
           if (mm) camera.focalMm = mm
           if (focus) camera.focusDistance = focus
           camera.near = 0.02

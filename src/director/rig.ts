@@ -87,6 +87,8 @@ export interface Shot {
   tStop: number
   operator: OperatorClass
   near?: number
+  /** Degrees about the lens axis, for a head levelled to a tilted subject. */
+  roll?: number
 }
 
 const up = new THREE.Vector3(0, 1, 0)
@@ -104,7 +106,7 @@ export function resolveShot(shot: Shot, format: FormatSpec, timeSeconds: number)
   const [sx, sy] = shot.screen ?? [0, 0]
   const limit = limits[shot.operator]
   const rad = THREE.MathUtils.degToRad(limit.degrees)
-  euler.set(-Math.atan(sy * halfH) + rad * channel(0, timeSeconds), Math.atan(sx * halfW) + rad * channel(1, timeSeconds), rad * 0.5 * channel(2, timeSeconds), 'YXZ')
+  euler.set(-Math.atan(sy * halfH) + rad * channel(0, timeSeconds), Math.atan(sx * halfW) + rad * channel(1, timeSeconds), THREE.MathUtils.degToRad(shot.roll ?? 0) + rad * 0.5 * channel(2, timeSeconds), 'YXZ')
   quaternion.multiply(turn.setFromEuler(euler))
   offset.set(channel(3, timeSeconds), channel(4, timeSeconds), channel(5, timeSeconds)).multiplyScalar(limit.meters).applyQuaternion(quaternion)
   const position = shot.position.clone().add(offset)

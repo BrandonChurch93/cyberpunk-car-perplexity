@@ -35,7 +35,7 @@ const nearPlots: readonly Plot[] = [
 
 const skylinePlots: readonly Plot[] = [
   { name: 'southwest signal tower', x: -35, z: -102, width: 21, depth: 20, roof: 109, tone: 'slate', profile: 'shaft' },
-  { name: 'south pinnacle', x: 4, z: -111, width: 22, depth: 29, roof: 133, tone: 'graphite', profile: 'shaft' },
+  { name: 'south pinnacle', x: 17, z: -111, width: 22, depth: 29, roof: 133, tone: 'graphite', profile: 'shaft' },
   { name: 'northern court tower', x: -50, z: 112, width: 21, depth: 19, roof: 89, tone: 'stone', profile: 'terrace' },
 ]
 
