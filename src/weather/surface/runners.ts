@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { config, type FormatSpec } from '../../config'
 import type { CameraState } from '../../core/lens'
+import { circleScale } from '../../core/bokeh/pupil'
 import { layers } from '../../core/contract'
 import { hash01, stream } from '../../core/random'
 import { cameraAt } from '../../director/shots'
@@ -262,9 +263,9 @@ export class Runners {
   }
 
   /**
-   * Each arch drip is placed for this format's wheel insert as it booms down: the first leaves the upper arch lip onto the tread,
-   * the second leaves the top of the outer rim flange and falls past the spokes and hub, the third lands on the deck in front of
-   * the contact patch. Placing them needs the full vehicle raycast, so it runs only for frames of the wheel beat.
+   * Each arch drip is placed for this format's wheel insert as it booms down, in frame where it leaves and where it lands:
+   * the first leaves the upper arch lip, the second an arch lip or the outer rim flange, the third lands on the deck in front
+   * of the contact patch when the deck is in frame. Placing them needs the full vehicle raycast, so it runs only in the wheel beat.
    */
   private findArchDrips(): Drip[] {
     const out: Drip[] = []
@@ -285,12 +286,18 @@ export class Runners {
       }
       return f
     }
+    const blur = (q: THREE.Vector3, t: number) => {
+      const state = cameraAt(t, this.format, this.vehicle.anchors)
+      const depth = q.clone().sub(state.position).dot(new THREE.Vector3(0, 0, -1).applyQuaternion(state.quaternion))
+      return circleScale(state, this.format.width) * Math.abs(1 / state.focusDistance - 1 / depth)
+    }
     const ndc = new THREE.Vector3()
     const project = (q: THREE.Vector3, t: number) => ndc.copy(q).project(film(t))
     const inFrame = (q: THREE.Vector3, t: number, margin = 0.88) => {
       project(q, t)
       return Math.abs(ndc.x) < margin && Math.abs(ndc.y) < margin && ndc.z < 1
     }
+    const near = this.nearWheel(w)
     const ray = new THREE.Raycaster()
     const seen = (q: THREE.Vector3, t: number) => {
       const f = film(t)
@@ -298,67 +305,103 @@ export class Runners {
       const length = d.length()
       ray.set(f.position, d.normalize())
       ray.far = length + 0.01
-      const hit = ray.intersectObject(this.vehicle.root, true)[0]
+      const hit = ray.intersectObject(near, true)[0]
       return !hit || hit.distance > length - 0.006
     }
     const down = new THREE.Vector3(0, -1, 0)
     const floorBelow = (p: THREE.Vector3) => {
       ray.set(p.clone().setY(p.y - 0.006), down)
       ray.far = p.y
-      const hit = ray.intersectObject(this.vehicle.root, true)[0]
+      const hit = ray.intersectObject(near, true)[0]
       return hit ? hit.point.y : 0
     }
     const fallTime = (height: number) => Math.sqrt((2 * Math.max(0, height)) / gravity)
-    type Row = { p: THREE.Vector3; score: number }
-    const pick = (release: number, rows: Row[], accept: (p: THREE.Vector3, floor: number) => boolean): Drip | null => {
-      rows.sort((x, y) => y.score - x.score)
-      for (const { p } of rows.slice(0, 24)) {
-        if (out.some((d) => d.at.distanceTo(p) < 0.02)) continue
-        const floor = floorBelow(p)
-        if (!accept(p, floor)) continue
-        return { at: p.clone().setY(p.y - 0.0005), release, period: 0, floorY: floor }
-      }
-      return null
-    }
-    const [first, second, third] = archDrips
-    const upper: Row[] = []
-    for (const c of this.lower) {
-      const reach = reachOf(c.p)
-      if (c.p.x < w.x - 0.01 || reach < tire + 0.02 || reach > tire + 0.3 || c.p.y < w.y + 0.15) continue
-      if (!inFrame(c.p, first - 0.4) || !inFrame(c.p, first)) continue
-      project(c.p, first)
-      upper.push({ p: c.p, score: -Math.abs(ndc.x) - 0.5 * Math.abs(ndc.y) + (c.p.z > w.z ? 0.5 : 0) })
-    }
-    const lip = pick(first, upper, (p, floor) => floor > 0.2 && p.y - floor > 0.03 && seen(p.clone().setY(p.y - 0.004), first))
-    if (lip) out.push(lip)
-    const flange: Row[] = []
-    for (const c of this.lower) {
-      const reach = reachOf(c.p)
-      if (c.p.x < w.x + 0.02 || reach < 0.2 || reach > tire - 0.02 || c.p.y < w.y + 0.1 || Math.abs(c.p.z - w.z) > 0.24) continue
-      const half = second + fallTime(c.p.y - w.y)
-      const mid = new THREE.Vector3(c.p.x, w.y, c.p.z)
-      if (!inFrame(mid, half, 0.8)) continue
-      project(mid, half)
-      flange.push({ p: c.p, score: -Math.abs(ndc.x) + (inFrame(c.p, second - 0.3) && inFrame(c.p, second) ? 1.5 : 0) + 4 * (c.p.x - w.x) })
-    }
-    const rim = pick(second, flange, (p, floor) => p.y - floor > 0.2 && seen(new THREE.Vector3(p.x, w.y, p.z), second + fallTime(p.y - w.y)))
-    if (rim) out.push(rim)
-    const deck: Row[] = []
-    for (const c of this.lower) {
-      if (c.p.z < w.z + 0.08 || c.p.z > w.z + 0.45 || c.p.y > w.y + 0.25 || Math.abs(c.p.x - w.x) > 0.25) continue
-      if (reachOf(c.p) < tire - 0.004 || (c.p.y > w.y - 0.05 && c.p.z - w.z < tire + 0.005)) continue
-      const land = new THREE.Vector3(c.p.x, 0.004, c.p.z)
-      const at = third + fallTime(c.p.y)
-      if (!inFrame(land, at + 0.15)) continue
-      project(land, at + 0.15)
-      deck.push({ p: c.p, score: -Math.abs(ndc.x) - Math.abs(ndc.y + 0.55) + 3 * Math.min(c.p.y, 0.25) + (inFrame(c.p, third) ? 0.5 : 0) })
-    }
-    const ring = pick(third, deck, (p, floor) => {
-      const at = third + fallTime(p.y)
-      return floor === 0 && seen(new THREE.Vector3(p.x, 0.004, p.z), at + 0.15) && (seen(p.clone().setY(p.y - 0.004), third) || !inFrame(p, third))
+    type Role = 'lip' | 'lipOrFlange' | 'deck'
+    const cells = new Set<string>()
+    const pool = this.lower.filter((c) => {
+      if (Math.abs(c.p.z - w.z) > 0.5 || c.p.x < w.x - 0.12 || c.p.y > w.y + 0.45) return false
+      const key = `${Math.round(c.p.x / 0.015)},${Math.round(c.p.y / 0.015)},${Math.round(c.p.z / 0.015)}`
+      if (cells.has(key)) return false
+      cells.add(key)
+      return true
     })
-    if (ring) out.push(ring)
+    const place = (release: number, role: Role): Drip | null => {
+      const rows: Array<{ p: THREE.Vector3; score: number }> = []
+      for (const c of pool) {
+        const reach = reachOf(c.p)
+        const lip = reach > tire + 0.02 && reach < tire + 0.3
+        const flange = c.p.x > w.x + 0.02 && reach > 0.2 && reach < tire - 0.02
+        const tread = reach > tire - 0.004 && reach < tire + 0.02 && c.p.y < w.y - 0.05
+        if (role === 'lip' && !(lip && c.p.y > w.y)) continue
+        if (role === 'lipOrFlange' && !(lip || flange)) continue
+        if (role === 'deck' && !(lip || tread)) continue
+        if (out.some((d) => d.at.distanceTo(c.p) < 0.02)) continue
+        if (!inFrame(c.p, release - 0.3, 0.85) || !inFrame(c.p, release, 0.85) || blur(c.p, release) > 3) continue
+        project(c.p, release)
+        rows.push({ p: c.p, score: -Math.abs(ndc.x) - Math.abs(ndc.y) + (lip ? 1 : 0) + (lip && c.p.z > w.z ? 0.3 : 0) })
+      }
+      rows.sort((x, y) => y.score - x.score)
+      let best: { drip: Drip; score: number } | null = null
+      let tries = 0
+      for (const { p, score } of rows) {
+        if (tries++ > 80) break
+        if (best && score + 2.3 < best.score) break
+        const floor = floorBelow(p)
+        const height = p.y - floor
+        if (height < 0.015) continue
+        const land = new THREE.Vector3(p.x, floor + 0.004, p.z)
+        const landing = release + fallTime(height)
+        if (!inFrame(land, landing, 0.85) || (role === 'deck' && floor === 0 && !inFrame(land, landing + 0.15, 0.85))) continue
+        if (blur(land, landing) > 3) continue
+        project(land, landing)
+        const total = score - 0.5 * Math.max(Math.abs(ndc.x), Math.abs(ndc.y)) + (role === 'deck' && floor === 0 ? 2 : 0) + Math.min(height, 0.3)
+        if (best && total <= best.score) continue
+        if (!seen(p.clone().setY(p.y - 0.004), release) || !seen(land, landing)) continue
+        if (!best || total > best.score) best = { drip: { at: p.clone().setY(p.y - 0.0005), release, period: 0, floorY: floor }, score: total }
+      }
+      return best?.drip ?? null
+    }
+    const roles: Role[] = ['lip', 'lipOrFlange', 'deck']
+    archDrips.forEach((release, i) => {
+      const drip = place(release, roles[i]) ?? place(release, 'lipOrFlange')
+      if (drip) out.push(drip)
+    })
     return out
+  }
+
+  /** The vehicle triangles around the wheel, so the drip search raycasts a few thousand faces instead of the whole car. */
+  private nearWheel(w: THREE.Vector3): THREE.Group {
+    const box = new THREE.Box3(new THREE.Vector3(w.x - 0.4, -0.05, w.z - 0.9), new THREE.Vector3(w.x + 0.6, w.y + 1, w.z + 0.9))
+    const bySide = new Map<THREE.Side, number[]>()
+    const tri = new THREE.Box3()
+    const a = new THREE.Vector3()
+    const b = new THREE.Vector3()
+    const c = new THREE.Vector3()
+    this.vehicle.root.traverse((o) => {
+      const mesh = o as THREE.Mesh
+      if (!mesh.isMesh || Array.isArray(mesh.material) || (mesh as THREE.InstancedMesh).isInstancedMesh || !mesh.visible) return
+      const pos = mesh.geometry.getAttribute('position')
+      if (!pos) return
+      const index = mesh.geometry.index
+      const count = index ? index.count : pos.count
+      let out = bySide.get(mesh.material.side)
+      if (!out) bySide.set(mesh.material.side, (out = []))
+      for (let k = 0; k < count; k += 3) {
+        a.fromBufferAttribute(pos, index ? index.getX(k) : k).applyMatrix4(mesh.matrixWorld)
+        b.fromBufferAttribute(pos, index ? index.getX(k + 1) : k + 1).applyMatrix4(mesh.matrixWorld)
+        c.fromBufferAttribute(pos, index ? index.getX(k + 2) : k + 2).applyMatrix4(mesh.matrixWorld)
+        if (!tri.setFromPoints([a, b, c]).intersectsBox(box)) continue
+        out.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z)
+      }
+    })
+    const group = new THREE.Group()
+    for (const [side, xyz] of bySide) {
+      if (xyz.length === 0) continue
+      const g = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(xyz, 3))
+      group.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ side })))
+    }
+    group.updateMatrixWorld(true)
+    return group
   }
 
   private findEdgeDrips(): void {
