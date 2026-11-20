@@ -8,7 +8,7 @@ const south = -19
 const north = 19
 const slabDepth = 0.28
 const ramp = { x0: -24, width: 3.66, topZ: -11.5, endZ: 17.4, endY: -2.71 }
-const seam = { z: 3.65, width: 0.05 }
+export const deckJoint = { z: 6.8, width: 0.05, startX: ramp.x0 + ramp.width }
 const coreX = 7.6
 const coreZ = -16.6
 
@@ -16,8 +16,8 @@ function floors(forms: Forms, roof: THREE.Group): DeckSurface {
   const slab = (name: string, x0: number, x1: number, z0: number, z1: number, y: number, depth = slabDepth) =>
     forms.box(roof, name, 'stone', [x1 - x0, depth, z1 - z0], [(x0 + x1) / 2, y - depth / 2, (z0 + z1) / 2])
   const x1 = ramp.x0 + ramp.width
-  const rearEdge = seam.z - seam.width / 2
-  const frontEdge = seam.z + seam.width / 2
+  const rearEdge = deckJoint.z - deckJoint.width / 2
+  const frontEdge = deckJoint.z + deckJoint.width / 2
   const westSlab = slab('west rim slab', west, ramp.x0, south, north, 0)
   const meshes = [
     westSlab,
@@ -27,9 +27,9 @@ function floors(forms: Forms, roof: THREE.Group): DeckSurface {
     slab('north slab', x1, east, frontEdge, north, 0),
   ]
   slab('expansion joint foundation', x1, east, rearEdge, frontEdge, -0.065, slabDepth - 0.065)
-  forms.box(roof, 'expansion joint seal', 'graphite', [east - x1, 0.02, seam.width], [(x1 + east) / 2, -0.013, seam.z])
+  forms.box(roof, 'expansion joint seal', 'graphite', [east - x1, 0.02, deckJoint.width], [(x1 + east) / 2, -0.013, deckJoint.z])
   for (const side of [-1, 1]) {
-    forms.box(roof, 'joint nosing', 'slate', [east - x1, 0.003, 0.065], [(x1 + east) / 2, 0.001, seam.z + side * 0.0575])
+    forms.box(roof, 'joint nosing', 'slate', [east - x1, 0.003, 0.065], [(x1 + east) / 2, 0.001, deckJoint.z + side * 0.0575])
   }
 
   const sublevels = group(roof, 'open-sided lower parking levels')
@@ -105,7 +105,7 @@ function stripePattern(forms: Forms, roof: THREE.Group): void {
   const wheelStops: Box[] = []
   for (const end of [offset, offset + stallDepth + aisle]) {
     for (let i = -6; i <= 8; i++) {
-      const setback = end > 0 && i === 1 ? 1.8 : 0
+      const setback = i === 1 ? (end > 0 ? 1.8 : 2.75) : 0
       strips.push({ size: [stripeWidth, thickness, stallDepth - setback], at: [i * stallWidth, thickness / 2, end + setback / 2] })
       if (i < 8 && (end < 0 || i < 6)) {
         const z = end + (end < 0 ? -1.9 : 1.9)
@@ -125,18 +125,18 @@ function stripePattern(forms: Forms, roof: THREE.Group): void {
       [-0.4, 0, 0.26], [-0.105, 0, 0.26],
     ], [0, 6, 2, 0, 2, 1, 5, 4, 3])
   }
-  arrow(-0.7, 4.55, -Math.PI / 2)
-  arrow(3.75, 5.9, Math.PI / 2)
+  arrow(-1.75, 5.2, -Math.PI / 2)
+  arrow(3.75, 6.35, Math.PI / 2)
 }
 
-function foregroundStop(forms: Forms, roof: THREE.Group): void {
-  const stop = group(roof, 'foreground wheel stop', [3.7, 0, 3.24])
+function foregroundStop(forms: Forms, roof: THREE.Group, x: number, z: number): void {
+  const stop = group(roof, 'foreground wheel stop', [x, 0, z])
   stop.rotation.y = THREE.MathUtils.degToRad(18)
-  const crest = 0.102
+  const crest = 0.09
   const rings = [
-    [0.82, 0, 0.075],
-    [0.808, 0.022, 0.073],
-    [0.75, crest, 0.048],
+    [0.13, 0, 0.065],
+    [0.118, 0.019, 0.063],
+    [0.098, crest, 0.041],
   ] as const
   const vertices = rings.flatMap(([x, y, z]): Tuple[] => [[-x, y, -z], [-x, y, z], [x, y, z], [x, y, -z]])
   const faces = [0, 2, 1, 0, 3, 2, 8, 9, 10, 8, 10, 11]
@@ -145,7 +145,7 @@ function foregroundStop(forms: Forms, roof: THREE.Group): void {
     faces.push(a + i, a + j, a + j + 4, a + i, a + j + 4, a + i + 4)
   }
   forms.surface(stop, 'precast concrete stop', 'slate', vertices, faces)
-  for (const x of [-0.5, 0.5]) forms.cylinder(stop, 'steel anchor washer', 'graphite', [x, crest, 0], 0.004, 0.018)
+  for (const anchor of [-0.058, 0.058]) forms.cylinder(stop, 'steel anchor washer', 'graphite', [anchor, crest, 0], 0.004, 0.018)
 }
 
 function drain(forms: Forms, roof: THREE.Group, x: number, z: number, width = 0.2): void {
@@ -214,17 +214,17 @@ function coreAndServices(forms: Forms, roof: THREE.Group): void {
   forms.box(core, 'roof and coping', 'slate', [7.68, 0.2, 4.95], [0, 3.51, 0])
   forms.box(core, 'recessed doorway back', 'graphite', [1.36, 2.28, 0.14], [-2.73, 1.14, 1.37])
   forms.box(core, 'threshold', 'slate', [1.04, 0.016, 0.92], [-2.73, 0.008, 1.95])
-  forms.box(core, 'blank wayfinding plate', 'chalk', [0.84, 0.24, 0.04], [-2.73, 2.48, 2.41])
+  forms.box(core, 'blank wayfinding plate', 'chalk', [0.84, 0.24, 0.04], [-2.96, 2.48, 2.41])
   forms.box(core, 'door light housing', 'slate', [0.43, 0.11, 0.11], [-2.73, 2.05, 2.28])
   forms.box(core, 'lift overrun', 'stone', [2.62, 0.58, 2.25], [1.7, 3.9, -0.7])
-  forms.box(core, 'wall junction box', 'slate', [0.27, 0.34, 0.16], [-1.62, 1.3, 2.47])
-  forms.pipe(core, 'wall conduit', 'slate', [-1.62, 0.17, 2.44], [-1.62, 3.05, 2.44], 0.018)
-  forms.pipe(core, 'return conduit', 'slate', [-1.62, 3.05, 2.44], [-3.3, 3.05, 2.44], 0.018)
+  const serviceX = -1.12
+  forms.box(core, 'wall junction box', 'slate', [0.27, 0.34, 0.16], [serviceX, 1.3, 2.47])
+  forms.pipe(core, 'wall conduit', 'slate', [serviceX, 0.17, 2.44], [serviceX, 1.16, 2.44], 0.018)
   forms.pipe(core, 'security camera bracket', 'slate', [-3.38, 3.03, 2.38], [-3.38, 3.03, 2.69], 0.034)
   const camera = forms.box(core, 'security camera body', 'chalk', [0.13, 0.12, 0.24], [-3.38, 3.03, 2.73])
   camera.rotation.set(0.28, -0.55, 0)
 
-  for (const [x, z, turn] of [[-15.2, 1.2, 0.12], [-26.3, 5.4, 0], [-26.3, 2.1, 0], [-26.3, 14.1, 0], [21.4, -15.5, 0], [24.2, -3.6, 0], [24.8, 8.4, 0], [13.2, 15.4, 0.55], [0.6, 16.2, 0.28], [-19.8, 11.5, 0]]) {
+  for (const [x, z, turn] of [[-15.2, 1.2, 0.12], [-26.3, 5.4, 0], [-26.3, 1.15, 0], [-27.3, 11.7, 0], [21.4, -15.5, 0], [24.2, -3.6, 0], [24.8, 8.4, 0], [13.2, 15.4, 0.55], [5.1, 16, 0.28], [-21.8, 8.3, 0]]) {
     const pole = group(roof, 'deck light pole', [x, 0, z])
     pole.rotation.y = turn
     forms.box(pole, 'pole concrete plinth', 'stone', [0.39, 0.16, 0.39], [0, 0.08, 0])
@@ -254,9 +254,10 @@ export function buildDeck(forms: Forms, roof: THREE.Group): DeckSurface {
   const deck = floors(forms, roof)
   edges(forms, roof)
   stripePattern(forms, roof)
-  foregroundStop(forms, roof)
-  for (const [x, z] of [[-1.7, 2.75], [1.75, 2.6], [-12.5, -15.7], [15.45, 11.4], [20.1, -14.6]]) drain(forms, roof, x, z)
-  drain(forms, roof, 0.65, -3.95, 1.5)
+  foregroundStop(forms, roof, 0.6, 4.45)
+  foregroundStop(forms, roof, 3.36, 4.18)
+  for (const [x, z] of [[-1.7, 3.7], [1.75, 2.6], [-12.5, -15.7], [15.45, 11.4], [20.1, -14.6]]) drain(forms, roof, x, z)
+  drain(forms, roof, 0.1, -2.89, 1.5)
   rampAndControl(forms, roof)
   coreAndServices(forms, roof)
   return deck

@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { streamSeed } from '../core/random'
 import { insertAfter, patchMaterial } from '../materials/patch'
 import type { DeckSurface } from './contract'
+import { deckJoint } from './deck'
 
 const basins = [
   [0.92, 3.13, 4.12, 1.38, 0.016, -0.16],
@@ -23,8 +24,8 @@ export function deckHeight(x: number, z: number): number {
     const r = u * u + v * v
     if (r < 1) y -= drop * (1 - r) * (1 + 0.14 * Math.sin(9 * u + 7 * v) + 0.09 * Math.sin(19 * u - 13 * v))
   }
-  const joint = Math.abs(z - 3.65)
-  if (joint < 0.14 && x > -20.34) y += 0.004 * (1 - joint / 0.14)
+  const joint = Math.abs(z - deckJoint.z)
+  if (joint < 0.14 && x > deckJoint.startX) y += 0.004 * (1 - joint / 0.14)
   return y
 }
 

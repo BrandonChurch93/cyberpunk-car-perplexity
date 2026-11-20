@@ -31,7 +31,7 @@ export interface ShowcaseConfig {
   reference: { minSourcesPerElement: number; minObservationsPerSource: number }
   keyframes: { directions: number; minImageModels: number }
   quality: {
-    passScore: number; plateauRounds: number; judgedFramesPerBeat: number; loopSeamMinSsim: number
+    passScore: number; blockoutCompositionPass: number; plateauRounds: number; judgedFramesPerBeat: number; loopSeamMinSsim: number
     compressionStressMbps: number
     stress: { seconds: number; beats: string[]; tier: string; confirmTier: string }
     blind: {
@@ -68,7 +68,7 @@ const required: Array<[string, Kind]> = [
   ['signage.generic', 'array'], ['signage.invented', 'array'],
   ['reference.minSourcesPerElement', 'number'], ['reference.minObservationsPerSource', 'number'],
   ['keyframes.directions', 'number'], ['keyframes.minImageModels', 'number'],
-  ['quality.passScore', 'number'], ['quality.plateauRounds', 'number'], ['quality.judgedFramesPerBeat', 'number'],
+  ['quality.passScore', 'number'], ['quality.blockoutCompositionPass', 'number'], ['quality.plateauRounds', 'number'], ['quality.judgedFramesPerBeat', 'number'],
   ['quality.loopSeamMinSsim', 'number'], ['quality.compressionStressMbps', 'number'],
   ['quality.stress.seconds', 'number'], ['quality.stress.beats', 'array'], ['quality.stress.tier', 'string'],
   ['quality.stress.confirmTier', 'string'],

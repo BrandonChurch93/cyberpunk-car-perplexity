@@ -120,7 +120,7 @@ function nearCity(forms: Forms, city: THREE.Group): void {
   const cool = group(near, 'cool sign group')
   panel(forms, cool, 'wide cool panel', [-24.4, 11.1, 48.08], 4.4, 1.5, Math.PI)
   panel(forms, cool, 'vertical cool panel', [-14.2, 8.6, 48.08], 1.05, 3.36, Math.PI)
-  panel(forms, cool, 'small cool panel', [-44.2, 11.8, 44.38], 2.6, 0.95, Math.PI)
+  panel(forms, cool, 'small cool panel', [-42.15, 11.8, 44.38], 2.6, 0.95, Math.PI)
   panel(forms, cool, 'corner cool panel', [-41.88, 8.6, 50.4], 1.5, 2.2, Math.PI / 2)
 
   const warm = group(near, 'warm sign group')
