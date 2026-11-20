@@ -112,6 +112,8 @@ describe('full roof world', () => {
       expect(w).toBeLessThanOrEqual(1.8)
       expect(h).toBeGreaterThanOrEqual(3)
       expect(h).toBeLessThanOrEqual(3.6)
+      expect(shell.material.userData.mechanicalFloorPitch).toBeGreaterThanOrEqual(15)
+      expect(shell.material.userData.mechanicalFloorPitch).toBeLessThanOrEqual(25)
       facadeFamilies.add(shell.material.userData.facade)
       rooms += Math.floor(width/w)*Math.floor(height/h)
     }
@@ -378,7 +380,8 @@ describe('full roof world', () => {
     for (const x of [-.50, -.40, -.32, -.24, -.16]) {
       expect(skyRay(x,.92).intersectObject(world.root, true)[0]?.object.name).toBe('city-lit cloud base')
     }
-    for (const [x,y] of [[-.44,.75],[-.32,.86],[-.20,.70]]) {
+    expect(skyRay(-.16,.75).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
+    for (const [x,y] of [[-.44,.70],[-.32,.75],[-.20,.70]]) {
       const hit = skyRay(x,y).intersectObject(world.root, true)[0]
       expect(hit?.distance).toBeGreaterThan(800)
       expect(hit?.distance).toBeLessThan(1100)

@@ -4,7 +4,7 @@ import type { FilmLight } from '../core/contract'
 import { plate, type Label } from './fixtures'
 import { group, heroCityYaw, heroDrainLayout, streetY, type Tuple } from './forms'
 import { heroPoint, heroScale as scale, heroSize } from './hero-scale'
-import { billboardMural, fixtureOpal, signGlass, towerSurface, type Facade, type SignSpill } from './hero-surfaces'
+import { billboardMural, fixtureOpal, signGlass, towerSurface, type Facade, type FacadeLayer, type SignSpill } from './hero-surfaces'
 import type { finishRoof } from './roof-look'
 
 const palette = {
@@ -32,7 +32,7 @@ export const approvedHeroSources = [
   { id: 'violet mid distance blade', at: [-1.48, 5.38, -31.64], size: [.44, 2.58], tint: 'violet', scale: scale.screen },
   { id: 'magenta violet tower screen', at: [2.94, 5.61, -29.80], size: [4.99, 6.28], tint: 'magenta', yaw: .066, scale: scale.screen },
   { id: 'magenta upper service ribbon', at: [2.62, 15.79, -30.02], size: [3.22, .37], tint: 'magenta', scale: scale.screen },
-  { id: 'cool glass service ribbon', at: [-1.48, 17.39, -31.64], size: [1.58, .53], tint: 'cyan', scale: scale.screen },
+  { id: 'cool glass service ribbon', at: [1.20, 16.91, -30.10], size: [1.58, .26], tint: 'cyan', scale: scale.screen },
   { id: 'amber upper tower cabinet', at: [7.44, 3.79, -30.12], size: [1.11, .72], tint: 'amber', text: '24H', scale: scale.amber },
   { id: 'amber lower tower cabinet', at: [7.46, 2.46, -30.10], size: [1.22, .83], tint: 'amber', text: 'OPEN', scale: scale.amber },
   { id: 'right amber facade sail', at: [13.00, 3.17, -30.20], size: [.30, 3.69], tint: 'amber', scale: scale.rightBlade },
@@ -115,28 +115,28 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   }
   const towers = [
     ['hero left edge tower', -33.25, -75.2, 16.1, 3.3, 99.8, .069, scale.leftEdge],
-    ['hero hotel tower', -9.52, -32.25, 3.05, 6.75, 6.14, .127, scale.hotel],
+    ['hero hotel tower', -9.67, -32.25, 3.15, 3.90, 6.52, .127, scale.hotel],
     ['hero parking tower', -9.98, -26.52, .94, 2.43, 5.78, .092, scale.parking],
-    ['hero near west garage bay', -7.83, -25.40, 2.78, 4.15, 5.24, .079, scale.westFrontage],
+    ['hero near west garage bay', -7.83, -25.40, 2.78, 4.15, 5.07, .079, scale.westFrontage],
     ['hero bar tower', -6.01, -43.56, 2.80, 5.37, 4.92, .103, scale.bar],
     ['hero violet tower', -1.69, -47.28, 2.08, 4.84, 8.74, .097, 11.7],
     ['hero screen tower', 2.92, -30.01, 6.76, 5.96, 12.59, .106, scale.screen],
-    ['hero tower setback glass wing', -1.48, -31.79, 1.88, 4.89, 18.81, .087, scale.screen],
+    ['hero tower setback glass wing', -1.48, -31.79, 1.88, 4.89, 6.77, .087, scale.screen],
     ['hero amber tower', 7.77, -30.40, 2.74, 5.95, 10.68, .141, scale.amber],
-    ['hero right edge tower', 31.69, -73.5, 13.9, 11.8, 91.8, .069, scale.rightEdge],
+    ['hero right edge tower', 32.82, -73.5, 11.64, 11.8, 91.8, .069, scale.rightEdge],
     ['hero near east garage bay', 7.22, -17.79, 1.88, 3.91, 5.27, .057, scale.eastFrontage],
     ['hero middle west distance', -10.78, -60.0, 2.15, 10.53, 8.41, .083, scale.middleWest],
-    ['hero far west distance', -9.99, -83.0, 3.07, 10.63, 13.88, .074, 8.5],
+    ['hero far west distance', -9.99, -83.0, 3.07, 10.63, 13.88, .074, 8.67],
     ['hero middle center distance', -6.54, -65.0, .89, 11.77, 7.78, .084, 9.55],
     ['hero far center distance', -4.76, -94.0, 2.79, 10.63, 14.54, .074, 8.4],
     ['hero middle east distance', 17.27, -56.0, 2.82, 9.15, 8.33, .085, 9],
-    ['outer west exchange glass tower', -43.4, -157, 17.9, 15.7, 81.2, .059, 3.6],
-    ['outer west bank setback', -75.6, -279, 19.2, 23.6, 119.1, .049, 2.65],
-    ['far west communications stack', -98.3, -433, 24.8, 28.4, 184.0, .047, 2.3],
-    ['far west narrow crown', -39.6, -337, 10.4, 17.8, 59.2, .045, scale.farWest],
-    ['far central west glass tower', -57.9, -346, 12.1, 19.2, 53.2, .050, scale.farCentralWest],
-    ['far inner west glass crown', -28.2, -363, 7.8, 17.3, 54.3, .047, 2.62],
-    ['far central recessed slab', -12.1, -323, 9.3, 16.1, 51.5, .048, 3.18],
+    ['outer west exchange glass tower', -43.4, -157, 17.9, 15.7, 21.30, .059, 3.6],
+    ['outer west bank setback', -75.6, -279, 19.2, 23.6, 33.21, .049, 2.65],
+    ['far west communications stack', -98.3, -433, 24.8, 28.4, 45.77, .047, 2.3],
+    ['far west narrow crown', -39.6, -337, 10.4, 17.8, 49.24, .045, scale.farWest],
+    ['far central west glass tower', -57.9, -346, 12.1, 19.2, 47.06, .050, scale.farCentralWest],
+    ['far inner west glass crown', -28.2, -363, 7.8, 17.3, 48.54, .047, 2.62],
+    ['far central recessed slab', -12.1, -323, 9.3, 16.1, 44.60, .048, 3.18],
     ['rear middle glass stack', -51.9, -469, 16.5, 25.6, 64.0, .043, 2.25],
     ['outer east hotel glass slab', 37.4, -151, 12.9, 20.7, 79.1, .052, scale.outerEast],
     ['outer east relay shaft', 44.5, -219, 17.1, 19.8, 114.2, .046, 3.18],
@@ -156,11 +156,15 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       (['banded','curtain','concrete'] as const)[n%3]!
   const edgeCyan = new THREE.MeshBasicMaterial({ color: new THREE.Color(.047,3.1,5.4), toneMapped: false })
   const edgePink = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.30,.066,.91), toneMapped: false })
+  const edgeRust = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.13,.54,.13), toneMapped: false })
+  const crownCyan = new THREE.MeshBasicMaterial({ color: new THREE.Color(.17,1.03,1.57), toneMapped: false })
+  const crownViolet = new THREE.MeshBasicMaterial({ color: new THREE.Color(.62,.27,1.36), toneMapped: false })
   const safetyRed = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.1,.052,.079), toneMapped: false })
   for (const [index,[name, x, faceZ, width, depth, top, level, k]] of towers.entries()) {
     const z = faceZ-depth*.5
     const tower = group(city, name + ' volume')
-    const shell = towerSurface(name, level, facadeOf(name,index), screenReflection, spillAt(name))
+    const layer: FacadeLayer = index >= 16 || [12,14].includes(index) ? 'far' : [4,5,11,13,15].includes(index) ? 'middle' : 'near'
+    const shell = towerSurface(name, level, facadeOf(name,index), screenReflection, spillAt(name),layer)
     groundedBox(tower,name,x,top,z,width,depth,shell,k)
     const [wx,wy,wz] = heroPoint([x,top,z],k)
     const w = width*k, d = depth*k
@@ -172,6 +176,19 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const crownH = index%4===0 ? 7.3 : index%3===0 ? 4.9 : 2.55
       box(tower,'setback service penthouse',[wx+w*.08,wy+crownH*.5,wz-d*.14],[w*.52,crownH,d*.48],shell)
       box(tower,'penthouse coping',[wx+w*.08,wy+crownH,wz-d*.14],[w*.54,.47,d*.50],frame)
+      if ([5,12,13,14,18,19,20,22,23].includes(index)) {
+        const crown = group(tower,'lit setback cornice',[wx+w*.08,wy+crownH*.74,wz+d*.104])
+        box(crown,'louvred top band backing',[0,0,0],[w*.482,.82,.38],frame)
+        for (const lx of [-.16,-.054,.054,.16]) {
+          box(crown,'recessed crown opal',[w*lx,0,.21],[w*.096,.44,.09],index%3===1 ? crownViolet : crownCyan)
+        }
+      }
+      if ([5,12,18,19,22,27].includes(index)) {
+        const py = wy+crownH, arm = crownH*.67+3.0
+        box(tower,'rooftop riser mast',[wx+w*.07,py+arm*.5,wz-d*.10],[.27,arm,.27],frame)
+        box(tower,'rooftop mast crossbar',[wx+w*.07,py+arm*.71,wz-d*.10],[arm*.51,.13,.12],zinc)
+        box(tower,'mast obstruction lens',[wx+w*.07,py+arm,wz-d*.10],[.52,.46,.52],safetyRed)
+      }
       for (const side of [-1,1]) {
         const px = wx+side*w*.27
         box(tower,'roof condenser bank',[px,wy+1.15,wz+d*.23],[Math.min(4.6,w*.21),2.3,Math.min(3.4,d*.21)],frame)
@@ -193,6 +210,16 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const pz = wz+d*.5
       for (const [fraction,breadth] of [[.405,.66],[.485,.83]]) {
         addRail('full height cyan cornice',wx+w*fraction,(wy+streetY)*.5,pz,wy-streetY-.92,edgeCyan,true,breadth)
+      }
+      const base = 77, crownW = 9.4
+      box(tower,'left upper service setback',[wx+w*.5+crownW*.19,(wy+base)*.5,wz-d*.04],[crownW,wy-base,d*.73],shell)
+      box(tower,'left wing folded floor lip',[wx+w*.5+crownW*.19,base-.28,wz-d*.04],[crownW+.2,.56,d*.75],frame)
+    } else if (index === 6) {
+      const pz = wz+d*.50
+      for (const [ladder,width] of [[.447,.49],[.473,.67]]) {
+        for (let j=0;j<8;j++) {
+          addRail('recessed red-orange tower tracer',wx+w*ladder,wy-(wy-streetY)*.35-j*5.4,pz,3.10,edgeRust,false,width)
+        }
       }
     } else if ([7,11,19,20,24,26].includes(index)) {
       const litH = (wy-streetY)*.49
