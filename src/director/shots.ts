@@ -217,7 +217,7 @@ const vertical: Record<string, ShotMaker> = {
       near: 0.02,
     }
   },
-  detail: (t, a) => grazing(t, a, 180, 50, 0.42, -0.08, 0.04, portraitMm, 0, true),
+  detail: (t, a) => grazing(t, a, 180, 42, 0.36, -0.065, 0.015, portraitMm, 0, true),
   ignition: (t, a) => {
     const p = glide(t, ignition.start + 0.8, ignition.end - 0.2, 1.5, 1.5)
     return {
