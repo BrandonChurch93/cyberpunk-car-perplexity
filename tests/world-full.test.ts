@@ -95,6 +95,31 @@ describe('full roof world', () => {
     expect(world.signs.filter(s => config.signage.invented.includes(s)).sort()).toEqual(['BRINESCALE SUSHI', 'SHUTTER HUSH CLUB', 'VAPOR SILL HOTEL'])
   })
 
+  it('sweeps the service flood deterministically and holds the wheel boost inside its beat', () => {
+    const service = world.lights.find(l => l.id === 'north deck pole')!
+    const wheel = world.lights.find(l => l.id === 'wheel deck pole')!
+    const detail = config.beats.find(b => b.id === 'detail')!
+    const wheelBeat = config.beats.find(b => b.id === 'wheel')!
+    const start = detail.start+.22, end = detail.end-.22
+    const state = () => {
+      const axis = new THREE.Vector3(0,0,1).applyQuaternion(service.object.getWorldQuaternion(new THREE.Quaternion()))
+      return [...axis.toArray(), service.angle, service.intensity]
+    }
+    world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
+    const resting = state()
+    world.beginSample({ timeSeconds: start } as SampleContext)
+    const first = state()
+    world.beginSample({ timeSeconds: end } as SampleContext)
+    expect(state()).not.toEqual(first)
+    expect(service.angle!).toBeLessThan(resting[3]!)
+    world.beginFrame({ frame: { timeSeconds: start } } as FrameContext)
+    expect(state()).toEqual(first)
+    world.beginSample({ timeSeconds: config.film.durationSeconds } as SampleContext)
+    expect(state()).toEqual(resting)
+    expect(wheel.level((wheelBeat.start+wheelBeat.end)/2)).toBeGreaterThan(wheel.level(0)*3)
+    expect(wheel.level(config.film.durationSeconds)).toBeCloseTo(wheel.level(0),12)
+  })
+
   it('keeps supported traffic, navigation lights and roof beacons periodic in both hooks', () => {
     const train = world.root.getObjectByName('tracked eight-axle electric train')!
     const aircraft = world.root.getObjectByName('small aircraft')!

@@ -105,6 +105,10 @@ const bbWaveMean = .81
 const bbStripeFloor = .38
 
 const ease = THREE.MathUtils.smoothstep
+const wheelBeat = config.beats.find(b => b.id === 'wheel')!
+const detailBeat = config.beats.find(b => b.id === 'detail')!
+const lampEnvelope = (t: number, beat: { start: number; end: number }) =>
+  ease(t, beat.start-.3, beat.start+.23) * (1-ease(t, beat.end-.23, beat.end+.3))
 
 export function billboardState(t: number, out: THREE.Color, cool: THREE.Color, light: THREE.Color): { center: number; mean: number } {
   const phase = tau * t / duration
@@ -273,7 +277,67 @@ function panelPractical(
   return { id: name, kind: 'area', object: anchor, color, intensity: width*height*radiance*.78*delivery, size, range, shadow, beam: false, level: () => 1 }
 }
 
-function rearDeckPractical(pole: THREE.Object3D, metal: THREE.Material, frame: THREE.Material): FilmLight {
+function frontageRibbon(parent: THREE.Object3D, shell: THREE.Material, name: string, at: Tuple, yaw: number, size: [number, number], gain: number): THREE.Group {
+  const housing = new THREE.Group()
+  housing.name = name
+  housing.position.set(...at)
+  housing.rotation.y = yaw
+  parent.add(housing)
+  const [width,height] = size
+  block(housing, 'ribbon casing', shell, [0,0,-.18], [width+.16,height+.14,.35]).castShadow = false
+  plate(housing, 'feathered LED ribbon', new THREE.ShaderMaterial({
+    uniforms: { gain: { value: gain } }, toneMapped: false,
+    vertexShader: 'varying vec2 faceUV; void main(){faceUV=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader: /* glsl */ `
+      varying vec2 faceUV;
+      uniform float gain;
+      void main(){
+        vec2 p=faceUV;
+        float lengthMask=smoothstep(.02,.22,p.x)*(1.-smoothstep(.79,.98,p.x));
+        float row=.57+.055*sin(p.x*4.6);
+        float cyanOffset=(p.y-row)/.20, redOffset=(p.y-.16)/.055;
+        float cyan=exp(-cyanOffset*cyanOffset);
+        float red=exp(-redOffset*redOffset)*smoothstep(.40,.76,p.x);
+        float pitch=abs(fract(p.x*6.)-.5);
+        float joins=mix(.91,1.,1.-smoothstep(.475,.495,pitch));
+        vec3 cool=mix(vec3(.20,.93,1.65),vec3(.62,1.72,2.35),smoothstep(.05,.86,p.x));
+        gl_FragColor=vec4(vec3(.014,.021,.028)+gain*lengthMask*joins*(cool*cyan+red*vec3(1.03,.045,.087)),1.);
+      }`,
+  }), [0,0,.003], width,height)
+  return housing
+}
+
+function paintPracticals(roof: THREE.Group, city: THREE.Group, shell: THREE.Material, metal: THREE.Material): void {
+  const east = frontageRibbon(roof,shell,'east traffic guidance ribbon',[12.7,.62,7.7],-1.57,[11.3,.58],7.7)
+  for (const x of [-4.6,0,4.6]) {
+    block(east,'traffic ribbon frame',metal,[x,-.35,-.2],[.093,.55,.28])
+    block(east,'traffic ribbon bolted shoe',shell,[x,-.556,-.2],[.34,.124,.47])
+  }
+  const west = city.getObjectByName('west low block')!
+  const westRibbon = frontageRibbon(west,shell,'west roof wayfinding crown',[-51.55,23.0,23.1],Math.PI/2,[17.4,3.55],8.2)
+  for (const x of [-6,0,6]) {
+    block(westRibbon,'crown lattice column',metal,[x,-4.4,-1.07],[.32,7.3,.45])
+    block(westRibbon,'crown cross member',metal,[x,-.86,-.67],[.31,.26,1.25])
+  }
+  const north = city.getObjectByName('northwest tower')!
+  frontageRibbon(north,shell,'northwest concourse ribbon',[-41.58,10.1,53.7],Math.PI/2,[17.7,3.0],7)
+  const ice = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5,3.9,6.1), toneMapped: false })
+  const ruby = new THREE.MeshBasicMaterial({ color: new THREE.Color(4.9,.23,.42), toneMapped: false })
+  const pearl = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6,3.8,4.2), toneMapped: false })
+  for (const [z,y,width,height,face] of [
+    [17.46,2.15,.33,1.12,ice],[19.45,2.87,.38,.64,ruby],
+    [22.03,2.59,.74,.49,pearl],[23.5,1.75,.4,.82,ice],
+  ] as const) {
+    const mount = new THREE.Group()
+    mount.position.set(-51.51,y,z)
+    mount.rotation.y = Math.PI/2
+    west.add(mount)
+    block(mount,'recessed frontage beacon mount',shell,[0,0,-.25],[width+.12,height+.12,.49]).castShadow = false
+    plate(mount,'frontage beacon opal',face,[0,0,.006],width,height)
+  }
+}
+
+function rearDeckPractical(pole: THREE.Object3D, metal: THREE.Material, frame: THREE.Material): { film: FilmLight; set(t: number): void } {
   const tint = new THREE.Color(.53,.76,1)
   const radiance = 245
   const face = new THREE.MeshBasicMaterial({ color: tint.clone().multiplyScalar(radiance), toneMapped: false })
@@ -286,10 +350,9 @@ function rearDeckPractical(pole: THREE.Object3D, metal: THREE.Material, frame: T
   const rack = new THREE.Group()
   rack.name = 'rear service flood bank'
   rack.position.set(0,8.31,0)
-  const aim = new THREE.Vector3(.04,.88,-1.44).sub(new THREE.Vector3(pole.position.x,8.31,pole.position.z))
-    .applyAxisAngle(new THREE.Vector3(0,1,0),-pole.rotation.y).normalize()
-  const across = new THREE.Vector3(0,1,0).cross(aim).normalize()
-  rack.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(across, aim.clone().cross(across), aim))
+  const origin = new THREE.Vector3(pole.position.x,rack.position.y,pole.position.z)
+  const up = new THREE.Vector3(0,1,0), aim = new THREE.Vector3(), across = new THREE.Vector3(), down = new THREE.Vector3()
+  const basis = new THREE.Matrix4()
   pole.add(rack)
   block(rack, 'worklight bracket plate', metal, [0,0,-.22], [4.39,.45,.34])
   for (const x of [-1.44,0,1.44]) {
@@ -304,8 +367,21 @@ function rearDeckPractical(pole: THREE.Object3D, metal: THREE.Material, frame: T
   const anchor = new THREE.Object3D()
   anchor.position.z = .54
   rack.add(anchor)
-  return { id: 'north deck pole', kind: 'spot', object: anchor, color: tint, intensity: radiance * (3*1.27*.51) * 1.31, size: [1.42,.35],
+  const film: FilmLight = { id: 'north deck pole', kind: 'spot', object: anchor, color: tint, intensity: radiance * (3*1.27*.51) * 1.31, size: [1.42,.35],
     angle: .123, penumbra: .39, range: 39, shadow: true, beam: false, level: () => 1 }
+  const set = (t: number) => {
+    const gate = lampEnvelope(t,detailBeat)
+    const progress = ease(t,detailBeat.start,detailBeat.end)
+    aim.set(.04+gate*(.22-.42*progress),.88+gate*.06,-1.44+gate*(-.86+1.67*progress))
+      .sub(origin).applyAxisAngle(up,-pole.rotation.y).normalize()
+    across.copy(up).cross(aim).normalize()
+    rack.quaternion.setFromRotationMatrix(basis.makeBasis(across,down.copy(aim).cross(across),aim))
+    film.angle = .123-.071*gate
+    film.penumbra = .39+.27*gate
+    film.intensity = radiance * (3*1.27*.51) * (1.31+1.19*gate)
+  }
+  set(0)
+  return { film, set }
 }
 
 export interface RoofFixtures { lights: FilmLight[]; signs: string[]; steamSources: NonNullable<import('./contract').WorldModule['steamSources']>; set(t: number): void }
@@ -325,6 +401,7 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   const primary = addBillboard(billboard, metal, false, labels)
   const rakingCabinet = addRakingCabinet(roof, metal, frame)
   const raking = addBillboard(rakingCabinet, metal, true)
+  paintPracticals(roof,city,frame,metal)
   const lights = [
     primary.film, raking.film,
     panelPractical(roof, metal, frame, 'east parking canopy fascia', [13.65,2.58,-4.95], -1.42, [9.6,.46], new THREE.Color(.36,.66,1), 7.0, 44, true, 8, 0, .64),
@@ -387,11 +464,10 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   const mild = (t: number) => 1 - .105 * Math.max(0, Math.sin(tau * fast * t / duration)) * Math.max(0, Math.sin(tau * slow * t / duration + phase))
   const poleMats = new Map<string, THREE.MeshBasicMaterial>()
   const poles = roof.children.filter(o => o.name === 'deck light pole')
+  const service = rearDeckPractical(poles[8]!,metal,frame)
+  const wheelLevel = (t: number) => mild(t) * (.24+.76*lampEnvelope(t,wheelBeat))
   for (const [i, pole] of poles.entries()) {
-    if (i === 8) {
-      lights.push(rearDeckPractical(pole, metal, frame))
-      continue
-    }
+    if (i === 8) { lights.push(service.film); continue }
     const key = i === 5 ? 'wheel deck pole' : 'auxiliary pole'
     const radiance = key === 'wheel deck pole' ? 115 : 11
     let mat = poleMats.get(key)
@@ -402,7 +478,7 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
     for (const o of pole.children) if (o.name === 'unlit lamp diffuser' && o instanceof THREE.Mesh) { o.material = mat; o.castShadow = false }
     if (key !== 'auxiliary pole') {
       pole.position.set(10.8, 0, 4.9)
-      const aim = new THREE.Vector3(1.35, .04, 1.79)
+      const aim = new THREE.Vector3(1.04, .23, 1.36)
         .sub(new THREE.Vector3(pole.position.x, 4.586, pole.position.z)).applyAxisAngle(new THREE.Vector3(0,1,0), -pole.rotation.y).normalize()
       const tilt = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,-1,0), aim)
       for (const o of pole.children) {
@@ -421,8 +497,8 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
       anchor.position.set(0, 4.586, 0).addScaledVector(aim,.27)
       anchor.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), aim)
       pole.add(anchor)
-      lights.push({ id: key, kind: 'spot', object: anchor, color: cool, intensity: 31, size: [2, .36], angle: .64,
-        penumbra: .67, range: 30, shadow: true, beam: false, level: mild })
+      lights.push({ id: key, kind: 'spot', object: anchor, color: cool, intensity: 129, size: [2, .36], angle: .21,
+        penumbra: .61, range: 26, shadow: true, beam: false, level: wheelLevel })
     }
   }
 
@@ -440,7 +516,8 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
     set(t) {
       primary.set(t)
       raking.set(t)
-      poleMats.get('wheel deck pole')?.color.copy(cool).multiplyScalar(115 * mild(t))
+      service.set(t)
+      poleMats.get('wheel deck pole')?.color.copy(cool).multiplyScalar((115+59*lampEnvelope(t,wheelBeat))*mild(t))
     },
   }
 }
