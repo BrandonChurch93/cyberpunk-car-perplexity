@@ -1,0 +1,30 @@
+{
+  "critic": "C8",
+  "score": 8,
+  "pass": false,
+  "issues": [
+    {
+      "severity": "major",
+      "file": "set-B-08.png",
+      "where": "Paint macro, 9–14.97 s; lower-third crease and upper half",
+      "what": "The wide retains a diagonal, but neither format reveals a distinct panel landmark over the glide. In portrait the crease sits low and flattens toward the end, leaving most of the frame without a feature to follow.",
+      "fix": "Keep the continuous macro glide but carry it past a panel edge or seam. Give portrait its own more oblique camera path so the crease travels diagonally through the middle of the frame."
+    },
+    {
+      "severity": "minor",
+      "file": "set-B-20.png",
+      "where": "Portrait ignition, rear fascia between the towers and foreground deck",
+      "what": "The car fills most of the width but very little of the height. The nearly horizontal rear fascia makes the exhaust area feel secondary to the surroundings.",
+      "fix": "Keep the low camera height, but move slightly closer and farther around the rear quarter so the near wheel and tail form a stronger diagonal. Trade some foreground deck for more rear fascia without cutting off the tail."
+    },
+    {
+      "severity": "minor",
+      "file": "set-B-06.png",
+      "where": "Portrait wake, final frame; car in lower third",
+      "what": "The skyline still carries much of the arrival framing at the end of wake, leaving the front three-quarter reveal visually low in the frame.",
+      "fix": "Ease the aim down during the existing push and settle slightly tighter on the nose and nearer lamp, keeping one tower for scale and the full car within frame."
+    }
+  ],
+  "reviewer": "reviewer_2502",
+  "family": "gpt_6_2_sol"
+}

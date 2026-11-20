@@ -5,7 +5,7 @@ The Builder's memory. Read this first in every task. Update it before every comm
 ## Status
 
 - Current phase: 2 · Blockout in motion
-- Current round: 5 (Phase 2 blockout)
+- Current round: 6 (Phase 2 blockout)
 - Blocked: no
 - Last push: see the push log, 2026-11-19
 
@@ -230,12 +230,13 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2 | 2 | blockout | n/a | n/a | n/a | n/a | 7 | n/a | n/a | 6 | Both: the wheel beat is a dark low view of the front corner, not the wheel | Wheel at 50 mm and hub height, paint over the wing crease, tall wides and tall rear shot set oblique, slower crane, sun moved to the lit side |
 | 3 | 2 | blockout | n/a | n/a | n/a | n/a | 10 | n/a | n/a | 6 | C8 major: the paint beat hardly moves over a blank panel, the wheel shot cuts off the contact patch, the detail beat is not a close pass | Paint as a grazing glide across the wing with a horizon, wheel whole on a 14 degree arc, detail as a forward track along the covers, tall lamp on a projector lens, return opens on the whole car from 1.25 m, tall wides further back, paint anchor moved forward, new wheel mounted |
 | 4 | 2 | blockout | n/a | n/a | n/a | n/a | 9 | n/a | n/a | 5 | C8 severe: the paint frame is mostly background, the detail pass misses the fine mesh, the wheel shot is not a macro | Plateau rung: lens and camera height changed on every insert. Paint from above at 100 mm, wheel at 85 mm with a boom down, detail over an enlarged hex grille at 85 mm, lamp holding the whole fork, longer tall arrival dolly, lower return start |
+| 5 | 2 | blockout | n/a | n/a | n/a | n/a | 8 | n/a | n/a | 8 | C8 major: the paint macro shows no panel landmark over the glide, and the tall paint crease sits low and flattens | Paint glide carried past a panel edge with an oblique tall path, tall ignition closer and further round, tall wake settles tighter, push added to the lamp slide, wheel boom holds on the arch then slows, longer detail ease-in, shorter stop at the loop seam |
 
 ## Plateau log
 
 | Critic | Rounds without gain | Rung tried | Result |
 | --- | --- | --- | --- |
-| C8 | 3 (rounds 2, 3, 4: 6, 6, 5 after 5) | Composition and lighting design, rung 1: change the lens and the camera height | Round 5 pending |
+| C8 | 3 (rounds 2, 3, 4: 6, 6, 5 after 5) | Composition and lighting design, rung 1: change the lens and the camera height | Round 5: C8 8, up from 5, no severe issue. Plateau broken. The count starts again |
 
 ## QA gauntlet
 

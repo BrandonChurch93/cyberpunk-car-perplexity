@@ -1,0 +1,37 @@
+{
+  "critic": "C5",
+  "score": 8,
+  "pass": true,
+  "issues": [
+    {
+      "severity": "minor",
+      "file": "set-A-05.png",
+      "where": "whole frame, 20.00–24.97 s",
+      "what": "The 'macro into a lit lamp' move is almost entirely a slow sideways slide. The lamp graphic barely grows across 5 s, so the camera never actually pushes into the lens.",
+      "fix": "Add a slow eased dolly-in toward the lens (about 15–25% scale growth) on top of the lateral drift"
+    },
+    {
+      "severity": "minor",
+      "file": "set-A-04.png",
+      "where": "whole frame, 16.37–19.07 s",
+      "what": "The tilt/crane from the arch down to the tread is fast for a macro move, peaking at about a third of the frame height per second. The arch, where the drips fall, leaves frame by about 17 s, so the drips get little screen time.",
+      "fix": "Slow the descent and hold on the arch longer before easing down to the tread"
+    },
+    {
+      "severity": "minor",
+      "file": "set-A-06.png",
+      "where": "whole frame, 25.00–25.73 s",
+      "what": "The close pass reaches cruise speed within about 0.4 s of the cut, so the ease-in is very short compared with the eased ending",
+      "fix": "Lengthen the ease-in to about 0.8–1 s or start the move pre-rolled at a gentler speed"
+    },
+    {
+      "severity": "minor",
+      "file": "set-A-09.png",
+      "where": "whole frame, 43.80–1.17 s",
+      "what": "The seam has no jump, and 44.97 s matches 0.00 s. But the camera eases to a full stop and eases out again, so it sits near-static for about 2 s across the loop and reads as a pause.",
+      "fix": "Shorten the settle at the end of return and the ease-out at the start of arrival so the push keeps some motion through the seam"
+    }
+  ],
+  "reviewer": "reviewer_2501",
+  "family": "claude_opus_5_5"
+}
