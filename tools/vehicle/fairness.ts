@@ -14,9 +14,11 @@
 // ripple is |n(s + h) - 2 n(s) + n(s - h)| / h^2, in 1/m^2. A fair panel scores low; a waviness of amplitude a
 // and wavelength L scores about a (2 pi / L)^3. Folds tighter than the crease radius are declared creases and the
 // samples within three steps of them are left out, so a crisp character line does not count as ripple.
+// Columns: samples kept, share of stations left out as crease, RMS along rows (u) and columns (v), median, 95th
+// percentile and worst value with its native pixel. RMS carries the tail, the median the general state of the panel.
 // The result goes to out/work/vehicle/fairness/<label>/ as table.txt, ripple-<view>.png, ripple.jpg and zebra.jpg.
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, openSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import * as T from 'three'
@@ -280,8 +282,8 @@ async function soupAt(timeSeconds: number) {
   return { soup: new Soup(tris), anchors: car.anchors, toLocal }
 }
 
-type Stat = { sum: number; n: number; values: number[]; worst: number; at: [number, number] }
-const newStat = (): Stat => ({ sum: 0, n: 0, values: [], worst: 0, at: [0, 0] })
+type Stat = { sum: number; n: number; excluded: number; values: number[]; worst: number; at: [number, number] }
+const newStat = (): Stat => ({ sum: 0, n: 0, excluded: 0, values: [], worst: 0, at: [0, 0] })
 
 const built = new Map<number, Awaited<ReturnType<typeof soupAt>>>()
 async function measure(frame: number, key: 'master' | 'vertical') {
@@ -385,7 +387,7 @@ async function measure(frame: number, key: 'master' | 'vertical') {
     const d2 = new T.Vector3()
     const rs = new Float32Array(m + 1).fill(-1)
     for (let i = 1; i < m; i++) {
-      if (crease[i]) continue
+      if (crease[i]) { stat.excluded++; continue }
       d2.copy(normals[i + 1]).addScaledVector(normals[i], -2).add(normals[i - 1])
       const r = d2.length() / (step * step)
       rs[i] = r
@@ -434,7 +436,7 @@ const f0 = (x: number) => x.toFixed(0).padStart(7)
 
 const lines: string[] = [
   `fairness ${label}  step ${(step * 1000).toFixed(0)} mm  crease radius ${(creaseRadius * 1000).toFixed(0)} mm  unit 1/m^2  (RMS of |n(s+h) - 2n(s) + n(s-h)| / h^2 along image rows u and columns v)`,
-  `${'view'.padEnd(13)}${'panel'.padEnd(20)}${'samples'.padStart(8)}${'u rms'.padStart(7)}${'v rms'.padStart(7)}${'p95'.padStart(7)}${'worst'.padStart(7)}  at native px`,
+  `${'view'.padEnd(13)}${'panel'.padEnd(20)}${'samples'.padStart(8)}${'crease%'.padStart(8)}${'u rms'.padStart(7)}${'v rms'.padStart(7)}${'p50'.padStart(7)}${'p95'.padStart(7)}${'worst'.padStart(7)}  at native px`,
 ]
 const results = []
 for (const frame of frames) for (const key of formatKeys) {
@@ -446,7 +448,7 @@ for (const frame of frames) for (const key of formatKeys) {
     if (u.n + v.n < 50) continue
     const all = u.values.concat(v.values)
     const worst = u.worst >= v.worst ? u : v
-    lines.push(`${r.view.padEnd(13)}${name.padEnd(20)}${String(u.n + v.n).padStart(8)}${f0(rms(u))}${f0(rms(v))}${f0(pct(all, 0.95))}${f0(worst.worst)}  ${worst.at.map((n) => n.toFixed(0)).join(',')}`)
+    lines.push(`${r.view.padEnd(13)}${name.padEnd(20)}${String(u.n + v.n).padStart(8)}${(100 * (u.excluded + v.excluded) / Math.max(1, u.n + v.n + u.excluded + v.excluded)).toFixed(0).padStart(8)}${f0(rms(u))}${f0(rms(v))}${f0(pct(all, 0.5))}${f0(pct(all, 0.95))}${f0(worst.worst)}  ${worst.at.map((n) => n.toFixed(0)).join(',')}`)
   }
 }
 writeFileSync(join(out, 'table.txt'), lines.join('\n') + '\n')
@@ -477,6 +479,10 @@ async function sheet(files: string[], name: string, caption: string) {
 await sheet(results.map((r) => join(out, `ripple-${r.view}.png`)), 'ripple.jpg', `${label} ripple, green fair, red 1000 per m2, rows ${results.map((r) => r.view).join(' ')}`)
 
 if (a.zebra === 'true') {
+  // One render at a time on the machine: a second zebra run would rebuild the studio bundle under the first one.
+  const lock = join(ensureDir(join(workDir, 'vehicle')), 'studio.lock')
+  try { closeSync(openSync(lock, 'wx')) } catch { throw new Error(`another studio render holds ${lock}; wait for it or remove the file if it is stale`) }
+  process.on('exit', () => { try { unlinkSync(lock) } catch { /* already gone */ } })
   const files: string[] = []
   for (const key of formatKeys) {
     const id = config.formats[key].id
