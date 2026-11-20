@@ -502,8 +502,8 @@ if (a.base) {
   const base = join(workDir, 'vehicle', 'fairness', a.base)
   for (const name of ['zebra.jpg', 'ripple.jpg']) {
     if (!existsSync(join(base, name)) || !existsSync(join(out, name))) continue
-    const top = await sharp(join(base, name)).toBuffer({ resolveWithObject: true })
-    const bottom = await sharp(join(out, name)).toBuffer({ resolveWithObject: true })
+    const top = await sharp(join(base, name)).raw().toBuffer({ resolveWithObject: true })
+    const bottom = await sharp(join(out, name)).raw().toBuffer({ resolveWithObject: true })
     const w = Math.max(top.info.width, bottom.info.width)
     await sharp({ create: { width: w, height: top.info.height + bottom.info.height, channels: 3, background: '#111' } })
       .composite([{ input: top.data, raw: top.info, left: 0, top: 0 }, { input: bottom.data, raw: bottom.info, left: 0, top: top.info.height }])
