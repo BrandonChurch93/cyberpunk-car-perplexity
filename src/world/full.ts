@@ -34,8 +34,8 @@ export async function createFullWorld(): Promise<WorldModule> {
   const fixtures = roofFixtures(root, roof, city, labels, surfaces)
   const updateCity = cityPracticals(city, labels, fixtures.signs)
   detailFacades(city)
-  const set = (timeSeconds: number) => {
-    fixtures.set(timeSeconds)
+  const set = (timeSeconds: number, cutTime = timeSeconds) => {
+    fixtures.set(timeSeconds, cutTime)
     updateCity(timeSeconds)
   }
   const { min, max } = deck.bounds
@@ -48,6 +48,6 @@ export async function createFullWorld(): Promise<WorldModule> {
     surfaces,
     steamSources: fixtures.steamSources,
     beginFrame: ({ frame }) => set(frame.timeSeconds),
-    beginSample: ({ timeSeconds }) => set(timeSeconds),
+    beginSample: ({ timeSeconds, sample }) => set(timeSeconds, sample?.frame.timeSeconds),
   }
 }
