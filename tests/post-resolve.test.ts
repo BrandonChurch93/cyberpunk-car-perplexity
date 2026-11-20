@@ -64,6 +64,22 @@ function exercise(
   const lamp = render('beauty', 0)
   const middleX = width >> 1
   const middleY = height >> 1
+  const scene = (x: number, y: number) => x < 10 && y < 10 ? 2500 : [0.12, 0.32, 0.59] as const
+  field(scene)
+  const healthy = render('beauty', 0)
+  const cleanCount = resolver.nonFinitePixels
+  const damage = (x: number, y: number) => (x >= width - 40 && y >= height - 31) || (x === 21 && y === 21)
+  field((x, y) => damage(x, y) ? [NaN, -Infinity, Infinity] : scene(x, y))
+  input[3] = NaN // Unused alpha is not scene radiance.
+  const repaired = render('beauty', 0)
+  const repairedCount = resolver.nonFinitePixels
+  field(() => NaN)
+  const allBad = render('clay', 0)
+  const allBadCount = resolver.nonFinitePixels
+  field(() => 3 * 0.18)
+  const neutral = render('clay', 0)
+  field((x, y) => x === middleX && y === middleY ? 4_100_000 : 0.32)
+  const firefly = render('beauty', 0)
   const result = {
     grayCodes: [...codes].sort((a, b) => a - b),
     seamSame: first.every((v, i) => v === seam[i]),
@@ -75,6 +91,15 @@ function exercise(
     near: px(lamp, middleX, middleY + 5),
     streak: px(lamp, middleX + 18, middleY),
     far: px(lamp, middleX, middleY + 18),
+    cleanCount,
+    repairedCount,
+    allBadCount,
+    fallbackMatches: allBad.every((v, i) => v === neutral[i]),
+    cleanCountAfterRepair: resolver.nonFinitePixels,
+    validPixelDelta: Math.max(...px(repaired, 8, 8).map((v, c) => Math.abs(v - px(healthy, 8, 8)[c]))),
+    repairedDelta: repaired.reduce((delta, value, i) => Math.max(delta, Math.abs(value - healthy[i])), 0),
+    fireflyCount: resolver.nonFinitePixels,
+    fireflyMin: firefly.reduce((lo, value) => Math.min(lo, value), 255),
   }
   sum.dispose()
   target.dispose()
@@ -94,7 +119,7 @@ test('resolves on WebGL2 with dither, lens scatter, diagnostic passthrough and a
         import * as THREE from 'three'
         import { BasicResolver } from '/src/post/resolve.ts'
         import { config, frameCount } from '/src/config.ts'
-        export const run = () => (${exercise.toString()})(THREE, BasicResolver, frameCount, config.film.fps, { id: config.formats.preview.id, width: 96, height: 64 })
+        export const run = () => (${exercise.toString()})(THREE, BasicResolver, frameCount, config.film.fps, { id: config.formats.preview.id, width: 95, height: 63 })
       ` : null,
       configureServer(server) {
         server.middlewares.use('/post-test', (_req, res) => {
@@ -126,6 +151,15 @@ test('resolves on WebGL2 with dither, lens scatter, diagnostic passthrough and a
       expect(result.cyan[2]).toBeGreaterThan(result.cyan[0] + 35)
       expect(result.near[0]).toBeGreaterThan(result.near[2])
       expect(result.streak[2]).toBeGreaterThan(result.far[2] + 2)
+      expect(result.cleanCount).toBe(0)
+      expect(result.repairedCount).toBe(40 * 31 + 1)
+      expect(result.allBadCount).toBe(95 * 63)
+      expect(result.fallbackMatches).toBe(true)
+      expect(result.cleanCountAfterRepair).toBe(0)
+      expect(result.validPixelDelta).toBe(0)
+      expect(result.repairedDelta).toBeLessThanOrEqual(1)
+      expect(result.fireflyCount).toBe(0)
+      expect(result.fireflyMin).toBeGreaterThan(16)
     } finally {
       await browser.close()
     }
