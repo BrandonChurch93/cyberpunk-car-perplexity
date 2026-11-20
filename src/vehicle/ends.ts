@@ -105,7 +105,7 @@ function profileGuide(mesh: T.Mesh<T.BufferGeometry, T.MeshStandardMaterial>, hu
         float core = crossSection / 0.145;
         float pocket = smoothstep(0.28, 0.44, crossSection) * (1.0 - smoothstep(0.67, 0.91, crossSection));
         float pitch = along / 0.010;
-        float facets = 0.31 * pocket * cos(PI2 * pitch) * smoothstep(0.003, 0.014, along)
+        float facets = 0.16 * pocket * cos(PI2 * pitch) * smoothstep(0.003, 0.014, along)
           * (1.0 - smoothstep(0.12, 0.45, fwidth(pitch)));
         float resolve = 1.0 - smoothstep(0.065, 0.20, length(fwidth(vGuidePlane)) / guideHalfWidth);
         return mix(1.05, sleeve * (1.0 + facets) + 5.65 * exp(-0.5 * core * core), resolve);
@@ -267,7 +267,13 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const hub: XY = [.834, .429]
     const tips: XY[] = [[.877, .285], [.879, .644], [.470, .421]]
     const guideWidth = .015
-    const guide = emit('front running guide', lightGuide(f, hub, tips, guideWidth, -.007, outFront), false, false, f(...hub, -.008), 3.99)
+    const guideFace: Face = (x, y, depth) => {
+      const p = f(x, y, depth)
+      const lift = .0105 * smooth(y, .505, .553) * (1 - smooth(y, .631, .652))
+      return [p[0], p[1], p[2] + lift]
+    }
+    const guide = emit('front running guide', lightGuide(guideFace, hub, tips, guideWidth, -.007, outFront),
+      false, false, f(...hub, -.008), 3.99)
     profileGuide(guide, hub, tips, guideWidth)
     const eyeStart = .495, eyeEnd = .919
     const window = (u: number, v: number, d: number): Point => {

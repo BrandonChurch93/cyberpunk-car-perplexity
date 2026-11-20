@@ -786,22 +786,21 @@ describe('vehicle geometry and state', () => {
     }
   })
 
-  it('keeps the upper running guide free of opaque trim in the lamp shot', () => {
+  it('keeps the upper running guide in front of the lens and trim in both lamp shots', () => {
     for (const vehicle of [blockout, full]) {
       vehicle.root.updateMatrixWorld(true)
       const guide = vehicle.root.getObjectsByProperty('name', 'front running guide').find((node) => node.position.x > 0)!
-      for (const y of [.515, .552, .585]) {
-        const x = T.MathUtils.mapLinear(y, .429, .644, .834, .879)
+      for (const y of [.515, .552, .585, .618]) for (const edge of [-.004, 0, .004]) {
+        const x = T.MathUtils.mapLinear(y, .429, .644, .834, .879) + edge
         const target = new T.Raycaster(new T.Vector3(x, y, 3), new T.Vector3(0, 0, -1)).intersectObject(guide)[0].point
-        for (const frame of [615, 690]) {
-          const { position } = cameraAt(frame / config.film.fps, config.formats.preview, vehicle.anchors)
+        for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [615, 690]) {
+          const { position } = cameraAt(frame / config.film.fps, format, vehicle.anchors)
           const ray = new T.Raycaster(position, target.clone().sub(position).normalize())
-          const opaque = ray.intersectObject(vehicle.root).find(({ object }) => object.name !== 'front optical lens shells')
-          expect(opaque?.object).toBe(guide)
+          expect(ray.intersectObject(vehicle.root)[0]?.object).toBe(guide)
         }
       }
     }
-  })
+  }, 15_000)
 
   it('uses the same running-guide optical coordinates and emitted intensity on each side', () => {
     for (const vehicle of [blockout, full]) {
