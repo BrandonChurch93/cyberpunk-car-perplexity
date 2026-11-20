@@ -197,7 +197,7 @@ function fitSpotShadow(light: THREE.SpotLight, region: THREE.Box3, isArea: boole
   const margin = 0.045
   const padX = Math.max((right - left) * margin, 0.02)
   const padY = Math.max((top - bottom) * margin, 0.02)
-  const near = isArea ? Math.min(0.45, Math.max(0.035, minZ * 0.18)) : 0.045
+  const near = isArea ? Math.max(Math.min(0.45, Math.max(0.035, minZ * 0.18)), minZ - 60) : 0.045
   const far = hasFit && isArea ? Math.max(near + 0.1, Math.min(light.distance, maxZ + 8)) : light.distance
   camera.near = near
   camera.far = far
@@ -334,6 +334,7 @@ export class LightRig {
       else scratch.copy(film.color)
       light.color.copy(scratch)
       light.intensity = film.intensity * level
+      light.distance = film.range
       light.visible = light.intensity > 1e-5
       u.filmLightPosition.value[i].copy(world)
       const cutoff = light instanceof THREE.SpotLight ? Math.cos(light.angle) : -1

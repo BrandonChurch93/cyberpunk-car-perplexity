@@ -45,10 +45,10 @@ export async function createFullWorld(): Promise<WorldModule> {
     return { original, wide, output: wide ? { ...wide } : original }
   })
   const set = (timeSeconds: number, cutTime = timeSeconds) => {
-    fixtures.set(timeSeconds, cutTime)
+    const wide = cutTime < wake.end || cutTime >= returnShot.start
+    fixtures.set(timeSeconds, cutTime, wide)
     updateCity(timeSeconds)
     hero.set(timeSeconds)
-    const wide = cutTime < wake.end || cutTime >= returnShot.start
     for (const slot of slots) {
       if (!slot.wide) continue
       const source = wide ? slot.wide : slot.original

@@ -77,6 +77,20 @@ Note on timing: WebGL calls return before the software rasterizer finishes. `add
 
 Preview film tier on these numbers: `review` (5.1 h fits in `sandbox.previewFilmMaxHours`, `final` does not).
 
+### Measured again on the real scene, start of Phase 3
+
+Measured 2026-11-20 with `tools/measure.ts --samples 2` at frame 195, full detail, build a3cb37e31151a9f5, in the Builder's VM (2 cores). A sandbox agent VM (4 cores) runs the same sample in roughly half the time.
+
+| Format | Page ready | First sample (shaders compile) | Each later sample | One still, draft | One still, review | One still, final | Whole film, draft |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 16x9 | 11.2 s | 214 s | 74.8 s | 3.8 min | 12.5 min | 62 min | 28 h |
+| 9x16 | 10.7 s | 202 s | 62.1 s | 3.6 min | 10.8 min | 52 min | 23 h |
+| preview | 11.0 s | 177 s | 36.7 s | 3.1 min | 7.4 min | 32 min | 13.8 h |
+
+- Preview film tier on these numbers: `draft`, rendered as film parts on several agent VMs and assembled with a byte compare (13.8 h on one machine does not fit `sandbox.previewFilmMaxHours`, eight 4 core machines bring it under two hours).
+- Look lock stills at the final tier are rendered one per agent VM in parallel.
+- A cost profile per pass and per system, and savings that are byte identical, are in work on `dev/perf`. The first finding: about 140 s of every first sample is shader compile, and the rain ribbons were 0.38 s of a sample before the exact compactor and 0.06 s after.
+
 Chunking strategy:
 
 - A detached process outlives a scripted step (step 4), so long renders run detached with `--budget 0` and a log file that is polled.
@@ -110,7 +124,7 @@ Vetted 2026-11-19. The ledger is `reference/controls.json` (URLs, licenses and s
 - Chosen: direction C. Cold blue with one red accent, 24 mm and very low, headlamp beams and haze as the main event, a long puddle in the foreground.
 - One key frame per beat in that direction is in `reference/keyframes/`, with every prompt in `PROMPTS.md`. Four of them (arrival, wheel, ignition, return) were made again because the first takes carried a real maker name on a skyline sign or on the brake caliper.
 - What the jurors named, carried into the build as things to avoid: garbled or repeated sign text, out of focus highlights spaced evenly, a black body that recedes at phone size, sign color so saturated that it reads as a game.
-- Addendum 002, 2026-11-20: Brandon approved direction A. `reference/approved/hero.jpg` is the hero target and the style anchor. Direction C and the K1 result are retired, the direction C beat key frames are in `reference/keyframes/retired/` and are targets for nothing, and the K1 note on saturated sign color is retired. New beat key frames are generated from the approved image (at most `keyframes.maxTakes` takes each, no jury), with `02-wake.jpg` a byte copy of the approved image. State: in work on `dev/keyframes`.
+- Addendum 002, 2026-11-20: Brandon approved direction A. `reference/approved/hero.jpg` is the hero target and the style anchor. Direction C and the K1 result are retired, the direction C beat key frames are in `reference/keyframes/retired/` and are targets for nothing, and the K1 note on saturated sign color is retired. New beat key frames are generated from the approved image (at most `keyframes.maxTakes` takes each, no jury), with `02-wake.jpg` a byte copy of the approved image. State: done 2026-11-20. All seven are in `reference/keyframes/` (`01-arrival`, `03-paint`, `04-wheel`, `05-lamp`, `06-detail`, `07-ignition`, `08-return`), each posted in the thread, prompts and take counts in `PROMPTS.md`.
 - The key frames are targets for composition, palette and mood only. They are never used as textures, backgrounds or frames.
 
 ## Judged frames
@@ -248,6 +262,10 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-20 | G14 treats no `getExtension` call in `src` as an empty list | `grep` exits 1 on no match and the check threw | `tools/gate.ts` |
 | 2026-11-20 | Fifteen neon street controls are collected on `dev/neon-controls` and vetted in one pass before round 8. C9 joins the critics from round 8 | Addendum 002 | `reference/controls.json` |
 | 2026-11-20 | Every thread update from here shows the current hero frame beside the approved image, and each new beat key frame is posted as it finishes | Addendum 002 | thread |
+| 2026-11-20 | The city behind the parapet is rebuilt at real scale by a homothety about the hero eye: towers and their signs move to 380 to 650 m (outer skyline to 1280 m) and grow by the same factor, so the hero frame keeps the approved layout while floors are 3.0 to 3.6 m. Mounted lights keep their illuminance at the car. The director's far plane is 1500 m, and an area shadow far from the car starts 60 m before its fitted region | The restaged city had been fitted as a miniature (screen tower 12.6 m tall at 38 m). `kit/03-WORLD.md` asks for real-world size, and at model scale windows are huge, haze has no depth and parallax is wrong | `src/world/`, `src/director/rig.ts`, `src/core/lights.ts`, haze in `src/core/haze` |
+| 2026-11-20 | `tools/match.py` measures the hero frame against the approved image per area (mean color, luma percentiles, chroma, detail energy). Every owner reports its rows with each hero render. It is a meter for the team, not a critic and not a gate | Qualitative notes were converging slowly. The numbers show what the eye could not rank: the deck is bright enough but half as textured, the body has a quarter of the target detail, the sky and towers sit 30 to 45 levels low | `tools/match.py` |
+| 2026-11-20 | The front cheek, wing side and lamp surround are rebuilt as one continuous surface with the openings cut in | Nine seam trials in a row held C4 at 5 on the hero frame. The auditor's probes show separate surfaces with normal jumps of 4 to 100 degrees | `src/vehicle/body.ts` on `dev/vehicle-b` |
+| 2026-11-20 | Sources are added where the paint mirrors them: full-height cyan strips on the left edge tower up to 45 degrees elevation from the car, and the stair core, amber wayfinding sign, pay station and pole behind and right of the hero camera | The paint owner measured that the bonnet and the right flank mirror directions where the cube held only haze, so a correct coat showed nothing | `src/world/` |
 
 ## Declined issues
 
@@ -324,6 +342,12 @@ Addendum 002: any issue that asks for less color, fewer signs, less reflection, 
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-20, session 16
+
+- Done: merged on `dev/p3` the planar clamp with flush bay line and grate receivers, the lamp bezel seat, the wheel pass, the surface pass, the last key frames (wheel and detail posted), the clear coat with explicit flakes for black pearl, the rain roll-off and the exact ribbon compactor, haunch step 2, the layered city pass and the cloud layer with the retuned haze. Render budget measured again on the real scene. Match meter written and handed to every owner with target rows. Found that the restaged city was a miniature and ordered the real-scale rebuild. Front cheek rebuild ordered. Cost profile started on `dev/perf`.
+- Measured: suite 203 of 203 on the merge. Meter on the hero frame (target / ours): sky center p50 103 / 79, towers center 97 / 52, deck near left detail 60.9 / 28.4, body hood detail 43.7 / 12.9, body flank p50 34 / 18. C4 at the hero camera stays 5 and 5, macro 8 and 8.
+- Next: real-scale city with small windows, haze retuned for depth, deck breakup and bead glints, spray halo and denser rain, sources for the paint at 195 and 360, the continuous cheek, then the look lock set at the final tier and round 8 with C1, C2, C3, C4, C8 and C9.
 
 ### 2026-11-20, session 15
 

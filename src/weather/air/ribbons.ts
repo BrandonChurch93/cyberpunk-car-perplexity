@@ -6,6 +6,7 @@ import { filmLightsGlsl, type FilmLightUniforms } from '../../core/lights'
 import { stream } from '../../core/random'
 import type { WorldModule } from '../../world'
 import { fallCycle, prevailingWind, terminalSpeed } from './motion'
+import { clipBounds, rainExtents, ribbonCorners, worldRainMotion, WorldRibbonSelection } from './selection'
 
 const nearRainDensity = 5.4
 const middleRainDensity = 2.42
@@ -18,8 +19,13 @@ vec3 scatterRain(vec3 p, vec3 toEye) {
   vec3 light = vec3(0.0);
   for (int i = 0; i < MAX_FILM_LIGHTS; ++i) {
     if (i >= filmLightCount) break;
+    vec4 source = filmLightColor[i];
+    if (all(equal(source.rgb, vec3(0.0)))) continue;
+    vec3 offset = filmLightPosition[i] - p;
+    if (dot(offset, offset) > source.a * source.a * 1.000001) continue;
     vec3 toSource;
     vec3 incident = filmLightAt(i, p, toSource);
+    if (all(equal(incident, vec3(0.0)))) continue;
     float mu = -dot(toEye, toSource);
     bool area = filmLightShape[i].x < 0.0;
     float forward = exp2(-(area ? 12.0 : 18.0) * (1.0 - mu));
@@ -69,11 +75,11 @@ vec3 wrapAround(vec3 point, vec3 anchor, vec3 span) {
 
 vec3 veilHighlights(vec3 peak, float weight) {
   float brightest = max(peak.r, max(peak.g, peak.b));
-  const float knee = 0.031;
-  const float span = 0.068;
+  const float knee = 0.017;
+  const float span = 0.035;
   float excess = max(0.0, brightest - knee);
   float scale = 1.0 - weight * excess * excess / max(1e-6, brightest * (span + excess));
-  return peak * scale;
+  return peak * (scale * mix(1.0, 0.69, weight));
 }
 
 void main() {
@@ -81,24 +87,26 @@ void main() {
   vec3 direction = aMotion.xyz;
   vec3 delta = 0.5 * direction;
   float amount = aMotion.w;
+  gl_Position = vec4(3.0, 3.0, 3.0, 1.0);
   if (uLayer >= 0.0) {
     float tau = 6.28318530718;
-    float slant = 0.19 + aMotion.w * 0.075;
+    float slant = ${worldRainMotion.slant} + aMotion.w * ${worldRainMotion.variation};
     float cycle = fract(aDrop.y - uPhase * aMotion.x);
     float y = (cycle - 0.5) * aMotion.y;
     vec3 span = vec3(uVolumeSize.x, aMotion.y, uVolumeSize.z);
     vec3 origin = uLayer < 0.5 ? uNearAnchor : uVolumeCenter;
     if (uLayer < 0.5) y = wrapAround(vec3(0.0, y, 0.0), origin, span).y;
-    float gustPhase = tau * (uPhase * 14.0 + aDrop.x * 0.26 + aDrop.z * 0.14);
-    float flutter = sin(tau * (uPhase * 91.0 + aMotion.w));
-    float gust = 0.09 * sin(gustPhase);
-    vec2 drift = uWind * (-slant * y + gust) + vec2(uWind.y, -uWind.x) * (0.018 * flutter);
+    float gustPhase = tau * (uPhase * ${worldRainMotion.gustCycles.toFixed(1)} + aDrop.x * 0.26 + aDrop.z * 0.14);
+    float flutterPhase = tau * (uPhase * ${worldRainMotion.flutterCycles.toFixed(1)} + aMotion.w);
+    float flutter = sin(flutterPhase);
+    float gust = ${worldRainMotion.gust} * sin(gustPhase);
+    vec2 drift = uWind * (-slant * y + gust) + vec2(uWind.y, -uWind.x) * (${worldRainMotion.flutter} * flutter);
     p = vec3(aDrop.x * uVolumeSize.x + drift.x, y, aDrop.z * uVolumeSize.z + drift.y);
     if (uLayer < 0.5) p = wrapAround(p, origin, span);
     else p += origin;
     vec3 eye = uFilmView > 0.5 ? uOpticalEye : cameraPosition;
     float distanceToEye = length(p - eye);
-    float low = smoothstep(0.018, 0.14, p.y);
+    float low = smoothstep(${rainExtents.floor}, 0.14, p.y);
     if (uLayer < 0.5) {
       float border = max(max(abs(p.x - origin.x) / span.x, abs(p.y - origin.y) / span.y), abs(p.z - origin.z) / span.z);
       amount = low * smoothstep(0.65, 1.48, distanceToEye) * (1.0 - smoothstep(3.25, 4.8, distanceToEye));
@@ -106,27 +114,27 @@ void main() {
       amount *= mix(0.54, 1.0, smoothstep(0.88, 2.65, distanceToEye));
     } else if (uLayer < 1.5) {
       amount = low * smoothstep(0.01, 0.10, min(cycle, 1.0 - cycle));
-      amount *= smoothstep(1.9, uFilmView > 0.5 ? 4.4 : 3.1, distanceToEye);
-      amount *= 1.0 - smoothstep(17.0, 25.0, distanceToEye);
+      amount *= smoothstep(${rainExtents.middle[0]}, uFilmView > 0.5 ? 4.4 : 3.1, distanceToEye);
+      amount *= 1.0 - smoothstep(17.0, ${rainExtents.middle[1].toFixed(1)}, distanceToEye);
     } else {
       amount = low * smoothstep(0.02, 0.14, min(cycle, 1.0 - cycle));
-      amount *= smoothstep(15.0, 24.0, distanceToEye) * (1.0 - smoothstep(25.0, 36.0, distanceToEye));
+      amount *= smoothstep(${rainExtents.far[0].toFixed(1)}, 24.0, distanceToEye) * (1.0 - smoothstep(25.0, ${rainExtents.far[1].toFixed(1)}, distanceToEye));
       amount *= 0.38;
     }
+    if (amount < 0.0003) return;
     float speed = aMotion.z;
-    float vx = slant * speed + 0.09 * tau * 14.0 / uDuration * cos(gustPhase);
-    vec2 sideWind = uWind * vx + vec2(uWind.y, -uWind.x) * (0.018 * tau * 91.0 / uDuration * cos(tau * (uPhase * 91.0 + aMotion.w)));
+    float vx = slant * speed + ${worldRainMotion.gust} * tau * ${worldRainMotion.gustCycles.toFixed(1)} / uDuration * cos(gustPhase);
+    vec2 sideWind = uWind * vx + vec2(uWind.y, -uWind.x) * (${worldRainMotion.flutter} * tau * ${worldRainMotion.flutterCycles.toFixed(1)} / uDuration * cos(flutterPhase));
     delta = vec3(sideWind.x, -speed, sideWind.y) * (0.5 * uShutter);
   }
 
-  gl_Position = vec4(3.0, 3.0, 3.0, 1.0);
   if (amount < 0.0003) return;
   vec4 a = modelViewMatrix * vec4(p - delta, 1.0);
   vec4 b = modelViewMatrix * vec4(p + delta, 1.0);
   vec4 ca = lensProject(a);
   vec4 cb = lensProject(b);
   float depth = 0.5 * (ca.w + cb.w);
-  if (min(ca.w, cb.w) < 0.035 || abs(ca.x) > ca.w * 1.4 || abs(ca.y) > ca.w * 1.7) return;
+  if (min(ca.w, cb.w) < ${clipBounds.near} || abs(ca.x) > ca.w * ${clipBounds.x} || abs(ca.y) > ca.w * ${clipBounds.y}) return;
   vec2 ap = (ca.xy / ca.w * 0.5 + 0.5) * uViewport;
   vec2 bp = (cb.xy / cb.w * 0.5 + 0.5) * uViewport;
   vec2 line = bp - ap;
@@ -142,10 +150,13 @@ void main() {
   float sigmaEnd = sqrt(pow(length(axis * coc) * 0.5, 2.0) + physical * physical * 0.5 + 0.17);
   vec3 eye = uFilmView > 0.5 ? uOpticalEye : cameraPosition;
   vec3 radiance = scatterRain(p, normalize(eye - p));
+  if (all(equal(radiance, vec3(0.0)))) return;
   float gain = uLayer < 0.0 ? 0.64 : uLayer < 0.5 ? 0.92 : 4.2;
   float coverage = min(1.0, diameter * 0.39894228 / sigmaSide) * min(1.0, max(len, diameter) / (1.35 * sigmaEnd));
   float frameTravel = len / max(uViewport.x, uViewport.y);
-  float veil = uLayer >= 0.0 && uLayer < 1.5 ? uFilmView * smoothstep(0.008, 0.028, frameTravel) : 0.0;
+  float nearVeil = smoothstep(0.006, 0.024, frameTravel);
+  float midVeil = smoothstep(0.0095, 0.031, frameTravel);
+  float veil = uLayer >= 0.0 && uLayer < 1.5 ? uFilmView * (uLayer < 0.5 ? nearVeil : midVeil) : 0.0;
   vHead = ap;
   vTail = bp;
   vSigma = vec2(sigmaSide, sigmaEnd);
@@ -188,7 +199,7 @@ void main() {
 
 export function makeRibbonGeometry(drops: Float32Array, motion: Float32Array, dynamic = false): THREE.InstancedBufferGeometry {
   const geometry = new THREE.InstancedBufferGeometry()
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0], 3))
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(ribbonCorners, 3))
   geometry.setIndex([0, 1, 2, 0, 2, 3])
   geometry.setAttribute('aDrop', new THREE.InstancedBufferAttribute(drops, 4).setUsage(dynamic ? THREE.DynamicDrawUsage : THREE.StaticDrawUsage))
   geometry.setAttribute('aMotion', new THREE.InstancedBufferAttribute(motion, 4).setUsage(dynamic ? THREE.DynamicDrawUsage : THREE.StaticDrawUsage))
@@ -211,7 +222,7 @@ export class RibbonView {
     this.sample = sample
   }
 
-  makeMesh(lights: FilmLightUniforms, geometry: THREE.InstancedBufferGeometry, layer: number, center = new THREE.Vector3(), size = new THREE.Vector3()): THREE.Mesh {
+  makeMesh(lights: FilmLightUniforms, geometry: THREE.BufferGeometry, layer: number, center = new THREE.Vector3(), size = new THREE.Vector3(), selection?: WorldRibbonSelection): THREE.Mesh {
     const uniform = {
       ...lights,
       uViewport: { value: new THREE.Vector2() },
@@ -271,6 +282,7 @@ export class RibbonView {
           uniform.uLensShift.value.set(offset.x, offset.y)
         }
       }
+      selection?.select(camera, mesh.matrixWorld, uniform.uFilmView.value ? uniform.uOpticalEye.value : undefined, uniform.uLensShift.value, uniform.uFocus.value, this.phase)
       material.uniformsNeedUpdate = true
     }
     return mesh
@@ -299,7 +311,8 @@ export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLig
       drops.set([rng.range(-0.5, 0.5), rng.next(), rng.range(-0.5, 0.5), diameter], i * 4)
       motion.set([cycles, wrapHeight, terminalSpeed(diameter), rng.next()], i * 4)
     }
-    const mesh = view.makeMesh(lights, makeRibbonGeometry(drops, motion), layer, center, size)
+    const selection = layer > 0 ? new WorldRibbonSelection(drops, motion, size, center, layer === 1 ? rainExtents.middle : rainExtents.far) : undefined
+    const mesh = view.makeMesh(lights, selection?.geometry ?? makeRibbonGeometry(drops, motion), layer, center, size, selection)
     mesh.name = `rain-${key}`
     return mesh
   })

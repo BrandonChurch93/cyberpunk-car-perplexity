@@ -73,15 +73,19 @@ const porousFragment = /* glsl */ `
   vec2 surfSlope = vec2(0.0);
   #ifdef SURF_STANDING
     float surfH = surfDeckHeight(surfXZ, surfDetail);
-    surfWater = surfUp * surfCover * smoothstep(0.0, -0.35, surfH);
+    float surfGround = 1.0;
+    #ifdef SURF_GROUNDED
+      surfGround = 1.0 - smoothstep(0.01, 0.03, abs(surfWorldPos.y));
+    #endif
+    surfWater = surfGround * surfUp * surfCover * smoothstep(0.0, -0.35, surfH);
     surfDepth = max(-surfH, 0.0);
-    surfFringe = surfUp * surfCover * (1.0 - smoothstep(0.0, 1.6, surfH)) * (1.0 - surfWater);
+    surfFringe = surfGround * surfUp * surfCover * (1.0 - smoothstep(0.0, 1.6, surfH)) * (1.0 - surfWater);
     if (abs(surfH) < 1.2 && surfDetail > 0.0) {
       float e = 0.006;
       float hx = surfDeckHeight(surfXZ + vec2(e, 0.0), surfDetail);
       float hz = surfDeckHeight(surfXZ + vec2(0.0, e), surfDetail);
       vec2 g = vec2(hx - surfH, hz - surfH) / e;
-      float rim = exp(-pow(surfH / 0.22, 2.0)) * surfDetail;
+      float rim = exp(-pow(surfH / 0.22, 2.0)) * surfDetail * surfGround;
       surfSlope -= rim * 0.00028 * g;
     }
   #else
@@ -93,12 +97,12 @@ const porousFragment = /* glsl */ `
   float surfDamp = clamp(surfWet + surfFringe * 0.6, 0.0, 1.0);
   float surfDark = mix(1.0, mix(0.9, mix(0.5, 0.6, surfAgg), surfPorosity), surfDamp);
   surfDark *= mix(1.0, 0.82, surfFringe);
-  surfDark *= mix(1.0, mix(0.55, 0.3, smoothstep(0.0, 3.0, surfDepth)), surfWater);
+  surfDark *= mix(1.0, mix(0.85, 0.65, smoothstep(0.0, 3.0, surfDepth)), surfWater * mix(0.3, 1.0, surfPorosity));
   float surfL = surfLuma(diffuseColor.rgb);
   diffuseColor.rgb = max(mix(vec3(surfL), diffuseColor.rgb, 1.0 + 0.15 * surfDamp), 0.0) * surfDark;
-  float surfRoughWet = mix(0.16, 0.3, smoothstep(0.35, 0.75, surfAgg));
+  float surfRoughWet = mix(0.28, 0.42, smoothstep(0.35, 0.75, surfAgg));
   roughnessFactor = mix(roughnessFactor, min(roughnessFactor, surfRoughWet), surfDamp);
-  roughnessFactor = mix(roughnessFactor, mix(0.09, 0.035, smoothstep(0.5, 2.5, surfDepth)), surfWater);
+  roughnessFactor = mix(roughnessFactor, mix(0.26, 0.08, smoothstep(3.0, 10.0, surfDepth)), surfWater);
   vec3 surfFlat = mix(surfN, vec3(0.0, 1.0, 0.0), surfWater);
   vec3 surfWorldN = normalize(surfFlat + vec3(-surfSlope.x, 0.0, -surfSlope.y));
   normal = surfToView(surfWorldN);
@@ -120,13 +124,16 @@ if (surfDiag > 0.5) {
 }
 `
 
-/** Sealed or painted ground carries `userData.wetPorosity` below 1: it darkens less when wet and still turns glossy. */
+/**
+ * Sealed or painted ground carries `userData.wetPorosity` below 1: it darkens less when wet and still turns glossy. Anything else
+ * that lies on the deck plane, such as the bay lines, floods with the deck.
+ */
 export function applyPorous(material: THREE.Material, uniforms: Uniforms, deck: boolean): void {
   const porosity = typeof material.userData.wetPorosity === 'number' ? THREE.MathUtils.clamp(material.userData.wetPorosity, 0, 1) : 1
   patchMaterial(material, {
     id: deck ? 'surface water deck' : 'surface water porous',
     uniforms: { ...uniforms, surfPorosity: { value: porosity } },
-    defines: deck ? { SURF_DECK: 1, SURF_STANDING: 1 } : {},
+    defines: deck ? { SURF_DECK: 1, SURF_STANDING: 1 } : { SURF_DECK: 1, SURF_STANDING: 1, SURF_GROUNDED: 1 },
     apply(shader) {
       shader.vertexShader = surfaceVaryingsGlsl(false) + insertAfter(shader.vertexShader, '#include <project_vertex>', surfaceVertexGlsl(false))
       let f = shader.fragmentShader
