@@ -4,7 +4,7 @@ import type { FilmLight } from '../core/contract'
 import { plate, type Label } from './fixtures'
 import { group, heroCityYaw, heroDrainLayout, streetY, type Tuple } from './forms'
 import { heroPoint, heroScale as scale, heroSize } from './hero-scale'
-import { billboardMural, fixtureOpal, signGlass, towerSurface } from './hero-surfaces'
+import { billboardMural, fixtureOpal, signGlass, towerSurface, type Facade, type SignSpill } from './hero-surfaces'
 import type { finishRoof } from './roof-look'
 
 const palette = {
@@ -74,6 +74,29 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const lights = new Map<string, FilmLight>()
   const signs: string[] = []
   let set = (_time: number) => {}
+  const survey = approvedHeroSourceSurvey()
+  const screen = survey.find(source => source.id === 'magenta violet tower screen')!
+  const screenReflection = { point: new THREE.Vector3(...screen.at), normal: new THREE.Vector3(...screen.normal), size: new THREE.Vector2(...screen.size) }
+  const washes = [
+    ['left edge','left cyan facade sail'],
+    ['hotel tower','hotel rooftop cabinet'],
+    ['parking tower','white parking blade'],
+    ['west garage','cyan garage rise'],
+    ['bar tower','far cyan bar cabinet'],
+    ['setback','violet mid distance blade'],
+    ['screen tower','magenta violet tower screen'],
+    ['amber tower','amber upper tower cabinet'],
+    ['right edge','right amber facade sail'],
+    ['east garage','amber garage rise'],
+  ] as const
+  const spillAt = (name: string): SignSpill | undefined => {
+    const key = washes.find(([fragment]) => name.includes(fragment))?.[1]
+    const entry = survey.find(source => source.id === key)
+    if (!entry) return
+    const color = new THREE.Color(...entry.rgb)
+    color.multiplyScalar(.68/Math.max(color.r,color.g,color.b))
+    return { point: new THREE.Vector3(...entry.at), size: new THREE.Vector2(...entry.size), color }
+  }
   const box = (parent: THREE.Object3D, name: string, at: Tuple, size: Tuple, material: THREE.Material) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material)
     mesh.name = name
@@ -91,7 +114,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     return { light, anchor }
   }
   const towers = [
-    ['hero left edge tower', -33.25, -75.2, 16.1, 3.3, 78.4, .069, scale.leftEdge],
+    ['hero left edge tower', -33.25, -75.2, 16.1, 3.3, 99.8, .069, scale.leftEdge],
     ['hero hotel tower', -9.52, -32.25, 3.05, 6.75, 6.14, .127, scale.hotel],
     ['hero parking tower', -9.98, -26.52, .94, 2.43, 5.78, .092, scale.parking],
     ['hero near west garage bay', -7.83, -25.40, 2.78, 4.15, 5.24, .079, scale.westFrontage],
@@ -128,22 +151,56 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     const [xx,roofY,zz] = heroPoint([x,top,z],k)
     return box(parent,name,[xx,(roofY+streetY)*.5,zz],[width*k,roofY-streetY,depth*k],material)
   }
-  for (const [name, x, faceZ, width, depth, top, level, k] of towers) {
-    const distant = faceZ < -50
+  const facadeOf = (name: string, n: number): Facade => /hotel|amber tower/.test(name) ? 'hotel' :
+    /screen|glass|left edge/.test(name) ? 'curtain' : /parking|garage|service/.test(name) ? 'concrete' :
+      (['banded','curtain','concrete'] as const)[n%3]!
+  const edgeCyan = new THREE.MeshBasicMaterial({ color: new THREE.Color(.047,3.1,5.4), toneMapped: false })
+  const edgePink = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.30,.066,.91), toneMapped: false })
+  const safetyRed = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.1,.052,.079), toneMapped: false })
+  for (const [index,[name, x, faceZ, width, depth, top, level, k]] of towers.entries()) {
+    const z = faceZ-depth*.5
     const tower = group(city, name + ' volume')
-    const shell = towerSurface(name, level, distant)
-    groundedBox(tower,name,x,top,faceZ-depth*.5,width,depth,shell,k)
-    scaledBox(tower, 'coated coping band', [x,top-.043,faceZ-depth/2], [width+.08,.12,depth+.09], frame,k)
-    if (distant || width < 1) continue
-    for (const side of [-1,1]) {
-      groundedBox(tower,'rainwater jamb',x+side*(width/2-.068),top,faceZ+.021,.092,.092,frame,k)
+    const shell = towerSurface(name, level, facadeOf(name,index), screenReflection, spillAt(name))
+    groundedBox(tower,name,x,top,z,width,depth,shell,k)
+    const [wx,wy,wz] = heroPoint([x,top,z],k)
+    const w = width*k, d = depth*k
+    box(tower,'folded coping band',[wx,wy-.52,wz],[w+.28,1.5,d+.28],frame)
+    if (faceZ >= -50 && width >= 1) {
+      for (const side of [-1,1]) groundedBox(tower,'rainwater jamb',x+side*(width/2-.068),top,faceZ+.021,.092,.092,frame,k)
     }
-    if (top > 7) {
-      scaledBox(tower, 'roof service machine room', [x+width*.07,top+.34,faceZ-depth*.61], [width*.42,.68, depth*.32], shell,k)
-      scaledBox(tower, 'raised inspection access lid', [x+width*.07,top+.70,faceZ-depth*.61], [width*.48,.078,depth*.36], frame,k)
+    if (index !== 1 && wy > 62 && w > 10) {
+      const crownH = index%4===0 ? 7.3 : index%3===0 ? 4.9 : 2.55
+      box(tower,'setback service penthouse',[wx+w*.08,wy+crownH*.5,wz-d*.14],[w*.52,crownH,d*.48],shell)
+      box(tower,'penthouse coping',[wx+w*.08,wy+crownH,wz-d*.14],[w*.54,.47,d*.50],frame)
+      for (const side of [-1,1]) {
+        const px = wx+side*w*.27
+        box(tower,'roof condenser bank',[px,wy+1.15,wz+d*.23],[Math.min(4.6,w*.21),2.3,Math.min(3.4,d*.21)],frame)
+        box(tower,'condenser top cowls',[px,wy+2.45,wz+d*.23],[Math.min(4.9,w*.23),.3,Math.min(3.7,d*.23)],zinc)
+        if (wy > 100) {
+          const py = wy+crownH
+          const mastX = wx+w*(.08+side*.235)
+          box(tower,'aviation beacon mount',[mastX,py+1.25,wz-d*.14],[.23,2.5,.23],frame)
+          box(tower,'aviation beacon lens',[mastX,py+2.53,wz-d*.14],[.69,.40,.69],safetyRed)
+        }
+      }
+    }
+    const addRail = (id: string, px: number, py: number, pz: number, length: number, face: THREE.Material, edge: boolean, breadth: number) => {
+      box(tower,id+' carrier',[px,py,pz],[breadth+.43,length+.71,.64],frame)
+      box(tower,id,[px,py,pz+.35],[breadth,length,.11],face)
+      if (edge) box(tower,id+' return',[px+breadth*.5+.25,py,pz],[.12,length,.47],face)
+    }
+    if (index === 0) {
+      const pz = wz+d*.5
+      for (const [fraction,breadth] of [[.405,.66],[.485,.83]]) {
+        addRail('full height cyan cornice',wx+w*fraction,(wy+streetY)*.5,pz,wy-streetY-.92,edgeCyan,true,breadth)
+      }
+    } else if ([7,11,19,20,24,26].includes(index)) {
+      const litH = (wy-streetY)*.49
+      addRail('recessed facade edge tracer',wx+w*(index%2 ? -.44 : .45),streetY+litH*.98,wz+d*.5,litH,
+        index%3===0 || index===7 ? edgePink : edgeCyan,false,index===7 ? .31 : .45)
     }
   }
-  const upper = towerSurface('hero tower setback roof bay', .094, false)
+  const upper = towerSurface('hero tower setback roof bay', .094, 'curtain', screenReflection, spillAt('setback'))
   scaledBox(city, 'screen tower setback service bay', [2.60,14.94,-32.38], [4.63,4.71,4.42], upper,scale.screen)
   scaledBox(city, 'service bay folded roof edge', [2.60,17.30,-32.38], [4.70,.11,4.49], frame,scale.screen)
   const railTop = 12.14
