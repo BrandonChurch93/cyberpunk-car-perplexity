@@ -418,6 +418,40 @@ describe('vehicle geometry and state', () => {
         expect(hit.object).toBe(grille)
         expect(hit.point.distanceTo(position)).toBeLessThan(.000001)
       }
+      const duct = car.root.getObjectByName('flush airbox grille ducts') as T.Mesh
+      const tray = backing.object as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
+      expect(tray.material.color.getHex()).toBe(0)
+      expect(tray.material.specularIntensity).toBe(0)
+      expect(tray.material.roughness).toBe(1)
+      for (const direction of [
+        axis.clone().multiplyScalar(.5), axis.clone().multiplyScalar(-.5),
+        across.clone().multiplyScalar(.5), across.clone().multiplyScalar(-.5),
+      ]) {
+        const outward = direction.clone().normalize()
+        const rim = position.clone().add(direction).addScaledVector(outward, .003)
+        const top = look(rim.clone().addScaledVector(normal, .4), rim)
+        expect(top.object).toBe(duct)
+        expect(top.distance).toBeCloseTo(.397, 5)
+        const edge = position.clone().add(direction).addScaledVector(normal, -.012)
+        ray.set(edge.clone().addScaledVector(outward, .03), outward.clone().negate())
+        expect(ray.intersectObjects([duct, tray])[0]?.object).toBe(duct)
+      }
+      for (let i = 1; i < 10; i++) {
+        const frontBar = corners[0].clone().addScaledVector(across, i / 10).addScaledVector(axis.clone().normalize(), .005)
+        expect(look(frontBar.clone().addScaledVector(normal, .3), frontBar).object).toBe(grille)
+      }
+      const baySurround = car.root.getObjectByName('thin carbon engine bay surround')!
+      const bayReturns = car.root.getObjectByName('dry carbon bay wall returns')!
+      const long = axis.clone().normalize(), out = across.clone().normalize()
+      let clearHoles = 0
+      for (const u of [.060, .085, .11, .135, .160, .185]) for (const v of [.069, .075, .081, .087]) {
+        const surface = position.clone().addScaledVector(long, u).addScaledVector(out, v)
+        ray.set(surface.addScaledVector(normal, .4), normal.clone().negate())
+        const hit = ray.intersectObjects([grille, tray, baySurround, bayReturns])[0]
+        expect([grille, tray]).toContain(hit?.object)
+        if (hit.object === tray) clearHoles++
+      }
+      expect(clearHoles).toBeGreaterThan(0)
     }
   })
 
@@ -429,6 +463,8 @@ describe('vehicle geometry and state', () => {
         ['dry carbon bay wall returns', 'none'],
         ['matte hex pad walls', 'none'],
         ['front airbox hex grilles', 'none'],
+        ['flush airbox grille ducts', 'none'],
+        ['recessed airbox grille trays', 'none'],
         ['dark chevron rear bay louvers', 'none'],
       ]) {
         const mesh = vehicle.root.getObjectByName(name) as T.Mesh
