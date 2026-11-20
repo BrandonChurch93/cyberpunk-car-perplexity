@@ -3,7 +3,7 @@ import type { CameraState } from '../../core/lens'
 import { patchFilmLighting } from '../../core/lights'
 import { layers } from '../../core/contract'
 import { insertAfter, patchMaterial, replaceOnce } from '../../materials/patch'
-import { type BeadClass, beadLayers, cellDrops, dominantAxis, geometryMinMm } from './beads'
+import { type BeadClass, beadLayers, cellDrops, dominantAxis, geometryMinMm, maxDensity } from './beads'
 import { surfHash3 } from './hash'
 
 /** Beyond this distance from the lens a drop is small enough on screen, and soft enough in focus, for the shader field. */
@@ -27,6 +27,93 @@ interface Source {
   triRadius: Float32Array
   triangles: number
   index: ArrayLike<number> | null
+  /** Open edges and sharp folds a drop may not straddle, hashed by cell in object space. */
+  edges: EdgeGrid
+}
+
+const edgeCell = 0.02
+const foldCos = Math.cos(THREE.MathUtils.degToRad(60))
+
+class EdgeGrid {
+  private readonly cells = new Map<string, number[]>()
+  private readonly seg: number[] = []
+  private readonly a = new THREE.Vector3()
+  private readonly b = new THREE.Vector3()
+  private readonly line = new THREE.Line3()
+  private readonly q = new THREE.Vector3()
+
+  add(ax: number, ay: number, az: number, bx: number, by: number, bz: number): void {
+    const id = this.seg.length / 6
+    this.seg.push(ax, ay, az, bx, by, bz)
+    const lo = [Math.min(ax, bx), Math.min(ay, by), Math.min(az, bz)].map((v) => Math.floor(v / edgeCell))
+    const hi = [Math.max(ax, bx), Math.max(ay, by), Math.max(az, bz)].map((v) => Math.floor(v / edgeCell))
+    if ((hi[0] - lo[0] + 1) * (hi[1] - lo[1] + 1) * (hi[2] - lo[2] + 1) > 512) return
+    for (let x = lo[0]; x <= hi[0]; x++) for (let y = lo[1]; y <= hi[1]; y++) for (let z = lo[2]; z <= hi[2]; z++) {
+      const key = `${x},${y},${z}`
+      const list = this.cells.get(key)
+      if (list) list.push(id)
+      else this.cells.set(key, [id])
+    }
+  }
+
+  /** Whether any edge passes within `reach` of p. `reach` stays under one cell. */
+  near(p: THREE.Vector3, reach: number): boolean {
+    const cx = Math.floor(p.x / edgeCell), cy = Math.floor(p.y / edgeCell), cz = Math.floor(p.z / edgeCell)
+    for (let x = cx - 1; x <= cx + 1; x++) for (let y = cy - 1; y <= cy + 1; y++) for (let z = cz - 1; z <= cz + 1; z++) {
+      const list = this.cells.get(`${x},${y},${z}`)
+      if (!list) continue
+      for (const id of list) {
+        const o = id * 6
+        this.line.set(this.a.fromArray(this.seg, o), this.b.fromArray(this.seg, o + 3))
+        this.line.closestPointToPoint(p, true, this.q)
+        if (this.q.distanceToSquared(p) < reach * reach) return true
+      }
+    }
+    return false
+  }
+}
+
+/** Edges used by one triangle only, the panel gaps, and edges where the faces either side fold by more than 60 degrees. */
+function edgeGrid(pos: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, index: ArrayLike<number> | null, triangles: number): EdgeGrid {
+  const grid = new EdgeGrid()
+  const weld = new Map<string, number>()
+  const id = (i: number): number => {
+    const key = `${Math.round(pos.getX(i) * 2e4)},${Math.round(pos.getY(i) * 2e4)},${Math.round(pos.getZ(i) * 2e4)}`
+    let v = weld.get(key)
+    if (v === undefined) {
+      v = weld.size
+      weld.set(key, v)
+    }
+    return v
+  }
+  const at = (t: number, k: number): number => (index ? index[t * 3 + k] : t * 3 + k)
+  const faces = new Map<string, { n: THREE.Vector3; i: number; j: number; count: number; fold: boolean }>()
+  const pa = new THREE.Vector3(), pb = new THREE.Vector3(), pc = new THREE.Vector3()
+  for (let t = 0; t < triangles; t++) {
+    const v = [at(t, 0), at(t, 1), at(t, 2)]
+    pa.fromBufferAttribute(pos, v[0])
+    pb.fromBufferAttribute(pos, v[1])
+    pc.fromBufferAttribute(pos, v[2])
+    const n = new THREE.Vector3().crossVectors(pb.clone().sub(pa), pc.clone().sub(pa))
+    if (n.lengthSq() < 1e-20) continue
+    n.normalize()
+    for (let k = 0; k < 3; k++) {
+      const i = v[k], j = v[(k + 1) % 3]
+      const a = id(i), b = id(j)
+      const key = a < b ? `${a}:${b}` : `${b}:${a}`
+      const e = faces.get(key)
+      if (!e) faces.set(key, { n, i, j, count: 1, fold: false })
+      else {
+        e.count++
+        if (e.n.dot(n) < foldCos) e.fold = true
+      }
+    }
+  }
+  for (const e of faces.values()) {
+    if (e.count !== 1 && !e.fold) continue
+    grid.add(pos.getX(e.i), pos.getY(e.i), pos.getZ(e.i), pos.getX(e.j), pos.getY(e.j), pos.getZ(e.j))
+  }
+  return grid
 }
 
 /** A unit footprint, unit height spherical cap for one contact angle. Past 90 degrees the side bulges out over the footprint. */
@@ -120,7 +207,7 @@ export class DropGeometry {
         positions.set([pos.getX(i), pos.getY(i), pos.getZ(i)], i * 3)
         normals.set([nor.getX(i), nor.getY(i), nor.getZ(i)], i * 3)
       }
-      this.sources.push({ mesh, bead, positions, normals, centroids, triRadius, triangles, index })
+      this.sources.push({ mesh, bead, positions, normals, centroids, triRadius, triangles, index, edges: edgeGrid(pos, index, triangles) })
     }
   }
 
@@ -173,7 +260,7 @@ export class DropGeometry {
     const pa = new THREE.Vector3(), pb = new THREE.Vector3(), pc = new THREE.Vector3()
     const na = new THREE.Vector3(), nb = new THREE.Vector3(), nc = new THREE.Vector3()
     const n = new THREE.Vector3(), gObj = new THREE.Vector3(), down = new THREE.Vector3(), side = new THREE.Vector3()
-    const center = new THREE.Vector3(), world = new THREE.Vector3()
+    const center = new THREE.Vector3(), world = new THREE.Vector3(), objCenter = new THREE.Vector3()
     this.count = 0
     const angle = geometryAngle(camera, widthPx)
     for (const src of this.sources) {
@@ -217,7 +304,7 @@ export class DropGeometry {
             for (let cy = v0; cy <= v1; cy++) {
               for (let cx = u0; cx <= u1; cx++) {
                 const [hx, hy, hz] = surfHash3(cx, cy, axis * 4 + layer, bead.salt)
-                if (hx >= Math.max(beadLayers[layer].flat, beadLayers[layer].steep)) continue
+                if (hx >= maxDensity(beadLayers[layer])) continue
                 const pu = (cx + 0.25 + 0.5 * hy) * cell, pv = (cy + 0.25 + 0.5 * hz) * cell
                 const w0 = ((bv - cv) * (pu - cu) + (cu - bu) * (pv - cv)) / det
                 const w1 = ((cv - av) * (pu - cu) + (au - cu) * (pv - cv)) / det
@@ -240,7 +327,9 @@ export class DropGeometry {
                     const du = drop.u - drops[0].u, dv = drop.v - drops[0].v
                     center.add(liftOffset(du, dv, axis, n))
                   }
-                  world.copy(center).divideScalar(scale).applyMatrix4(mesh.matrixWorld)
+                  objCenter.copy(center).divideScalar(scale)
+                  if (src.edges.near(objCenter, (drop.radius * 1.25 + 0.0003) / scale)) continue
+                  world.copy(objCenter).applyMatrix4(mesh.matrixWorld)
                   if (world.distanceTo(camera.position) > geometryRange) continue
                   if (swept(world, drop.radius)) continue
                   if (drop.diameterMm * 0.001 < angle * world.distanceTo(camera.position)) continue

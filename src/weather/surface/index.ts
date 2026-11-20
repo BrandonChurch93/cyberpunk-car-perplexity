@@ -43,18 +43,23 @@ function rearPuddle(anchors: Parameters<typeof cameraAt>[2]): Basin {
 }
 
 /**
- * The macro lens grazes the crest, where a trail is foreshortened to nothing. The rivulet starts on the inner face of the
- * wing beside the anchor, where the panel turns toward the lens and runs downhill across the frame, in plain view where the focus pull lands as it lets go.
+ * The rivulet waits on the wing beside the paint anchor, where the focus pull lands as it lets go, in plain view of both
+ * formats and with its downhill run crossing the frame rather than heading into it.
  */
 function rivuletStart(vehicle: WeatherDeps['vehicle']): THREE.Vector3 {
   const anchor = vehicle.anchors.paint.position
-  const camera = cameraAt(config.film.macroFrameSeconds, config.formats.master, vehicle.anchors)
-  const lens = camera.position
-  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
+  const views = [config.formats.master, config.formats.vertical].map((format) => {
+    const camera = cameraAt(config.film.macroFrameSeconds, format, vehicle.anchors)
+    const film = new THREE.PerspectiveCamera(THREE.MathUtils.radToDeg(2 * Math.atan(camera.sensorWidthMm / (format.width / format.height) / 2 / camera.focalMm)), format.width / format.height, 0.01, 10)
+    film.position.copy(camera.position)
+    film.quaternion.copy(camera.quaternion)
+    film.updateMatrixWorld(true)
+    return { camera, film, forward: new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion) }
+  })
   const paint = new Set(vehicle.surfaces.filter((s) => s.wetness === 'beads' && !s.material.transparent).map((s) => s.material))
   const ray = new THREE.Raycaster()
-  ray.near = 0
   const toLens = new THREE.Vector3()
+  const ndc = new THREE.Vector3()
   let best = anchor.clone()
   let score = -Infinity
   vehicle.root.updateMatrixWorld(true)
@@ -67,15 +72,29 @@ function rivuletStart(vehicle: WeatherDeps['vehicle']): THREE.Vector3 {
     const normalMatrix = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld)
     for (let i = 0; i < pos.count; i++) {
       const p = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld)
-      if (p.distanceTo(anchor) > 0.15 || Math.abs(toLens.subVectors(p, lens).dot(forward) - camera.focusDistance) > 0.012) continue
+      if (p.distanceTo(anchor) > 0.1) continue
       const n = new THREE.Vector3().fromBufferAttribute(nor, i).applyMatrix3(normalMatrix).normalize()
-      toLens.subVectors(lens, p).normalize()
+      if (n.y < 0.3) continue
       const down = new THREE.Vector3(0, -1, 0).addScaledVector(n, n.y).normalize()
-      const s = n.dot(toLens) + 0.6 * (1 - Math.abs(down.dot(toLens))) - 0.4 * p.distanceTo(anchor)
-      if (s <= score || n.y < 0.3) continue
-      ray.set(lens, p.clone().sub(lens).normalize())
-      const hit = ray.intersectObject(vehicle.root, true)[0]
-      if (!hit || hit.point.distanceTo(p) > 0.004) continue
+      let s = -3 * p.distanceTo(anchor)
+      let seen = true
+      for (const { camera, film, forward } of views) {
+        const depth = toLens.subVectors(p, camera.position).dot(forward) - camera.focusDistance
+        ndc.copy(p).project(film)
+        if (Math.abs(depth) > 0.008 || Math.abs(ndc.x) > 0.7 || Math.abs(ndc.y) > 0.7) {
+          seen = false
+          break
+        }
+        toLens.subVectors(camera.position, p).normalize()
+        s += 0.5 * (1 - Math.abs(down.dot(forward))) + 0.3 * n.dot(toLens) - 20 * Math.abs(depth)
+        ray.set(camera.position, p.clone().sub(camera.position).normalize())
+        const hit = ray.intersectObject(vehicle.root, true)[0]
+        if (!hit || hit.point.distanceTo(p) > 0.003) {
+          seen = false
+          break
+        }
+      }
+      if (!seen || s <= score) continue
       score = s
       best = p
     }
