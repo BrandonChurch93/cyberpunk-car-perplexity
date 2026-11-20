@@ -14,8 +14,19 @@ import type { ExtraImpact } from './ripples'
 const gravity = 9.81
 const paint = beatById('paint')
 const wheel = beatById('wheel')
-/** The hero rivulet lets go just before the macro frame, so it is already moving there with a short neck behind it. */
-const breakLoose = config.film.macroFrameSeconds - 0.6
+/** The hero rivulet lets go a little before the macro frame, so it is running there with its neck and bead line behind it. */
+const breakLoose = config.film.macroFrameSeconds - 1.2
+
+/** Distance the hero rivulet has run by time t, before it meets the end of its path. It sits until it lets go, then slips in short surges, as runners on wax do. */
+export function rivuletTravel(t: number): number {
+  const age = t - breakLoose
+  if (age <= 0 || t > paint.end + 6) return 0
+  const speed = 0.05
+  const ramp = Math.min(age, 0.6)
+  const base = 0.5 * (speed / 0.6) * ramp * ramp + speed * Math.max(0, age - 0.6)
+  const surge = 0.0025 * Math.sin(age * 9) * Math.min(1, age)
+  return Math.max(0, base + surge)
+}
 /** Drips leave the wheel arch lip at these times, in the wheel beat. */
 export const archDrips = [wheel.start + 1.2, wheel.start + 2.9, wheel.start + 4.1]
 const pendantGrowSeconds = 1.4
@@ -30,7 +41,7 @@ const pathStep = 0.002
 const pathSteps = 160
 const trailAcross = 9
 /** Behind the head the trail stays a continuous neck this long, then pinches off into a line of small drops, as it does on wax. */
-const trailNeck = 0.012
+const trailNeck = 0.02
 
 interface Tri {
   a: THREE.Vector3
@@ -236,8 +247,8 @@ export class Runners {
     const positions: number[] = []
     const normals: number[] = []
     const index: number[] = []
-    const width = 0.0017
-    const height = 0.0012
+    const width = 0.0024
+    const height = 0.0010
     const across = trailAcross
     for (let i = 0; i < this.path.length; i++) {
       const s = i * pathStep
@@ -471,15 +482,9 @@ export class Runners {
     this.trailBeads.visible = near
   }
 
-  /** Distance traveled along the path at time t. It sits until it lets go, then slips in short surges, as runners on wax do. */
+  /** Distance traveled along the path at time t. */
   travel(t: number): number {
-    const age = t - breakLoose
-    if (age <= 0 || t > paint.end + 6) return 0
-    const speed = 0.05
-    const ramp = Math.min(age, 0.6)
-    const base = 0.5 * (speed / 0.6) * ramp * ramp + speed * Math.max(0, age - 0.6)
-    const surge = 0.0025 * Math.sin(age * 9) * Math.min(1, age)
-    return Math.max(0, Math.min(base + surge, (this.path.length - 1) * pathStep))
+    return Math.min(rivuletTravel(t), Math.max(0, (this.path.length - 1) * pathStep))
   }
 
   beginSample(t: number): void {
@@ -487,7 +492,7 @@ export class Runners {
     if (this.active && this.path.length > 1) {
       const s = this.travel(t)
       const grow = 1 + 0.25 * THREE.MathUtils.smoothstep(t, paint.start, breakLoose)
-      const r = 0.0023 * grow
+      const r = 0.0032 * grow
       const p = this.pointAt(s)
       const n = this.normalAt(s)
       const down = this.downAt(s)
