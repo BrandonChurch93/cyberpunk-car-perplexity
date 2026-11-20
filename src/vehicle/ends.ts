@@ -294,8 +294,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const x = (.979 - .024 * v) * u
       const low = tailLower(x), high = tailUnderSlot(x) + .002
       const y = mix(low, high, v)
-      const z = bumperSweep(x) + .080 * v * (1.10 - .10 * v) * (1 - smooth(x, .23, .57))
-        + .008 * v * smooth(x, .54, .90)
+      const underMask = mix(.080, .008, smooth(x, .115, .665))
+      const z = bumperSweep(x) + underMask * v * (1.10 - .10 * v)
       const limit = limitTailZ(x, -3)
       const offset = z - limit
       return [side * x, y, limit + .5 * (offset + Math.hypot(offset, .011))]
