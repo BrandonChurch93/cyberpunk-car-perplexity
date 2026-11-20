@@ -85,6 +85,21 @@ describe('full roof world', () => {
     expect(world.signs).toContain('HOTEL')
   })
 
+  it('mounts the reflection strip to the ramp without adding a film light', () => {
+    const ramp = world.root.getObjectByName('drive-down ramp and control island')!
+    const fixture = ramp.getObjectByName('west ramp luminous barrier')!
+    const strip = fixture.getObjectByName('graded ramp opal strip') as THREE.Mesh
+    expect(fixture.parent).toBe(ramp)
+    const cleats = fixture.children.filter(o => o.name === 'ramp guard anchoring cleat')
+    const guards = ramp.children.filter(o => o.name === 'ramp guard wall').map(o => new THREE.Box3().setFromObject(o))
+    expect(cleats).toHaveLength(4)
+    for (const cleat of cleats) expect(guards.some(guard => guard.intersectsBox(new THREE.Box3().setFromObject(cleat)))).toBe(true)
+    expect(strip.material).toBeInstanceOf(THREE.ShaderMaterial)
+    expect(strip.getWorldPosition(new THREE.Vector3()).x).toBeLessThan(-9)
+    expect(new THREE.Vector3(0, 0, 1).applyQuaternion(strip.getWorldQuaternion(new THREE.Quaternion())).x).toBeCloseTo(1, 10)
+    expect(world.lights).toHaveLength(8)
+  })
+
   it('sets the billboard for both capture times and supplies a periodic mean to the rig', () => {
     const { durationSeconds } = config.film
     const emitter = world.lights.find(l => l.id === 'billboard')!

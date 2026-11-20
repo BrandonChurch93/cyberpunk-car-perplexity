@@ -337,7 +337,47 @@ function frontageRibbon(parent: THREE.Object3D, shell: THREE.Material, name: str
   return housing
 }
 
+function rampRibbon(roof: THREE.Group, shell: THREE.Material, metal: THREE.Material): void {
+  const housing = new THREE.Group()
+  housing.name = 'west ramp luminous barrier'
+  housing.position.set(-20.08, 1.94, 14.56)
+  housing.rotation.y = Math.PI / 2
+  roof.getObjectByName('drive-down ramp and control island')!.add(housing)
+  const width = 7.35, height = 2.48
+  block(housing, 'weatherproof barrier enclosure', shell, [0, 0, .016], [width + .13, height + .16, .195])
+  for (const x of [-2.61, -.91, 1.51, 3.13]) {
+    block(housing, 'ramp guard upright', metal, [x, -.99, -.14], [.108, 1.13, .17])
+    block(housing, 'ramp guard anchoring cleat', metal, [x, -1.245, -.095], [.25, .083, .27])
+  }
+  for (const y of [-height / 2, height / 2]) {
+    block(housing, 'barrier glazing gasket', shell, [0, y, .128], [width + .08, .069, .087])
+  }
+  plate(housing, 'graded ramp opal strip', new THREE.ShaderMaterial({
+    toneMapped: false,
+    vertexShader: /* glsl */ `varying vec2 faceUV; void main() { faceUV=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+    fragmentShader: /* glsl */ `
+      varying vec2 faceUV;
+      void main() {
+        vec2 p=faceUV;
+        float rise=(p.x-.39)/.20;
+        float shoulder=exp(-rise*rise);
+        float rail=.305+.137*shoulder+.02*sin(p.x*5.8);
+        float d=(p.y-rail)/(.092+.071*shoulder);
+        float beam=exp(-d*d);
+        float lift=(p.y-.645)/.215;
+        float spill=.20*shoulder*exp(-lift*lift);
+        float feather=smoothstep(.016,.19,p.x)*(1.-smoothstep(.76,.995,p.x));
+        float edge=smoothstep(.008,.055,p.y)*(1.-smoothstep(.88,.997,p.y));
+        vec3 tint=mix(vec3(.42,2.2,3.28),vec3(4.,6.5,8.),smoothstep(.32,1.,beam));
+        float joint=mix(.86,1.,1.-smoothstep(.46,.496,abs(fract(p.x*8.)-.5)));
+        gl_FragColor=vec4(vec3(.009,.016,.023)+feather*edge*joint*(beam*tint+spill*vec3(.46,1.47,2.17)),1.);
+      }
+    `,
+  }), [0, 0, .123], width, height)
+}
+
 function paintPracticals(roof: THREE.Group, city: THREE.Group, shell: THREE.Material, metal: THREE.Material): void {
+  rampRibbon(roof, shell, metal)
   const east = frontageRibbon(roof,shell,'east traffic guidance ribbon',[12.7,.62,7.7],-1.57,[11.3,.58],7.7)
   for (const x of [-4.6,0,4.6]) {
     block(east,'traffic ribbon frame',metal,[x,-.35,-.2],[.093,.55,.28])
