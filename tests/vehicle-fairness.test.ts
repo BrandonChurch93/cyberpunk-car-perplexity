@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { fairCurve, type Knot } from '../src/vehicle/geometry'
+import { bonnet, bonnetCrease } from '../src/vehicle/body'
+import { fairCurve, mix, type Knot } from '../src/vehicle/geometry'
 import { samplePatchFairness, skinProbes } from '../tools/vehicle/skin-fairness'
 
 describe('fair body splines', () => {
@@ -43,5 +44,27 @@ describe('vehicle skin normal fairness outside creases', () => {
       expect(count).toBeGreaterThan(850)
       expect(max).toBeLessThan(limits[axis])
     })
+  })
+
+  it('fades the starting hood fold without a local reversal in the outboard reflection', () => {
+    const [along, across] = samplePatchFairness({
+      name: 'outer bonnet tip',
+      surface: (u, v) => bonnet(mix(.064, .110, u), mix(.53, .82, v)),
+      crease: bonnetCrease,
+    })
+    expect(Math.min(along.count, across.count)).toBeGreaterThan(700)
+    expect(along.max).toBeLessThan(.0009)
+    expect(across.max).toBeLessThan(.0020)
+  })
+
+  it('keeps the skin beside the lamp fold fair approaching the vent corner', () => {
+    const [along, across] = samplePatchFairness({
+      name: 'lamp fold at wing vent',
+      surface: (u, v) => bonnet(mix(.115, .150, u), mix(.85, .97, v)),
+      crease: bonnetCrease,
+    })
+    expect(Math.min(along.count, across.count)).toBeGreaterThan(800)
+    expect(along.max).toBeLessThan(.00005)
+    expect(across.max).toBeLessThan(.00004)
   })
 })

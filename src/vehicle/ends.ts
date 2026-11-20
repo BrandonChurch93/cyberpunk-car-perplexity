@@ -238,12 +238,14 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const outerY = fairCurve([[0, .191], [.42, .37], [.70, .534], [1, .716]])
     const outerX = fairCurve([[0, .835], [.25, .904], [.51, .872], [.79, .906], [1, .929]], { controls: 4 })
     const fPanel = (u: number, v: number): Point => {
-      const x = mix(outerX(v), frontEdge(v), u)
+      const apron = fair(v, .10, .27) * (1 - fair(v, .52, .75)) * (1 - fair(u, 0, .42))
+      const x = mix(outerX(v), frontEdge(v), u) - .045 * apron
       const y = mix(outerY(v), mix(chin(x), noseTop(x), v), u)
       const tuck = fair(x, .912, .927) * fair(y, .655, .711)
-      return f(x - .006 * tuck, y - .024 * tuck, mix(-.007, .011, u) - .005 * Math.sin(Math.PI * u))
+      const recess = mix(-.007, .011, u) - .005 * Math.sin(Math.PI * u) + .008 * apron
+      return f(x - .006 * tuck, y - .024 * tuck, recess)
     }
-    frontPaint.push(patch(fPanel, 22, 28, outFront, .008))
+    frontPaint.push(patch(fPanel, 22, 28, outFront, .003))
     black.push(patch((u, v) => {
       const x = .487 * u
       const y = mix(lipY(x) + .020, noseTop(x) - .004, v)
