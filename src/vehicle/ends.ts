@@ -2,7 +2,7 @@ import * as T from 'three'
 import { lampThresholds } from '../director/timeline'
 import { insertAfter, patchMaterial } from '../materials/patch'
 import { fascia, frontFascia, frontHoodEdge, limitTailZ, sAt, tailCrestZ, tailLipY, zAt } from './body'
-import { add, blend, curve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
+import { add, blend, curve, fairCurve, hexMesh, joined, mix, patch, polygon, roundedPath, smooth, tau, vec, type Point, type Surface } from './geometry'
 import type { Palette } from './materials'
 import type { Anchor, VehicleModule } from './contract'
 
@@ -211,9 +211,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     return mesh
   }
   const outFront: Point = [0, 0, 1], outRear: Point = [0, 0, -1]
-  const lipY = curve([[0, .168], [.27, .151], [.71, .146], [.91, .155], [.967, .174]])
-  const fasciaTop = curve([[0, .417], [.29, .419], [.36, .430], [.48, .468], [.60, .509], [.72, .552], [.84, .620], [.928, .695], [.974, .754]])
-  const noseTop = (x: number) => mix(frontHoodEdge(x)[1], fasciaTop(x), smooth(x, .70, .85))
+  const fair = T.MathUtils.smootherstep
+  const lipY = fairCurve([[0, .168], [.27, .151], [.71, .146], [.91, .155], [.967, .174]], { controls: 5 })
+  const fasciaTop = fairCurve([[0, .417], [.29, .419], [.36, .430], [.48, .468], [.60, .509], [.72, .552], [.84, .620], [.928, .695], [.974, .754]])
+  const noseTop = (x: number) => mix(frontHoodEdge(x)[1], fasciaTop(x), fair(x, .70, .85))
   const chin = (x: number) => lipY(x) + .025
   const eyeCrest = curve([[.48, .474], [.58, .512], [.68, .552], [.79, .600], [.889, .649], [.918, .658]])
   const eyeTop = (x: number) => eyeCrest(x) - .015 * (1 - smooth(x, .535, .601))
@@ -231,18 +232,20 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   for (const side of [1, -1]) {
     const f: Face = (x, y, d = 0) => fascia(true, side, x, y, d)
     const r: Face = (x, y, d = 0) => fascia(false, side, x, y, d)
-    const points: XY[] = [[.448, .398], [.519, .427], [.674, .436], [.804, .460], [.844, .421], [.869, .299], [.820, .190], [.541, .195]]
+    const points: XY[] = [[.448, .398], [.519, .427], [.674, .436], [.804, .460], [.875, .421], [.915, .299], [.820, .190], [.541, .195]]
     const outline: XY[] = [[.474, .455], [.568, .501], [.685, .554], [.797, .609], [.884, .667], [.923, .675], [.931, .599], [.883, .471], [.912, .354], [.930, .283], [.858, .198], [.819, .179], [.520, .180], [.429, .245], [.405, .360]]
-    const frontEdge = curve([[0, .981], [.40, .972], [.67, .939], [1, .953]])
-    const outerY = curve([[0, .191], [.42, .37], [.70, .534], [1, .716]])
-    const outerX = curve([[0, .835], [.25, .904], [.51, .872], [.79, .906], [1, .929]])
+    const frontEdge = fairCurve([[0, .981], [.40, .972], [.67, .939], [1, .953]])
+    const outerY = fairCurve([[0, .191], [.42, .37], [.70, .534], [1, .716]])
+    const outerX = fairCurve([[0, .835], [.25, .904], [.51, .872], [.79, .906], [1, .929]], { controls: 4 })
     const fPanel = (u: number, v: number): Point => {
-      const x = mix(outerX(v), frontEdge(v), u)
+      const apron = fair(v, .10, .27) * (1 - fair(v, .52, .75)) * (1 - fair(u, 0, .42))
+      const x = mix(outerX(v), frontEdge(v), u) - .045 * apron
       const y = mix(outerY(v), mix(chin(x), noseTop(x), v), u)
-      const tuck = smooth(x, .912, .927) * smooth(y, .655, .711)
-      return f(x - .006 * tuck, y - .024 * tuck, mix(-.007, .011, u) - .005 * Math.sin(Math.PI * u))
+      const tuck = fair(x, .912, .927) * fair(y, .655, .711)
+      const recess = mix(-.007, .011, u) - .005 * Math.sin(Math.PI * u) + .008 * apron
+      return f(x - .006 * tuck, y - .024 * tuck, recess)
     }
-    frontPaint.push(patch(fPanel, 22, 28, outFront, .008))
+    frontPaint.push(patch(fPanel, 22, 28, outFront, .003))
     black.push(patch((u, v) => {
       const x = .487 * u
       const y = mix(lipY(x) + .020, noseTop(x) - .004, v)
@@ -281,7 +284,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       [.909, .362, .894, .360], [.929, .287, .907, .286], [.861, .182, .842, .218],
       [.818, .172, .808, .205], [.531, .167, .548, .198], [.456, .238, .467, .252],
     ]
-    const trace = (i: number) => curve(blade.map((row, j) => [j / (blade.length - 1), row[i]]))
+    const trace = (i: number) => fairCurve(blade.map((row, j) => [j / (blade.length - 1), row[i]]), {
+      controls: 6, pins: [[.20, blade[1][i]], [.60, blade[3][i]]],
+    })
     const [outerXAt, outerYAt, innerXAt, innerYAt] = [0, 1, 2, 3].map(trace)
     const bladeSkin = (u: number, v: number) => {
       const x = mix(outerXAt(u), innerXAt(u), v), y = mix(outerYAt(u), innerYAt(u), v)

@@ -5,6 +5,7 @@ import { patchMaterial } from '../../materials/patch'
 import { layers, type FrameContext, type SampleContext } from '../contract'
 import type { StageDeps, StagePart } from '../parts'
 import { hash01, streamSeed } from '../random'
+import { probeLamps } from './lamps'
 import { mirrorCamera } from './mirror'
 import { Probe } from './probe'
 import { boxPatch, planarPatch, type BoxUniforms, type PlanarUniforms } from './shaders'
@@ -37,6 +38,13 @@ export interface ReflectionsPart extends StagePart {
   /** For other parts: the planar reflection of the deck and how to look it up. See `src/core/reflect/README.md`. */
   planar: PlanarUniforms
   box: BoxUniforms
+}
+
+interface ReflectionDeps extends Pick<StageDeps, 'renderer' | 'scene'> {
+  world: Pick<StageDeps['world'], 'root' | 'reflectionBox'> & {
+    deck: Pick<StageDeps['world']['deck'], 'material' | 'meshes'>
+  }
+  vehicle: Pick<StageDeps['vehicle'], 'root' | 'lamps'>
 }
 
 function planarSize(format: FormatSpec, planarScale: number): THREE.Vector2 {
@@ -77,7 +85,7 @@ function materialsOf(root: THREE.Object3D): THREE.MeshStandardMaterial[] {
   return [...found]
 }
 
-export function createReflections(deps: StageDeps): ReflectionsPart {
+export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const { renderer, scene, world, vehicle } = deps
   const seed = streamSeed('reflect')
   let format = config.formats.master
@@ -129,6 +137,8 @@ export function createReflections(deps: StageDeps): ReflectionsPart {
     planar.reflectLodMax.value = lodMax(size)
   }
   const bounce = new Probe(renderer, bounceSize, captureNear, captureFar)
+  const lamps = probeLamps(vehicle)
+  scene.add(lamps.root)
   const probePosition = new THREE.Vector3()
   let stripes: THREE.Texture | null = null
   const mirrorMaterial = zebraMirror()
@@ -149,13 +159,20 @@ export function createReflections(deps: StageDeps): ReflectionsPart {
     box.reflectBoxMax.value.copy(world.reflectionBox.max)
     box.reflectBoxOn.value = 1
     planar.reflectOn.value = 0
+    lamps.sync()
     const showVehicle = hide([vehicle.root])
     const showDeck = hide(world.deck.meshes)
-    scene.environment = null
-    if (quality[tier].bounce) scene.environment = bounce.capture(scene, probePosition)
-    showDeck()
-    scene.environment = probeOf(quality[tier].captureSize).capture(scene, probePosition)
-    showVehicle()
+    try {
+      lamps.root.visible = true
+      scene.environment = null
+      if (quality[tier].bounce) scene.environment = bounce.capture(scene, probePosition)
+      showDeck()
+      scene.environment = probeOf(quality[tier].captureSize).capture(scene, probePosition)
+    } finally {
+      lamps.root.visible = false
+      showDeck()
+      showVehicle()
+    }
   }
 
   const setZebra = (on: boolean): void => {

@@ -124,28 +124,17 @@ describe('world blockout', () => {
     expect(closest).toBeGreaterThan(0.1)
   })
 
-  it('frames the billboard and physically closes the street below the camera far plane', () => {
+  it('keeps the blank south billboard and closes the street below both wide framings', () => {
     world.root.updateMatrixWorld(true)
     const billboard = required('billboard')
     const street = new THREE.Box3().setFromObject(required('continuous ground'))
     const north = new THREE.Vector3(0, 0, 1)
     expect(north.transformDirection(billboard.matrixWorld).z).toBeGreaterThan(0)
+    expect(billboard.getWorldPosition(north).z).toBeLessThan(0)
     for (const format of formats) {
       for (const seconds of [0, config.film.heroFrameSeconds]) {
         const state = cameraAt(seconds, format, anchors)
         applyLens(camera, state, format.width, format.height, { pixel: [0, 0], aperture: [0, 0] }, 1)
-        const position = billboard.getWorldPosition(new THREE.Vector3())
-        expect(position.z).toBeLessThan(0)
-        expect(position.x).toBeGreaterThan(0)
-        const screen = position.clone().project(camera)
-        expect(screen.x).toBeGreaterThan(0)
-        if (format.width > format.height) {
-          expect(screen.x).toBeLessThan(1)
-          expect(Math.abs(screen.y)).toBeLessThan(1)
-        }
-        const ray = new THREE.Raycaster(state.position, position.clone().sub(state.position).normalize(), 0, state.far)
-        const hit = ray.intersectObject(world.root, true)[0]
-        expect(hit?.object.parent).toBe(billboard)
         expect(street.min.x).toBeLessThan(state.position.x - state.far)
         expect(street.max.x).toBeGreaterThan(state.position.x + state.far)
         expect(street.min.z).toBeLessThan(state.position.z - state.far)

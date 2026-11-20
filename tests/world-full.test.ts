@@ -1,14 +1,21 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { config } from '../src/config'
+import { config, frameCount } from '../src/config'
 import type { FrameContext, SampleContext } from '../src/core/contract'
+import { apertureRadius, applyLens } from '../src/core/lens'
+import { cameraAt } from '../src/director/shots'
 import { patchesOf } from '../src/materials/patch'
+import { createVehicle } from '../src/vehicle'
 import { createWorld } from '../src/world'
 import { heroDrain } from '../src/world/deck'
 import { billboardState } from '../src/world/fixtures'
+import { approvedHeroSourceSurvey } from '../src/world/hero-layout'
 import { deckHeight } from '../src/world/roof-look'
 
-const world = await createWorld({ detail: 'full' })
+const [world, { anchors }] = await Promise.all([
+  createWorld({ detail: 'full' }),
+  createVehicle({ paint: config.paint.candidates[0], detail: 'blockout' }),
+])
 
 function radiance(t: number): { position: number; color: THREE.Color } {
   const color = new THREE.Color()
@@ -17,6 +24,37 @@ function radiance(t: number): { position: number; color: THREE.Color } {
 }
 
 describe('full roof world', () => {
+  it('publishes the mounted hero sources and preserves camera clearance', () => {
+    world.root.updateMatrixWorld(true)
+    const hero = world.root.getObjectByName('approved hero layout')!
+    const local = new THREE.Vector3()
+    const solid: { bounds: THREE.Box3; inverse: THREE.Matrix4 }[] = []
+    for (const { id, at, normal, size } of approvedHeroSourceSurvey()) {
+      const fixture = hero.getObjectByName(id)!
+      expect(fixture.getWorldPosition(local).distanceTo(new THREE.Vector3(...at))).toBeLessThan(1e-10)
+      expect(local.set(0, 0, 1).transformDirection(fixture.matrixWorld).distanceTo(new THREE.Vector3(...normal))).toBeLessThan(1e-10)
+      expect(size.every(n => n > 0)).toBe(true)
+    }
+    hero.traverse(object => {
+      if (!(object instanceof THREE.Mesh) || !object.geometry.attributes.position) return
+      object.geometry.computeBoundingBox()
+      solid.push({ bounds: object.geometry.boundingBox!, inverse: object.matrixWorld.clone().invert() })
+    })
+    const shutterHalf = config.film.shutterDegrees / (720 * config.film.fps)
+    let clearance = Infinity
+    for (const format of [config.formats.master, config.formats.vertical]) {
+      for (let i = 0; i <= frameCount; i++) {
+        const time = i / config.film.fps
+        for (const offset of [-shutterHalf, 0, shutterHalf]) {
+          const state = cameraAt(time + offset, format, anchors, time)
+          const pupil = apertureRadius(state)
+          for (const box of solid) clearance = Math.min(clearance, box.bounds.distanceToPoint(local.copy(state.position).applyMatrix4(box.inverse)) - pupil)
+        }
+      }
+    }
+    expect(clearance).toBeGreaterThan(.10)
+  })
+
   it('exposes metric relief for the front puddle and an unchanged reflective plane', () => {
     const { deck } = world
     expect(deck.heightMap).toBeInstanceOf(THREE.DataTexture)
@@ -82,12 +120,51 @@ describe('full roof world', () => {
     expect(world.signs).toContain('HOTEL')
   })
 
+  it('mounts the reflection strip to the ramp without adding a film light', () => {
+    const ramp = world.root.getObjectByName('drive-down ramp and control island')!
+    ramp.updateWorldMatrix(true, true)
+    const fixture = ramp.getObjectByName('west ramp luminous barrier')!
+    const strip = fixture.getObjectByName('graded ramp opal strip') as THREE.Mesh
+    expect(fixture.parent).toBe(ramp)
+    const cleats = fixture.children.filter(o => o.name === 'ramp guard anchoring cleat')
+    const guards = ramp.children.filter(o => o.name === 'ramp guard wall').map(o => new THREE.Box3().setFromObject(o))
+    expect(cleats).toHaveLength(4)
+    for (const cleat of cleats) expect(guards.some(guard => guard.intersectsBox(new THREE.Box3().setFromObject(cleat)))).toBe(true)
+    expect(strip.material).toBeInstanceOf(THREE.ShaderMaterial)
+    expect(strip.getWorldPosition(new THREE.Vector3()).x).toBeLessThan(-9)
+    expect(new THREE.Vector3(0, 0, 1).applyQuaternion(strip.getWorldQuaternion(new THREE.Quaternion())).x).toBeCloseTo(1, 10)
+    expect(world.lights).toHaveLength(8)
+  })
+
+  it('anchors the macro reflection sources to the city and retains the rear service light', () => {
+    const west = world.root.getObjectByName('west low block')!
+    const north = world.root.getObjectByName('northwest tower')!
+    west.updateWorldMatrix(true, true)
+    north.updateWorldMatrix(true, true)
+    for (const [tower, fixture, face, arm] of [
+      [west, 'west upper service LED cabinet', 'segmented cool white LED face', 'facade practical cantilever'],
+      [west, 'west south frontage neon badge', 'red opal neon badge', 'facade practical cantilever'],
+      [north, 'east glazed concourse return', 'feathered LED ribbon', 'concourse return standoff'],
+    ] as const) {
+      const housing = tower.getObjectByName(fixture)!
+      const emitter = housing.getObjectByName(face) as THREE.Mesh
+      expect(housing.parent).toBe(tower)
+      const mounts = housing.children.filter(o => o.name === arm)
+      expect(mounts.length).toBeGreaterThanOrEqual(3)
+      const wall = tower.children.filter(o => o.name === 'building mass').map(o => new THREE.Box3().setFromObject(o))
+      for (const mount of mounts) expect(wall.some(box => box.intersectsBox(new THREE.Box3().setFromObject(mount)))).toBe(true)
+      expect(emitter.material).toBeInstanceOf(THREE.ShaderMaterial)
+      expect(new THREE.Vector3(0, 0, 1).transformDirection(emitter.matrixWorld).x).toBeCloseTo(1, 10)
+    }
+    expect(world.root.getObjectByName('rear service flood bank')!.children.filter(o => o.name === 'rear service flood diffuser')).toHaveLength(3)
+    expect(world.lights).toHaveLength(8)
+  })
+
   it('sets the billboard for both capture times and supplies a periodic mean to the rig', () => {
     const { durationSeconds } = config.film
     const emitter = world.lights.find(l => l.id === 'billboard')!
     const raking = world.lights.find(l => l.id === 'raking billboard')!
-    const originalBillboard = world.root.getObjectByName('billboard')!
-    expect(originalBillboard.position.toArray()).toEqual([4, 11.15, -46.77])
+    expect(emitter.intensity).toBeCloseTo(9.216, 10)
     expect(raking.intensity).toBeGreaterThan(emitter.intensity * 3)
     const start = radiance(0)
     const end = radiance(durationSeconds)
@@ -107,6 +184,39 @@ describe('full roof world', () => {
     expect(color.clone().multiplyScalar(emitter.level(2)).b).toBeCloseTo(expected.color.b, 10)
     world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
     expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
+  })
+
+  it('holds the hero screen, parapet, cyan and amber division in the fitted master', () => {
+    const { master, vertical } = config.formats
+    const { heroFrameSeconds } = config.film
+    const camera = new THREE.PerspectiveCamera()
+    world.root.updateMatrixWorld(true)
+    const position = (id: string) => world.root.getObjectByName(id)!.getWorldPosition(new THREE.Vector3())
+    const toScreen = (at: THREE.Vector3) => at.project(camera)
+    const cameraAtTime = (format: typeof master, time: number) => {
+      applyLens(camera, cameraAt(time, format, anchors), format.width, format.height, { pixel: [0, 0], aperture: [0, 0] }, 1)
+    }
+    const billboard = 'magenta violet tower screen'
+    for (const time of [0, heroFrameSeconds, config.film.durationSeconds]) {
+      cameraAtTime(master, time)
+      expect(toScreen(position(billboard)).x).toBeGreaterThan(.10)
+      expect(toScreen(position(billboard)).x).toBeLessThan(.40)
+      expect(toScreen(position('left cyan facade sail')).x).toBeLessThan(-.60)
+      expect(toScreen(position('amber upper tower cabinet')).x).toBeGreaterThan(.48)
+      expect(toScreen(position('hero full span steel top rail')).y).toBeGreaterThan(.05)
+      expect(toScreen(position('hero full span steel top rail')).y).toBeLessThan(.20)
+    }
+    cameraAtTime(master, heroFrameSeconds)
+    const skyRay = (x: number) => new THREE.Raycaster(camera.position,
+      new THREE.Vector3(x, .8, .5).unproject(camera).sub(camera.position).normalize(), 0, camera.far)
+    for (const x of [-.40, -.24, -.16]) {
+      expect(skyRay(x).intersectObject(world.root, true)[0]?.object.name).toBe('city-lit cloud base')
+    }
+    cameraAtTime(vertical, heroFrameSeconds)
+    const tallScreen = toScreen(position(billboard))
+    expect(Math.abs(tallScreen.x)).toBeLessThan(.7)
+    expect(tallScreen.y).toBeGreaterThan(0)
+    expect(tallScreen.y).toBeLessThan(1)
   })
 
   it('uses batched geometry for room depths and utility silhouettes within the city budget', () => {
