@@ -5,7 +5,7 @@ import type { FormatSpec } from '../../src/config.ts'
 import type { CameraState } from '../../src/core/lens.ts'
 import { config, ensureDir, readJson, workDir, writeJson } from './env.ts'
 import { detailOf, stillName, type RenderSession, type StillSpec } from './render.ts'
-import { anchorIds, beatOfFrame, cameraForFrame, describeRegion, frameSeconds, project, sceneAnchors, type Anchors } from './scene.ts'
+import { anchorIds, beatOfFrame, cameraForFrame, describeRegion, extraCropPoints, frameSeconds, project, sceneAnchors, type Anchors, type CropPoint } from './scene.ts'
 
 export interface Rect {
   left: number
@@ -39,7 +39,7 @@ export interface CropManifest {
   crops: Array<CropPlan & { file: string }>
 }
 
-export const cropPlanVersion = 3
+export const cropPlanVersion = 4
 const limit = (): number => config.critics.maxImageLongEdgePx
 
 export function gridShape(format: FormatSpec): { columns: number; rows: number } {
@@ -70,11 +70,12 @@ export function clampRect(cx: number, cy: number, width: number, height: number,
   return { left, top, width: Math.round(w), height: Math.round(h) }
 }
 
-export function planCrops(state: CameraState, format: FormatSpec, anchors: Anchors): CropPlan[] {
+export function planCrops(state: CameraState, format: FormatSpec, anchors: Anchors, extra: CropPoint[] = []): CropPlan[] {
   const plans: CropPlan[] = []
   const minSide = Math.min(limit(), Math.round(Math.min(format.width, format.height) / 2))
-  for (const id of anchorIds) {
-    const a = anchors[id]
+  const points: CropPoint[] = [...anchorIds.map((id) => ({ id, position: anchors[id].position, radius: anchors[id].radius })), ...extra]
+  for (const a of points) {
+    const id = a.id
     const p = project(state, format, a.position)
     if (!p) continue
     const r = a.radius * p.pixelsPerMeter
@@ -83,7 +84,7 @@ export function planCrops(state: CameraState, format: FormatSpec, anchors: Ancho
     const side = Math.min(limit(), Math.max(minSide, Math.round(3 * r)))
     const rect = clampRect(p.x, p.y, side, side, format)
     const merged = plans.find((q) => overlap(q.rect, rect) > 0.8 && Math.hypot(q.center[0] - p.x, q.center[1] - p.y) < side / 4)
-    const note = `${id} anchor at ${p.depth.toFixed(2)} m, projected radius ${Math.round(r)} px${p.x < 0 || p.x > format.width || p.y < 0 || p.y > format.height ? ', center just outside the frame' : ''}`
+    const note = `${id} ${extra.includes(a) ? 'point' : 'anchor'} at ${p.depth.toFixed(2)} m, projected radius ${Math.round(r)} px${p.x < 0 || p.x > format.width || p.y < 0 || p.y > format.height ? ', center just outside the frame' : ''}`
     if (merged) {
       merged.on.push(id)
       merged.note += `; ${note}`
@@ -120,7 +121,7 @@ export async function buildCrops(session: RenderSession, spec: StillSpec): Promi
   const page = await session.pageFor(spec)
   const { anchors, source } = await sceneAnchors(page, spec.paint)
   const state = cameraForFrame(spec.frame, spec.format, anchors)
-  const plans = planCrops(state, spec.format, anchors)
+  const plans = planCrops(state, spec.format, anchors, await extraCropPoints())
   rmSync(dir, { recursive: true, force: true })
   ensureDir(dir)
   const crops: CropManifest['crops'] = []

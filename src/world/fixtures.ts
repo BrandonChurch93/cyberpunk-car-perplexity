@@ -3,7 +3,7 @@ import { config } from '../config'
 import type { FilmLight, WetSurface } from '../core/contract'
 import { stream, streamSeed } from '../core/random'
 import { primaryBillboardSize } from './city'
-import { type Tuple } from './forms'
+import { group, type Tuple } from './forms'
 
 const tau = Math.PI * 2
 const duration = config.film.durationSeconds
@@ -563,6 +563,55 @@ const generic = (name: string): string => {
   return value
 }
 
+function rearRoofAccess(parent: THREE.Group, pole: THREE.Object3D, labels: Label, metal: THREE.Material, frame: THREE.Material): void {
+  const zone = group(parent,'northeast roof access')
+  const at = (name: string, x: number, z: number) => {
+    const node = group(zone,name,[x,0,z])
+    node.rotation.y = Math.atan2(-x,-z)
+    return node
+  }
+  const core = at('northeast stair and lift core',14.9,14.0)
+  const concrete = new THREE.MeshStandardMaterial({ color: new THREE.Color(.16,.14,.12), roughness: .84 })
+  const vestibule = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(.17,.116,.078), emissive: new THREE.Color(.79,.31,.070), emissiveIntensity: .67, roughness: .8,
+  })
+  const amber = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.28,1.2,.25), toneMapped: false })
+  const ice = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.46,2.53,3.27), toneMapped: false })
+  block(core,'concrete rear shear wall',concrete,[0,1.68,-1.52],[5.4,3.36,.30])
+  for (const x of [-2.54,2.54]) block(core,'concrete side shear wall',concrete,[x,1.68,-.05],[.32,3.36,2.88])
+  block(core,'concrete head and fascia',concrete,[0,2.87,1.40],[5.40,.98,.29])
+  block(core,'folded roof coping',metal,[0,3.36,-.03],[5.53,.16,3.39])
+  block(core,'lift roof overrun',concrete,[1.14,3.65,-.61],[2.16,.52,1.37])
+  block(core,'concrete left door pier',concrete,[-2.05,1.19,1.4],[1.30,2.38,.29])
+  block(core,'concrete right door pier',concrete,[1.41,1.19,1.4],[2.58,2.38,.29])
+  block(core,'door reveal back',vestibule,[-.64,1.17,.60],[1.62,2.34,.17])
+  for (const x of [-1.4,.12]) {
+    block(core,'oxide door channel',metal,[x,1.18,1.38],[.089,2.35,.19])
+    block(core,'doorway inner return',vestibule,[x,1.17,1.0],[.077,2.34,.61])
+  }
+  for (let i=0;i<3;i++) block(core,'recessed stair tread',metal,[-.64,.034+i*.093,1.27-i*.225],[1.42,.067+i*.187,.22])
+  const optic = plate(core,'doorway ceiling opal',amber,[-.64,2.29,1.19],1.24,.09)
+  optic.rotation.x = .87
+  block(core,'stair wayfinding cabinet',frame,[-.63,2.70,1.60],[1.67,.33,.13])
+  labelFace(core,generic('STAIRS'),[-.63,2.70,1.674],[1.48,.269],labels,amber.color)
+  const pay = at('northeast pay station',11.07,13.03)
+  block(pay,'pay station socket',concrete,[0,.08,0],[.54,.16,.43])
+  block(pay,'pay station pedestal',metal,[0,.57,0],[.20,1.0,.19])
+  block(pay,'pay station cabinet',frame,[0,1.28,.015],[.46,.56,.27])
+  block(pay,'coin and card housing',metal,[0,1.13,.169],[.235,.089,.075])
+  plate(pay,'pay station backlit screen',ice,[0,1.37,.154],.289,.154)
+  labelFace(pay,generic('PAY HERE'),[0,1.56,.154],[.393,.10],labels,amber.color)
+  pole.name = 'northeast access light pole'
+  pole.position.set(16.2,0,11.1)
+  pole.rotation.y = Math.atan2(-16.2,-11.1)
+  for (const x of [-.48,.48]) {
+    const key = block(pole,'access pole cutoff housing',frame,[x,4.59,.069],[.44,.115,.194])
+    key.castShadow = false
+    const opal = plate(pole,'access pole opal face',ice,[x,4.558,.174],.38,.087)
+    opal.rotation.x = .39
+  }
+}
+
 export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.Group, labels: Label, surfaces: WetSurface[]): RoofFixtures {
   const metal = new THREE.MeshStandardMaterial({ color: new THREE.Color(.12, .135, .16), metalness: .73, roughness: .39 })
   const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.023, .031, .047), metalness: .6, roughness: .56 })
@@ -616,6 +665,13 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   core.add(doorAnchor)
   lights.push({ id: 'doorway', kind: 'area', object: doorAnchor, color: doorTint, intensity: 2.8, size: [.9, .36], range: 18, shadow: false, beam: false, level: () => 1 })
   const signMount = core.getObjectByName('blank wayfinding plate')
+  const stairSidelight = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.07,1.07,.22), toneMapped: false })
+  for (const x of [-.73,.49,1.71]) {
+    const head = block(core,'recessed stairwell sidelight casing',frame,[x,.83,2.41],[.97,.36,.15])
+    head.castShadow = false
+    plate(core,'warm stairwell sidelight opal',stairSidelight,[x,.83,2.488],.86,.245)
+    block(core,'sidelight storm cap',metal,[x,1.014,2.432],[1.01,.042,.19]).castShadow = false
+  }
   const stairs = generic('STAIRS')
   if (signMount instanceof THREE.Mesh) {
     signMount.material = frame
@@ -640,6 +696,7 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   const mild = (t: number) => 1 - .105 * Math.max(0, Math.sin(tau * fast * t / duration)) * Math.max(0, Math.sin(tau * slow * t / duration + phase))
   const poleMats = new Map<string, THREE.MeshBasicMaterial>()
   const poles = roof.children.filter(o => o.name === 'deck light pole')
+  rearRoofAccess(roof,poles[7]!,labels,metal,frame)
   const service = rearDeckPractical(poles[8]!,roof,metal,frame)
   let setWheel = (_t: number): void => undefined
   const wheelPeak = 330

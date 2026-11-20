@@ -132,13 +132,16 @@ function textureMaterial(material: THREE.MeshStandardMaterial, type: Type): void
           vec2 wallP = vec2(dot(roofP,wallAxis),vRoofWorld.y);
           float bay = wallP.x/2.35;
           float formJoint = 1.0-smoothstep(.003,.017+fwidth(bay),abs(fract(bay+.5)-.5));
-          float strata = roofGrain(wallP*vec2(2.4,46.0));
-          float drip = roofNoise(wallP*vec2(14.5,.71))*roofNoise(wallP*vec2(4.9,1.12));
-          float stain = smoothstep(.35,.75,drip)*(1.0-smoothstep(.79,1.04,wallP.y));
+          float strata = roofGrain(wallP*vec2(4.6,67.0));
+          float drip = roofGrain(wallP*vec2(27.0,1.84))*roofNoise(wallP*vec2(6.9,1.42));
+          float stain = smoothstep(.21,.59,drip)*(1.0-smoothstep(.83,1.06,wallP.y));
           vec2 tie = vec2(fract(bay)-.13,fract(wallP.y/.44)-.60);
           float collar = 1.0-smoothstep(.019,.033,length(tie*vec2(2.35,.44)));
-          float damp = (1.0-smoothstep(.011,.21,wallP.y))*(.55+.45*roofNoise(wallP*10.0));
-          diffuseColor.rgb *= .80+.18*strata+.13*roofNoise(vec2(floor(bay),2.0))-.28*formJoint-.28*stain-.48*collar-.20*damp;
+          float damp = (1.0-smoothstep(.011,.29,wallP.y))*(.43+.57*roofNoise(wallP*10.0));
+          float pits = smoothstep(.36,.69,roofGrain(wallP*vec2(76.0,94.0)));
+          float lime=roofNoise(wallP*vec2(11.6,21.0));
+          diffuseColor.rgb *= max(.20,.61+.26*strata+.38*lime+.23*roofNoise(vec2(floor(bay),2.0))
+            -.38*formJoint-.49*stain-.48*collar-.22*damp-.15*pits);
         #elif defined(ROOF_PARAPET)
           vec2 wallP = vec2(vRoofWorld.x+vRoofWorld.z*.79,vRoofWorld.y);
           float board = wallP.x*.46;
@@ -163,6 +166,9 @@ function textureMaterial(material: THREE.MeshStandardMaterial, type: Type): void
           roughnessFactor = clamp(roughnessFactor + .14*(roofFine-.5) + .06*(roofMottle-.5), .04, 1.0);
         #endif
       `)
+      if (type === 'hero_wall') shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', /* glsl */ `
+        totalEmissiveRadiance+=vec3(.047,.017,.006)*max(.04,1.0-.81*stain-.33*damp)*(.23+.70*lime+.27*strata);
+      `)
       if (type === 'deck') shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <normal_fragment_maps>', /* glsl */ `
         float grit = roofFine*.37 + roofGrain(roofP*24.0)*.22;
         vec3 roofDx = dFdx(vViewPosition), roofDy = dFdy(vViewPosition);
@@ -179,7 +185,7 @@ export function finishRoof(deck: DeckSurface, roof: THREE.Group) {
   const floor = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(.12, .129, .141), roughness: .73, metalness: 0 })
   const concrete = new THREE.MeshStandardMaterial({ color: new THREE.Color(.116, .133, .15), roughness: .83 })
   const parapet = new THREE.MeshStandardMaterial({ color: new THREE.Color(.111, .128, .145), roughness: .79 })
-  const heroWall = new THREE.MeshStandardMaterial({ color: new THREE.Color(.159, .136, .111), roughness: .82 })
+  const heroWall = new THREE.MeshStandardMaterial({ color: new THREE.Color(.176, .120, .080), roughness: .82 })
   const zinc = new THREE.MeshStandardMaterial({ color: new THREE.Color(.30, .33, .37), roughness: .49, metalness: .88 })
   const stripe = new THREE.MeshStandardMaterial({ color: new THREE.Color(.47, .46, .39), roughness: .69 })
   stripe.userData.wetPorosity = .23

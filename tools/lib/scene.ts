@@ -123,6 +123,24 @@ function labelOf(object: THREE.Object3D, point: THREE.Vector3, distance: number)
 
 const caster = new THREE.Raycaster()
 
+export interface CropPoint {
+  id: string
+  position: THREE.Vector3
+  radius: number
+}
+
+/** Points the critics always get a crop of that are not anchors of the vehicle contract. The glass is found by name in the node scene. */
+export async function extraCropPoints(): Promise<CropPoint[]> {
+  const scene = await nodeScene()
+  const out: CropPoint[] = []
+  scene?.traverse((o) => {
+    if (out.length || !(o instanceof THREE.Mesh) || !/^(windscreen|windshield)$/i.test(o.name)) return
+    const sphere = new THREE.Box3().setFromObject(o).getBoundingSphere(new THREE.Sphere())
+    out.push({ id: 'glass', position: sphere.center, radius: sphere.radius * 0.6 })
+  })
+  return out
+}
+
 /** What a region of the frame shows, by casting a grid of rays into the scene. */
 export async function describeRegion(state: CameraState, format: FormatSpec, rect: { left: number; top: number; width: number; height: number }, steps = 5): Promise<string> {
   const scene = await nodeScene()

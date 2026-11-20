@@ -99,6 +99,67 @@ describe('full roof world', () => {
     expect(footprints).toHaveLength(30)
   })
 
+  it('builds real-meter facade grids with distinct families and uses practical mesh donors in the cube', () => {
+    world.root.updateMatrixWorld(true)
+    const city = world.root.getObjectByName('hero tower layout')!
+    const facadeFamilies = new Set<string>()
+    let rooms = 0
+    for (const volume of city.children.filter(o => o.name.endsWith(' volume'))) {
+      const shell = volume.children[0] as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
+      const [w,h] = shell.material.userData.moduleMeters as [number,number]
+      const { width,height } = shell.geometry.parameters
+      expect(w).toBeGreaterThanOrEqual(1.2)
+      expect(w).toBeLessThanOrEqual(1.8)
+      expect(h).toBeGreaterThanOrEqual(3)
+      expect(h).toBeLessThanOrEqual(3.6)
+      facadeFamilies.add(shell.material.userData.facade)
+      rooms += Math.floor(width/w)*Math.floor(height/h)
+    }
+    expect(rooms).toBeGreaterThan(10_000)
+    expect(facadeFamilies).toEqual(new Set(['curtain','concrete','banded','hotel']))
+    const probe = new THREE.Vector3(0,.6,0)
+    const cornices = city.getObjectByName('hero left edge tower volume')!.children.filter(o=>o.name === 'full height cyan cornice')
+    expect(cornices).toHaveLength(2)
+    for (const cornice of cornices as THREE.Mesh<THREE.BoxGeometry,THREE.MeshBasicMaterial>[]) {
+      const top = cornice.localToWorld(new THREE.Vector3(0,cornice.geometry.parameters.height/2,0)).sub(probe)
+      expect(top.y).toBeGreaterThan(Math.hypot(top.x,top.z))
+      expect(top.x).toBeLessThan(0)
+      expect(top.z).toBeLessThan(0)
+    }
+    const access = world.root.getObjectByName('northeast roof access')!
+    const fixtures = ['northeast stair and lift core','northeast pay station','northeast access light pole']
+      .map(name=>world.root.getObjectByName(name)!)
+    const visibleTarget = (name: string) => {
+      const fixture = world.root.getObjectByName(name)!
+      const direction = fixture.getWorldPosition(new THREE.Vector3()).sub(probe)
+      const ray = new THREE.Raycaster(probe,direction.clone().normalize(),0,direction.length()+.25)
+      expect(ray.intersectObject(world.root,true)[0]?.object.name).toBe(name)
+    }
+    visibleTarget('door reveal back')
+    visibleTarget('pay station backlit screen')
+    visibleTarget('access pole opal face')
+    const camera = new THREE.PerspectiveCamera()
+    const frustum = new THREE.Frustum()
+    const matrix = new THREE.Matrix4()
+    const bounds = fixtures.map(o=>new THREE.Box3().setFromObject(o))
+    const openingEnd = config.beats.find(b=>b.id==='wake')!.end
+    const returnStart = config.beats.find(b=>b.id==='return')!.start
+    for (const format of Object.values(config.formats)) {
+      for (let i=0;i<=frameCount;i++) {
+        const t = i/config.film.fps
+        const state = cameraAt(t,format,anchors)
+        expect(bounds.every(box=>box.distanceToPoint(state.position)-apertureRadius(state)>.10)).toBe(true)
+        if (t >= openingEnd && t < returnStart) continue
+        applyLens(camera,state,format.width,format.height,{pixel:[0,0],aperture:[0,0]},1)
+        camera.updateMatrixWorld(true)
+        frustum.setFromProjectionMatrix(matrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse))
+        expect(bounds.some(box=>frustum.intersectsBox(box)),format.id+' '+i).toBe(false)
+      }
+    }
+    expect(access.children).toHaveLength(2)
+    expect(world.lights).toHaveLength(8)
+  })
+
   it('fits the distant cyan shadow around the car and returns to the local macro cutoff', () => {
     const t = config.film.heroFrameSeconds
     world.beginFrame({ frame: { timeSeconds: t } } as FrameContext)
