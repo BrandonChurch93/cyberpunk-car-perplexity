@@ -34,6 +34,13 @@ describe('full roof world', () => {
       expect(fixture.getWorldPosition(local).distanceTo(new THREE.Vector3(...at))).toBeLessThan(1e-10)
       expect(local.set(0, 0, 1).transformDirection(fixture.matrixWorld).distanceTo(new THREE.Vector3(...normal))).toBeLessThan(1e-10)
       expect(size.every(n => n > 0)).toBe(true)
+      for (const format of [config.formats.master, config.formats.vertical]) {
+        const eye = cameraAt(config.film.heroFrameSeconds,format,anchors).position
+        const delta = local.set(...at).sub(eye)
+        const distance = delta.length()
+        const ray = new THREE.Raycaster(eye,delta.normalize(),.01,distance+.10)
+        expect(ray.intersectObject(world.root,true)[0]?.object.parent?.name,id).toBe(id)
+      }
     }
     hero.traverse(object => {
       if (!(object instanceof THREE.Mesh) || !object.geometry.attributes.position) return
@@ -203,7 +210,7 @@ describe('full roof world', () => {
     const wall = world.root.getObjectByName(id)
     const rate = emitter.level(0)
     expect(emitter.object.parent).toBe(wall)
-    expect(emitter.intensity).toBeGreaterThan(150)
+    expect(emitter.intensity).toBe(Math.max(...world.lights.filter(light=>!light.shadow).map(light=>light.intensity)))
     const wake = config.beats.find(beat=>beat.id==='wake')!
     world.beginSample({ timeSeconds: wake.end+.003, sample: { frame: { timeSeconds: wake.end-.001 } } } as SampleContext)
     expect(emitter.object.parent).toBe(wall)

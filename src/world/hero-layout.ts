@@ -8,7 +8,7 @@ import type { finishRoof } from './roof-look'
 
 const palette = {
   cyan: [.055, 2.55, 3.52],
-  white: [1.78, 2.19, 2.78],
+  white: [2.64, 3.19, 4.04],
   amber: [4.72, 2.23, .46],
   violet: [1.20, .25, 2.75],
   magenta: [3.48, .145, 1.46],
@@ -22,15 +22,21 @@ type RoofMaterials = ReturnType<typeof finishRoof>['materials']
 export const approvedHeroSources = [
   { id: 'left cyan facade sail', at: [-11.76, 6.42, -29.40], size: [.139, 11.05], tint: 'cyan' },
   { id: 'left cyan secondary strip', at: [-12.03, 4.72, -29.38], size: [.16, 5.68], tint: 'cyan' },
+  { id: 'cyan garage rise', at: [-8.88, 3.80, -25.23], size: [.37, 2.67], tint: 'cyan' },
+  { id: 'cyan garage return', at: [-6.92, 3.61, -25.23], size: [.27, 2.84], tint: 'cyan' },
   { id: 'hotel rooftop cabinet', at: [-9.74, 6.35, -32.10], size: [2.65, .98], tint: 'cyan', text: 'HOTEL' },
   { id: 'white parking blade', at: [-9.90, 2.87, -26.35], size: [.59, 2.58], tint: 'white', text: 'PARKING' },
-  { id: 'cyan hotel facade strip', at: [-10.23, 3.18, -32.03], size: [.07, 4.52], tint: 'cyan' },
+  { id: 'cyan hotel facade strip', at: [-8.43, 3.13, -25.23], size: [.07, 4.52], tint: 'cyan' },
   { id: 'far cyan bar cabinet', at: [-6.10, 4.01, -43.40], size: [2.57, 1.45], tint: 'cyan', text: 'BAR' },
-  { id: 'violet mid distance blade', at: [-1.36, 5.47, -47.00], size: [.64, 3.61], tint: 'violet' },
+  { id: 'violet mid distance blade', at: [-.48, 5.47, -47.00], size: [.64, 3.61], tint: 'violet' },
   { id: 'magenta violet tower screen', at: [2.94, 5.61, -29.80], size: [4.99, 6.28], tint: 'magenta' },
+  { id: 'magenta upper service ribbon', at: [2.62, 15.79, -30.02], size: [3.22, .37], tint: 'magenta' },
+  { id: 'cool glass service ribbon', at: [-1.48, 17.39, -31.64], size: [1.58, .53], tint: 'cyan' },
   { id: 'amber upper tower cabinet', at: [7.78, 3.79, -30.12], size: [1.11, .72], tint: 'amber', text: '24H' },
   { id: 'amber lower tower cabinet', at: [7.70, 2.46, -30.10], size: [1.22, .83], tint: 'amber', text: 'OPEN' },
   { id: 'right amber facade sail', at: [13.00, 3.17, -30.20], size: [.30, 3.69], tint: 'amber' },
+  { id: 'amber garage rise', at: [7.24, 3.51, -17.61], size: [.31, 2.64], tint: 'amber' },
+  { id: 'amber garage return', at: [7.76, 3.31, -17.61], size: [.16, 2.23], tint: 'amber' },
   { id: 'amber parapet exit', at: [5.45, 1.30, -9.76], size: [1.16, .41], tint: 'amber', text: 'EXIT' },
   { id: 'left warm parapet strip', at: [-5.83, .53, -9.83], size: [.69, .037], tint: 'strip', onWall: true },
   { id: 'right warm parapet strip', at: [5.35, .58, -9.83], size: [.76, .044], tint: 'strip', onWall: true },
@@ -77,11 +83,14 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     ['hero left edge tower', -14.86, -29.55, 7.63, 8.21, 20.0, .098],
     ['hero hotel tower', -9.52, -32.25, 3.05, 6.75, 5.86, .127],
     ['hero parking tower', -9.96, -26.52, .66, 2.43, 4.48, .16],
+    ['hero near west garage bay', -7.83, -25.40, 2.78, 4.15, 5.28, .089],
     ['hero bar tower', -6.01, -43.56, 2.80, 5.37, 4.92, .103],
-    ['hero violet tower', -1.69, -47.28, 2.08, 4.84, 8.74, .097],
+    ['hero violet tower', -1.39, -47.28, 2.76, 4.84, 8.74, .097],
     ['hero screen tower', 2.92, -30.01, 6.76, 5.96, 12.59, .106],
+    ['hero tower setback glass wing', -1.48, -31.79, 1.88, 4.89, 18.81, .087],
     ['hero amber tower', 7.77, -30.40, 2.74, 5.95, 10.68, .141],
     ['hero right edge tower', 15.43, -30.41, 5.56, 4.8, 18.93, .093],
+    ['hero near east garage bay', 7.22, -17.79, 1.88, 3.91, 5.27, .082],
     ['hero middle west distance', -10.78, -60.0, 2.15, 10.53, 8.41, .083],
     ['hero far west distance', -9.99, -83.0, 3.07, 10.63, 13.88, .074],
     ['hero middle center distance', -6.54, -65.0, .89, 11.77, 7.78, .084],
@@ -103,6 +112,9 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       box(tower, 'raised inspection access lid', [x+width*.07,top+.70,faceZ-depth*.61], [width*.48,.078,depth*.36], frame)
     }
   }
+  const upper = towerSurface('hero tower setback roof bay', .094, false)
+  box(city, 'screen tower setback service bay', [2.60,14.94,-32.38], [4.63,4.71,4.42], upper)
+  box(city, 'service bay folded roof edge', [2.60,17.30,-32.38], [4.70,.11,4.49], frame)
   box(roof, 'hero full span concrete parapet', [0, .39, -10.025], [29, .78, .34], parapet)
   box(roof, 'hero concrete wall cap', [0, .767, -10.02], [29, .042, .377], parapet)
   box(roof, 'hero full span steel top rail', [0, 1.014, -10.015], [29, .053, .067], zinc)
@@ -125,7 +137,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       for (const dx of [-.38,.38]) for (const dy of [-.36,0,.36]) {
         box(housing, 'billboard facade tie bracket', [dx*width,dy*height,-.19], [.12,.19,.30], zinc)
       }
-      const { light } = mountLight(housing,'billboard',source.size,color,188,75)
+      const { light } = mountLight(housing,'billboard',source.size,color,91,75)
       light.colorAt = mural.colorAt
       light.level = mural.level
       set = mural.set
@@ -133,7 +145,9 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const segments = source.onWall ? 1 : Math.round(height / (source.tint === 'cyan' ? .34 : .50))
       plate(housing, 'weather-sealed opal face', fixtureOpal(color, segments), [0,0,.002], width,height)
       if (!source.onWall) for (const fraction of [-.40,-.17,.17,.40]) {
-        box(housing, 'opal rail standoff', [0,fraction*height,-.184], [Math.max(width*.79,.081),.14,.27], zinc)
+        const horizontal = width > height
+        box(housing, 'opal rail standoff', [horizontal ? fraction*width : 0,horizontal ? 0 : fraction*height,-.184],
+          [horizontal ? .17 : Math.max(width*.79,.081),horizontal ? height*.8 : .14,.27], zinc)
       }
     }
     if (source.id === 'amber parapet exit') {
@@ -160,11 +174,11 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       }
       signs.push(allowed)
     }
-    if (source.id === 'left cyan facade sail') mountLight(housing,'east parking canopy fascia',source.size,color,67,66,true)
-    if (source.id === 'right amber facade sail') mountLight(housing,'red deck marker',source.size,color,94,63)
+    if (source.id === 'cyan garage rise') mountLight(housing,'east parking canopy fascia',source.size,color,46,66,true)
+    if (source.id === 'amber garage rise') mountLight(housing,'red deck marker',source.size,color,28,56)
     if (source.onWall) {
-      const { anchor } = mountLight(housing, x < 0 ? 'doorway' : 'lane separator opal',source.size,color,7.2,18)
-      anchor.rotation.x = .51
+      const { anchor } = mountLight(housing, x < 0 ? 'doorway' : 'lane separator opal',source.size,color,2.3,18)
+      anchor.rotation.x = .97
       for (const side of [-1,1]) box(housing, 'sealed parapet light end bracket', [side*(width/2+.012),0,-.022], [.045,height+.037,.15], zinc)
     }
   }
