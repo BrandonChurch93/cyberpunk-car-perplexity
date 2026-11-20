@@ -313,6 +313,7 @@ function paintPracticals(roof: THREE.Group, city: THREE.Group, shell: THREE.Mate
     block(east,'traffic ribbon frame',metal,[x,-.35,-.2],[.093,.55,.28])
     block(east,'traffic ribbon bolted shoe',shell,[x,-.556,-.2],[.34,.124,.47])
   }
+  frontageRibbon(roof,shell,'flush bay approach guide',[1.64,.004,2.27],-.26,[.91,.18],3.5).rotateX(-Math.PI/2)
   const west = city.getObjectByName('west low block')!
   const westRibbon = frontageRibbon(west,shell,'west roof wayfinding crown',[-51.55,23.0,23.1],Math.PI/2,[17.4,3.55],8.2)
   for (const x of [-6,0,6]) {
@@ -320,7 +321,8 @@ function paintPracticals(roof: THREE.Group, city: THREE.Group, shell: THREE.Mate
     block(westRibbon,'crown cross member',metal,[x,-.86,-.67],[.31,.26,1.25])
   }
   const north = city.getObjectByName('northwest tower')!
-  frontageRibbon(north,shell,'northwest concourse ribbon',[-41.58,10.1,53.7],Math.PI/2,[17.7,3.0],7)
+  const concourse = frontageRibbon(north,shell,'northwest concourse ribbon',[-48.7,11.15,43.49],Math.PI,[16.1,4.4],7)
+  for (const x of [-6.2,0,6.2]) block(concourse,'concourse fascia standoff',metal,[x,0,-.43],[.25,3.5,.64])
   const ice = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5,3.9,6.1), toneMapped: false })
   const ruby = new THREE.MeshBasicMaterial({ color: new THREE.Color(4.9,.23,.42), toneMapped: false })
   const pearl = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6,3.8,4.2), toneMapped: false })
@@ -465,7 +467,8 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   const poleMats = new Map<string, THREE.MeshBasicMaterial>()
   const poles = roof.children.filter(o => o.name === 'deck light pole')
   const service = rearDeckPractical(poles[8]!,metal,frame)
-  const wheelLevel = (t: number) => mild(t) * (.24+.76*lampEnvelope(t,wheelBeat))
+  const wheelPeak = 198
+  const wheelLevel = (t: number) => mild(t) * (31+(wheelPeak-31)*lampEnvelope(t,wheelBeat))/wheelPeak
   for (const [i, pole] of poles.entries()) {
     if (i === 8) { lights.push(service.film); continue }
     const key = i === 5 ? 'wheel deck pole' : 'auxiliary pole'
@@ -497,8 +500,8 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
       anchor.position.set(0, 4.586, 0).addScaledVector(aim,.27)
       anchor.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), aim)
       pole.add(anchor)
-      lights.push({ id: key, kind: 'spot', object: anchor, color: cool, intensity: 129, size: [2, .36], angle: .21,
-        penumbra: .61, range: 26, shadow: true, beam: false, level: wheelLevel })
+      lights.push({ id: key, kind: 'spot', object: anchor, color: cool, intensity: wheelPeak, size: [2, .36], angle: .16,
+        penumbra: .64, range: 26, shadow: true, beam: false, level: wheelLevel })
     }
   }
 
