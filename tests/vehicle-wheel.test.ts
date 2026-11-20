@@ -26,7 +26,7 @@ describe('closed-web forged wheel', () => {
         const R = spec.rim
         const ray = new T.Raycaster()
         const dir = new T.Vector3(-1, 0, 0)
-        const th0 = name === 'front wheel' ? 1.18 : 0.22
+        const th0 = name === 'front wheel' ? 1.18 : 0.56
         for (let k = 0; k < 5; k++) {
           const th = th0 + (k * Math.PI * 2) / 5
           for (const sign of [-1, 1]) {
@@ -84,9 +84,12 @@ describe('closed-web forged wheel', () => {
     for (const lod of [blockout, full]) {
       const wheel = lod.root.getObjectByName('front wheel')!
       const tire = wheel.getObjectByName('loaded rubber and tread') as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
+      const spokes = wheel.getObjectByName('satin forged spoke web') as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
       const band = wheel.getObjectByName('molded sidewall relief') as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
       const rotor = wheel.getObjectByName('drilled ceramic rotor') as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
 
+      expect(lod.surfaces.find((s) => s.material === tire.material)?.wetness).toBe('sheet')
+      expect(lod.surfaces.find((s) => s.material === spokes.material)?.wetness).toBe('sheet')
       expect(band.material.roughness).toBeLessThan(tire.material.roughness - 0.25)
 
       const bandPos = band.geometry.getAttribute('position')

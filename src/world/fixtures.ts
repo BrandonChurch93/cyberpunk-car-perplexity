@@ -546,7 +546,7 @@ function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE
   return { film, set }
 }
 
-export interface RoofFixtures { lights: FilmLight[]; signs: string[]; steamSources: NonNullable<import('./contract').WorldModule['steamSources']>; set(t: number, cutTime?: number): void }
+export interface RoofFixtures { lights: FilmLight[]; signs: string[]; steamSources: NonNullable<import('./contract').WorldModule['steamSources']>; set(t: number, cutTime?: number, wide?: boolean): void }
 
 const generic = (name: string): string => {
   const value = config.signage.generic.find(s => s === name)
@@ -570,6 +570,9 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
     panelPractical(rakingCabinet, metal, frame, 'red deck marker', [1.765,2.76,.55], -.11, [5.3,.20], new THREE.Color(1,.048,.068), 10, 47, false, 3, 2.45),
     panelPractical(roof, metal, frame, 'lane separator opal', [11.4,.32,7.65], -2.04, [5.4,.27], new THREE.Color(.49,.64,.88), 15, 30, false, 6, 0, .72),
   ]
+  const redMarker = lights.find(light => light.id === 'red deck marker')!.object.parent!
+  const markerFace = redMarker.getObjectByName('graded opal face') as THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>
+  const markerRadiance = markerFace.material.uniforms.opalRadiance.value.clone() as THREE.Color
   const signs: string[] = []
   signs.push(generic('LEVEL 9'))
   const dirtyAcrylic = new THREE.MeshStandardMaterial({ color: 0x30383b, roughness: .54 })
@@ -685,10 +688,11 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   addSky(root)
   return {
     lights, signs, steamSources: [{ object: vent, kind: 'vent', strength: .7 }, { object: drain, kind: 'drain', strength: .38 }],
-    set(t, cutTime) {
+    set(t, cutTime, wide) {
       primary.set(t)
       raking.set(t)
       service.set(t, cutTime)
+      markerFace.material.uniforms.opalRadiance.value.copy(markerRadiance).multiplyScalar(wide ? .18 : 1)
       setWheel(t)
       poleMats.get('wheel deck pole')?.color.copy(cool).multiplyScalar((115+59*lampEnvelope(t,wheelBeat))*mild(t))
     },
