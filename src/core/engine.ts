@@ -31,6 +31,7 @@ export interface Stage {
 }
 
 export interface Resolver {
+  readonly nonFinitePixels?: number
   resize(format: FormatSpec): void
   setDiagnostic(view: string): void
   resolve(sum: THREE.Texture, count: number, frame: FrameInfo, target: THREE.WebGLRenderTarget | null): void

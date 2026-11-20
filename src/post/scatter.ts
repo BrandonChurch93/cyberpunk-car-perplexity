@@ -3,10 +3,14 @@ import type { FormatSpec } from '../config'
 import { FullscreenPass, passMaterial } from '../core/fullscreen'
 
 const BLOOM_LEVEL_WEIGHTS = [0.36, 0.24, 0.16, 0.10, 0.08, 0.06]
-export const BLOOM_WEIGHT = 0.027
-export const HALATION_WEIGHT = [0.020, 0.0045, 0.0015]
-export const STREAK_WEIGHT = [0.0012, 0.0028, 0.0055]
+export const BLOOM_WEIGHT = 0.020
+export const HALATION_WEIGHT = [0.012, 0.0032, 0.0010]
+export const STREAK_WEIGHT = [0.0009, 0.0021, 0.0040]
 const STREAK_TAPS = [1, 2, 4, 8, 16, 32]
+// Carry the same linear energy with four extra stops of half-float headroom.
+// Resolve restores these stops when weighting the lens contributions.
+const SCATTER_ENCODE = 0.0625
+export const SCATTER_DECODE = 1 / SCATTER_ENCODE
 
 const firstFragment = /* glsl */ `
 precision highp float;
@@ -20,7 +24,10 @@ void main() {
   ivec2 q = min(p + 1, size - 1);
   vec3 s = texelFetch(source, p, 0).rgb + texelFetch(source, q, 0).rgb;
   s += texelFetch(source, ivec2(p.x, q.y), 0).rgb + texelFetch(source, ivec2(q.x, p.y), 0).rgb;
-  outColor = vec4(s * (0.25 * exposurePerSample), 1.0);
+  // Prevent out-of-range input from writing Inf, which linear filtering can
+  // turn into NaN and spread across a whole coarse bloom tile.
+  vec3 encoded = s * (0.25 * exposurePerSample * ${SCATTER_ENCODE});
+  outColor = vec4(clamp(encoded, -65504.0, 65504.0), 1.0);
 }
 `
 

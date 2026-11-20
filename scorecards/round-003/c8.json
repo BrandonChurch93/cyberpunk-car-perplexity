@@ -1,0 +1,72 @@
+{
+  "critic": "C8",
+  "score": 6,
+  "pass": false,
+  "issues": [
+    {
+      "severity": "major",
+      "file": "set-C-03.png",
+      "where": "whole sheet, 9.00 s to 14.97 s",
+      "what": "The paint beat hardly moves. Over 6 s the frame drifts a few percent toward the cowl and A-pillar junction instead of gliding along a panel. The panel area is a blank gray field with no curvature line or horizon for reflections to slide across, and the soft background deck fills the upper right third. Nothing in it gives the eye a subject.",
+      "fix": "Put the lens a few cm off a curved, reflective panel (door shoulder or front fender crown) and track laterally along it for the whole 6 s. Keep the body line on a third and the panel's reflection horizon running across the frame."
+    },
+    {
+      "severity": "major",
+      "file": "set-B-07.png",
+      "where": "left edge and upper third, through set-B-09.png",
+      "what": "The vertical paint frame reads as a center crop of the wide. The mirror is cut in half at the left edge, the A-pillar diagonal exits the top corner, and about half the frame is unfocused background or a blank panel. It is not composed for vertical.",
+      "fix": "Reframe the vertical on its own: either tilt down to run the glide down the height of a panel, or move the mirror fully in or fully out. Use the tall frame for a vertical body line."
+    },
+    {
+      "severity": "major",
+      "file": "set-C-04.png",
+      "where": "bottom edge, all 12 frames (set-A-10.png to set-A-12.png)",
+      "what": "The wide wheel shot is a centered, near face-on bullseye push. The tire's bottom and contact patch are cut off by the frame edge the whole time. The tread is never shown, and the caliper is not legible as a separate part, so the beat cannot show water in the tread or parts holding up at macro.",
+      "fix": "Drop the camera and swing it to about 30 to 40 degrees off the wheel face. Frame the arch lip, a caliper behind the spokes and the sidewall down to the wet contact patch, with the hub off center."
+    },
+    {
+      "severity": "major",
+      "file": "set-B-13.png",
+      "where": "upper left / whole frame, through set-B-15.png",
+      "what": "In the vertical lamp shot the flat DRL bar fills the frame, and the projector lenses (the glass with depth that the beat is about) sit small near the upper left and drift toward the edge. The push goes into the light bar, not into the lens.",
+      "fix": "Center the vertical's push on a projector lens and let the DRL run as a diagonal lead-in from below."
+    },
+    {
+      "severity": "major",
+      "file": "set-A-16.png",
+      "where": "whole frame, through set-A-18.png and set-C-06.png",
+      "what": "The detail beat is a medium push-in down onto the engine bay from a high angle, not a close pass. The fine repeating hex pattern sits small in the corners and side panels and is cut by the frame edges, so the moire and shimmer test never fills the frame.",
+      "fix": "Go much closer and make a lateral pass at a grazing angle over the detail anchor, so the repeating pattern fills at least half the frame and moves across it."
+    },
+    {
+      "severity": "major",
+      "file": "set-A-22.png",
+      "where": "bottom edge",
+      "what": "The return beat opens on a high crane frame with the car's nose and front lamps cut off by the bottom edge, and a large area of empty deck above.",
+      "fix": "Start the crane-down with the whole car in frame, leaving lead room below the nose, or start higher and wider so the descent reveals the opening composition cleanly."
+    },
+    {
+      "severity": "minor",
+      "file": "set-B-06.png",
+      "where": "left edge (also set-B-05.png)",
+      "what": "At the end of the wake push in the vertical, the car fills the full width and its front lamp and nose touch the left edge, just as the lamps are the story of the beat.",
+      "fix": "Stop the vertical push slightly earlier or offset the camera so the nose keeps a margin inside the frame."
+    },
+    {
+      "severity": "minor",
+      "file": "set-A-15.png",
+      "where": "right edge",
+      "what": "At the end of the wide lamp push the second projector is clipped by the right edge, and the top third is flat bonnet.",
+      "fix": "Bias the frame left and down so both lenses stay whole, or commit to a single lens."
+    },
+    {
+      "severity": "minor",
+      "file": "set-C-09.png",
+      "where": "frames 1 to 7 (43.80 s to 0.00 s)",
+      "what": "The return settles and holds still for about 1.6 s, then the arrival push restarts from zero. The loop matches in framing but stalls in motion.",
+      "fix": "Ease the return into the same push velocity that arrival starts with, instead of coming to a full stop."
+    }
+  ],
+  "reviewer": "reviewer_2302",
+  "family": "claude_opus_5_5"
+}
