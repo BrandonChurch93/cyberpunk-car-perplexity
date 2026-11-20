@@ -101,8 +101,9 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
       const centre = Math.hypot(ndc.x, ndc.y)
       const run = p.clone().addScaledVector(down, 0.035)
       ndc.copy(run).project(laterFilm)
-      if (laterBlurAt(run) > 2 || Math.abs(ndc.x) > 0.85 || Math.abs(ndc.y) > 0.85) continue
-      rows.push({ p, score: -0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.4 * centre + 4 * (p.y - anchor.y) })
+      const runBlur = laterBlurAt(run)
+      if (runBlur > 5 || Math.abs(ndc.x) > 0.85 || Math.abs(ndc.y) > 0.85) continue
+      rows.push({ p, score: -0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.15 * runBlur - 0.4 * centre + 4 * (p.y - anchor.y) })
     }
   })
   rows.sort((x, y) => y.score - x.score)

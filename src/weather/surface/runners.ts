@@ -17,7 +17,6 @@ const wheel = beatById('wheel')
 const breakLoose = config.film.macroFrameSeconds - 0.6
 /** Drips leave the wheel arch lip at these times, in the wheel beat. */
 export const archDrips = [wheel.start + 1.2, wheel.start + 2.9, wheel.start + 4.1]
-/** Drips leave the wheel arch lip at these times, in the wheel beat. */
 const pendantGrowSeconds = 1.4
 /** A drop leaving a lip carries the water that gathered along it, so it is larger than a drop hanging off a flat edge. */
 const dripRadius = 0.0038
@@ -85,7 +84,7 @@ export class Runners {
       for (let i = 0; i < pos.count; i += 3) {
         v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld)
         nrm.fromBufferAttribute(nor, i).applyMatrix3(normalMatrix).normalize()
-        if (nrm.y < -0.2 && v.y > 0.12) lower.push({ p: v.clone(), n: nrm.clone() })
+        if (nrm.y < -0.2 && v.y > 0.02) lower.push({ p: v.clone(), n: nrm.clone() })
       }
       if (!beadMats.has(mesh.material)) return
       const index = g.index
@@ -263,22 +262,15 @@ export class Runners {
   }
 
   /**
-   * Each arch drip is placed for this format's wheel insert as it booms down: the first leaves the upper lip onto the tread,
-   * the second leaves a lower lip point in frame at its release, the third falls to the deck if a lip above it is in frame.
-   * Placing them needs the full vehicle raycast, so it runs only for frames of the wheel beat and the drips exist only there.
+   * Each arch drip is placed for this format's wheel insert as it booms down: the first leaves the upper arch lip onto the tread,
+   * the second leaves the top of the outer rim flange and falls past the spokes and hub, the third lands on the deck in front of
+   * the contact patch. Placing them needs the full vehicle raycast, so it runs only for frames of the wheel beat.
    */
   private findArchDrips(): Drip[] {
     const out: Drip[] = []
     const w = this.vehicle.anchors.wheel.position
     const tire = w.y
-    const floorUnder = (p: THREE.Vector3) => {
-      const dz = Math.abs(p.z - w.z)
-      return dz < tire ? w.y + Math.sqrt(tire * tire - dz * dz) : 0
-    }
-    const arch = this.lower.filter((c) => {
-      const reach = Math.hypot(c.p.y - w.y, c.p.z - w.z)
-      return c.p.x > w.x - 0.12 && reach > tire + 0.02 && reach < tire + 0.3 && c.p.y - floorUnder(c.p) > 0.03
-    })
+    const reachOf = (p: THREE.Vector3) => Math.hypot(p.y - w.y, p.z - w.z)
     const films = new Map<number, THREE.PerspectiveCamera>()
     const film = (t: number) => {
       const key = Math.round(t * 1000)
@@ -294,12 +286,14 @@ export class Runners {
       return f
     }
     const ndc = new THREE.Vector3()
-    const inFrame = (q: THREE.Vector3, f: THREE.Camera) => {
-      ndc.copy(q).project(f)
-      return Math.abs(ndc.x) < 0.88 && Math.abs(ndc.y) < 0.88 && ndc.z < 1
+    const project = (q: THREE.Vector3, t: number) => ndc.copy(q).project(film(t))
+    const inFrame = (q: THREE.Vector3, t: number, margin = 0.88) => {
+      project(q, t)
+      return Math.abs(ndc.x) < margin && Math.abs(ndc.y) < margin && ndc.z < 1
     }
     const ray = new THREE.Raycaster()
-    const seen = (q: THREE.Vector3, f: THREE.Camera) => {
+    const seen = (q: THREE.Vector3, t: number) => {
+      const f = film(t)
       const d = q.clone().sub(f.position)
       const length = d.length()
       ray.set(f.position, d.normalize())
@@ -307,40 +301,63 @@ export class Runners {
       const hit = ray.intersectObject(this.vehicle.root, true)[0]
       return !hit || hit.distance > length - 0.006
     }
-    const roles = ['upper', 'lower', 'deck'] as const
-    const place = (release: number, role: (typeof roles)[number]): Drip | null => {
-      const rows: Array<{ p: THREE.Vector3; land: THREE.Vector3; landFilm: THREE.Camera; landSeen: boolean; score: number }> = []
-      for (const c of arch) {
-        if (out.some((d) => d.at.distanceTo(c.p) < 0.02)) continue
-        const floor = floorUnder(c.p)
-        const land = new THREE.Vector3(c.p.x, floor + 0.004, c.p.z)
-        const landFilm = film(release + Math.sqrt((2 * (c.p.y - floor)) / gravity))
-        if (role !== 'deck' && c.p.x < w.x - 0.01) continue
-        if (!inFrame(c.p, film(release - (role === 'upper' ? 0.4 : 0.15))) || !inFrame(c.p, film(release))) continue
-        const landIn = inFrame(land, landFilm)
-        if (role === 'upper' && (floor === 0 || c.p.y < w.y + 0.15)) continue
-        if (role === 'deck' && (floor > 0 || !landIn)) continue
-        ndc.copy(c.p).project(film(release))
-        let score = -Math.abs(ndc.x) - 0.5 * Math.abs(ndc.y) + (landIn ? 1 : 0)
-        if (role === 'upper') score += c.p.z > w.z ? 0.5 : 0
-        if (role === 'lower') score -= 4 * c.p.y
-        if (role === 'deck') score -= 2 * Math.abs(c.p.z - w.z)
-        rows.push({ p: c.p, land, landFilm, landSeen: landIn, score })
-      }
-      rows.sort((x, y) => y.score - x.score)
-      let fallback: Drip | null = null
-      for (const r of rows.slice(0, 24)) {
-        if (!seen(r.p.clone().setY(r.p.y - 0.004), film(release))) continue
-        const drip = { at: r.p.clone().setY(r.p.y - 0.0005), release, period: 0, floorY: r.land.y - 0.004 }
-        if (r.landSeen && seen(r.land, r.landFilm)) return drip
-        if (role !== 'deck') fallback ??= drip
-      }
-      return fallback
+    const down = new THREE.Vector3(0, -1, 0)
+    const floorBelow = (p: THREE.Vector3) => {
+      ray.set(p.clone().setY(p.y - 0.006), down)
+      ray.far = p.y
+      const hit = ray.intersectObject(this.vehicle.root, true)[0]
+      return hit ? hit.point.y : 0
     }
-    archDrips.forEach((release, i) => {
-      const drip = place(release, roles[i]) ?? (roles[i] === 'deck' ? place(release, 'lower') : null)
-      if (drip) out.push(drip)
+    const fallTime = (height: number) => Math.sqrt((2 * Math.max(0, height)) / gravity)
+    type Row = { p: THREE.Vector3; score: number }
+    const pick = (release: number, rows: Row[], accept: (p: THREE.Vector3, floor: number) => boolean): Drip | null => {
+      rows.sort((x, y) => y.score - x.score)
+      for (const { p } of rows.slice(0, 24)) {
+        if (out.some((d) => d.at.distanceTo(p) < 0.02)) continue
+        const floor = floorBelow(p)
+        if (!accept(p, floor)) continue
+        return { at: p.clone().setY(p.y - 0.0005), release, period: 0, floorY: floor }
+      }
+      return null
+    }
+    const [first, second, third] = archDrips
+    const upper: Row[] = []
+    for (const c of this.lower) {
+      const reach = reachOf(c.p)
+      if (c.p.x < w.x - 0.01 || reach < tire + 0.02 || reach > tire + 0.3 || c.p.y < w.y + 0.15) continue
+      if (!inFrame(c.p, first - 0.4) || !inFrame(c.p, first)) continue
+      project(c.p, first)
+      upper.push({ p: c.p, score: -Math.abs(ndc.x) - 0.5 * Math.abs(ndc.y) + (c.p.z > w.z ? 0.5 : 0) })
+    }
+    const lip = pick(first, upper, (p, floor) => floor > 0.2 && p.y - floor > 0.03 && seen(p.clone().setY(p.y - 0.004), first))
+    if (lip) out.push(lip)
+    const flange: Row[] = []
+    for (const c of this.lower) {
+      const reach = reachOf(c.p)
+      if (c.p.x < w.x + 0.02 || reach < 0.2 || reach > tire - 0.02 || c.p.y < w.y + 0.1 || Math.abs(c.p.z - w.z) > 0.24) continue
+      const half = second + fallTime(c.p.y - w.y)
+      const mid = new THREE.Vector3(c.p.x, w.y, c.p.z)
+      if (!inFrame(mid, half, 0.8)) continue
+      project(mid, half)
+      flange.push({ p: c.p, score: -Math.abs(ndc.x) + (inFrame(c.p, second - 0.3) && inFrame(c.p, second) ? 1.5 : 0) + 4 * (c.p.x - w.x) })
+    }
+    const rim = pick(second, flange, (p, floor) => p.y - floor > 0.2 && seen(new THREE.Vector3(p.x, w.y, p.z), second + fallTime(p.y - w.y)))
+    if (rim) out.push(rim)
+    const deck: Row[] = []
+    for (const c of this.lower) {
+      if (c.p.z < w.z + 0.08 || c.p.z > w.z + 0.45 || c.p.y > w.y + 0.25 || Math.abs(c.p.x - w.x) > 0.25) continue
+      if (reachOf(c.p) < tire - 0.004 || (c.p.y > w.y - 0.05 && c.p.z - w.z < tire + 0.005)) continue
+      const land = new THREE.Vector3(c.p.x, 0.004, c.p.z)
+      const at = third + fallTime(c.p.y)
+      if (!inFrame(land, at + 0.15)) continue
+      project(land, at + 0.15)
+      deck.push({ p: c.p, score: -Math.abs(ndc.x) - Math.abs(ndc.y + 0.55) + 3 * Math.min(c.p.y, 0.25) + (inFrame(c.p, third) ? 0.5 : 0) })
+    }
+    const ring = pick(third, deck, (p, floor) => {
+      const at = third + fallTime(p.y)
+      return floor === 0 && seen(new THREE.Vector3(p.x, 0.004, p.z), at + 0.15) && (seen(p.clone().setY(p.y - 0.004), third) || !inFrame(p, third))
     })
+    if (ring) out.push(ring)
     return out
   }
 

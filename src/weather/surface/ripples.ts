@@ -8,6 +8,8 @@ export const ringSpeed = 0.2
 export const binMeters = 0.25
 export const gridBins = 128
 export const slotsPerBin = 24
+/** Added to the stored diameter in mm to mark a drip impact, which brings its own water to wherever it lands. */
+const ownWaterMark = 100
 
 export interface ExtraImpact {
   x: number
@@ -46,7 +48,7 @@ export class RippleField {
     const oz = Math.floor((center.y - span / 2) / binMeters) * binMeters
     this.origin.set(ox, oz, binMeters, gridBins)
     const earliest = t0 - ringLifeSeconds
-    const add = (x: number, z: number, t: number, diameter: number): void => {
+    const add = (x: number, z: number, t: number, diameter: number, own = false): void => {
       if (t < earliest || t > t1) return
       const bx = Math.floor((x - ox) / binMeters)
       const bz = Math.floor((z - oz) / binMeters)
@@ -62,7 +64,7 @@ export class RippleField {
       this.data[at] = x - ox
       this.data[at + 1] = z - oz
       this.data[at + 2] = t - t0
-      this.data[at + 3] = diameter * 1000
+      this.data[at + 3] = diameter * 1000 + (own ? ownWaterMark : 0)
     }
     const c0x = Math.floor(ox / impactCellMeters)
     const c0z = Math.floor(oz / impactCellMeters)
@@ -80,7 +82,7 @@ export class RippleField {
         }
       }
     }
-    for (const e of extra) add(e.x, e.z, e.timeSeconds, e.diameter)
+    for (const e of extra) add(e.x, e.z, e.timeSeconds, e.diameter, true)
     this.texture.needsUpdate = true
   }
 }
@@ -94,6 +96,7 @@ uniform float surfPulseTime;
 #define SURF_SLOTS ${slotsPerBin}
 #define SURF_RING_LIFE ${ringLifeSeconds.toFixed(4)}
 #define SURF_RING_SPEED ${ringSpeed.toFixed(4)}
+#define SURF_OWN_WATER ${ownWaterMark.toFixed(1)}
 
 /** Slope of one ring packet at distance r from its center. deep: 1 on standing water, 0 on a thin film. */
 float surfRing(float r, float age, float diameterMm, float deep) {
@@ -119,8 +122,8 @@ float surfRing(float r, float age, float diameterMm, float deep) {
 /** Ripple slope (d height / dx, d height / dz) on the deck from the binned rain impacts and the exhaust pulses. */
 vec2 surfRipples(vec2 p, float deep, float film, float sampleOffset) {
   vec2 slope = vec2(0.0);
+  vec2 own = vec2(0.0);
   float weight = max(deep, film);
-  if (weight <= 0.001) return slope;
   vec2 local = p - surfImpactGrid.xy;
   vec2 g = local / surfImpactGrid.z;
   int n = int(surfImpactGrid.w);
@@ -136,12 +139,15 @@ vec2 surfRipples(vec2 p, float deep, float film, float sampleOffset) {
         vec2 d = local - e.xy;
         float r = length(d);
         if (r > 0.16) continue;
-        float s = surfRing(r, t - e.z, e.w, deep);
-        slope += s * d / max(r, 1e-5);
+        if (e.w > SURF_OWN_WATER) {
+          own += surfRing(r, t - e.z, e.w - SURF_OWN_WATER, max(deep, 0.6)) * d / max(r, 1e-5);
+        } else {
+          slope += surfRing(r, t - e.z, e.w, deep) * d / max(r, 1e-5);
+        }
       }
     }
   }
-  slope *= weight;
+  slope = slope * weight + own * max(weight, 0.8) * 6.0;
   for (int i = 0; i < 2; i++) {
     vec4 pulse = surfPulse[i];
     if (pulse.z <= 0.0) continue;
