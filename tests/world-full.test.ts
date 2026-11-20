@@ -22,6 +22,8 @@ describe('full roof world', () => {
     expect(map.format).toBe(THREE.RedFormat)
     expect(map.type).toBe(THREE.FloatType)
     expect(deckHeight(.92, 3.13)).toBeLessThan(0)
+    expect(deckHeight(1.21, 1.64)).toBeLessThan(-.003)
+    expect(deckHeight(.96, 1.285)).toBeGreaterThan(0)
     expect(deckHeight(.18, -3.71)).toBeLessThan(0)
     expect(deckHeight(0, 0)).toBeGreaterThan(0)
     const samples = map.image.data as Float32Array
@@ -95,27 +97,36 @@ describe('full roof world', () => {
     expect(world.signs.filter(s => config.signage.invented.includes(s)).sort()).toEqual(['BRINESCALE SUSHI', 'SHUTTER HUSH CLUB', 'VAPOR SILL HOTEL'])
   })
 
-  it('sweeps the service flood deterministically and holds the wheel boost inside its beat', () => {
+  it('rakes the grille from the parapet and tracks the wheel boom without leaking either cue into the seam', () => {
     const service = world.lights.find(l => l.id === 'north deck pole')!
     const wheel = world.lights.find(l => l.id === 'wheel deck pole')!
     const detail = config.beats.find(b => b.id === 'detail')!
     const wheelBeat = config.beats.find(b => b.id === 'wheel')!
     const start = detail.start+.22, end = detail.end-.22
+    const axis = (object: THREE.Object3D) =>
+      new THREE.Vector3(0,0,1).applyQuaternion(object.getWorldQuaternion(new THREE.Quaternion()))
     const state = () => {
-      const axis = new THREE.Vector3(0,0,1).applyQuaternion(service.object.getWorldQuaternion(new THREE.Quaternion()))
-      return [...axis.toArray(), service.angle, service.intensity]
+      return [...service.object.getWorldPosition(new THREE.Vector3()).toArray(), ...axis(service.object).toArray(), service.intensity]
     }
     world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
     const resting = state()
     world.beginSample({ timeSeconds: start } as SampleContext)
     const first = state()
+    expect(first[2]).toBeLessThan(-16)
+    expect(Math.abs(axis(service.object).dot(new THREE.Vector3(.229,.973,.044).normalize()))).toBeLessThan(.09)
     world.beginSample({ timeSeconds: end } as SampleContext)
     expect(state()).not.toEqual(first)
-    expect(service.angle!).toBeLessThan(resting[3]!)
+    expect(service.intensity).toBeGreaterThan(resting[6]! * 2)
     world.beginFrame({ frame: { timeSeconds: start } } as FrameContext)
     expect(state()).toEqual(first)
+    world.beginSample({ timeSeconds: detail.start-.01, sample: { frame: { timeSeconds: detail.start } } } as SampleContext)
+    expect(state()[2]).toBeLessThan(-16)
     world.beginSample({ timeSeconds: config.film.durationSeconds } as SampleContext)
     expect(state()).toEqual(resting)
+    world.beginSample({ timeSeconds: wheelBeat.start+.7 } as SampleContext)
+    const shoulderAim = axis(wheel.object).y
+    world.beginSample({ timeSeconds: wheelBeat.end-.38 } as SampleContext)
+    expect(axis(wheel.object).y).toBeLessThan(shoulderAim-.03)
     expect(wheel.level((wheelBeat.start+wheelBeat.end)/2)).toBeGreaterThan(wheel.level(0)*3)
     expect(wheel.level(config.film.durationSeconds)).toBeCloseTo(wheel.level(0),12)
   })
