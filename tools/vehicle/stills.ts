@@ -50,19 +50,24 @@ void runTool(async () => {
             this.scene.environment = env.fromScene(inspectionRoom, 0.035).texture;
             this.scene.environmentIntensity = 0.45;
             this.scene.userData.neutral = this.scene.environment;
-            const bands = new Uint8Array(512 * 256 * 4);
-            for (let y = 0; y < 256; y++) for (let x = 0; x < 512; x++) {
-              const i = (y * 512 + x) * 4;
-              const v = Math.cos(2.0 * Math.PI * (x * 14 / 512 + y * 4 / 256)) > 0.22 ? 246 : 10;
-              bands.set([v, v, v, 255], i);
+            if (${diagnostics.includes('zebra')}) {
+              const width = 2048, height = 1024;
+              const bands = new Uint8Array(width * height * 4);
+              for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+                const i = (y * width + x) * 4;
+                const phase = 2.0 * Math.PI * ((x + 0.5) * 14 / width + (y + 0.5) * 4 / height);
+                const v = Math.round(10 + 236 * THREE.MathUtils.smoothstep(Math.cos(phase), 0.19, 0.25));
+                bands[i] = bands[i + 1] = bands[i + 2] = v;
+                bands[i + 3] = 255;
+              }
+              const stripes = new THREE.DataTexture(bands, width, height);
+              stripes.mapping = THREE.EquirectangularReflectionMapping;
+              stripes.minFilter = THREE.LinearFilter;
+              stripes.magFilter = THREE.LinearFilter;
+              stripes.needsUpdate = true;
+              this.scene.userData.stripes = env.fromEquirectangular(stripes).texture;
+              stripes.dispose();
             }
-            const stripes = new THREE.DataTexture(bands, 512, 256);
-            stripes.mapping = THREE.EquirectangularReflectionMapping;
-            stripes.minFilter = THREE.LinearFilter;
-            stripes.magFilter = THREE.LinearFilter;
-            stripes.needsUpdate = true;
-            this.scene.userData.stripes = env.fromEquirectangular(stripes).texture;
-            stripes.dispose();
             inspectionRoom.dispose();
             env.dispose();
             const bounce = new THREE.HemisphereLight(0xe6ecff, 0x66646c, 0.74);
