@@ -5,7 +5,7 @@ import { config, defaultPaint, paintById } from '../src/config'
 import { cameraAt } from '../src/director/shots'
 import { events, lampThresholds, stateAt } from '../src/director/timeline'
 import { createVehicle, type VehicleModule, type VehicleState } from '../src/vehicle'
-import { zAt } from '../src/vehicle/body'
+import { frontWheel, rearWheel, sAt, zAt } from '../src/vehicle/body'
 
 const paint = paintById(defaultPaint)
 let blockout: VehicleModule
@@ -98,6 +98,12 @@ describe('vehicle geometry and state', () => {
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
     }
+    for (const [wheel, offset] of [[frontWheel, .023], [rearWheel, .032]] as const) {
+      const crown = wheel.loaded + wheel.arch + offset, s = sAt(wheel.z)
+      const a = normalAt(crown - .002, s, true), b = normalAt(crown + .002, s, true)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
+      expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
+    }
     for (const [x, s] of [[-.318, .520], [.318, .490], [.686, .750], [.849, .789]]) {
       const a = normalAt(x - .003, s), b = normalAt(x + .003, s)
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
@@ -135,6 +141,25 @@ describe('vehicle geometry and state', () => {
     }
   }, 30_000)
 
+  it('keeps a closed mirror seam and an unobstructed glass face on both sides', () => {
+    for (const car of [blockout, full]) {
+      const mirrors = car.root.getObjectByName('door mirrors')!
+      mirrors.updateWorldMatrix(true, true)
+      for (const side of [-1, 1]) {
+        const sideHit = (y: number) => new T.Raycaster(
+          new T.Vector3(side * 1.45, y, .718), new T.Vector3(-side, 0, 0),
+        ).intersectObject(mirrors, true)[0].object.name
+        expect(sideHit(.865)).toBe('painted upper mirror wings')
+        expect(sideHit(.851)).toBe('mirror shell seam and rear gaskets')
+        expect(sideHit(.827)).toBe('lower mirror shells')
+        for (const x of [.96, 1.015, 1.07]) for (const y of [.821, .846, .868]) {
+          const hit = new T.Raycaster(new T.Vector3(side * x, y, .4), new T.Vector3(0, 0, 1)).intersectObject(mirrors, true)[0]
+          expect(hit.object.name).toBe('mirror glass')
+        }
+      }
+    }
+  })
+
   it('registers every render material, shadow and light at both levels of detail', () => {
     for (const [vehicle, budget] of [[blockout, 400_000], [full, 2_000_000]] as const) {
       const trackedMaterials = new Set(vehicle.surfaces.map((surface) => surface.material))
@@ -163,8 +188,8 @@ describe('vehicle geometry and state', () => {
   it('keeps both cam covers exposed and targets the dark gap in both LODs', () => {
     for (const car of [blockout, full]) {
       const detail = car.anchors.detail.position
-      const topHit = (x: number) => new T.Raycaster(
-        new T.Vector3(x, 2, detail.z), new T.Vector3(0, -1, 0),
+      const topHit = (x: number, z = detail.z) => new T.Raycaster(
+        new T.Vector3(x, 2, z), new T.Vector3(0, -1, 0),
       ).intersectObject(car.root, true)[0]
       expect(detail.x).toBe(0)
       expect(topHit(0).object.name).toBe('dark intake plenum and engine hardware')
@@ -174,7 +199,18 @@ describe('vehicle geometry and state', () => {
         expect(Math.abs(hit.point.y - detail.y)).toBeLessThan(.005)
       }
       expect(car.root.getObjectByName('high rear brake lamp bar')).toBeDefined()
-      expect(car.root.getObjectByName('front airbox hex grilles')).toBeDefined()
+      const grille = car.root.getObjectByName('front airbox hex grilles') as T.Mesh
+      const covers = car.root.getObjectByName('carbon cam covers with hex relief') as T.Mesh
+      grille.geometry.computeBoundingBox()
+      covers.geometry.computeBoundingBox()
+      expect(grille.geometry.boundingBox!.max.y).toBeLessThan(covers.geometry.boundingBox!.max.y)
+      let previous = 0
+      for (const s of [.853, .870, .887]) {
+        const hit = topHit(0, zAt(s))
+        expect(hit.object.name).toBe('dark chevron rear bay louvers')
+        expect(hit.point.y - previous).toBeGreaterThan(.02)
+        previous = hit.point.y
+      }
     }
   })
 
@@ -269,11 +305,11 @@ describe('vehicle geometry and state', () => {
 
   it('keeps the diffuser inside the lower side profile at the tail', () => {
     for (const vehicle of [full, blockout]) {
-      const diffuser = vehicle.root.getObjectByName('channeled graphite rear diffuser') as T.Mesh
-      const points = diffuser.geometry.getAttribute('position')
+      const surfaces = ['channeled graphite rear diffuser', 'thin graphite diffuser blades'].map((name) =>
+        (vehicle.root.getObjectByName(name) as T.Mesh).geometry.getAttribute('position'))
       for (const [station, minY] of [[.98, .309], [.995, .407]]) {
         let bottom = Number.POSITIVE_INFINITY
-        for (let i = 0; i < points.count; i++) {
+        for (const points of surfaces) for (let i = 0; i < points.count; i++) {
           if (Math.abs(points.getZ(i) - zAt(station)) < .008) bottom = Math.min(bottom, points.getY(i))
         }
         expect(bottom).toBeLessThan(.54)
@@ -282,11 +318,27 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('keeps all four diffuser blade edges exposed to the ignition camera', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      const { position } = cameraAt(950 / config.film.fps, config.formats.preview, vehicle.anchors)
+      for (const side of [-1, 1]) for (const [x, y, z] of [
+        [.419, .584, -2.419], [.420, .536, -2.445], [.648, .583, -2.306], [.659, .523, -2.293],
+      ]) {
+        const ray = new T.Raycaster(position, new T.Vector3(side * x, y, z).sub(position).normalize())
+        expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('thin graphite diffuser blades')
+      }
+    }
+  })
+
   it('keeps the painted rear fascia in front of the internal liner', () => {
     for (const vehicle of [full, blockout]) {
       vehicle.root.updateMatrixWorld(true)
       const { position } = cameraAt(950 / config.film.fps, config.formats.preview, vehicle.anchors)
-      for (const [x, y, z] of [[.390, .648, -2.310], [.374, .637, -2.307], [.354, .609, -2.314], [.287, .656, -2.294]]) {
+      for (const [x, y, z] of [
+        [.390, .648, -2.310], [.374, .637, -2.307], [.354, .609, -2.314], [.287, .656, -2.294],
+        [.725, .574, -2.226], [.617, .548, -2.302], [.536, .557, -2.348], [-.62, .589, -2.3],
+      ]) {
         const ray = new T.Raycaster(position, new T.Vector3(x, y, z).sub(position).normalize())
         expect(ray.intersectObject(vehicle.root, true)[0]?.object.name).toBe('rear bumper paint surfaces')
       }
@@ -312,17 +364,22 @@ describe('vehicle geometry and state', () => {
 
   it('shows both projector cores through two separate lens surfaces in the lamp shot', () => {
     for (const vehicle of [blockout, full]) {
-      const cores = vehicle.root.getObjectsByProperty('name', 'main beam projector').filter((node) => node.position.x > 0)
+      const cores = vehicle.root.getObjectsByProperty('name', 'main beam projector')
+        .filter((node): node is T.Mesh => node instanceof T.Mesh && node.position.x > 0)
       expect(cores).toHaveLength(2)
       vehicle.root.updateMatrixWorld(true)
       for (const frame of [610, 690]) {
         const { position } = cameraAt(frame / config.film.fps, config.formats.preview, vehicle.anchors)
         for (const core of cores) {
-          const center = core.getWorldPosition(new T.Vector3())
-          const ray = new T.Raycaster(position, center.sub(position).normalize())
-          expect(ray.intersectObject(vehicle.root, true).slice(0, 3).map(({ object }) => object.name)).toEqual([
-            'front optical lens shells', 'convex projector lenses', 'main beam projector',
-          ])
+          core.geometry.computeBoundingBox()
+          const size = core.geometry.boundingBox!.getSize(new T.Vector3()).multiplyScalar(.31)
+          for (const [x, y] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
+            const p = core.localToWorld(new T.Vector3(size.x * x, size.y * y, 0))
+            const ray = new T.Raycaster(position, p.sub(position).normalize())
+            expect(ray.intersectObject(vehicle.root, true).slice(0, 3).map(({ object }) => object.name)).toEqual([
+              'front optical lens shells', 'convex projector lenses', 'main beam projector',
+            ])
+          }
         }
       }
     }

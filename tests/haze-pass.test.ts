@@ -15,6 +15,18 @@ it('uses the board contrast steps without lifting short-distance sky fill', () =
   expect(atmosphere.layerHeight).toBeLessThan(0.3)
 })
 
+it('keeps a defined forward projector lobe and a much weaker side and rear wing', () => {
+  const hg = (c: number, g: number) => (1 - g * g) / (4 * Math.PI * (1 + g * g - 2 * g * c) ** 1.5)
+  const atAngle = (degrees: number) => {
+    const cosine = Math.cos(THREE.MathUtils.degToRad(degrees))
+    return ((1 - atmosphere.projectorWingFraction) * hg(cosine, atmosphere.projectorAnisotropy)
+      + atmosphere.projectorWingFraction * hg(cosine, atmosphere.projectorWingAnisotropy)) * atmosphere.projectorScatterFraction
+  }
+  expect(atAngle(20)).toBeGreaterThan(atAngle(90) * 8)
+  expect(atAngle(90)).toBeGreaterThan(atAngle(180))
+  expect(atAngle(180)).toBeLessThan(hg(-1, atmosphere.anisotropy) * atmosphere.scatterFraction / 2)
+})
+
 it('feeds the current sample camera, depth and seeded jitter to the scattering pass', () => {
   const rig = new LightRig([], 1)
   const sync = vi.spyOn(rig, 'syncShadowUniforms')
@@ -36,10 +48,10 @@ it('feeds the current sample camera, depth and seeded jitter to the scattering p
   const indices = [frame.samples - 1, 1, frame.samples - 1]
   parts.resize(frame.format)
   const observed: [number, number][] = []
-  for (const sampleIndex of indices) {
+  for (const [i, sampleIndex] of indices.entries()) {
     const noise = sampleSet(frame.frameIndex, sampleIndex)
     const sample = { ...noise, sampleIndex, frame, timeSeconds: frame.timeSeconds }
-    const state = { position: camera.position, quaternion: camera.quaternion, focalMm: 35, sensorWidthMm: 36, focusDistance: 5, fNumber: 2.8, near: camera.near, far: camera.far }
+    const state = { position: camera.position, quaternion: camera.quaternion, focalMm: 35, sensorWidthMm: 36, focusDistance: i === 1 ? 0.8 : 5, fNumber: 2.8, near: camera.near, far: camera.far }
     parts.samplePasses![0].render(renderer, { color, depth }, output, { camera, state, sample, timeSeconds: sample.timeSeconds })
     const mesh = render.mock.lastCall![0] as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>
     const u = mesh.material.uniforms
@@ -51,6 +63,7 @@ it('feeds the current sample camera, depth and seeded jitter to the scattering p
     expect(u.inverseProjection.value.equals(camera.projectionMatrixInverse)).toBe(true)
     expect(u.deckBounds.value.toArray()).toEqual([-8, -4, 8, 5])
     expect(u.sampleJitter.value.toArray()).toEqual(noise.misc)
+    expect(u.focusDistance.value).toBe(state.focusDistance)
   }
   expect(observed[0]).not.toEqual(observed[1])
   expect(observed[0]).toEqual(observed[2])
