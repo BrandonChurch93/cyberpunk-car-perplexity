@@ -246,6 +246,23 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
   const scratch = new THREE.Vector3()
   const forward = new THREE.Vector3()
 
+  function sampleState(t: number): void {
+    const state = stateAt(t)
+    uniforms.surfTime.value = t
+    uniforms.surfImpactTime.value = t - frameStart
+    uniforms.surfPulseTime.value = t
+    const pulse = uniforms.surfPulse.value[0] as THREE.Vector4
+    if (state.engine > 0) {
+      const exhaust = vehicle.anchors.exhaust
+      scratch.copy(exhaust.position).addScaledVector(exhaust.normal, pulseReach)
+      pulse.set(scratch.x, scratch.z, state.engine * pulseStrength, 0)
+    } else pulse.set(0, 0, 0, 0)
+    if (runners) {
+      runners.beginSample(t)
+      uniforms.surfTrackLen.value = runners.travel(t)
+    }
+  }
+
   return {
     root,
     lights: [],
@@ -279,23 +296,11 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       const age = t - shakeStart
       uniforms.surfShakeAge.value = age > 0 && t < refill.end ? age : 0
       uniforms.surfRefill.value = t > refill.start && t < refill.end ? THREE.MathUtils.smoothstep(t, refill.start, refill.end) : 0
+      // Captures drawn before the first sample read the deck shader too.
+      sampleState(t)
     },
     beginSample(sample: SampleContext) {
-      const t = sample.timeSeconds
-      const state = stateAt(t)
-      uniforms.surfTime.value = t
-      uniforms.surfImpactTime.value = t - frameStart
-      uniforms.surfPulseTime.value = t
-      const pulse = uniforms.surfPulse.value[0] as THREE.Vector4
-      if (state.engine > 0) {
-        const exhaust = vehicle.anchors.exhaust
-        scratch.copy(exhaust.position).addScaledVector(exhaust.normal, pulseReach)
-        pulse.set(scratch.x, scratch.z, state.engine * pulseStrength, 0)
-      } else pulse.set(0, 0, 0, 0)
-      if (runners) {
-        runners.beginSample(t)
-        uniforms.surfTrackLen.value = runners.travel(t)
-      }
+      sampleState(sample.timeSeconds)
     },
     setDiagnostic(view: string) {
       uniforms.surfDiag.value = view === 'wetness' ? 1 : 0
