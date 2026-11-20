@@ -446,7 +446,7 @@ function forgedWheelAssembly(w: WheelSize, full: boolean, hero = w === frontWhee
   const rHubInner = .248 * R, rHubOuter = .260 * R
   const rWebOuter = R - .0035
   const rWinOuter = R - .0124
-  const theta0 = .22
+  const theta0 = w === frontWheel ? .98 : .22
   const branchSpan = .456
   const stemRootHalf = .064 * R
   const stemForkHalf = .052 * R
@@ -573,11 +573,12 @@ function forgedWheelAssembly(w: WheelSize, full: boolean, hero = w === frontWhee
     [hubBowlX, rHubInner],
   ], hubDiscSegs)
 
-  const backCollarPts = collarLoop.map(({ p }) => p)
-  const backWindowHoles = windowLoops.map((loop) => loop.map(({ p, n }) => [p[0] + n[0] * .0006, p[1] + n[1] * .0006] as Pt2))
-  const backWeb = buildPlanarSurface(outerWebPts, [backCollarPts, ...backWindowHoles], backHeight, -1, 0)
-
-  const forgedParts: T.BufferGeometry[] = [backWeb, hubDisc, hubStepWall]
+  const forgedParts: T.BufferGeometry[] = [hubDisc, hubStepWall]
+  if (full || hero) {
+    const backCollarPts = collarLoop.map(({ p }) => p)
+    const backWindowHoles = windowLoops.map((loop) => loop.map(({ p, n }) => [p[0] + n[0] * .0006, p[1] + n[1] * .0006] as Pt2))
+    forgedParts.unshift(buildPlanarSurface(outerWebPts, [backCollarPts, ...backWindowHoles], backHeight, -1, 0))
+  }
   const machinedParts: T.BufferGeometry[] = []
 
   for (const loop of windowLoops) {
@@ -670,7 +671,7 @@ function forgedWheelAssembly(w: WheelSize, full: boolean, hero = w === frontWhee
 
 function caliper(w: WheelSize, full: boolean, axis: number, hero = w === frontWheel): [T.BufferGeometry, T.BufferGeometry, T.BufferGeometry] {
   const rear = w === rearWheel
-  const middle = rear ? 1.18 : -.86
+  const middle = rear ? 1.18 : -.98
   const half = rear ? .735 : 1.05
   const low = w.disc - (rear ? .058 : .066)
   const outer = w.disc + (rear ? .026 : .025)
@@ -1024,13 +1025,13 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
     envMapIntensity: 1.35,
   }), 'none')
   const caliperFinish = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x741b1f : 0x6a6f77,
-    metalness: full ? .30 : .32,
-    roughness: full ? .33 : .31,
+    color: full ? 0x741b1f : 0x8e959f,
+    metalness: full ? .30 : .22,
+    roughness: full ? .33 : .28,
     clearcoat: full ? .52 : .55,
     clearcoatRoughness: full ? .20 : .19,
     specularIntensity: .82,
-    envMapIntensity: full ? 1.24 : 1.18,
+    envMapIntensity: full ? 1.24 : 1.22,
   }), 'none')
   const hatFinish = m.tag(new T.MeshPhysicalMaterial({
     color: full ? 0x1c1f24 : 0x2c3037,
