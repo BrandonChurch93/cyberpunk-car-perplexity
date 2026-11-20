@@ -5,15 +5,15 @@ import { describe, expect, it } from 'vitest'
 import { config, frameCount } from '../src/config'
 import { createVehicle } from '../src/vehicle'
 import { clampRect, gridShape, planCrops } from '../tools/lib/crops'
-import { filmMatches, filmPath, framesDir, partRange, type FilmRecord } from '../tools/lib/film'
+import { bundleGroups, filmMatches, filmPath, framesDir, partRange, type FilmRecord } from '../tools/lib/film'
 import { detailFrom } from '../tools/lib/detail'
 import { recordMatches, stillName, type StillRecord } from '../tools/lib/render'
 import { signProblems } from '../tools/lib/gates'
 import { parseJudged } from '../tools/lib/judged'
-import { beatMoments, configValues, eventRuns, extractSection, heroFrame, hookFrames, isNeutral, juryText, macroFrame, neutralName, neutralProblems, returnFormat, roundName, shuffle } from '../tools/lib/pack'
-import { boardObservations, onlyImageChunks } from '../tools/lib/pack-build'
+import { beatMoments, configValues, eventRuns, extractSection, heroFrame, hookFrames, isNeutral, juryText, macroFrame, neutralName, neutralProblems, returnFormat, roundName, shuffle, splitMessages } from '../tools/lib/pack'
+import { boardObservations, onlyImageChunks, sheetCaption } from '../tools/lib/pack-build'
 import sharp from 'sharp'
-import { cameraForFrame, project, rayThrough } from '../tools/lib/scene'
+import { beatJoins, cameraForFrame, project, rayThrough } from '../tools/lib/scene'
 import { sheetFrames } from '../tools/lib/sheet'
 
 const root = join(import.meta.dirname, '..')
@@ -303,5 +303,48 @@ describe('anchor crops on close shots', () => {
     expect(ids(765)).toContain('detail')
     expect(ids(765)).not.toContain('paint')
     expect(ids(615)).toEqual(['lamp'])
+  })
+})
+
+describe('cuts in the sheet captions', () => {
+  it('takes the cuts from the shots, so wake and the loop continue and every macro beat cuts', () => {
+    for (const format of [config.formats.master, config.formats.vertical]) {
+      const joins = beatJoins(format, anchors)
+      const cut = Object.fromEntries(joins.map((j) => [j.beat, j.cut]))
+      expect(cut).toEqual({ arrival: false, wake: false, paint: true, wheel: true, lamp: true, detail: true, ignition: true, return: true })
+    }
+  })
+  it('states the cut or the continued move', () => {
+    const joins = beatJoins(config.formats.preview, anchors)
+    expect(sheetCaption('paint', joins)).toBe('12 frames from 9.00 s to 14.97 s, beat 3 of 8 (paint). The film cuts to this shot at 9.00 s.')
+    expect(sheetCaption('wake', joins)).toMatch(/beat 2 of 8 \(wake\)\. It continues the move of beat 1 without a cut\.$/)
+    expect(sheetCaption('arrival', joins)).toMatch(/loops into it from the end of beat 8 without a cut\.$/)
+    expect(sheetCaption('seam', joins)).toMatch(/The film loops here without a cut\.$/)
+  })
+})
+
+describe('splitting a pack into messages', () => {
+  const files = Array.from({ length: 23 }, (_, i) => ({ file: `set-A-${String(i + 1).padStart(2, '0')}.png`, shows: `frame ${i}` }))
+  it('puts at most N files in each message, brief first, answer last', () => {
+    const m = splitMessages('C3', files, 10)
+    expect(m.map((x) => x.name)).toEqual(['message-01.txt', 'message-02.txt', 'message-03.txt'])
+    expect(m[0].text).toContain('Send brief.txt')
+    expect(m[2].text).toContain('covering the files of all 3 messages')
+    expect(m.map((x) => x.text.split('\n').filter((l) => l.startsWith('set-')).length)).toEqual([10, 10, 3])
+    expect(m[1].text).toContain('set-A-11.png: frame 10')
+  })
+  it('gives one image per call packs one message per file', () => {
+    expect(splitMessages('C1', files.slice(0, 4), 10, true)).toHaveLength(4)
+    expect(splitMessages('C5', files.slice(0, 4), 10)[0].text).toContain('then ask for the answer')
+    expect(() => splitMessages('C5', files, 0)).toThrow()
+  })
+})
+
+describe('frame bundles for sending parts between machines', () => {
+  it('fills each bundle up to the limit, in frame order', () => {
+    const sizes = Array.from({ length: 10 }, (_, i) => ({ frame: 100 + i, bytes: 30 }))
+    expect(bundleGroups(sizes, 100)).toEqual([[100, 101, 102], [103, 104, 105], [106, 107, 108], [109]])
+    expect(bundleGroups(sizes, 1000)).toEqual([sizes.map((s) => s.frame)])
+    expect(() => bundleGroups([{ frame: 1, bytes: 101 }], 100)).toThrow()
   })
 })

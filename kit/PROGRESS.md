@@ -5,7 +5,7 @@ The Builder's memory. Read this first in every task. Update it before every comm
 ## Status
 
 - Current phase: 2 · Blockout in motion
-- Current round: 2 (Phase 2 blockout)
+- Current round: 3 (Phase 2 blockout)
 - Blocked: no
 - Last push: see the push log, 2026-11-19
 
@@ -187,6 +187,13 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | Critics C5 and C8 receive the beat lines of `kit/01-FILM.md` and the rule on cuts with the brief, and every sheet caption states whether its beat begins with a cut or continues a move, computed from the camera data | The rubric refers to the beats and to cuts. In round 1 the motion critic could not tell a planned cut from a jump | `tools/pack.ts`, `tools/lib/scene.ts` |
 | 2026-11-19 | The `return` beat cuts to a high crane view of the lit car, then comes down and back into the opening frame. The wake push travels 2.6 m. The paint beat looks along the left wing crest toward the door mirror. The wheel beat is a 35 mm low three-quarter arc. The detail beat holds the crossed braces from its first frame. The tall shots are each set up again | Critic round 1: C5 6, C8 5. See `scorecards/round-001/SUMMARY.md` | `src/director/shots.ts`, `cut/SHOTS.md` |
 | 2026-11-19 | Phase 2 contact sheets are rendered in the preview format | The sheets are downsized to `critics.longEdgePx` anyway. The round 1 pack took an hour on two cores | `tools/pack.ts` |
+| 2026-11-19 | The engine bay is rebuilt after the factory photograph: two ribbed carbon cam covers, stepped carbon side panels, a carbon surround and mesh airboxes, with no bracing over the engine. The detail shot is a crane move from the rear left that copies that photograph. This replaces the earlier decision that named bracing | The real car has no braces over the engine. The first bay was built from a wrong reading of the reference | `src/vehicle/`, `anchors.detail`, the detail rows in `cut/SHOTS.md` |
+| 2026-11-19 | The paint beat is a 0.30 m sideways slide with a locked head | Along the lens axis the frames of the beat were nearly the same. A sideways slide gives parallax between the crest, the pillar, the mirror and the city | `src/director/shots.ts`, `cut/SHOTS.md` |
+| 2026-11-19 | Every frame of the film is tested for one camera pose across its exposure. The first round 2 pack was discarded | That pack showed a double exposure at 36.00 s: samples of the first crane frame that fall before the cut took the end pose of the move. The first fix covered only frame 0 | `push()` and `pull()` in `src/director/shots.ts`, `tests/camera.test.ts` |
+| 2026-11-19 | The wheel beat is a 50 mm shot at hub height from 1.7 to 1.5 m that arcs from 48 to 68 degrees off the nose. The paint beat looks 12.5 degrees down along the crease of the left wing crest from 0.27 m above it. The crane return runs from 36.3 s to 44.0 s. The tall wides sit 30 degrees off the nose and the tall rear shot 32 to 22 degrees off the tail | Critic round 2: C5 7, C8 6. See `scorecards/round-002/SUMMARY.md` | `src/director/shots.ts`, `src/director/timeline.ts`, `cut/SHOTS.md` |
+| 2026-11-19 | The gray-box sun stands on the left of the car and lower, at (16, 13, 12) | Every insert is shot on the left side, which was in shadow. The critics could not read the wheel | `grayBoxLight()` in `src/core/film-stage.ts` |
+| 2026-11-19 | The tall wide shot does not have to hold the billboard in frame. The world test checks that only for the wide formats | At 30 degrees off the nose the car fills the narrow frame and the billboard lies outside it to the right. The kit asks for its light on the car and the deck, not for the panel in every frame | `tests/world.test.ts`, `cut/SHOTS.md` |
+| 2026-11-19 | `src/vehicle/wheels.ts` has its own owner on branch `dev/wheel`. The scripted-model car (D) also exports its wheel alone as a candidate. The one the auditor scores higher at the wheel camera is mounted | The wheel now fills a frame for five seconds and the auditor scores it 5. One builder cannot fix the body and the wheel at once | `src/vehicle/wheels.ts`, Phase 3 |
 
 ## Config changes
 
@@ -201,6 +208,7 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | Round | Phase | Gate | C1 render against control | C2 | C3 | C4 | C5 | C6 | C7 | C8 | Top issue | What changed next |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | 2 | blockout | n/a | n/a | n/a | n/a | 6 | n/a | n/a | 5 | C8 severe: the paint beat is a bare hood curve with no line and no background | Every shot reframed, crane return, tall shots set up again, cut captions |
+| 2 | 2 | blockout | n/a | n/a | n/a | n/a | 7 | n/a | n/a | 6 | Both: the wheel beat is a dark low view of the front corner, not the wheel | Wheel at 50 mm and hub height, paint over the wing crease, tall wides and tall rear shot set oblique, slower crane, sun moved to the lit side |
 
 ## Plateau log
 
@@ -229,10 +237,19 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | 2a71642 | pushed to main. Merges of the tools detail flag, world lighting, reflections, surface water, vehicle B step 8, bokeh |
 | 2026-11-19 | 6ee5cc7 | pushed to main. Merge of the post stage |
 | 2026-11-19 | the commit titled "Round 1 scorecards and the round 2 shot plan" | pushed to main. Round 1 scorecards, new shots, vehicle B pass 2 steps 1 to 3, tools for split packs and film parts |
+| 2026-11-19 | the commit titled "Detail shot on the rebuilt engine bay" | pushed to main. Exposure test on every frame, paint slide, vehicle B through the bay rebuild, split packs and film parts tools |
+| 2026-11-19 | the commit titled "Round 2 scorecards and the round 3 shot plan" | pushed to main. Round 2 scorecards, new wheel, paint, tall and crane shots, haze, surface water, vehicle B pass 3 and pass 4 through the side |
 
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-19, session 7
+
+- Done: the engine bay was rebuilt from the factory photograph and the detail shot copies that photograph. Critic round 2 on the gray box: C5 7, C8 6. Answered with a 50 mm wheel shot at hub height, a paint glide over the left wing crease, tall wides at 30 degrees off the nose, a tall rear shot off the centerline, a crane return spread over 36.3 to 44.0 s and a gray-box sun on the side the inserts are shot on. Round 3 pack rendered (build 2ce7d31f00d145ca) and sent to two fresh reviewers on two other families. Merged headlamp haze, surface water, the post curve with a lifted toe and a matched shoulder (no channel reaches 255 on the seven look frames), and vehicle B through pass 5 front and side. 145 unit tests pass.
+- Measured: the auditor scores vehicle B front three-quarter 6, side 6, rear three-quarter 6, wheel 5, lamp 7, bay 7 against a bar of 8. A Phase 2 pack takes 30 to 50 minutes on two cores.
+- Seen at full detail: lighting restaged by the world owner makes the body read but overshoots to pale silver. It is being pulled back so the black paint is described by reflections of sign shapes, not by fill. A review frame at 8.00 s showed a black square: one sample carries a value near 4.7 million that overflows the half-float bloom buffer. The post owner is finding the source and adding a count of non-finite pixels that a gate can read.
+- Next: round 3 answers, more rounds until C5 and C8 hold at 9 with no severe or major issue, then the Phase 2 gate. Phase 3 work continues behind the detail switch: lighting, bead shading, the wheel, the body form.
 
 ### 2026-11-19, session 6
 

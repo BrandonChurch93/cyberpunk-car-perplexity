@@ -1,0 +1,232 @@
+{
+  "files": [
+    {
+      "file": "set-A-01.png",
+      "shows": "frame at 0.00 s, start of beat 1 of 8 (arrival), wide frame"
+    },
+    {
+      "file": "set-A-02.png",
+      "shows": "frame at 2.00 s, middle of beat 1 of 8 (arrival), wide frame"
+    },
+    {
+      "file": "set-A-03.png",
+      "shows": "frame at 3.97 s, end of beat 1 of 8 (arrival), wide frame"
+    },
+    {
+      "file": "set-A-04.png",
+      "shows": "frame at 4.00 s, start of beat 2 of 8 (wake), wide frame"
+    },
+    {
+      "file": "set-A-05.png",
+      "shows": "frame at 6.50 s, middle of beat 2 of 8 (wake), wide frame"
+    },
+    {
+      "file": "set-A-06.png",
+      "shows": "frame at 8.97 s, end of beat 2 of 8 (wake), wide frame"
+    },
+    {
+      "file": "set-A-07.png",
+      "shows": "frame at 9.00 s, start of beat 3 of 8 (paint), wide frame"
+    },
+    {
+      "file": "set-A-08.png",
+      "shows": "frame at 12.00 s, middle of beat 3 of 8 (paint), wide frame"
+    },
+    {
+      "file": "set-A-09.png",
+      "shows": "frame at 14.97 s, end of beat 3 of 8 (paint), wide frame"
+    },
+    {
+      "file": "set-A-10.png",
+      "shows": "frame at 15.00 s, start of beat 4 of 8 (wheel), wide frame"
+    },
+    {
+      "file": "set-A-11.png",
+      "shows": "frame at 17.50 s, middle of beat 4 of 8 (wheel), wide frame"
+    },
+    {
+      "file": "set-A-12.png",
+      "shows": "frame at 19.97 s, end of beat 4 of 8 (wheel), wide frame"
+    },
+    {
+      "file": "set-A-13.png",
+      "shows": "frame at 20.00 s, start of beat 5 of 8 (lamp), wide frame"
+    },
+    {
+      "file": "set-A-14.png",
+      "shows": "frame at 22.50 s, middle of beat 5 of 8 (lamp), wide frame"
+    },
+    {
+      "file": "set-A-15.png",
+      "shows": "frame at 24.97 s, end of beat 5 of 8 (lamp), wide frame"
+    },
+    {
+      "file": "set-A-16.png",
+      "shows": "frame at 25.00 s, start of beat 6 of 8 (detail), wide frame"
+    },
+    {
+      "file": "set-A-17.png",
+      "shows": "frame at 27.00 s, middle of beat 6 of 8 (detail), wide frame"
+    },
+    {
+      "file": "set-A-18.png",
+      "shows": "frame at 28.97 s, end of beat 6 of 8 (detail), wide frame"
+    },
+    {
+      "file": "set-A-19.png",
+      "shows": "frame at 29.00 s, start of beat 7 of 8 (ignition), wide frame"
+    },
+    {
+      "file": "set-A-20.png",
+      "shows": "frame at 32.50 s, middle of beat 7 of 8 (ignition), wide frame"
+    },
+    {
+      "file": "set-A-21.png",
+      "shows": "frame at 35.97 s, end of beat 7 of 8 (ignition), wide frame"
+    },
+    {
+      "file": "set-A-22.png",
+      "shows": "frame at 36.00 s, start of beat 8 of 8 (return), wide frame"
+    },
+    {
+      "file": "set-A-23.png",
+      "shows": "frame at 40.50 s, middle of beat 8 of 8 (return), wide frame"
+    },
+    {
+      "file": "set-A-24.png",
+      "shows": "frame at 44.97 s, end of beat 8 of 8 (return), wide frame"
+    },
+    {
+      "file": "set-B-01.png",
+      "shows": "frame at 0.00 s, start of beat 1 of 8 (arrival), tall frame"
+    },
+    {
+      "file": "set-B-02.png",
+      "shows": "frame at 2.00 s, middle of beat 1 of 8 (arrival), tall frame"
+    },
+    {
+      "file": "set-B-03.png",
+      "shows": "frame at 3.97 s, end of beat 1 of 8 (arrival), tall frame"
+    },
+    {
+      "file": "set-B-04.png",
+      "shows": "frame at 4.00 s, start of beat 2 of 8 (wake), tall frame"
+    },
+    {
+      "file": "set-B-05.png",
+      "shows": "frame at 6.50 s, middle of beat 2 of 8 (wake), tall frame"
+    },
+    {
+      "file": "set-B-06.png",
+      "shows": "frame at 8.97 s, end of beat 2 of 8 (wake), tall frame"
+    },
+    {
+      "file": "set-B-07.png",
+      "shows": "frame at 9.00 s, start of beat 3 of 8 (paint), tall frame"
+    },
+    {
+      "file": "set-B-08.png",
+      "shows": "frame at 12.00 s, middle of beat 3 of 8 (paint), tall frame"
+    },
+    {
+      "file": "set-B-09.png",
+      "shows": "frame at 14.97 s, end of beat 3 of 8 (paint), tall frame"
+    },
+    {
+      "file": "set-B-10.png",
+      "shows": "frame at 15.00 s, start of beat 4 of 8 (wheel), tall frame"
+    },
+    {
+      "file": "set-B-11.png",
+      "shows": "frame at 17.50 s, middle of beat 4 of 8 (wheel), tall frame"
+    },
+    {
+      "file": "set-B-12.png",
+      "shows": "frame at 19.97 s, end of beat 4 of 8 (wheel), tall frame"
+    },
+    {
+      "file": "set-B-13.png",
+      "shows": "frame at 20.00 s, start of beat 5 of 8 (lamp), tall frame"
+    },
+    {
+      "file": "set-B-14.png",
+      "shows": "frame at 22.50 s, middle of beat 5 of 8 (lamp), tall frame"
+    },
+    {
+      "file": "set-B-15.png",
+      "shows": "frame at 24.97 s, end of beat 5 of 8 (lamp), tall frame"
+    },
+    {
+      "file": "set-B-16.png",
+      "shows": "frame at 25.00 s, start of beat 6 of 8 (detail), tall frame"
+    },
+    {
+      "file": "set-B-17.png",
+      "shows": "frame at 27.00 s, middle of beat 6 of 8 (detail), tall frame"
+    },
+    {
+      "file": "set-B-18.png",
+      "shows": "frame at 28.97 s, end of beat 6 of 8 (detail), tall frame"
+    },
+    {
+      "file": "set-B-19.png",
+      "shows": "frame at 29.00 s, start of beat 7 of 8 (ignition), tall frame"
+    },
+    {
+      "file": "set-B-20.png",
+      "shows": "frame at 32.50 s, middle of beat 7 of 8 (ignition), tall frame"
+    },
+    {
+      "file": "set-B-21.png",
+      "shows": "frame at 35.97 s, end of beat 7 of 8 (ignition), tall frame"
+    },
+    {
+      "file": "set-B-22.png",
+      "shows": "frame at 36.00 s, start of beat 8 of 8 (return), tall frame"
+    },
+    {
+      "file": "set-B-23.png",
+      "shows": "frame at 40.50 s, middle of beat 8 of 8 (return), tall frame"
+    },
+    {
+      "file": "set-B-24.png",
+      "shows": "frame at 44.97 s, end of beat 8 of 8 (return), tall frame"
+    },
+    {
+      "file": "set-C-01.png",
+      "shows": "contact sheet, 12 frames from 0.00 s to 3.97 s, beat 1 of 8 (arrival). The film loops into it from the end of beat 8 without a cut."
+    },
+    {
+      "file": "set-C-02.png",
+      "shows": "contact sheet, 12 frames from 4.00 s to 8.97 s, beat 2 of 8 (wake). It continues the move of beat 1 without a cut."
+    },
+    {
+      "file": "set-C-03.png",
+      "shows": "contact sheet, 12 frames from 9.00 s to 14.97 s, beat 3 of 8 (paint). The film cuts to this shot at 9.00 s."
+    },
+    {
+      "file": "set-C-04.png",
+      "shows": "contact sheet, 12 frames from 15.00 s to 19.97 s, beat 4 of 8 (wheel). The film cuts to this shot at 15.00 s."
+    },
+    {
+      "file": "set-C-05.png",
+      "shows": "contact sheet, 12 frames from 20.00 s to 24.97 s, beat 5 of 8 (lamp). The film cuts to this shot at 20.00 s."
+    },
+    {
+      "file": "set-C-06.png",
+      "shows": "contact sheet, 12 frames from 25.00 s to 28.97 s, beat 6 of 8 (detail). The film cuts to this shot at 25.00 s."
+    },
+    {
+      "file": "set-C-07.png",
+      "shows": "contact sheet, 12 frames from 29.00 s to 35.97 s, beat 7 of 8 (ignition). The film cuts to this shot at 29.00 s."
+    },
+    {
+      "file": "set-C-08.png",
+      "shows": "contact sheet, 12 frames from 36.00 s to 44.97 s, beat 8 of 8 (return). The film cuts to this shot at 36.00 s."
+    },
+    {
+      "file": "set-C-09.png",
+      "shows": "contact sheet, 12 frames across the loop point, 43.80 s to the end, then from 0 s to 1.17 s. The film loops here without a cut."
+    }
+  ]
+}

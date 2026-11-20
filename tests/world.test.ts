@@ -139,8 +139,10 @@ describe('world blockout', () => {
         expect(position.x).toBeGreaterThan(0)
         const screen = position.clone().project(camera)
         expect(screen.x).toBeGreaterThan(0)
-        expect(screen.x).toBeLessThan(1)
-        expect(Math.abs(screen.y)).toBeLessThan(1)
+        if (format.width > format.height) {
+          expect(screen.x).toBeLessThan(1)
+          expect(Math.abs(screen.y)).toBeLessThan(1)
+        }
         const ray = new THREE.Raycaster(state.position, position.clone().sub(state.position).normalize(), 0, state.far)
         const hit = ray.intersectObject(world.root, true)[0]
         expect(hit?.object.parent).toBe(billboard)

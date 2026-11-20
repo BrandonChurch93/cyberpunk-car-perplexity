@@ -12,6 +12,8 @@ interface RoundKey {
   paint: string
   detail: string
   tier: string
+  sheetCells: string
+  split: number
   buildHash: string
   critics: Record<string, { folder: string; files: Record<string, KeyEntry> }>
 }
@@ -26,6 +28,8 @@ void runTool(async () => {
   const paint = paintById(a.paint ?? defaultPaint).id
   const detail = detailFrom(a.detail)
   const tier = a.tier
+  const split = a.split !== undefined ? Number(a.split) : 10
+  if (!Number.isInteger(split) || split < 1) throw new Error('--split must be a whole number of at least 1')
   if (tier !== undefined && !isTier(tier)) throw new Error(`unknown tier ${tier}`)
   const wanted = a.critic ? a.critic.toUpperCase().split(',') : Object.keys(table)
   for (const c of wanted) if (!table[c]) throw new Error(`phase ${phase} has no pack for ${c}. It packs for ${Object.keys(table).join(', ')}`)
@@ -37,9 +41,11 @@ void runTool(async () => {
   const previous = readJson<RoundKey>(keyPath)
   const merge = a.critic !== undefined && previous !== null && previous.phase === phase && previous.paint === paint && previous.detail === detail && previous.tier === (tier ?? 'as the brief asks') && previous.buildHash === hash
   if (!merge) rmSync(roundDir, { recursive: true, force: true })
-  const key: RoundKey = merge ? previous : { round, phase, paint, detail, tier: tier ?? 'as the brief asks', buildHash: hash, critics: {} }
+  const key: RoundKey = merge ? previous : { round, phase, paint, detail, tier: tier ?? 'as the brief asks', sheetCells: '', split, buildHash: hash, critics: {} }
 
-  const ctx = new PackContext(phase, round, paint, hash, a.budget !== undefined ? Number(a.budget) : undefined, tier)
+  const ctx = new PackContext(phase, round, paint, hash, a.budget !== undefined ? Number(a.budget) : undefined, tier, split)
+  key.sheetCells = `${ctx.sheetFormat.id}, ${ctx.sheetFormat.width} x ${ctx.sheetFormat.height}`
+  key.split = split
   try {
     for (const critic of wanted) {
       const pack = await table[critic](ctx)

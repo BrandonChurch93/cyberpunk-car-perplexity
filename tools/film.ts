@@ -1,15 +1,51 @@
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { defaultPaint, formatById, frameCount, isTier, paintById } from '../src/config.ts'
 import { diagnosticViews } from '../src/diagnostics/views.ts'
-import { args, buildHash, config, ensureDir, readJson, writeJson } from './lib/env.ts'
-import { emptyFrames, encodeFilm, filmMatches, filmPath, frameChecks, frameFileName, frameSpec, framesDir, missingFrames, rangeFromArgs, recordPathFor, verifyFilm, type FilmRecord, type FilmSpec } from './lib/film.ts'
+import { args, buildHash, config, ensureDir, readJson, workDir, writeJson } from './lib/env.ts'
+import { bundleFrames, emptyFrames, encodeFilm, unbundleFrames, filmMatches, filmPath, frameChecks, frameFileName, frameSpec, framesDir, missingFrames, rangeFromArgs, recordPathFor, verifyFilm, type FilmRecord, type FilmSpec } from './lib/film.ts'
 import { megabytes } from './lib/probe.ts'
 import { detailFrom, OutOfBudget, RenderSession, runTool, type StillRecord } from './lib/render.ts'
 
 const freshPageEvery = 300
 
+const help = `npm run film -- [--format preview] [--tier draft] [--detail blockout|full] [--paint id] [--diag beauty]
+  [--first F --last L] [--parts P --part K] [--bundle] [--unbundle file.tar,...|folder] [--assemble] [--budget minutes] [--force]
+
+Renders every frame as a PNG with a record, then encodes the film when the whole range is present.
+A frame is a pure function of its index, so a frame rendered in any part on any machine is identical
+to the same frame of a single run. Exit 75 with a CONTINUE line means the chunk budget ran out: run
+the same command again and it resumes where it stopped.
+
+Across machines, P parts of the whole film, on the machine of part K (K = 1 to P):
+  npm run film -- --format preview --tier draft --detail blockout --parts P --part K --budget 0 --bundle
+  This renders part K and writes tar files of at most ${config.repo.maxFileMb * 0.95} MB to out/work/parts/,
+  each holding frame PNGs, their records and a bundle.json that names format, tier, detail, paint and build.
+Send every tar file as an attachment to the machine that assembles. There, from the same commit:
+  npm run film -- --format preview --tier draft --detail blockout --unbundle out/work/parts --assemble
+  This unpacks every tar in the folder (or a comma list of files), checks each frame's record against the
+  current build, encodes the film and runs G5 on every frame. Frames already rendered there are kept and
+  compared byte for byte with the bundled copy; any difference stops the command. To prove two machines
+  agree, render one frame on both, for example with --first and --last on the last frame of the part before.
+`
+
 void runTool(async () => {
   const a = args()
+  if (a.help === 'true') {
+    console.log(help)
+    return 0
+  }
+  if (a.unbundle !== undefined) {
+    const list = existsSync(a.unbundle) && statSync(a.unbundle).isDirectory() ? readdirSync(a.unbundle).filter((n) => n.endsWith('.tar')).sort().map((n) => join(a.unbundle, n)) : a.unbundle.split(',')
+    if (list.length === 0) throw new Error(`no tar files in ${a.unbundle}`)
+    let differing = 0
+    for (const u of unbundleFrames(list)) {
+      console.log(`unpacked ${u.file}: frames ${u.record.frames[0]} to ${u.record.frames[u.record.frames.length - 1]} of build ${u.record.buildHash} into ${u.dir}. ${u.added} added, ${u.same} already here and identical${u.differing.length ? `, ${u.differing.length} already here and DIFFERENT: ${u.differing.slice(0, 10).join(', ')}` : ''}`)
+      differing += u.differing.length
+      if (u.record.buildHash !== buildHash()) console.log(`WARNING: ${u.file} holds frames of build ${u.record.buildHash}, the current build is ${buildHash()}. Those frames will not count. Check out the same commit on both machines`)
+    }
+    if (differing > 0) throw new Error(`${differing} frames differ between machines. The renders are not identical, so the parts cannot be joined`)
+  }
   const tier = a.tier ?? 'draft'
   if (!isTier(tier)) throw new Error(`unknown tier ${tier}`)
   const diag = a.diag ?? 'beauty'
@@ -57,17 +93,25 @@ void runTool(async () => {
     }
   }
 
+  const bundleSlice = (): void => {
+    const gap = missingFrames(spec, slice[0], slice[1], hash)
+    if (gap.length > 0) throw new Error(`cannot bundle: ${gap.length} frames of ${slice[0]} to ${slice[1]} are missing`)
+    const label = `frames-${spec.format.id}-${spec.tier}-${spec.detail}-${first}-${last}${a.parts !== undefined ? `-part-${a.part}-of-${a.parts}` : ''}`
+    for (const f of bundleFrames(spec, slice[0], slice[1], hash, join(workDir, 'parts'), label)) console.log(`bundled ${f}: ${megabytes(statSync(f).size).toFixed(1)} MB`)
+  }
   const missing = missingFrames(spec, first, last, hash)
   if (missing.length > 0) {
     if (assemble) {
       console.error(`cannot assemble: ${missing.length} frames are missing or do not match build ${hash}, first ${missing.slice(0, 10).join(', ')}`)
       return 1
     }
+    if (a.bundle === 'true') bundleSlice()
     console.log(`slice ${slice[0]} to ${slice[1]} is done. ${missing.length} frames of ${first} to ${last} are still missing here, first ${missing.slice(0, 10).join(', ')}`)
     console.log(`copy the f*.png and f*.json files of every part into ${dir}, then run again with --assemble`)
     return 0
   }
 
+  if (a.bundle === 'true' && !assemble) bundleSlice()
   const { crf, probe: p } = encodeFilm(dir, first, last, out)
   const count = last - first + 1
   const bad = verifyFilm(p, spec.format, count)

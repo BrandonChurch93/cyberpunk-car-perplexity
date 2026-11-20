@@ -1,14 +1,22 @@
 import * as THREE from 'three'
 import type { CameraState } from '../../core/lens'
+import { patchFilmLighting } from '../../core/lights'
 import { layers } from '../../core/contract'
 import { insertAfter, patchMaterial, replaceOnce } from '../../materials/patch'
-import { type BeadClass, beadLayers, cellDrops, dominantAxis, geometryMinMm } from './beads'
+import { type BeadClass, beadLayers, cellDrops, dominantAxis, geometryMinMm, maxDensity } from './beads'
 import { surfHash3 } from './hash'
 
 /** Beyond this distance from the lens a drop is small enough on screen, and soft enough in focus, for the shader field. */
-export const geometryRange = 1.1
-const maxInstances = 24000
+export const geometryRange = 1.7
+const maxInstances = 40000
 const chunk = 4096
+/** A drop becomes geometry only when it spans this many pixels; smaller ones stay in the shader field. */
+const minPixels = 5
+
+/** Smallest diameter over distance that is drawn as geometry for this lens and frame width. */
+export function geometryAngle(camera: CameraState, widthPx: number): number {
+  return (minPixels * camera.sensorWidthMm) / camera.focalMm / widthPx
+}
 
 interface Source {
   mesh: THREE.Mesh
@@ -19,6 +27,93 @@ interface Source {
   triRadius: Float32Array
   triangles: number
   index: ArrayLike<number> | null
+  /** Open edges and sharp folds a drop may not straddle, hashed by cell in object space. */
+  edges: EdgeGrid
+}
+
+const edgeCell = 0.02
+const foldCos = Math.cos(THREE.MathUtils.degToRad(60))
+
+class EdgeGrid {
+  private readonly cells = new Map<string, number[]>()
+  private readonly seg: number[] = []
+  private readonly a = new THREE.Vector3()
+  private readonly b = new THREE.Vector3()
+  private readonly line = new THREE.Line3()
+  private readonly q = new THREE.Vector3()
+
+  add(ax: number, ay: number, az: number, bx: number, by: number, bz: number): void {
+    const id = this.seg.length / 6
+    this.seg.push(ax, ay, az, bx, by, bz)
+    const lo = [Math.min(ax, bx), Math.min(ay, by), Math.min(az, bz)].map((v) => Math.floor(v / edgeCell))
+    const hi = [Math.max(ax, bx), Math.max(ay, by), Math.max(az, bz)].map((v) => Math.floor(v / edgeCell))
+    if ((hi[0] - lo[0] + 1) * (hi[1] - lo[1] + 1) * (hi[2] - lo[2] + 1) > 512) return
+    for (let x = lo[0]; x <= hi[0]; x++) for (let y = lo[1]; y <= hi[1]; y++) for (let z = lo[2]; z <= hi[2]; z++) {
+      const key = `${x},${y},${z}`
+      const list = this.cells.get(key)
+      if (list) list.push(id)
+      else this.cells.set(key, [id])
+    }
+  }
+
+  /** Whether any edge passes within `reach` of p. `reach` stays under one cell. */
+  near(p: THREE.Vector3, reach: number): boolean {
+    const cx = Math.floor(p.x / edgeCell), cy = Math.floor(p.y / edgeCell), cz = Math.floor(p.z / edgeCell)
+    for (let x = cx - 1; x <= cx + 1; x++) for (let y = cy - 1; y <= cy + 1; y++) for (let z = cz - 1; z <= cz + 1; z++) {
+      const list = this.cells.get(`${x},${y},${z}`)
+      if (!list) continue
+      for (const id of list) {
+        const o = id * 6
+        this.line.set(this.a.fromArray(this.seg, o), this.b.fromArray(this.seg, o + 3))
+        this.line.closestPointToPoint(p, true, this.q)
+        if (this.q.distanceToSquared(p) < reach * reach) return true
+      }
+    }
+    return false
+  }
+}
+
+/** Edges used by one triangle only, the panel gaps, and edges where the faces either side fold by more than 60 degrees. */
+function edgeGrid(pos: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, index: ArrayLike<number> | null, triangles: number): EdgeGrid {
+  const grid = new EdgeGrid()
+  const weld = new Map<string, number>()
+  const id = (i: number): number => {
+    const key = `${Math.round(pos.getX(i) * 2e4)},${Math.round(pos.getY(i) * 2e4)},${Math.round(pos.getZ(i) * 2e4)}`
+    let v = weld.get(key)
+    if (v === undefined) {
+      v = weld.size
+      weld.set(key, v)
+    }
+    return v
+  }
+  const at = (t: number, k: number): number => (index ? index[t * 3 + k] : t * 3 + k)
+  const faces = new Map<string, { n: THREE.Vector3; i: number; j: number; count: number; fold: boolean }>()
+  const pa = new THREE.Vector3(), pb = new THREE.Vector3(), pc = new THREE.Vector3()
+  for (let t = 0; t < triangles; t++) {
+    const v = [at(t, 0), at(t, 1), at(t, 2)]
+    pa.fromBufferAttribute(pos, v[0])
+    pb.fromBufferAttribute(pos, v[1])
+    pc.fromBufferAttribute(pos, v[2])
+    const n = new THREE.Vector3().crossVectors(pb.clone().sub(pa), pc.clone().sub(pa))
+    if (n.lengthSq() < 1e-20) continue
+    n.normalize()
+    for (let k = 0; k < 3; k++) {
+      const i = v[k], j = v[(k + 1) % 3]
+      const a = id(i), b = id(j)
+      const key = a < b ? `${a}:${b}` : `${b}:${a}`
+      const e = faces.get(key)
+      if (!e) faces.set(key, { n, i, j, count: 1, fold: false })
+      else {
+        e.count++
+        if (e.n.dot(n) < foldCos) e.fold = true
+      }
+    }
+  }
+  for (const e of faces.values()) {
+    if (e.count !== 1 && !e.fold) continue
+    grid.add(pos.getX(e.i), pos.getY(e.i), pos.getZ(e.i), pos.getX(e.j), pos.getY(e.j), pos.getZ(e.j))
+  }
+  return grid
 }
 
 /** A unit footprint, unit height spherical cap for one contact angle. Past 90 degrees the side bulges out over the footprint. */
@@ -64,40 +159,22 @@ export function capTemplate(contactDegrees: number, rings: number, segments: num
 export class DropGeometry {
   readonly group = new THREE.Group()
   readonly material: THREE.MeshPhysicalMaterial
+  /** The same lens for the hero rivulet and its trail beads. */
+  readonly runner: THREE.MeshPhysicalMaterial
+  /** Water without a cap shape: ribbons and falling drips. */
+  readonly plain: THREE.MeshPhysicalMaterial
+  private readonly lenses = new Map<number, THREE.MeshPhysicalMaterial>()
+  private readonly uniforms: Record<string, THREE.IUniform>
   private readonly sources: Source[] = []
   private readonly pools = new Map<string, THREE.InstancedMesh[]>()
   count = 0
 
   constructor(meshes: Array<{ mesh: THREE.Mesh; bead: BeadClass }>, uniforms: Record<string, THREE.IUniform>) {
     this.group.name = 'surface water drops'
-    this.material = new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, metalness: 0, roughness: 0.02, transmission: 1, ior: 1.333, thickness: 0.002, specularIntensity: 1, envMapIntensity: 1,
-    })
-    patchMaterial(this.material, {
-      id: 'surface water drop lens',
-      uniforms,
-      apply(shader) {
-        shader.vertexShader = 'varying float surfDropH;\nvarying float surfDropScale;\n' + insertAfter(shader.vertexShader, '#include <project_vertex>', `
-          #ifdef USE_INSTANCING
-            surfDropScale = length(instanceMatrix[1].xyz);
-          #else
-            surfDropScale = 0.001;
-          #endif
-          surfDropH = position.y;`)
-        const chunkText = THREE.ShaderChunk.transmission_fragment
-        const lens = replaceOnce(
-          replaceOnce(chunkText, 'material.thickness = thickness;', 'material.thickness = surfDropScale * (0.6 + 2.4 * surfDropH);'),
-          'totalDiffuse = mix( totalDiffuse, transmitted.rgb, material.transmission );',
-          `float surfFacing = clamp(dot(n, v), 0.0, 1.0);
-          float surfRim = mix(0.12, 1.0, smoothstep(0.08, 0.55, surfFacing));
-          totalDiffuse = mix( totalDiffuse, transmitted.rgb * surfRim, material.transmission );`,
-        )
-        let f = 'varying float surfDropH;\nvarying float surfDropScale;\nuniform float surfDiag;\n' + shader.fragmentShader
-        f = replaceOnce(f, '#include <transmission_fragment>', lens)
-        f = insertAfter(f, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(1.0, 0.1, 0.9, 1.0); }')
-        shader.fragmentShader = f
-      },
-    })
+    this.uniforms = uniforms
+    this.material = dropMaterial(uniforms, 100)
+    this.runner = dropMaterial(uniforms, 100, true)
+    this.plain = dropMaterial(uniforms, null, true)
     for (const { mesh, bead } of meshes) {
       const geometry = mesh.geometry
       const pos = geometry.getAttribute('position')
@@ -130,7 +207,7 @@ export class DropGeometry {
         positions.set([pos.getX(i), pos.getY(i), pos.getZ(i)], i * 3)
         normals.set([nor.getX(i), nor.getY(i), nor.getZ(i)], i * 3)
       }
-      this.sources.push({ mesh, bead, positions, normals, centroids, triRadius, triangles, index })
+      this.sources.push({ mesh, bead, positions, normals, centroids, triRadius, triangles, index, edges: edgeGrid(pos, index, triangles) })
     }
   }
 
@@ -142,6 +219,16 @@ export class DropGeometry {
       this.pools.set(key, list)
     }
     return list
+  }
+
+  private lens(contact: number): THREE.MeshPhysicalMaterial {
+    if (contact === 100) return this.material
+    let m = this.lenses.get(contact)
+    if (!m) {
+      m = dropMaterial(this.uniforms, contact)
+      this.lenses.set(contact, m)
+    }
+    return m
   }
 
   private templates = new Map<string, THREE.BufferGeometry>()
@@ -156,7 +243,8 @@ export class DropGeometry {
     return t
   }
 
-  update(camera: CameraState, aspect: number): void {
+  /** `swept` says whether a drop of this radius at this world point has been taken up by the runner. */
+  update(camera: CameraState, widthPx: number, aspect: number, swept: (world: THREE.Vector3, radius: number) => boolean = () => false): void {
     const film = new THREE.PerspectiveCamera(
       THREE.MathUtils.radToDeg(2 * Math.atan(camera.sensorWidthMm / aspect / 2 / camera.focalMm)), aspect, camera.near, camera.far)
     film.position.copy(camera.position)
@@ -172,8 +260,9 @@ export class DropGeometry {
     const pa = new THREE.Vector3(), pb = new THREE.Vector3(), pc = new THREE.Vector3()
     const na = new THREE.Vector3(), nb = new THREE.Vector3(), nc = new THREE.Vector3()
     const n = new THREE.Vector3(), gObj = new THREE.Vector3(), down = new THREE.Vector3(), side = new THREE.Vector3()
-    const center = new THREE.Vector3(), world = new THREE.Vector3()
+    const center = new THREE.Vector3(), world = new THREE.Vector3(), objCenter = new THREE.Vector3()
     this.count = 0
+    const angle = geometryAngle(camera, widthPx)
     for (const src of this.sources) {
       const { mesh, bead } = src
       mesh.updateWorldMatrix(true, false)
@@ -215,7 +304,7 @@ export class DropGeometry {
             for (let cy = v0; cy <= v1; cy++) {
               for (let cx = u0; cx <= u1; cx++) {
                 const [hx, hy, hz] = surfHash3(cx, cy, axis * 4 + layer, bead.salt)
-                if (hx >= Math.max(beadLayers[layer].flat, beadLayers[layer].steep)) continue
+                if (hx >= maxDensity(beadLayers[layer])) continue
                 const pu = (cx + 0.25 + 0.5 * hy) * cell, pv = (cy + 0.25 + 0.5 * hz) * cell
                 const w0 = ((bv - cv) * (pu - cu) + (cu - bu) * (pv - cv)) / det
                 const w1 = ((cv - av) * (pu - cu) + (au - cu) * (pv - cv)) / det
@@ -238,8 +327,12 @@ export class DropGeometry {
                     const du = drop.u - drops[0].u, dv = drop.v - drops[0].v
                     center.add(liftOffset(du, dv, axis, n))
                   }
-                  world.copy(center).divideScalar(scale).applyMatrix4(mesh.matrixWorld)
+                  objCenter.copy(center).divideScalar(scale)
+                  if (src.edges.near(objCenter, (drop.radius * 1.25 + 0.0003) / scale)) continue
+                  world.copy(objCenter).applyMatrix4(mesh.matrixWorld)
                   if (world.distanceTo(camera.position) > geometryRange) continue
+                  if (swept(world, drop.radius)) continue
+                  if (drop.diameterMm * 0.001 < angle * world.distanceTo(camera.position)) continue
                   if (!frustum.intersectsSphere(sphere.set(world, drop.radius * 3 + 0.004))) continue
                   const up = 1 + 1.1 * slope, dn = 1 + 0.2 * slope
                   const along = (drop.radius * (up + dn)) / 2
@@ -275,7 +368,7 @@ export class DropGeometry {
     const list = this.pool(contact, small)
     const slot = Math.floor(k / chunk)
     while (list.length <= slot) {
-      const m = new THREE.InstancedMesh(this.template(contact, small), this.material, chunk)
+      const m = new THREE.InstancedMesh(this.template(contact, small), this.lens(contact), chunk)
       m.frustumCulled = false
       m.layers.set(layers.cameraOnly)
       m.castShadow = false
@@ -287,6 +380,110 @@ export class DropGeometry {
     }
     list[slot].setMatrixAt(k % chunk, matrix)
   }
+}
+
+/**
+ * The refraction of a cap is traced exactly against its sphere, in the cap's own frame with the height restored to the
+ * spherical cap, so the drop shows the inverted world behind it and the panel under its foot, as a ball lens does.
+ */
+const lensVertex = /* glsl */ `
+#ifdef USE_INSTANCING
+  mat4 surfM = modelMatrix * instanceMatrix;
+#else
+  mat4 surfM = modelMatrix;
+#endif
+vec3 surfCamL = (inverse(surfM) * vec4(cameraPosition, 1.0)).xyz;
+surfLensCam = vec3(surfCamL.x, surfCamL.y * SURF_CAP_HS, surfCamL.z);
+surfLensPos = vec3(position.x, position.y * SURF_CAP_HS, position.z);
+surfLensM0 = surfM[0].xyz;
+surfLensM1 = surfM[1].xyz / SURF_CAP_HS;
+surfLensM2 = surfM[2].xyz;
+surfLensT = surfM[3].xyz;
+`
+
+const lensPars = /* glsl */ `
+varying vec3 surfLensCam;
+varying vec3 surfLensPos;
+varying vec3 surfLensM0;
+varying vec3 surfLensM1;
+varying vec3 surfLensM2;
+varying vec3 surfLensT;
+`
+
+const lensFragment = /* glsl */ `
+{
+  mat3 surfLin = mat3(surfLensM0, surfLensM1, surfLensM2);
+  vec3 c = vec3(0.0, SURF_CAP_CY, 0.0);
+  vec3 o = surfLensPos;
+  vec3 d = normalize(o - surfLensCam);
+  vec3 sn = normalize(o - c);
+  if (dot(sn, d) > 0.0) sn = -sn;
+  vec3 t = refract(d, sn, 1.0 / 1.333);
+  float exitAt = max(-2.0 * dot(t, o - c), 0.0);
+  float baseAt = t.y < -1e-5 ? -o.y / t.y : 1e9;
+  vec3 seen = vec3(0.0);
+  vec3 e = t;
+  vec3 q = o + t * exitAt;
+  float through = 1.0;
+  if (baseAt < exitAt) {
+    vec3 f = o + t * baseAt;
+    vec3 w = surfLin * f + surfLensT;
+    vec4 clip = projectionMatrix * viewMatrix * vec4(w, 1.0);
+    // Water on clearcoat: a weak interface that turns into a mirror at grazing incidence.
+    float graze = pow(1.0 - clamp(-t.y, 0.0, 1.0), 5.0);
+    float mirror = 0.0035 + 0.9965 * graze;
+    seen = (1.0 - mirror) * getTransmissionSample(clip.xy / clip.w * 0.5 + 0.5, 0.0, 1.333).rgb;
+    through = mirror;
+    e = vec3(t.x, -t.y, t.z);
+    vec3 fc = f - c;
+    float b = dot(e, fc);
+    float s2 = -b + sqrt(max(b * b - dot(fc, fc) + SURF_CAP_R * SURF_CAP_R, 0.0));
+    q = f + e * s2;
+  }
+  vec3 n2 = normalize(q - c);
+  vec3 out2 = refract(e, -n2, 1.333);
+  if (dot(out2, out2) < 0.5) {
+    out2 = reflect(e, -n2);
+    through *= 0.6;
+  }
+  vec3 dirW = normalize(surfLin * out2);
+  #ifdef USE_ENVMAP
+    vec3 dirV = normalize((viewMatrix * vec4(dirW, 0.0)).xyz);
+    vec3 side = normalize(abs(dirV.y) < 0.9 ? cross(dirV, vec3(0.0, 1.0, 0.0)) : cross(dirV, vec3(1.0, 0.0, 0.0)));
+    seen += through * getIBLRadiance(-dirV, side, 0.0);
+  #endif
+  float cosIn = clamp(dot(-d, sn), 0.0, 1.0);
+  float fresnel = 0.02 + 0.98 * pow(1.0 - cosIn, 5.0);
+  float meniscus = smoothstep(0.0, 0.08, surfLensPos.y / SURF_CAP_HS);
+  totalDiffuse = seen * (1.0 - fresnel) * mix(0.25, 1.0, meniscus);
+}
+`
+
+/** Standing drops show magenta in the wetness view and running water yellow green, so the rivulet can be found in a frame. */
+function dropMaterial(uniforms: Record<string, THREE.IUniform>, contact: number | null, running = false): THREE.MeshPhysicalMaterial {
+  const material = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, metalness: 0, roughness: 0.02, transmission: 1, ior: 1.333, thickness: 0.002, specularIntensity: 1, envMapIntensity: 1,
+  })
+  const theta = THREE.MathUtils.degToRad(contact ?? 90)
+  const radius = 1 / Math.sin(theta)
+  patchMaterial(material, {
+    id: contact === null ? 'surface water drop' : `surface water drop lens ${contact}`,
+    uniforms: { ...uniforms, surfDiagColor: { value: running ? new THREE.Color(0.6, 1, 0.1) : new THREE.Color(1, 0.1, 0.9) } },
+    defines: contact === null ? {} : { SURF_CAP_LENS: 1, SURF_CAP_HS: (radius * (1 - Math.cos(theta))).toFixed(6), SURF_CAP_CY: (-radius * Math.cos(theta)).toFixed(6), SURF_CAP_R: radius.toFixed(6) },
+    apply(shader) {
+      if (contact !== null) {
+        shader.vertexShader = lensPars + insertAfter(shader.vertexShader, '#include <project_vertex>', lensVertex)
+        let f = lensPars + 'uniform float surfDiag;\nuniform vec3 surfDiagColor;\n' + shader.fragmentShader
+        f = insertAfter(f, '#include <transmission_fragment>', lensFragment)
+        f = insertAfter(f, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(surfDiagColor, 1.0); }')
+        shader.fragmentShader = f
+      } else {
+        shader.fragmentShader = insertAfter('uniform float surfDiag;\nuniform vec3 surfDiagColor;\n' + shader.fragmentShader, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(surfDiagColor, 1.0); }')
+      }
+    },
+  })
+  patchFilmLighting(material)
+  return material
 }
 
 function liftOffset(du: number, dv: number, axis: number, n: THREE.Vector3): THREE.Vector3 {

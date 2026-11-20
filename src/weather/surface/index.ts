@@ -4,8 +4,8 @@ import type { FrameContext, SampleContext, SceneSystem, WetnessKind } from '../.
 import { cameraAt } from '../../director/shots'
 import { beatById, events, stateAt } from '../../director/timeline'
 import type { WeatherDeps } from '../contract'
-import { applyBeads, type BeadClass } from './beads'
-import { DropGeometry, geometryRange } from './drop-geometry'
+import { applyBeads, type BeadClass, trackClear, trackPoints } from './beads'
+import { DropGeometry, geometryAngle, geometryRange } from './drop-geometry'
 import { applyPorous, type Uniforms } from './porous'
 import { heroBasin, SyntheticRelief, type Basin } from './relief'
 import { type ExtraImpact, RippleField } from './ripples'
@@ -42,6 +42,66 @@ function rearPuddle(anchors: Parameters<typeof cameraAt>[2]): Basin {
   return { center, axis: f, halfLength: 1.5, halfWidth: 0.85, depthMm: 5 }
 }
 
+/**
+ * The rivulet waits on the wing beside the paint anchor, where the focus pull lands as it lets go, in plain view of both
+ * formats and with its downhill run crossing the frame rather than heading into it.
+ */
+function rivuletStart(vehicle: WeatherDeps['vehicle']): THREE.Vector3 {
+  const anchor = vehicle.anchors.paint.position
+  const views = [config.formats.master, config.formats.vertical].map((format) => {
+    const camera = cameraAt(config.film.macroFrameSeconds, format, vehicle.anchors)
+    const film = new THREE.PerspectiveCamera(THREE.MathUtils.radToDeg(2 * Math.atan(camera.sensorWidthMm / (format.width / format.height) / 2 / camera.focalMm)), format.width / format.height, 0.01, 10)
+    film.position.copy(camera.position)
+    film.quaternion.copy(camera.quaternion)
+    film.updateMatrixWorld(true)
+    return { camera, film, forward: new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion) }
+  })
+  const paint = new Set(vehicle.surfaces.filter((s) => s.wetness === 'beads' && !s.material.transparent).map((s) => s.material))
+  const ray = new THREE.Raycaster()
+  const toLens = new THREE.Vector3()
+  const ndc = new THREE.Vector3()
+  let best = anchor.clone()
+  let score = -Infinity
+  vehicle.root.updateMatrixWorld(true)
+  vehicle.root.traverse((o) => {
+    const mesh = o as THREE.Mesh
+    if (!mesh.isMesh || Array.isArray(mesh.material) || !paint.has(mesh.material)) return
+    const pos = mesh.geometry.getAttribute('position')
+    const nor = mesh.geometry.getAttribute('normal')
+    if (!pos || !nor) return
+    const normalMatrix = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld)
+    for (let i = 0; i < pos.count; i++) {
+      const p = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld)
+      if (p.distanceTo(anchor) > 0.1) continue
+      const n = new THREE.Vector3().fromBufferAttribute(nor, i).applyMatrix3(normalMatrix).normalize()
+      if (n.y < 0.3) continue
+      const down = new THREE.Vector3(0, -1, 0).addScaledVector(n, n.y).normalize()
+      let s = -3 * p.distanceTo(anchor)
+      let seen = true
+      for (const { camera, film, forward } of views) {
+        const depth = toLens.subVectors(p, camera.position).dot(forward) - camera.focusDistance
+        ndc.copy(p).project(film)
+        if (Math.abs(depth) > 0.008 || Math.abs(ndc.x) > 0.7 || Math.abs(ndc.y) > 0.7) {
+          seen = false
+          break
+        }
+        toLens.subVectors(camera.position, p).normalize()
+        s += 0.5 * (1 - Math.abs(down.dot(forward))) + 0.3 * n.dot(toLens) - 20 * Math.abs(depth)
+        ray.set(camera.position, p.clone().sub(camera.position).normalize())
+        const hit = ray.intersectObject(vehicle.root, true)[0]
+        if (!hit || hit.point.distanceTo(p) > 0.003) {
+          seen = false
+          break
+        }
+      }
+      if (!seen || s <= score) continue
+      score = s
+      best = p
+    }
+  })
+  return best
+}
+
 export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
   const { world, vehicle } = deps
   const root = new THREE.Group()
@@ -59,7 +119,11 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
     surfShakeAge: { value: 0 },
     surfRefill: { value: 0 },
     surfGeo: { value: new THREE.Vector4(0, 0, 0, 0) },
+    surfGeoAngle: { value: 0 },
     surfVehicleCenter: { value: bodyCenter.clone() },
+    surfTrack: { value: Array.from({ length: trackPoints }, () => new THREE.Vector4(0, 0, 0, 1e9)) },
+    surfTrackBox: { value: new THREE.Vector4() },
+    surfTrackLen: { value: 0 },
     surfImpacts: { value: ripples.texture },
     surfImpactGrid: { value: ripples.origin },
     surfImpactTime: { value: 0 },
@@ -107,8 +171,10 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
 
   const drops = new DropGeometry(vehicleMeshes(vehicle.root, beadMaterials), uniforms)
   root.add(drops.group)
-  const runners = new Runners(vehicle, drops.material)
-  root.add(runners.group)
+  const runners = new Runners(vehicle, drops.runner, drops.plain, rivuletStart(vehicle))
+  const track = runners.track(trackPoints)
+  track.points.forEach((p, i) => (uniforms.surfTrack.value[i] as THREE.Vector4).copy(p))
+  uniforms.surfTrackBox.value.set(track.center.x, track.center.y, track.center.z, track.radius)
 
   const shutter = config.film.shutterDegrees / 360 / config.film.fps
   let frameStart = 0
@@ -120,6 +186,8 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
     root,
     lights: [],
     beginFrame(frame: FrameContext) {
+      // Joined late, as the drop chunks are, so the shade stage leaves water out of its screen space occlusion.
+      if (!runners.group.parent) root.add(runners.group)
       const t = frame.frame.timeSeconds
       frameStart = t - shutter / 2
       const cam = frame.camera
@@ -130,8 +198,9 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       const center = new THREE.Vector2(cam.position.x, cam.position.z).addScaledVector(flat, ahead)
       const extra: ExtraImpact[] = runners.impacts(frameStart - 0.6, frameStart + shutter)
       ripples.update(frameStart, frameStart + shutter, center, extra)
-      drops.update(cam, frame.format.width / frame.format.height)
+      drops.update(cam, frame.format.width, frame.format.width / frame.format.height, (p, r) => runners.sweptDistance(p, t) < trackClear + r)
       uniforms.surfGeo.value.set(cam.position.x, cam.position.y, cam.position.z, drops.count > 0 ? geometryRange : 0)
+      uniforms.surfGeoAngle.value = geometryAngle(cam, frame.format.width)
       runners.beginFrame(cam)
     },
     beginSample(sample: SampleContext) {
@@ -151,6 +220,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
         pulse.set(scratch.x, scratch.z, state.engine * pulseStrength, 0)
       } else pulse.set(0, 0, 0, 0)
       runners.beginSample(t)
+      uniforms.surfTrackLen.value = runners.travel(t)
     },
     setDiagnostic(view: string) {
       uniforms.surfDiag.value = view === 'wetness' ? 1 : 0
