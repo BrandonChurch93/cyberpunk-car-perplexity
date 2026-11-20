@@ -44,6 +44,7 @@ export interface ReflectionsPart extends StagePart {
 }
 
 interface ReflectionDeps extends Pick<StageDeps, 'renderer' | 'scene'> {
+  rig?: StageDeps['rig']
   world: Pick<StageDeps['world'], 'root' | 'reflectionBox'> & {
     deck: Pick<StageDeps['world']['deck'], 'material' | 'meshes'>
   }
@@ -106,6 +107,9 @@ function deckDetails(root: THREE.Object3D) {
 
 export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const { renderer, scene, world, vehicle } = deps
+  const billboardSpot = deps.rig?.group.children.find((object): object is THREE.SpotLight =>
+    object instanceof THREE.SpotLight && object.name === 'magenta violet tower screen')
+  const billboardPosition = new THREE.Vector3()
   const seed = streamSeed('reflect')
   let format = config.formats.master
   let tier: TierId = 'final'
@@ -124,6 +128,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     reflectLodMax: { value: lodMax(size) },
     reflectSeed: { value: 0 },
     reflectOn: { value: 0 },
+    reflectBillboard: { value: new THREE.Vector4() },
   }
   const box: BoxUniforms = {
     reflectBoxMin: { value: world.reflectionBox.min.clone() },
@@ -165,7 +170,8 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const lamps = probeLamps(vehicle)
   scene.add(lamps.root)
   const probePosition = new THREE.Vector3()
-  const backgroundReceivers = new Map<THREE.MeshStandardMaterial, number>()
+  const carCaptureReceivers = new Set<THREE.MeshStandardMaterial>()
+  let deckCaptureIntensity: number | undefined
   let stripes: THREE.Texture | null = null
   const mirrorMaterial = zebraMirror()
   const swapped = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>()
@@ -177,20 +183,35 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   }
 
   const clearBackground = (): void => {
-    for (const [material, intensity] of backgroundReceivers) {
-      material.envMap = null
-      material.envMapIntensity = intensity
+    for (const material of carCaptureReceivers) material.envMap = null
+    carCaptureReceivers.clear()
+    if (deckCaptureIntensity !== undefined) {
+      world.deck.material.envMap = null
+      world.deck.material.envMapIntensity = deckCaptureIntensity
+      deckCaptureIntensity = undefined
     }
-    backgroundReceivers.clear()
   }
 
-  const setBackground = (texture: THREE.Texture): void => {
-    for (const material of [world.deck.material, ...materialsOf(vehicle.root)]) {
+  const setCarEnvironment = (texture: THREE.Texture): void => {
+    for (const material of materialsOf(vehicle.root)) {
       if (material.envMap) continue
-      backgroundReceivers.set(material, material.envMapIntensity)
+      carCaptureReceivers.add(material)
       material.envMap = texture
-      material.envMapIntensity = scene.environmentIntensity
     }
+  }
+
+  const setDeckEnvironment = (texture: THREE.Texture): void => {
+    const material = world.deck.material
+    if (material.envMap) return
+    deckCaptureIntensity = material.envMapIntensity
+    material.envMap = texture
+    material.envMapIntensity = scene.environmentIntensity
+  }
+
+  const setEnvironment = (full: THREE.Texture, background?: THREE.Texture): void => {
+    scene.environment = full
+    setCarEnvironment(background ?? full)
+    if (background) setDeckEnvironment(background)
   }
 
   const capture = (): void => {
@@ -213,9 +234,8 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       const probe = probeOf(quality[tier].captureSize)
       if (lamps.root.children.some((emitter) => emitter.visible)) {
         const { full, background } = probe.capture(scene, probePosition, lamps.root)
-        scene.environment = full
-        setBackground(background)
-      } else scene.environment = probe.capture(scene, probePosition)
+        setEnvironment(full, background)
+      } else setEnvironment(probe.capture(scene, probePosition))
     } finally {
       showDeck()
       showVehicle()
@@ -265,6 +285,10 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     beforeSample(sample: SampleContext) {
       planar.reflectOn.value = 0
       if (diagnostic !== 'beauty' && diagnostic !== 'wetness') return
+      if (billboardSpot) {
+        billboardSpot.getWorldPosition(billboardPosition)
+        planar.reflectBillboard.value.set(billboardPosition.x, billboardPosition.y, billboardPosition.z, 1)
+      }
       planar.reflectSeed.value = hash01(seed, sample.sample.frame.frameKey, sample.sample.sampleIndex)
       if (sample.sample.sampleIndex > 0 && !quality[tier].planarEverySample) {
         planar.reflectOn.value = 1
