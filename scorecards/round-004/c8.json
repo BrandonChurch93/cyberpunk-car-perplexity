@@ -1,0 +1,86 @@
+{
+  "critic": "C8",
+  "score": 5,
+  "pass": false,
+  "issues": [
+    {
+      "severity": "severe",
+      "file": "set-A-08.png",
+      "where": "upper half",
+      "what": "camera sits too level beside the fender ridge and shoots horizontally over the body panel, filling 55-65% of the 16:9 frame across beat 3 (set-A-07.png to set-A-09.png, set-C-03.png) with out-of-focus background wall instead of painted sheetmetal",
+      "fix": "raise and pitch the camera down onto the fender surface so the painted body panel fills the 16:9 frame throughout the macro glide"
+    },
+    {
+      "severity": "severe",
+      "file": "set-A-18.png",
+      "where": "full frame and upper right",
+      "what": "framing relegates the fine repeating hex mesh to a dark clipped sliver at the upper right while chunky plenum covers dominate, and shallow depth of field drifts off the subject until almost the entire frame is defocused by the end of beat 6 (set-A-17.png, set-A-18.png, set-C-06.png)",
+      "fix": "center the close pass directly on the vehicle's fine repeating mesh anchor and track focus distance with the surface so pattern geometry stays sharp from start to end"
+    },
+    {
+      "severity": "severe",
+      "file": "set-B-16.png",
+      "where": "full frame",
+      "what": "vertical detail framing omits the fine repeating mesh pattern completely, showing only a molded engine cover with large bosses crowded against the right edge while shallow DoF blurs top and bottom across set-B-16.png to set-B-18.png",
+      "fix": "reframe the 9:16 pass directly over the fine repeating pattern surface with balanced horizontal margins and keep the focal plane locked on the pattern"
+    },
+    {
+      "severity": "severe",
+      "file": "set-C-04.png",
+      "where": "full frame and top center",
+      "what": "wheel shot uses a medium full-wheel framing instead of a macro lens and distance, sits nearly static across all 5 seconds, shoots flat side-on so the tire tread is hidden, and tangents/clips the wheel-arch crease along the top border (set-A-10.png to set-A-12.png)",
+      "fix": "move into a true three-quarter macro framing tight on the arch lip, angled tire tread and sidewall, rim spokes, brake disc, and caliper with a continuous slow glide"
+    },
+    {
+      "severity": "major",
+      "file": "set-B-13.png",
+      "where": "left edge, upper third, and lower right",
+      "what": "vertical lamp shot is a narrow slice of the wide camera rather than a vertical composition: it crops out the left projector lens, leaves the top third as blank hood panel, and severs the bright diagonal DRL bar across both the right and bottom borders (set-B-13.png to set-B-15.png)",
+      "fix": "recompose for 9:16 by pulling back slightly or angling along the headlamp housing so the projector pair and diagonal light signature sit cleanly inside the vertical frame"
+    },
+    {
+      "severity": "major",
+      "file": "set-B-10.png",
+      "where": "top fifth, bottom fifth, and side edges",
+      "what": "vertical wheel frame is not composed for 9:16: the full round tire is wedged nearly edge-to-edge horizontally while leaving empty deck floor at the bottom and distracting fender top, A-pillar, and background window at the top across a nearly static medium shot (set-B-10.png to set-B-12.png)",
+      "fix": "reframe as a vertical macro stack from the arch lip down through angled tire tread, sidewall, rim spokes, brake disc, and caliper"
+    },
+    {
+      "severity": "major",
+      "file": "set-B-01.png",
+      "where": "center and upper right",
+      "what": "arrival in 9:16 starts already in a medium front three-quarter (~62% frame width) and pushes only to ~72% width by the end of wake (set-B-06.png), giving almost no wide-to-medium scale variety across 9 full seconds while a building sliver clips into the upper-right border",
+      "fix": "start set-B-01.png (and matching loop end set-B-24.png) genuinely wider so arrival establishes city scale before pushing decisively into the wake three-quarter, and clear the tower sliver on the upper-right edge"
+    },
+    {
+      "severity": "minor",
+      "file": "set-B-22.png",
+      "where": "lower two-fifths and top edge",
+      "what": "return cuts in at a high downward-looking camera height (also visible in set-A-22.png) that flattens the vehicle, clips the skyline along the top border in 9:16, and fills the bottom 41% of the vertical frame with blank asphalt",
+      "fix": "lower the starting camera height at 36.00 s so the pullback begins from a more heroic waist-to-low angle that preserves skyline headroom"
+    },
+    {
+      "severity": "minor",
+      "file": "set-A-06.png",
+      "where": "upper left of hood",
+      "what": "a background T-top light pole rises directly out of the front-right fender crest on the settled wake three-quarter composition (set-A-05.png, set-A-06.png)",
+      "fix": "nudge the camera axis slightly laterally so the background light pole separates cleanly from the fender and hood silhouette"
+    },
+    {
+      "severity": "minor",
+      "file": "set-A-15.png",
+      "where": "upper left and right/bottom borders",
+      "what": "upper-left third is featureless hood sheetmetal while the bright diagonal DRL strip clips through the bottom border across the beat and exits the top-right border by 24.97 s",
+      "fix": "shift framing slightly down and right so the lamp cavity and DRL return sit more balanced inside the 16:9 frame"
+    },
+    {
+      "severity": "minor",
+      "file": "set-B-09.png",
+      "where": "top quarter and bottom fifth",
+      "what": "by the end of the vertical paint glide, the camera drifts high enough to expose out-of-focus background wall across the top quarter and dark wheel-arch void across the bottom fifth",
+      "fix": "pitch slightly lower at the end of the vertical paint move so painted sheetmetal continues filling the frame through 14.97 s"
+    }
+  ],
+  "reviewer": "reviewer_2402",
+  "family": "gemini_4_carbon"
+}

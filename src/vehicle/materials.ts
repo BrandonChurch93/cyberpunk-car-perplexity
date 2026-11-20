@@ -204,9 +204,7 @@ export function palette(spec: PaintSpec, full: boolean) {
     surfaces.push({ material, wetness })
     return material
   }
-  for (const m of [paint, glass, windscreen, optics, rearOptics, carbon, mirror]) tag(m, 'beads')
-  tag(bayCover, 'none')
-  tag(ventCarbon, 'none')
+  for (const m of [paint, glass, windscreen, optics, rearOptics, carbon, bayCover, ventCarbon, mirror]) tag(m, 'beads')
   tag(rearVent, 'none')
   for (const m of [matte, tire, diffuser]) tag(m, 'sheet')
   for (const m of [projector, brushed, forged, spoke, brake, caliper, dark, hot, engine]) tag(m, 'none')

@@ -5,7 +5,7 @@ The Builder's memory. Read this first in every task. Update it before every comm
 ## Status
 
 - Current phase: 2 · Blockout in motion
-- Current round: 4 (Phase 2 blockout)
+- Current round: 5 (Phase 2 blockout)
 - Blocked: no
 - Last push: see the push log, 2026-11-19
 
@@ -200,6 +200,12 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | The closed five spoke wheel from `dev/wheel` is mounted | The auditor scores it 7 at the wheel camera in both detail levels, against 5 for the wheel before it and against the wheel of car D, which stays at the front three-quarter stage | `src/vehicle/wheels.ts` |
 | 2026-11-19 | The draft sheets went to the two development agents twice. Their comments were answered in the camera data before the round 4 pack: the wide wheel shot holds the whole wheel again, the tall paint shot has a subject and a pan, the detail shots track further, the return starts further round to the side. Two minor notes are left as they are: the running light crosses the top and bottom edge in the wide lamp shot, and the car sits high in the wide wake frame | A boom down on the wide wheel shot lost the arch lip at the 17.9 s drip. The first tall paint frame had no line in it | `src/director/shots.ts`, `cut/SHOTS.md` |
 | 2026-11-19 | The round 3 C5 answer of 10 with no issue is logged as given and is not treated as a pass that carries over | Every shot C8 faulted was rebuilt, so C5 has not seen the shots that go forward | `scorecards/round-003/` |
+| 2026-11-19 | Plateau on C8 (5, 6, 6, 5). The rung taken is the first of the C8 rows in `kit/04-LOOK.md`: change the lens and the camera height. Every insert is shot again as a true macro: paint at 100 mm from 0.44 m above the wing looking down, wheel at 85 mm from 1.5 m with a boom down, lamp at 85 mm (wide) and 100 mm (tall) holding the whole fork and both projectors, detail at 85 mm from 0.6 m above a mesh | Three rounds without a gain. Each round the critic asked for the subject to fill the frame and each answer stayed a medium shot | `src/director/shots.ts`, `cut/SHOTS.md`, Plateau log |
+| 2026-11-19 | The detail anchor moves to the center of the right-hand airbox grille, which is enlarged to 0.42 by 0.18 m of perforated hex mesh. The detail beat is a pass over that mesh | The kit asks for a fine repeating pattern. On the cam covers the pattern was a sliver beside large ribs, and the critic failed it in three rounds. The auditor notes that the factory bay has no hex plate of this size, so the grille gets a flush surround and is judged again against the reference in Phase 3 | `src/vehicle/engine-bay.ts`, `anchors.detail` |
+| 2026-11-19 | The detail beat is shot at T11 | The lens looks 17 to 22 degrees off the mesh normal. At T2.8 only a band of the mesh was sharp and the critic read the frame as soft. A macro pass over a flat pattern is stopped down in practice | `src/director/shots.ts` |
+| 2026-11-19 | The wheel beat booms down with the drips, from the arch lip to the contact patch. The arch lip leaves the frame after the first drip. Later drips start from the lower front of the arch | The critic asked for a macro with continuous motion and the tread in view. A macro frame cannot hold the arch lip and the contact patch at once | `src/director/shots.ts`, `src/weather/surface` |
+| 2026-11-19 | The round 4 C5 answer of 9 is logged as given and is not carried over | Every insert is rebuilt, so C5 judges the new shots in round 5 | `scorecards/round-004/` |
+| 2026-11-19 | The brake lamp test checks the lamp only in frames where a detail camera holds it, and the crop test accepts other anchors beside the lamp at 20.5 s | The new detail cameras look down at the grille and do not see the lamp. The lamp shot is wider and holds the wing | `tests/vehicle.test.ts`, `tests/tools.test.ts` |
 
 ## Config changes
 
@@ -216,11 +222,13 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 1 | 2 | blockout | n/a | n/a | n/a | n/a | 6 | n/a | n/a | 5 | C8 severe: the paint beat is a bare hood curve with no line and no background | Every shot reframed, crane return, tall shots set up again, cut captions |
 | 2 | 2 | blockout | n/a | n/a | n/a | n/a | 7 | n/a | n/a | 6 | Both: the wheel beat is a dark low view of the front corner, not the wheel | Wheel at 50 mm and hub height, paint over the wing crease, tall wides and tall rear shot set oblique, slower crane, sun moved to the lit side |
 | 3 | 2 | blockout | n/a | n/a | n/a | n/a | 10 | n/a | n/a | 6 | C8 major: the paint beat hardly moves over a blank panel, the wheel shot cuts off the contact patch, the detail beat is not a close pass | Paint as a grazing glide across the wing with a horizon, wheel whole on a 14 degree arc, detail as a forward track along the covers, tall lamp on a projector lens, return opens on the whole car from 1.25 m, tall wides further back, paint anchor moved forward, new wheel mounted |
+| 4 | 2 | blockout | n/a | n/a | n/a | n/a | 9 | n/a | n/a | 5 | C8 severe: the paint frame is mostly background, the detail pass misses the fine mesh, the wheel shot is not a macro | Plateau rung: lens and camera height changed on every insert. Paint from above at 100 mm, wheel at 85 mm with a boom down, detail over an enlarged hex grille at 85 mm, lamp holding the whole fork, longer tall arrival dolly, lower return start |
 
 ## Plateau log
 
 | Critic | Rounds without gain | Rung tried | Result |
 | --- | --- | --- | --- |
+| C8 | 3 (rounds 2, 3, 4: 6, 6, 5 after 5) | Composition and lighting design, rung 1: change the lens and the camera height | Round 5 pending |
 
 ## QA gauntlet
 

@@ -36,12 +36,17 @@ const tailPlan = curve([
 export const limitTailZ = (x: number, z: number) => Math.max(zAt(tailPlan(Math.abs(x))), z)
 const shoulder = curve([
   [0, .431], [.016, .440], [.025, .454], [.044, .549], [.08, .622], [.10, .655], [.15, .735], [.20, .779], [.25, .772],
-  [.30, .738], [.34, .747], [.40, .765], [.51, .803], [.59, .860], [.67, .884], [.736, .920],
-  [.781, .928], [.816, .930], [.85, .927], [.89, .906], [.92, .878], [.96, .848], [1, .833],
+  [.30, .738], [.34, .747], [.40, .765], [.51, .803], [.56, .842], [.61, .889], [.66, .906], [.71, .919],
+  [.758, .927], [.781, .929], [.816, .930], [.85, .927], [.89, .906], [.92, .878], [.96, .848], [1, .833],
 ])
 const haunchCeiling = curve([[.69, 1.050], [.74, 1.006], [.78, .977], [.82, .947], [.86, .935], [.90, .925], [.94, .921], [1.02, .928]])
 const hoodLine = curve([[0, .431], [.028, .466], [.06, .523], [.105, .608], [.165, .716], [.225, .761], [.265, .769], [.33, .764], [.6, .83]])
-const hoodDome = curve([[0, .003], [.033, .046], [.074, .089], [.111, .095], [.159, .058], [.207, .009], [.235, 0]])
+const hoodDome = curve([[0, .003], [.033, .046], [.074, .095], [.111, .101], [.159, .060], [.207, .009], [.235, 0]])
+const bonnetProfileFall = curve([
+  [0, .027], [.005, .025], [.010, .015], [.015, .008], [.024, -.001], [.040, .006], [.056, .023], [.065, .028],
+  [.085, .032], [.102, .035], [.121, .035], [.150, .024], [.170, .012], [.188, .004], [.209, 0], [.225, 0],
+])
+const noseCornerFall = curve([[0, .025], [.005, .020], [.010, .013], [.019, .009], [.028, .009], [.050, .006], [.065, .0015], [.073, 0]])
 const spine = curve([
   [.575, 1.149], [.6, 1.146], [.62, 1.135], [.64, 1.124], [.66, 1.099], [.68, 1.085], [.70, 1.078], [.72, 1.068],
   [.742, 1.056], [.769, 1.040], [.80, 1.02], [.82, 1.011], [.85, .983], [.88, .963], [.90, .957], [.92, .941], [.94, .926], [.96, .908], [.984, .898],
@@ -50,20 +55,30 @@ const hoodTipS = .0605
 const hoodTipX = .472
 const hoodInner = (s: number) => hoodTipX - 1.425 * (s - hoodTipS)
 const hoodOuter = curve([[hoodTipS, hoodTipX], [.104, .557], [.140, .627], [.171, .688], [.211, .766], [.237, .758], [.290, .748]])
-const lampFold = curve([[.044, .470], [.0875, .647], [.102, .7022], [.1292, .797], [.1709, .942], [.182, .963]])
+const hoodFoldStrength = .90
+const lampFold = curve([[.044, .470], [.0875, .647], [.102, .7022], [.1292, .797], [.1709, .942], [.182, .963], [.205, .963]])
 const hoodShut = (v: number) => .166 + .089 * v ** 2.10
 const cabFront = (v: number) => .194 + .067 * v ** 2.40
 const cowlStep = (v: number) => mix(hoodShut(v), cabFront(v), .62)
 const wingRadius = (s: number) => .004 * smooth(s, .071, .099) * (1 - smooth(s, .295, .331))
 const paintWingDrop = .025
+const fairStep = (s: number, a: number, b: number) => {
+  const t = T.MathUtils.clamp((s - a) / (b - a), 0, 1)
+  return t ** 3 * (10 + t * (-15 + 6 * t))
+}
+const wingDraft = (s: number, drop: number) => {
+  const d = drop / paintWingDrop
+  return .00160 * d ** 3 * Math.exp(.306 * (1 - d ** 2))
+    * fairStep(s, .122, .183) * (1 - fairStep(s, .218, .292))
+}
 const sideDent = curve([[.29, 0], [.36, .020], [.53, .099], [.611, .110], [.680, .065], [.765, 0]])
 const rockerY = curve([[0, .155], [.04, .136], [.25, .136], [.69, .136], [.86, .137], [.90, .153], [.95, .187], [1, .40]])
 const shoulderInset = (s: number) => .008 * smooth(s, .322, .407) * (1 - smooth(s, .660, .743))
 const shoulderX = (s: number) => plan(s) - shoulderInset(s)
 const diagonalS = curve([[.13, .537], [.22, .548], [.33, .561], [.43, .573], [.58, .588], [.64, .596], [.73, .599], [.82, .593], [.90, .581]])
-const doorBelt = curve([[.295, .568], [.380, .605], [.460, .647], [.538, .687], [.593, .712], [.650, .783], [.701, .854], [.760, .896], [.812, .924], [.855, .920], [.899, .890]])
+const doorBelt = curve([[.295, .569], [.380, .610], [.460, .650], [.545, .689], [.600, .718], [.655, .793], [.705, .862], [.760, .896], [.812, .924], [.855, .920], [.899, .890]])
 const heelFold = curve([[.382, .272], [.530, .338], [.597, .375], [.712, .432]])
-const haunchFold = (s: number) => .899 - 2.80 * (s - .682)
+const haunchFold = curve([[.631, 1.009], [.646, .975], [.682, .895], [.702, .836], [.724, .774], [.756, .694]])
 const deckIn = curve([[.610, .608], [.670, .641], [.750, .686], [.820, .729], [.856, .762], [.882, .746], [.923, .704]])
 const deckOut = curve([[.697, .942], [.741, .899], [.789, .849], [.828, .798], [.856, .762]])
 const haunchRidgeY = curve([[.625, 1.066], [.650, 1.063], [.697, 1.047], [.750, 1.015],
@@ -74,6 +89,7 @@ const foldSlope = Math.tan(foldAngle)
 const foldHalf = foldRadius * Math.sin(foldAngle / 2)
 const foldTangent = Math.tan(foldAngle / 2)
 const crossOffset = (s: number, y: number) => dimensions.length * (s - diagonalS(y))
+const crossStepRun = .032
 
 function hinge(t: number, width: number): number {
   if (t <= -width) return 0
@@ -96,7 +112,7 @@ function sidePoint(s: number, y: number, side: number): Point {
     const base = mix(hinge(rockerY(s) - line, foldHalf), hinge(shoulder(s) - line, foldHalf), q)
     return direction * first * foldSlope * (hinge(t, foldHalf) - base)
   }
-  const belt = fold(doorBelt(s), smooth(s, .271, .302) * (1 - smooth(s, .895, .928)), -.84 - .075 * smooth(s, .60, .73))
+  const belt = fold(doorBelt(s), smooth(s, .271, .302) * (1 - smooth(s, .895, .928)), -.88 - .05 * smooth(s, .60, .73))
   const heel = fold(heelFold(s), smooth(s, .352, .383) * (1 - smooth(s, .700, .735)), .84)
   const haunch = fold(haunchFold(s), smooth(s, .636, .663) * (1 - smooth(s, .729, .763)), -.88)
   const ordinary = sill + thickness * q + dent + face + belt + heel
@@ -108,8 +124,8 @@ function sidePoint(s: number, y: number, side: number): Point {
   const flank = smooth(s, .572, .644) * (1 - smooth(s, .898, .926))
     * (1 - smooth(-rise, .048, .152))
   const diagonal = crossOffset(s, y)
-  const diagonalFade = smooth(y, .140, .174) * (1 - smooth(y, .428, .558)) * (1 - smooth(Math.abs(diagonal), .013, .097))
-  const cross = .301 * diagonalFade * (hinge(diagonal, foldHalf) - .5 * diagonal)
+  const diagonalFade = smooth(y, .135, .188) * (1 - smooth(y, .508, .682)) * (1 - smooth(diagonal, .057, .205))
+  const cross = .333 * diagonalFade * (hinge(diagonal, foldHalf) - hinge(diagonal - crossStepRun, foldHalf))
   const inset = Math.max(0, mix(ordinary, crest(rise) + close, flank) + haunch + cross)
   return [side * (plan(s) - inset), y, zAt(s)]
 }
@@ -122,7 +138,7 @@ function bonnetSection(s: number, x: number) {
 
 function wingEdge(s: number) {
   const width = plan(s)
-  const center = hoodLine(s), outer = shoulder(s)
+  const center = hoodLine(s), outer = shoulder(s) - noseCornerFall(s)
   const radius = wingRadius(s)
   let angle = Math.PI / 2
   if (radius > 0) for (let i = 0; i < 3; i++) {
@@ -130,7 +146,7 @@ function wingEdge(s: number) {
     const y = outer + radius * Math.sin(angle)
     const sectionTangent = (bonnetSection(s, x + .00005) - bonnetSection(s, x - .00005)) / .0001
     const sectionRise = (bonnetSection(s, x) - bonnetSection(s, 0)) / x
-    const slope = (.95 * (y - center) + .063 * smooth(s, .127, .236)) / x - .83 * foldSlope * (sectionTangent - sectionRise)
+    const slope = (.95 * (y - center) + .063 * smooth(s, .127, .236)) / x - hoodFoldStrength * foldSlope * (sectionTangent - sectionRise)
     angle = Math.PI / 2 + Math.atan(slope)
   }
   const x = width - radius + radius * Math.cos(angle)
@@ -143,18 +159,20 @@ function bonnet(s: number, v: number): Point {
   const section = (position: number) => bonnetSection(s, position)
   const weight = v * v * (2 - v)
   const fair = mix(weight, v, smooth(v, .73, .95))
-  const across = -.83 * foldSlope * (section(x) - mix(section(0), section(w.x), fair))
+  const across = -hoodFoldStrength * foldSlope * (section(x) - mix(section(0), section(w.x), fair))
   const base = mix(w.center, w.y, weight + .05 * v ** 6 * (1 - v))
   const crown = hoodDome(s) * Math.max(0, 1 - (x / .675) ** 2) ** 2
   const wingCrown = .005 * smooth(s, .143, .223) * (1 - smooth(s, .243, .315))
     * smooth(v, .60, .84) * (1 - smooth(v, .92, 1))
   const cowlDrop = .021 * smooth(s, .127, .236) * (1 - v ** 3)
     - .015 * smooth(s, .122, .189) * (1 - smooth(s, .260, .335)) * (1 - smooth(v, .735, 1))
-  return [x, base + across + crown + wingCrown - cowlDrop, zAt(s)]
+  const profileFall = bonnetProfileFall(s) * (1 - smooth(v, .74, 1))
+  return [x, base + across + crown + wingCrown - cowlDrop - profileFall, zAt(s)]
 }
 
-function foldRows(surface: Surface, traces: ((p: Point) => number)[], broad: number) {
-  const rows = (traces.length + 1) * broad + traces.length * 4
+function foldRows(surface: Surface, traces: ((p: Point) => number)[], broad: number | readonly number[]) {
+  const counts = typeof broad === 'number' ? traces.map(() => broad).concat(broad) : broad
+  const rows = counts.reduce((total, count) => total + count, 0) + traces.length * 4
   const cache = new Map<number, number[]>()
   return { rows, at: (u: number, j: number) => {
     let marks = cache.get(u)
@@ -181,8 +199,8 @@ function foldRows(surface: Surface, traces: ((p: Point) => number)[], broad: num
         const start = marks!.at(-1)!
         for (let i = 1; i <= count; i++) marks!.push(mix(start, Math.max(start, end), i / count))
       }
-      for (const [a, b] of spans) { stride(a, broad); stride(b, 4) }
-      stride(1, broad)
+      spans.forEach(([a, b], i) => { stride(a, counts[i]); stride(b, 4) })
+      stride(1, counts[spans.length])
       cache.set(u, marks)
     }
     return marks[j]
@@ -238,15 +256,19 @@ const edgeGlass = (s: number, v: number): Point => {
 const bayWidth = curve([[.60, .36], [.641, .431], [.68, .477], [.75, .452], [.82, .389], [.873, .326], [.901, .218], [.918, .04]])
 export const bayEdge = (s: number, side: number): Point => [side * bayWidth(s), spine(s) - .009, zAt(s)]
 const deckInnerX = curve([[.5984, edgeGlass(.5984, 0)[0]], [.616, .687], [.638, .608], [.657, .537], [.678, .486], [.706, bayWidth(.706)]])
-const deckInnerY = curve([[.5984, edgeGlass(.5984, 0)[1]], [.616, .952], [.638, .995], [.659, 1.041], [.680, 1.074], [.706, bayEdge(.706, 1)[1]]])
-export const tailLipY = (x: number): number => .898 - .038 * smooth(x, .295, .935)
-export const tailCrestZ = (x: number): number => limitTailZ(x, zAt(.9878 - .007 * smooth(x, .24, .48)))
+const deckInnerY = curve([[.5984, edgeGlass(.5984, 0)[1]], [.617, .950], [.641, .993], [.666, 1.044], [.683, 1.066], [.696, 1.071], [.706, bayEdge(.706, 1)[1]]])
+export const tailLipY = (x: number): number => .903 - .043 * smooth(x, .22, .935)
+export const tailCrestZ = (x: number): number => limitTailZ(x, zAt(.989 - .0082 * smooth(x, .18, .54)))
+
+export function frontFascia(side: number, x: number, y: number, recess: number, radius = 0): Point {
+  const s = frontWidth(x) + .002 * smooth(y, .2, .48) - .0008
+  const limit = zAt(nosePlan(Math.abs(x))), depth = zAt(s) - recess
+  const t = Math.max(0, radius - Math.abs(limit - depth))
+  return [x * side, y, Math.min(limit, depth) - (radius ? t * t / (4 * radius) : 0)]
+}
 
 export function fascia(front: boolean, side: number, x: number, y: number, recess = 0): Point {
-  if (front) {
-    const s = frontWidth(x) + .002 * smooth(y, .2, .48) - .0008
-    return [x * side, y, Math.min(zAt(nosePlan(Math.abs(x))), zAt(s) - recess)]
-  }
+  if (front) return frontFascia(side, x, y, recess)
   const s = tailWidth(x) + (.010 * smooth(y, .58, .81)) - .009 * smooth(y, .84, .94)
   const inset = .070 * smooth(y, .47, .70) * (1 - .78 * smooth(x, .32, .70))
   return [x * side, y, limitTailZ(x, zAt(s) + recess + inset)]
@@ -259,7 +281,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const part = (to: T.BufferGeometry[], surface: Surface, out: Point, length = n, width = k, thickness = .002) => {
     to.push(patch(surface, length, width, out, thickness))
   }
-  const folded = (surface: Surface, out: Point, traces: ((p: Point) => number)[], length = n, thickness = .002, broad = full ? 6 : 3) => {
+  const folded = (surface: Surface, out: Point, traces: ((p: Point) => number)[], length = n, thickness = .002,
+    broad: number | readonly number[] = full ? 6 : 3) => {
     const { rows, at } = foldRows(surface, traces, broad)
     paint.push(patch(surface, length, rows, out, thickness, at))
   }
@@ -269,16 +292,24 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const beltLine = sideTrace(doorBelt), heelLine = sideTrace(heelFold), haunchLine = sideTrace(haunchFold)
   const wingDraftLine = sideTrace((s) => shoulder(s) - paintWingDrop)
   const crossLine = (p: Point) => crossOffset(sAt(p[2]), p[1])
+  const crossToe = (p: Point) => crossLine(p) - crossStepRun
   const gap = .00055
   const frontEnd = (v: number) => v <= .818 ? hoodShut(v / .818) : mix(hoodShut(1), .295, (v - .818) / .182)
+  const bonnetSplit = .72
+  const splitEnd = frontEnd(bonnetSplit) - gap
+  const bonnetGrid = curve([[0, 0], [.4, .069], [.68, .154], [.84, .199], [1, splitEnd]])
   for (const side of [1, -1]) {
     const mirror = (p: Point): Point => [p[0] * side, p[1], p[2]]
     const sided = (f: Surface): Surface => (u, v) => mirror(f(u, v))
     const uSide: Point = [side, 0, 0]
     folded(sided((u, v) => {
-      const s = mix(0, frontEnd(v) - gap, u * (.51 + .49 * u))
-      return bonnet(s, v)
-    }), [0, 1, 0], hoodTraces, full ? 112 : n, .002, full ? 12 : 3)
+      const q = bonnetSplit * v
+      return bonnet(bonnetGrid(u) * (frontEnd(q) - gap) / splitEnd, q)
+    }), [0, 1, 0], hoodTraces, full ? 148 : 45, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
+    folded(sided((u, v) => {
+      const q = mix(bonnetSplit, 1, v)
+      return bonnet(bonnetGrid(u) + (frontEnd(q) - gap - splitEnd) * fairStep(u, .81, 1), q)
+    }), [0, 1, 0], hoodTraces.slice(1), full ? 148 : 45, 0, full ? [6, 15, 4] : [2, 6, 2])
     folded(sided((u, v) => {
       const s = mix(frontEnd(mix(.817, 1, v)) + gap, .599, u * (.43 + .57 * u))
       const q = mix(.817, 1, v)
@@ -296,8 +327,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     part(black, (u, v) => cowlFace(mix(cowlStep(v), cabFront(v) + gap, u), v, mix(.006, .0026, u)), [0, 1, 0], 7, n, .003)
     part(black, (u, v) => cowlFace(mix(hoodShut(v) - .004, cabFront(v) + .003, u), v, .009), [0, 1, 0], 4, n, .003)
     part(paint, sided((u, v) => {
-      const p = bonnet(mix(.239, .318, u), mix(.770, .907, v))
-      return [p[0], p[1] - .005, p[2]]
+      const p = bonnet(mix(.234, .320, u), mix(.783, .912, v))
+      return [p[0], p[1] - mix(.0018, .0045, smooth(u, .64, 1)), p[2]]
     }), [0, 1, 0], full ? 24 : 12, full ? 9 : 6, 0)
     for (const [a, b] of [[.071, frontEnd(1) - gap], [frontEnd(1) + gap, .331]]) {
       part(paint, sided((u, v) => {
@@ -325,25 +356,32 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const inY = mix(deckInnerY(s), inside[1], t)
       const x = mix(inX, outside[0], v)
       const ridge = deckIn(s)
-      const returnFold = 1 - smooth(s, .840, .860)
+      const returnFold = 1 - smooth(s, .794, .874)
       const section = (at: number) => hinge(at - ridge, foldHalf) - returnFold * hinge(at - deckOut(s), foldHalf)
       const vane = section(x) - mix(section(inX), section(outside[0]), v)
       const ridgeV = T.MathUtils.clamp((ridge - inX) / (outside[0] - inX), .14, .86)
-      const turn = -.37 * smooth(s, .603, .653) * (1 - smooth(s, .900, .926))
+      const turn = -.37 * smooth(s, .614, .672) * smooth(ridge - inX, -.009, .055)
+        * (1 - smooth(s, .905, .937))
       const ridgeFold = turn * (section(ridge) - mix(section(inX), section(outside[0]), ridgeV))
-      const fallAtRidge = T.MathUtils.clamp((inY - haunchRidgeY(s) + ridgeFold) / (inY - outside[1]), .085, .915)
+      const fairCrest = smooth(s, .813, .880)
+      const correction = ridgeFold * fairCrest
+      const fallAtRidge = T.MathUtils.clamp((inY - haunchRidgeY(s) + ridgeFold - correction) / (inY - outside[1]), .085, .915)
       const reach = smooth(inY - haunchRidgeY(s), -.027, .020)
       const fall = mix(1, ridgeV * (1 - fallAtRidge) / (fallAtRidge * (1 - ridgeV)),
-        reach * smooth(s, .635, .695) * (1 - smooth(s, .902, .930)))
+        reach * smooth(s, .635, .695) * (1 - smooth(s, .915, .939)))
       const y = mix(inY, outside[1], v / (fall + (1 - fall) * v))
       const high = Math.max(haunchCeiling(x), outside[1] + .005)
-      const base = y + turn * vane
+      const crestBlend = smooth(v, 0, ridgeV) * (1 - smooth(v, ridgeV, 1))
+      const base = y + turn * vane - correction * crestBlend
       const tBend = base - haunchFold(s)
-      const fade = smooth(s, .621, .654) * (1 - smooth(s, .712, .743))
-        * (1 - smooth(Math.abs(tBend), .010, .072)) * Math.sin(Math.PI * v) ** .65
-      const shape = base + .74 * fade * (hinge(tBend, foldHalf) - .5 * tBend)
-      const cap = hinge(shape - high + .004, .004)
-      return [x, shape - cap * smooth(x, .695, .765), zAt(s)]
+      const fade = smooth(s, .631, .654) * (1 - smooth(s, .715, .752))
+        * (1 - smooth(Math.abs(tBend), .014, .105)) * Math.sin(Math.PI * v)
+      const shape = base + .22 * fade * (hinge(tBend, .006) - .5 * tBend)
+      const capBlend = smooth(s, .735, .782)
+      const cap = hinge(shape - high + mix(.008, .004, capBlend), mix(.014, .004, capBlend))
+      const crownTrim = .013 * smooth(s, .833, .874) * (1 - smooth(s, .895, .924))
+        * smooth(x, .598, .705) * (1 - smooth(x, .758, .852))
+      return [x, shape - cap * smooth(x, .695, .765) - crownTrim, zAt(s)]
     }
     folded(sided((u, v) => deckSection(mix(.5984, .942 - .019 * v, u), v)),
       [0, 1, 0], [haunchLine, lateralTrace(deckIn), lateralTrace(deckOut)])
@@ -352,25 +390,30 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const t = smooth(s, .6, .68)
       const inner = bayEdge(s, 1)
       const outside = deckSection(s, 0)
-      const roofEnd: Point = [mix(.490, inner[0], t), spine(s), zAt(s)]
+      const roofX = mix(.486, inner[0], t)
+      const roofStep = spine(.595) - roof(.595, .486 / roofWidth(.595))[1]
+      const roofEnd: Point = [roofX, spine(s) - roofStep * (1 - smooth(s, .597, .658)) - .009 * t, zAt(s)]
       const next = deckSection(s, .006)
       const span = outside[0] - roofEnd[0]
       const slope = T.MathUtils.clamp((next[1] - outside[1]) / (next[0] - outside[0]), -1.20, .22)
       const delta = outside[1] - roofEnd[1]
-      const start = mix(delta, -.32 * span, smooth(s, .598, .629))
-      const end = mix(delta, slope * span, smooth(span, .015, .075))
-      const y = mix(roofEnd[1], outside[1], v)
+      const start = mix(delta, -.27 * span, smooth(s, .598, .640))
+      const end = mix(delta, slope * span, smooth(span, .026, .116))
+      const fair = mix(roofEnd[1], outside[1], v)
         + v * (1 - v) * ((1 - v) * (start - delta) + v * (delta - end))
+      const tBend = fair - haunchRidgeY(s)
+      const fade = smooth(s, .609, .638) * (1 - smooth(s, .651, .673)) * Math.sin(Math.PI * v) ** 2
+      const y = fair - .66 * fade * (hinge(tBend, .004) - .5 * tBend)
       return [mix(roofEnd[0], outside[0], v), y, zAt(s)]
-    }), [0, 1, 0])
+    }), [0, 1, 0], n, full ? 37 : 16, 0)
     part(paint, sided((u, v) => {
       const x = v * .935
       const s0 = mix(.921, .905, smooth(x, .28, .63))
       const y = tailLipY(x)
       const s1 = sAt(tailCrestZ(x))
       const s = mix(Math.min(s0, s1 - .014), s1, u)
-      const lead = y + mix(-.024, .026, smooth(x, .26, .69))
-      return [x, mix(lead, y, 1 - (1 - u) ** 1.38), zAt(s)]
+      const lead = y + mix(-.020, .023, smooth(x, .21, .74))
+      return [x, mix(lead, y, u * (1.26 - .26 * u)), zAt(s)]
     }), [0, 1, 0])
 
     const archEnds = (w: WheelSize) => {
@@ -394,27 +437,43 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const span = (s - before) / (after - before)
         const crown = (rear ? .35 : .32) * section * smooth(span, 0, .10) * (1 - smooth(span, .90, 1))
         const drop = high[1] - p[1]
-        const wingDraft = rear ? 0 : .004 * smooth(drop, .009, .046) * (1 - smooth(drop, .053, .132))
-          * smooth(s, .145, .176) * (1 - smooth(s, .203, .233))
-        return [p[0] + side * (crown + wingDraft), p[1], p[2]]
+        return [p[0] + side * (crown + (rear ? 0 : wingDraft(s, drop))), p[1], p[2]]
       }
       const face: Surface = (u, v) => archPanel(u, mix(.028, 1, v))
       const columns = full ? n * 2 : n + 12
-      folded(face, uSide, rear ? [beltLine, haunchLine, trace] : [beltLine, trace, wingDraftLine], columns)
+      if (rear) folded(face, uSide, [beltLine, haunchLine, trace], columns)
+      else {
+        const { rows, at } = foldRows(face, [beltLine, trace, wingDraftLine], full ? 6 : 3)
+        paint.push(patch(face, columns, rows, uSide, .002, at))
+        const height = shoulder(before) - floorY
+        const topRows = Array.from({ length: rows + 1 }, (_, j) => (face(0, at(0, j))[1] - floorY) / height)
+        const bottomRows = Array.from({ length: 5 }, (_, j) => topRows[0] * j / 5)
+        const stations = [...new Set([...bottomRows, ...topRows])]
+        paint.push(patch((u, v) => {
+          const s = mix(.141, before, u)
+          const y = mix(floorY, shoulder(s), v)
+          const p = sidePoint(s, y, side)
+          return [p[0] + side * wingDraft(s, shoulder(s) - y), y, p[2]]
+        }, n, stations.length - 1, uSide, .002, (_, j) => stations[j]))
+      }
       for (const [start, end] of [[theta0, 0], [Math.PI, theta1]]) part(paint, (u, v) => {
         const p = lower(mix(start, end, u))
-        return sidePoint(sAt(p[2]), mix(floorY, p[1], v), side)
+        const y = mix(floorY, p[1], v)
+        const skin = sidePoint(sAt(p[2]), y, side)
+        const tuck = rear && start === Math.PI ? .041 * (1 - smooth(y, .282, .405)) : 0
+        return [skin[0] - side * tuck, y, skin[2]]
       }, uSide, full ? 24 : 8, 4, 0)
       part(paint, (u, v) => {
         const p = archPanel(u, mix(0, .028, v))
-        return [side * Math.min(dimensions.bodyWidth / 2, Math.abs(p[0]) + .0025 * Math.sin(Math.PI * v)), p[1], p[2]]
-      }, uSide, columns, 6, .006)
+        const bead = rear ? .0025 * Math.sin(Math.PI * v) : .0016 * Math.sin(Math.PI * v) ** 2
+        return [side * Math.min(dimensions.bodyWidth / 2, Math.abs(p[0]) + bead), p[1], p[2]]
+      }, uSide, columns, 6, rear ? .006 : .003)
       const wellX = w.x - w.width / 2 - .025
       const well = (u: number, v: number): Point => {
         const angle = mix(theta0, theta1, u)
         const p = lower(angle)
         const depth = .012 * Math.sin(Math.PI * v)
-        const x = mix(Math.abs(p[0]) - .002, wellX, v), z = p[2] + depth * Math.cos(angle)
+        const x = mix(Math.abs(p[0]) - (rear ? .002 : .005), wellX, v), z = p[2] + depth * Math.cos(angle)
         const y = p[1] + depth * Math.sin(angle)
         const s = sAt(z)
         const ceiling = rear ? y + .01 : bonnet(s, Math.min(1, x / wingEdge(s).x))[1] - .010
@@ -433,14 +492,17 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     const last = archEnds(rearWheel)
     const sillPoint = (s: number, y: number) => sidePoint(s, y, side)
     const cutLeading = curve([[0, .374], [.17, .377], [.37, .352], [.56, .323], [.71, .307], [.86, .321], [1, .349]])
-    const intakeLeft = curve([[0, .617], [.20, .597], [.49, .570], [1, .538]])
-    const intakeRight = curve([[0, .617], [.27, .651], [.55, .635], [1, .590]])
+    const intakeShift = .035 / dimensions.length
+    const intakeFront = curve([[0, .617], [.20, .597], [.49, .570], [1, .538]])
+    const intakeBack = curve([[0, .617], [.27, .651], [.55, .635], [1, .590]])
+    const intakeLeft = (v: number) => intakeFront(v) + intakeShift
+    const intakeRight = (v: number) => intakeBack(v) + intakeShift
     const intakeBottom = .208, intakeTopLeft = .686, intakeTopRight = .708
     const leftY = (v: number) => mix(intakeBottom, intakeTopLeft, v)
     const rightY = (v: number) => mix(intakeBottom, intakeTopRight, v)
-    const slotStart = intakeLeft(1), slotJoin = intakeRight(1), slotEnd = .695
-    const slotRise = curve([[slotJoin, intakeTopRight], [.624, .748], [.661, .795], [slotEnd, .846]])
-    const slotWidth = curve([[slotStart, 0], [.562, .020], [slotJoin, .033], [.633, .028], [.670, .023], [slotEnd, 0]])
+    const slotStart = intakeLeft(1), slotJoin = intakeRight(1), slotEnd = .695 + intakeShift
+    const slotRise = curve([[slotJoin, intakeTopRight], [.624 + intakeShift, .748], [.661 + intakeShift, .795], [slotEnd, .846]])
+    const slotWidth = curve([[slotStart, 0], [.562 + intakeShift, .020], [slotJoin, .033], [.633 + intakeShift, .028], [.670 + intakeShift, .023], [slotEnd, 0]])
     const slotLow = (s: number) => s < slotJoin ? mix(intakeTopLeft, intakeTopRight, (s - slotStart) / (slotJoin - slotStart)) : slotRise(s)
     const slotHigh = (s: number) => slotLow(s) + slotWidth(s)
     const doorLeadAt = (y: number) => {
@@ -458,10 +520,20 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       return [side * (plan(s) - .083), mix(shoulder(s) - .086, shoulder(s) + .008, v), zAt(s)]
     }, uSide, 8, 5, .006)
     part(black, (u, v) => {
-      const s = cutLeading(v) + mix(-.009, .011, u)
-      const p = cap(s, v)
-      return [p[0] - side * mix(.007, .034, smooth(v, 0, .085) * (1 - smooth(v, .91, 1))), p[1], p[2]]
-    }, uSide, 5, n, .006)
+      const q = mix(.003, .996, u)
+      const s = cutLeading(q) + mix(-.003, .007, v)
+      const p = cap(s, q)
+      const inset = .0037 + .003 * (2 * v - 1) ** 2
+      return [p[0] - side * inset, p[1], p[2]]
+    }, uSide, full ? 64 : 36, 3, 0)
+    part(paint, (u, v) => {
+      const y = mix(floorY, shoulder(cutLeading(1)), u)
+      const span = .0044 + .0032 * (1 - smooth(u, .20, .47))
+      const s = doorLeadAt(y) + mix(-span, span, v)
+      const p = sillPoint(s, y)
+      const inset = .0018 + .0034 * smooth(Math.abs(2 * v - 1), .28, 1)
+      return [p[0] - side * inset, p[1], p[2]]
+    }, uSide, full ? 82 : 58, 4, 0)
     part(black, (u, v) => {
       const s = mix(.510, .686, u)
       const p = sillPoint(s, mix(.314, shoulder(s) + .003, v))
@@ -476,19 +548,18 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const p = sillPoint(s, mix(.542, shoulder(s) - .006, v))
       return [side * (Math.abs(p[0]) * .62), p[1], Math.max(p[2], zAt(mix(.948, .989, smooth(p[1], .713, .746))))]
     }, uSide, full ? 24 : 16, full ? 7 : 5, .008)
-    part(paint, (u, v) => cap(mix(.141, first.before, u), v), uSide, n, k)
     folded((u, v) => {
-      const s = mix(first.after, cutLeading(v) - gap, u)
+      const s = mix(first.after, Math.max(first.after, cutLeading(v) - gap), u)
       return cap(s, v)
-    }, uSide, [beltLine])
+    }, uSide, [beltLine], n, 0)
     folded((u, v) => {
-      const y = mix(.136, intakeBottom, v)
-      return sillPoint(mix(doorLeadAt(y) + gap, last.before, u), y)
-    }, uSide, [crossLine], n, .002, full ? 6 : 3)
+      const y = mix(.136, intakeBottom, u)
+      return sillPoint(mix(doorLeadAt(y) + gap, last.before, v), y)
+    }, uSide, [crossLine, crossToe], n, .002, full ? 3 : 1)
     folded((u, v) => {
-      const y = leftY(v)
-      return sillPoint(mix(doorLeadAt(y) + gap, intakeLeft(v), u), y)
-    }, uSide, [beltLine, heelLine, crossLine], n, .002, full ? 6 : 2)
+      const y = leftY(u)
+      return sillPoint(mix(doorLeadAt(y) + gap, intakeLeft(u), v), y)
+    }, uSide, [beltLine, heelLine, crossLine, crossToe], n, .002, full ? 4 : 1)
     folded((u, v) => {
       const y = rightY(v)
       return sillPoint(mix(intakeRight(v), last.before, u), y)
@@ -668,7 +739,11 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       part(cabin, spoke, [0, 0, -1], 11, 5, .009)
     }
   }
-  const skin = add(parent, 'closed body panels and returns', joined(paint), m.paint)
+  const paintedShell = joined(paint)
+  const shellPositions = paintedShell.getAttribute('position')
+  const nose = zAt(0)
+  for (let i = 0; i < shellPositions.count; i++) if (shellPositions.getZ(i) > nose) shellPositions.setZ(i, nose)
+  const skin = add(parent, 'closed body panels and returns', paintedShell, m.paint)
   add(parent, 'stowage, seals and wheelhouse liners', joined(black), m.matte)
   addMirrors(parent, m, full, dimensions.mirrorWidth * .5, edgeGlass(.353, 0), zAt)
   if (cabin.length) add(parent, 'covered cockpit upholstery', joined(cabin), m.cabin)

@@ -1,0 +1,16 @@
+{
+  "critic": "C5",
+  "score": 9,
+  "pass": true,
+  "issues": [
+    {
+      "severity": "minor",
+      "file": "set-A-04.png",
+      "where": "wheel beat, 15.00–19.97 s",
+      "what": "The camera stays nearly face-on to the wheel. It gives the rim and brake room, but exposes little tread for the water beat.",
+      "fix": "Angle the macro move slightly toward the front of the tire so the tread shoulder reads while keeping the rim and arch in frame."
+    }
+  ],
+  "reviewer": "reviewer_2401",
+  "family": "gpt_6_2_sol"
+}
