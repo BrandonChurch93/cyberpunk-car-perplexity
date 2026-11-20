@@ -2,9 +2,11 @@ import * as THREE from 'three'
 import { createServer } from 'vite'
 import { describe, expect, it } from 'vitest'
 import { config } from '../src/config'
+import { createHaze, createHazeCapture } from '../src/core/haze'
 import { LightRig } from '../src/core/lights'
 import { createReflections, quality } from '../src/core/reflect'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
+import { Probe } from '../src/core/reflect/probe'
 import { patchesOf } from '../src/materials/patch'
 import { launchBrowser } from '../tools/lib/browser'
 
@@ -236,7 +238,101 @@ function captureLamp(three: typeof THREE, reflections: typeof createReflections,
   return { off, dim, bright, tail, doorTail, deckTail, doorCity, worldCity, splitIntensity, fullIntensity, usesFullCapture, reset, captureOnly, bodyRestored }
 }
 
-it('captures the moving lamp at its current output but keeps the car body out of the cube', async () => {
+function captureAir(three: typeof THREE, createCameraHaze: typeof createHaze, createCubeHaze: typeof createHazeCapture,
+  Rig: typeof LightRig, Cube: typeof Probe, fmt: typeof config.formats.preview) {
+  const renderer = new three.WebGLRenderer()
+  const scene = new three.Scene()
+  const origin = new three.Vector3(0, .6, 0)
+  const makeLight = (id: string, p: number[], rgb: number[], intensity: number): ConstructorParameters<typeof LightRig>[0][number] => {
+    const object = new three.Object3D()
+    object.position.fromArray(p)
+    object.lookAt(origin)
+    return { id, object, color: new three.Color().fromArray(rgb), intensity, kind: 'area', size: [21, 34],
+      range: 740, shadow: false, beam: false, level: () => 1 }
+  }
+  const lights = [
+    makeLight('magenta violet tower screen', [45, 35, -480], [1, .14, .63], 14_000),
+    makeLight('cyan group', [-90, 30, -380], [.02, .65, 1], 5_500),
+    makeLight('amber group', [330, 20, -.1], [1, .52, .16], 5_500),
+  ]
+  const rig = new Rig(lights, 32)
+  scene.add(rig.group, ...lights.map((light) => light.object))
+  rig.update(0, [.5, .5])
+  const world = { lights, deck: { bounds: new three.Box2(new three.Vector2(-12, -18), new three.Vector2(12, 18)) } }
+  const domain = { rig, world }
+  const directions = [
+    [1, .09, -.1, 395], [1, .24, .27, 460], [-1, .1, .13, 510], [-1, -.19, .25, 6],
+    [.13, 1, -.22, 320], [-.22, 1, .1, 780], [.2, -1, .11, 1.1], [-.18, -1, -.2, 1.2],
+    [.15, .05, 1, 520], [-.23, .28, 1, 910], [.07, .09, -1, 490], [-.27, .08, -1, 650],
+  ]
+  const rays = directions.map(([x, y, z, distance], i) => {
+    const direction = new three.Vector3(x, y, z).normalize()
+    const plate = new three.Mesh(new three.PlaneGeometry(distance * .19, distance * .19), new three.MeshBasicMaterial({
+      color: new three.Color(.045 + .0025 * i, .075, .10), side: three.DoubleSide,
+    }))
+    plate.position.copy(origin).addScaledVector(direction, distance)
+    plate.lookAt(origin)
+    scene.add(plate)
+    return direction
+  })
+  const emitters = new three.Group()
+  const lamp = new three.Mesh(new three.PlaneGeometry(.2, .2), new three.MeshBasicMaterial({
+    color: new three.Color(4, .12, .08), side: three.DoubleSide,
+  }))
+  lamp.position.copy(origin).addScaledVector(rays[0], 2)
+  lamp.lookAt(origin)
+  emitters.add(lamp)
+  emitters.visible = false
+  scene.add(emitters)
+  const { background: capture, full } = new Cube(renderer, 64, .05, 1500, createCubeHaze(domain)).capture(scene, origin, emitters)
+  const clean = new Cube(renderer, 64, .05, 1500).capture(scene, origin)
+  const haze = createCameraHaze(domain)
+  const format = { ...fmt, width: 1, height: 1 }
+  haze.resize(format)
+  const frame = { format, frameIndex: 195, frameKey: 195, tier: 'draft' as const, samples: 1, timeSeconds: 0 }
+  const sample = { frame, sampleIndex: 0, timeSeconds: 0, shutter: .5, aperture: [0, 0] as [number, number],
+    misc: [.5, .5] as [number, number], pixel: [0, 0] as [number, number], light: [.5, .5] as [number, number] }
+  const eye = new three.PerspectiveCamera(40, 1, .05, 1500)
+  eye.position.copy(origin)
+  const input = new three.WebGLRenderTarget(1, 1, { type: three.HalfFloatType, depthTexture: new three.DepthTexture(1, 1, three.UnsignedIntType) })
+  const output = new three.WebGLRenderTarget(1, 1, { type: three.FloatType })
+  const uniforms = { captured: { value: capture }, direction: { value: new three.Vector3() } }
+  const sampler = new three.Mesh(new three.PlaneGeometry(2, 2), new three.ShaderMaterial({
+    uniforms,
+    vertexShader: 'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: 'uniform samplerCube captured; uniform vec3 direction; void main(){ gl_FragColor = vec4(textureCube(captured, direction).rgb, 1.0); }',
+  }))
+  sampler.frustumCulled = false
+  const sampleEye = new three.Camera()
+  const read = () => {
+    const values = new Float32Array(4)
+    renderer.readRenderTargetPixels(output, 0, 0, 1, 1, values)
+    return Array.from(values.slice(0, 3))
+  }
+  const lookup = (texture: THREE.Texture, r: THREE.Vector3) => {
+    uniforms.captured.value = texture
+    uniforms.direction.value.copy(r)
+    renderer.setRenderTarget(output)
+    renderer.render(sampler, sampleEye)
+    return read()
+  }
+  const values = rays.map((direction) => {
+    eye.lookAt(origin.clone().add(direction))
+    eye.updateMatrixWorld(true)
+    renderer.setRenderTarget(input)
+    renderer.render(scene, eye)
+    const state = { position: origin, quaternion: eye.quaternion, focalMm: 35, sensorWidthMm: 36, focusDistance: 6, fNumber: 2, near: .05, far: 1500 }
+    haze.samplePasses![0].render(renderer, { color: input.texture, depth: input.depthTexture! }, output, { camera: eye, state, sample, timeSeconds: 0 })
+    return { direct: read(), cube: lookup(capture, direction), clear: lookup(clean, direction) }
+  })
+  const lampRadiance = lookup(full, rays[0])
+  input.dispose()
+  output.dispose()
+  renderer.dispose()
+  return { values, lampRadiance, emittersHidden: !emitters.visible }
+}
+
+it('captures moving emitters without the car body and matches camera air along 12 rays', async () => {
   const id = '/reflect-test-entry.js'
   const app = await createServer({
     configFile: false,
@@ -246,9 +342,13 @@ it('captures the moving lamp at its current output but keeps the car body out of
       resolveId: (entry) => entry === id ? id : null,
       load: (entry) => entry === id ? `
         import * as THREE from 'three'
+        import { createHaze, createHazeCapture } from '/src/core/haze/index.ts'
+        import { LightRig } from '/src/core/lights.ts'
         import { createReflections } from '/src/core/reflect/index.ts'
+        import { Probe } from '/src/core/reflect/probe.ts'
         import { config } from '/src/config.ts'
         export const run = () => (${captureLamp.toString()})(THREE, createReflections, config.formats.preview)
+        export const air = () => (${captureAir.toString()})(THREE, createHaze, createHazeCapture, LightRig, Probe, config.formats.preview)
       ` : null,
       configureServer(server) {
         server.middlewares.use('/reflect-test', (_req, res) => {
@@ -281,6 +381,21 @@ it('captures the moving lamp at its current output but keeps the car body out of
       expect(result.fullIntensity).toEqual([.65, 1])
       expect(result.usesFullCapture && result.reset).toBe(true)
       expect(result.captureOnly && result.bodyRestored).toBe(true)
+      const { values: views, lampRadiance, emittersHidden }: ReturnType<typeof captureAir> =
+        await page.evaluate(`import("${id}").then(module => module.air())`)
+      expect(errors).toEqual([])
+      expect(views).toHaveLength(12)
+      expect(emittersHidden).toBe(true)
+      expect(lampRadiance[0]).toBeGreaterThan(views[0].cube[0] + 2)
+      expect(lampRadiance[0]).toBeGreaterThan(8 * lampRadiance[1])
+      let altered = 0
+      for (const [i, { direct, cube, clear }] of views.entries()) {
+        const length = (c: number[]) => Math.hypot(...c)
+        expect(length(direct), `direction ${i}`).toBeGreaterThan(.001)
+        expect(length(cube.map((channel, j) => channel - direct[j])) / length(direct), `direction ${i}`).toBeLessThan(.15)
+        if (length(cube.map((channel, j) => channel - clear[j])) / length(cube) > .15) altered++
+      }
+      expect(altered).toBeGreaterThanOrEqual(4)
     } finally {
       await browser.close()
     }
