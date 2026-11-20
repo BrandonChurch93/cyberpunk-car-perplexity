@@ -185,6 +185,40 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('keeps the front cheek return fair without hiding the lower running guide', () => {
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      const paint = vehicle.root.getObjectByName('nose blades, shield and lower lip')!
+      const guide = vehicle.root.getObjectsByProperty('name', 'front running guide').find((node) => node.position.x > 0)!
+      const time = config.film.heroFrameSeconds
+      const master = cameraAt(time, config.formats.master, vehicle.anchors).position
+      const ray = new T.Raycaster()
+      const hitAt = (eye: T.Vector3, target: T.Vector3) => {
+        ray.set(eye, target.clone().sub(eye).normalize())
+        return ray.intersectObject(vehicle.root, true)[0]
+      }
+      for (const y of [.310, .332, .374, .416]) {
+        let prior: T.Vector3 | undefined
+        for (const x of [.892, .896, .900]) {
+          const hit = hitAt(master, new T.Vector3(...fascia(true, 1, x, y, -.007)))
+          expect(hit?.object.uuid, hit?.object.name).toBe(paint.uuid)
+          expect(hit.normal!.x).toBeGreaterThan(.84)
+          if (prior) expect(prior.angleTo(hit.normal!)).toBeLessThan(.12)
+          prior = hit.normal
+        }
+      }
+      for (const y of [.310, .345, .390]) for (const edge of [-.004, 0, .004]) {
+        const x = T.MathUtils.mapLinear(y, .285, .429, .877, .834) + edge
+        ray.set(new T.Vector3(x, y, 3), new T.Vector3(0, 0, -1))
+        const { point } = ray.intersectObject(guide)[0]
+        for (const format of [config.formats.master, config.formats.vertical]) {
+          const hit = hitAt(cameraAt(time, format, vehicle.anchors).position, point)
+          expect(hit?.object.uuid, hit?.object.name).toBe(guide.uuid)
+        }
+      }
+    }
+  }, 15_000)
+
   it('keeps the bonnet crowned and the wheelhouse below the paint at the screen foot', () => {
     for (const vehicle of [full, blockout]) {
       vehicle.root.updateMatrixWorld(true)
