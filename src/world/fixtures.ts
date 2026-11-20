@@ -402,7 +402,7 @@ function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE
   const set = (t: number, cutTime = t) => {
     // Keep the shared light slot on one physical emitter across the shutter.
     const active = cutTime >= detailBeat.start && cutTime < detailBeat.end
-    const progress = ease(t,detailBeat.start,detailBeat.end)
+    const progress = active ? ease(t,detailBeat.start,detailBeat.end) : 0
     aim.set(-.358+.12*progress,1.011,-1.22+.38*progress).sub(source).normalize()
     head.quaternion.setFromUnitVectors(forward,aim)
     film.object = active ? low : anchor

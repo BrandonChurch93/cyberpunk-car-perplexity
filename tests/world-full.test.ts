@@ -110,6 +110,8 @@ describe('full roof world', () => {
     }
     world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
     const resting = state()
+    const grazer = world.root.getObjectByName('grazer frosted optic')!
+    const parked = axis(grazer).toArray()
     world.beginSample({ timeSeconds: start } as SampleContext)
     const first = state()
     expect(first[2]).toBeLessThan(-16)
@@ -123,6 +125,7 @@ describe('full roof world', () => {
     expect(state()[2]).toBeLessThan(-16)
     world.beginSample({ timeSeconds: config.film.durationSeconds } as SampleContext)
     expect(state()).toEqual(resting)
+    expect(axis(grazer).toArray()).toEqual(parked)
     world.beginSample({ timeSeconds: wheelBeat.start+.7 } as SampleContext)
     const shoulderAim = axis(wheel.object).y
     world.beginSample({ timeSeconds: wheelBeat.end-.38 } as SampleContext)
