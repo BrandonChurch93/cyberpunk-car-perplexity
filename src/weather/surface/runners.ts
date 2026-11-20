@@ -13,7 +13,7 @@ const gravity = 9.81
 const paint = beatById('paint')
 const wheel = beatById('wheel')
 /** The hero rivulet lets go just before the macro frame, so it is already moving there with a short neck behind it. */
-const breakLoose = config.film.macroFrameSeconds - 0.5
+const breakLoose = config.film.macroFrameSeconds - 0.6
 /** Drips leave the wheel arch lip at these times, in the wheel beat. */
 export const archDrips = [wheel.start + 1.2, wheel.start + 2.9, wheel.start + 4.1]
 const pendantGrowSeconds = 1.4

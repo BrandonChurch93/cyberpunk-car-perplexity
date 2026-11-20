@@ -74,14 +74,14 @@ function rivuletStart(vehicle: WeatherDeps['vehicle']): THREE.Vector3 {
       const p = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld)
       if (p.distanceTo(anchor) > 0.1) continue
       const n = new THREE.Vector3().fromBufferAttribute(nor, i).applyMatrix3(normalMatrix).normalize()
-      if (n.y < 0.3) continue
+      if (n.y < -0.2 || n.y > 0.9) continue
       const down = new THREE.Vector3(0, -1, 0).addScaledVector(n, n.y).normalize()
       let s = -3 * p.distanceTo(anchor)
       let seen = true
       for (const { camera, film, forward } of views) {
         const depth = toLens.subVectors(p, camera.position).dot(forward) - camera.focusDistance
         ndc.copy(p).project(film)
-        if (Math.abs(depth) > 0.008 || Math.abs(ndc.x) > 0.7 || Math.abs(ndc.y) > 0.7) {
+        if (Math.abs(depth) > 0.008 || Math.abs(ndc.x) > 0.7 || ndc.y < -0.1 || ndc.y > 0.7) {
           seen = false
           break
         }
