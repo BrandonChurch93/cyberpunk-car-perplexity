@@ -38,6 +38,7 @@ export interface StillRecord {
   samples: number
   width: number
   height: number
+  nonFinitePixels?: number
   check: FrameCheck
   seconds: number
 }
@@ -179,11 +180,18 @@ export class RenderSession {
       }
       if (have < total && Date.now() - lastSave > 120_000) await save()
     }
-    await page.evaluate(() => window.showcase!.finishFrame())
+    const nonFinitePixels = await page.evaluate(async () => {
+      await window.showcase!.finishFrame()
+      return window.showcase!.nonFinitePixels()
+    })
     const png = await grabCanvas(page, this.harness)
     const problems = pageProblems(page)
     if (problems.length > 0) throw new Error(`the page reported errors: ${problems.join(' | ')}`)
     const raw = await decode(png)
+    const check = checkFrame(raw)
+    // Keep the HDR count separately; either HDR corruption or display sentinels fail G5.
+    check.invalidPixels = Math.max(check.invalidPixels, nonFinitePixels)
+    check.ok = check.ok && nonFinitePixels === 0
     const record: StillRecord = {
       buildHash: this.buildHash,
       format: spec.format.id,
@@ -195,7 +203,8 @@ export class RenderSession {
       samples: total,
       width: raw.width,
       height: raw.height,
-      check: checkFrame(raw),
+      nonFinitePixels,
+      check,
       seconds: Math.round((spent + (Date.now() - t0) / 1000) * 10) / 10,
     }
     writeFileSync(file, png)

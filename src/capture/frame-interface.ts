@@ -15,6 +15,8 @@ export interface Showcase {
   saveSum(): Promise<void>
   loadSum(): Promise<void>
   finishFrame(): Promise<void>
+  /** Count of non-finite RGB pixels in the HDR sum at the last finishFrame. */
+  nonFinitePixels(): number
   /** Every string on every sign in the scene, for the gate. */
   signs(): string[]
   /** The vehicle's anchors as plain numbers, for the tools that place crops. */
@@ -90,6 +92,7 @@ export function createShowcase(engine: FrameEngine, ready: Promise<void>, initia
     async finishFrame() {
       engine.finishFrame()
     },
+    nonFinitePixels: () => engine.resolver.nonFinitePixels ?? 0,
     signs: () => engine.stage.signs(),
     anchors: () => engine.stage.anchors(),
   }

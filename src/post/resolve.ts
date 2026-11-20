@@ -3,8 +3,9 @@ import { config, type FormatSpec } from '../config'
 import type { FrameInfo, Resolver } from '../core/engine'
 import { FullscreenPass, passMaterial } from '../core/fullscreen'
 import { hashInts, streamSeed } from '../core/random'
+import { FiniteSum } from './finite'
 import { opticsGlsl } from './optics'
-import { Scatter, BLOOM_WEIGHT, HALATION_WEIGHT, STREAK_WEIGHT } from './scatter'
+import { Scatter, BLOOM_WEIGHT, HALATION_WEIGHT, SCATTER_DECODE, STREAK_WEIGHT } from './scatter'
 import { FILM_CURVE, toneMapGlsl } from './tone'
 
 export const FILM_EXPOSURE = 0.78
@@ -76,9 +77,9 @@ void main() {
       float radius2;
       vec2 uv = lensGeometry(vUv, gate, radius2);
       hdr = lensSample(uv, gate, radius2) * exposurePerSample;
-      hdr += ${BLOOM_WEIGHT} * texture(bloom, uv).rgb;
-      hdr += vec3(${HALATION_WEIGHT.join(', ')}) * texture(halation, uv).rgb;
-      if (anamorphic) hdr += vec3(${STREAK_WEIGHT.join(', ')}) * texture(streak, uv).r;
+      hdr += ${BLOOM_WEIGHT * SCATTER_DECODE} * texture(bloom, uv).rgb;
+      hdr += vec3(${HALATION_WEIGHT.map(w => w * SCATTER_DECODE).join(', ')}) * texture(halation, uv).rgb;
+      if (anamorphic) hdr += vec3(${STREAK_WEIGHT.map(w => w * SCATTER_DECODE).join(', ')}) * texture(streak, uv).r;
       hdr *= lensVignette(radius2);
     } else {
       hdr = texelFetch(sum, pixel, 0).rgb * exposurePerSample;
@@ -103,6 +104,7 @@ void main() {
 export class BasicResolver implements Resolver {
   private readonly pass: FullscreenPass
   private readonly scatter = new Scatter()
+  private readonly finiteSum = new FiniteSum()
   private treatment = 0
 
   constructor(private readonly renderer: THREE.WebGLRenderer) {
@@ -124,6 +126,7 @@ export class BasicResolver implements Resolver {
 
   resize(format: FormatSpec): void {
     const scale = format.height / config.formats.master.height
+    this.finiteSum.resize(format)
     this.scatter.resize(format, scale)
     this.pass.material.uniforms.imageScale.value = scale
     this.pass.material.uniforms.grainSize.value = GRAIN_SIZE_PX * scale
@@ -133,13 +136,19 @@ export class BasicResolver implements Resolver {
     this.treatment = view === 'beauty' ? 0 : view === 'normals' ? 2 : view === 'caps' ? 3 : 1
   }
 
+  /** Number of pixels with a non-finite RGB component in the last unresolved HDR sum. */
+  get nonFinitePixels(): number {
+    return this.finiteSum.count
+  }
+
   resolve(sum: THREE.Texture, count: number, frame: FrameInfo, target: THREE.WebGLRenderTarget | null): void {
     const u = this.pass.material.uniforms
-    u.sum.value = sum
+    const safeSum = this.finiteSum.render(this.renderer, sum, count)
+    u.sum.value = safeSum
     u.inverseCount.value = 1 / count
     u.exposurePerSample.value = FILM_EXPOSURE / count
     if (this.treatment === 0) {
-      this.scatter.render(this.renderer, sum, u.exposurePerSample.value, config.lens.anamorphic)
+      this.scatter.render(this.renderer, safeSum, u.exposurePerSample.value, config.lens.anamorphic)
       u.bloom.value = this.scatter.bloom
       u.halation.value = this.scatter.halation
       u.streak.value = this.scatter.streak
