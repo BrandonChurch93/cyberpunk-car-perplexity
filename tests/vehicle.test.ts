@@ -93,7 +93,7 @@ describe('vehicle geometry and state', () => {
       expect(T.MathUtils.radToDeg(a.angleTo(normalAt(x - .010, s)))).toBeLessThan(3)
       expect(T.MathUtils.radToDeg(b.angleTo(normalAt(x + .010, s)))).toBeLessThan(3)
     }
-    for (const [y, s] of [[.338, .530], [.650, .460], [.896, .760], [.924, .812], [.7814, .724]]) {
+    for (const [y, s] of [[.338, .530], [.647, .460], [.896, .760], [.924, .812], [.7814, .724]]) {
       const a = normalAt(y - .002, s, true), b = normalAt(y + .002, s, true)
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeGreaterThan(15)
       expect(T.MathUtils.radToDeg(a.angleTo(b))).toBeLessThan(25)
@@ -181,6 +181,29 @@ describe('vehicle geometry and state', () => {
         expect(throat.object.name).toBe('stowage, seals and wheelhouse liners')
         expect(hit(y - .032, zAt(s)).point.x - throat.point.x).toBeGreaterThan(.045)
         expect(hit(y + .040, zAt(s)).point.x - throat.point.x).toBeGreaterThan(.045)
+      }
+    }
+  })
+
+  it('forms a true diagonal turn and a deep intake that reaches the lower flank', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      for (const side of [-1, 1]) {
+        const profile = (s: number, y: number) => new T.Raycaster(new T.Vector3(side * 2, y, zAt(s)), new T.Vector3(-side, 0, 0))
+          .intersectObject(vehicle.root)[0]
+        for (const [s, y] of [[.548, .22], [.561, .33]]) {
+          const a = profile(s - .001, y), b = profile(s + .001, y)
+          const turn = T.MathUtils.radToDeg(a.normal!.angleTo(b.normal!))
+          expect(a.object.name).toBe('closed body panels and returns')
+          expect(b.object.name).toBe(a.object.name)
+          expect(turn).toBeGreaterThan(15)
+          expect(turn).toBeLessThan(25)
+        }
+        for (const [s, y] of [[.617, .230], [.618, .400], [.576, .650]]) {
+          const mouth = profile(s, y), panel = profile(s - .05, y)
+          expect(mouth.object.name).toBe('stowage, seals and wheelhouse liners')
+          expect((panel.point.x - mouth.point.x) * side).toBeGreaterThan(.145)
+        }
       }
     }
   })
