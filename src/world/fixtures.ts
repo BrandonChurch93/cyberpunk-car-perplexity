@@ -327,6 +327,7 @@ function frontageRibbon(parent: THREE.Object3D, shell: THREE.Material, name: str
         float beam=1.;
         #ifdef WORLD_INSET_LOUVRE
           beam=smoothstep(.136,.204,normalize(cameraPosition-faceWorld).y);
+          if (abs(p.y-.5)>mix(.08,.5,beam)) discard;
         #endif
         gl_FragColor=vec4(vec3(.014,.021,.028)+beam*gain*lengthMask*joins*(cool*cyan+red*vec3(1.03,.045,.087)),1.);
       }`,
