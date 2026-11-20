@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { config } from '../config'
-import { stream } from '../core/random'
+import { stream, streamSeed } from '../core/random'
+import { insertAfter, patchMaterial } from '../materials/patch'
 import { block, labelFace, mesh, plate, type Label } from './fixtures'
 import { group, type Tuple } from './forms'
 
@@ -10,6 +11,23 @@ const gray = (r: number, g: number, b: number) => new THREE.MeshBasicMaterial({ 
 const black = gray(.007, .013, .024)
 const trim = gray(.02, .036, .057)
 const steel = gray(.038, .055, .067)
+const washedSign = gray(.087, .129, .171)
+patchMaterial(washedSign, {
+  id: 'weathered lightbox diffuser',
+  uniforms: { cabinetSeed: { value: streamSeed('world/city/sign-faces') / 4294967296 * 31 } },
+  apply(shader) {
+    shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec2 vCabinetUv; flat varying float vCabinetPhase;')
+    shader.vertexShader = insertAfter(shader.vertexShader, '#include <project_vertex>', 'vCabinetUv=uv; vCabinetPhase=dot(modelMatrix[3].xz,vec2(.31,.53));')
+    shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'varying vec2 vCabinetUv; flat varying float vCabinetPhase; uniform float cabinetSeed;')
+    shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <color_fragment>', /* glsl */ `
+      float rustX = vCabinetUv.x*19.0+cabinetSeed+vCabinetPhase;
+      float rust = fract(sin(floor(rustX)*31.77)*43758.54);
+      float streak = smoothstep(.76,.96,rust)*(1.0-smoothstep(.07,.31,abs(fract(rustX)-.5)));
+      float gasket = smoothstep(.02,.15,vCabinetUv.y)*smoothstep(.02,.1,1.0-vCabinetUv.y);
+      diffuseColor.rgb *= (.41+.68*gasket)*(1.0-.36*streak*(1.0-smoothstep(.0,.68,vCabinetUv.y)));
+    `)
+  },
+})
 const cheap = (parent: THREE.Object3D, name: string, material: THREE.Material, at: Tuple, size: Tuple): THREE.Mesh => {
   const o = block(parent, name, material, at, size)
   o.castShadow = false
@@ -33,7 +51,7 @@ function mountedText(city: THREE.Group, labels: Label, signs: string[]): void {
     if (rows && rows.join(' ') !== text) throw new Error(`Malformed sign rows: ${text}`)
     signs.push(text)
     fixture.getObjectByName('blank unlit face')?.removeFromParent()
-    const surface = type === 'led' ? black : type === 'lightbox' ? gray(.09, .14, .19) : gray(.035, .055, .066)
+    const surface = type === 'led' ? black : type === 'lightbox' ? washedSign : gray(.035, .055, .066)
     plate(fixture, `${type} sign face`, surface, [0, 0, .184], w, h)
     for (const x of [-w*.41,w*.41]) {
       cheap(fixture, 'blade to facade steel cleat', trim, [x, h*.24, -.26-standoff*.5], [.074, .075, .61+standoff])
@@ -43,6 +61,7 @@ function mountedText(city: THREE.Group, labels: Label, signs: string[]): void {
     if (type === 'lightbox') {
       cheap(fixture, 'lightbox lower gasket', black, [0,-h*.47,.194], [w,.048,.051])
       cheap(fixture, 'lightbox upper weather hood', trim, [0,h*.47,.208], [w+.07,.062,.16])
+      for (const x of [-w*.44,w*.44]) cheap(fixture, 'lightbox drain slot', black, [x,-h*.43,.190], [.081,.012,.018])
     } else if (type === 'paint') {
       rod(fixture, [-w*.28,h*.5,.07], [-w*.28,h*.63,.33], .021, steel)
       const light = cheap(fixture, 'sign picture lamp', gray(.72,.76,.64), [-w*.28,h*.61,.33], [.27,.054,.08])
@@ -68,6 +87,7 @@ function mountedText(city: THREE.Group, labels: Label, signs: string[]): void {
     { text: 'KARAOKE', tower: 'north central tower', x: .70, y: 15.5, rot: Math.PI, w: 2.75, h: 1.13, type: 'paint', col: [.35,.49,.57] },
     { text: 'PARKING', tower: 'billboard terrace', x: 3.2, y: 14.52, rot: 0, w: 4.26, h: .91, type: 'led', col: [.84,1.69,2.25] },
     { text: 'EXIT', tower: 'southwest signal tower', x: -35, y: 41.7, rot: 0, w: 2.8, h: .90, type: 'led', col: [.71,1.14,1.72] },
+    { text: 'HOTEL', tower: 'west corner slab', x: -35.8, y: 15.85, rot: 0, w: 3.35, h: .82, type: 'led', col: [.60,1.56,1.93], standoff: .46 },
   ] as const) {
     const tower = city.getObjectByName(spec.tower)!
     const atRoof = spec.text === 'PARKING'
