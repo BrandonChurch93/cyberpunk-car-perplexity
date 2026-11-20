@@ -7,9 +7,9 @@ import { stream } from '../../core/random'
 import type { WorldModule } from '../../world'
 import { fallCycle, prevailingWind, terminalSpeed } from './motion'
 
-const nearRainDensity = 2.35
-const middleRainDensity = 1.61
-const farRainDensity = 0.13
+const nearRainDensity = 5.4
+const middleRainDensity = 2.42
+const farRainDensity = 0.085
 
 const scatter = /* glsl */ `
 ${filmLightsGlsl}
@@ -21,9 +21,10 @@ vec3 scatterRain(vec3 p, vec3 toEye) {
     vec3 toSource;
     vec3 incident = filmLightAt(i, p, toSource);
     float mu = -dot(toEye, toSource);
-    float forward = exp2(-18.0 * (1.0 - mu));
+    bool area = filmLightShape[i].x < 0.0;
+    float forward = exp2(-(area ? 12.0 : 18.0) * (1.0 - mu));
     float rim = exp2(-64.0 * abs(mu - 0.79));
-    light += incident * (0.003 + 1.8 * forward + 0.11 * rim);
+    light += incident * (area ? 0.008 + 1.6 * forward + 0.16 * rim : 0.003 + 1.8 * forward + 0.11 * rim);
   }
   return light / (1.0 + max(max(light.r, light.g), light.b) * 0.21);
 }
@@ -68,8 +69,8 @@ vec3 wrapAround(vec3 point, vec3 anchor, vec3 span) {
 
 vec3 veilHighlights(vec3 peak, float weight) {
   float brightest = max(peak.r, max(peak.g, peak.b));
-  const float knee = 0.105;
-  const float span = 0.17;
+  const float knee = 0.055;
+  const float span = 0.10;
   float excess = max(0.0, brightest - knee);
   float scale = 1.0 - weight * excess * excess / max(1e-6, brightest * (span + excess));
   return peak * scale;
@@ -100,7 +101,7 @@ void main() {
     float low = smoothstep(0.018, 0.14, p.y);
     if (uLayer < 0.5) {
       float border = max(max(abs(p.x - origin.x) / span.x, abs(p.y - origin.y) / span.y), abs(p.z - origin.z) / span.z);
-      amount = low * smoothstep(0.42, 0.84, distanceToEye) * (1.0 - smoothstep(2.65, 4.25, distanceToEye));
+      amount = low * smoothstep(0.65, 1.48, distanceToEye) * (1.0 - smoothstep(3.25, 4.8, distanceToEye));
       amount *= 1.0 - smoothstep(0.42, 0.5, border);
       amount *= mix(0.54, 1.0, smoothstep(0.88, 2.65, distanceToEye));
     } else if (uLayer < 1.5) {
@@ -109,7 +110,7 @@ void main() {
       amount *= 1.0 - smoothstep(17.0, 25.0, distanceToEye);
     } else {
       amount = low * smoothstep(0.02, 0.14, min(cycle, 1.0 - cycle));
-      amount *= smoothstep(13.0, 24.0, distanceToEye) * (1.0 - smoothstep(35.0, 56.0, distanceToEye));
+      amount *= smoothstep(15.0, 24.0, distanceToEye) * (1.0 - smoothstep(25.0, 36.0, distanceToEye));
       amount *= 0.38;
     }
     float speed = aMotion.z;
@@ -141,10 +142,10 @@ void main() {
   float sigmaEnd = sqrt(pow(length(axis * coc) * 0.5, 2.0) + physical * physical * 0.5 + 0.17);
   vec3 eye = uFilmView > 0.5 ? uOpticalEye : cameraPosition;
   vec3 radiance = scatterRain(p, normalize(eye - p));
-  float gain = uLayer < 0.0 ? 0.64 : uLayer < 0.5 ? 1.30 : 4.2;
+  float gain = uLayer < 0.0 ? 0.64 : uLayer < 0.5 ? 0.92 : 4.2;
   float coverage = min(1.0, diameter * 0.39894228 / sigmaSide) * min(1.0, max(len, diameter) / (1.35 * sigmaEnd));
   float angularTravel = len / max(1.0, pixelFocal.y);
-  float veil = uLayer >= 0.0 && uLayer < 1.5 ? uFilmView * smoothstep(0.024, 0.052, angularTravel) : 0.0;
+  float veil = uLayer >= 0.0 && uLayer < 1.5 ? uFilmView * smoothstep(0.018, 0.045, angularTravel) : 0.0;
   vHead = ap;
   vTail = bp;
   vSigma = vec2(sigmaSide, sigmaEnd);
@@ -279,27 +280,27 @@ export class RibbonView {
 export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLightUniforms): THREE.Mesh[] {
   const deckCenter = world.deck.bounds.getCenter(new THREE.Vector2())
   const deckSpan = world.deck.bounds.getSize(new THREE.Vector2())
-  const rng = stream('air-streaks')
   const middle = new THREE.Vector3(Math.min(deckSpan.x, 31), 8.5, Math.min(deckSpan.y, 31))
   const farSize = new THREE.Vector3(Math.max(deckSpan.x, 58), 11.5, Math.max(deckSpan.y, 58))
   const specs = [
-    { density: nearRainDensity, size: new THREE.Vector3(9.4, 9.4, 9.4), center: new THREE.Vector3() },
-    { density: middleRainDensity, size: middle, center: new THREE.Vector3(deckCenter.x, middle.y * 0.47, deckCenter.y) },
-    { density: farRainDensity, size: farSize, center: new THREE.Vector3(deckCenter.x, farSize.y * 0.49, deckCenter.y) },
+    { key: 'near', density: nearRainDensity, size: new THREE.Vector3(9.4, 9.4, 9.4), center: new THREE.Vector3() },
+    { key: 'middle', density: middleRainDensity, size: middle, center: new THREE.Vector3(deckCenter.x, middle.y * 0.47, deckCenter.y) },
+    { key: 'distance', density: farRainDensity, size: farSize, center: new THREE.Vector3(deckCenter.x, farSize.y * 0.49, deckCenter.y) },
   ]
-  return specs.map(({ density, size, center }, layer) => {
+  return specs.map(({ key, density, size, center }, layer) => {
+    const rng = stream(`air-streaks-${key}`)
     const volume = size.x * size.y * size.z
     const count = Math.round(Math.min(volume, 90_000) * density)
     const drops = new Float32Array(count * 4)
     const motion = new Float32Array(count * 4)
     for (let i = 0; i < count; i++) {
-      const diameter = (1 + 2 * Math.pow(rng.next(), 1.2)) * 0.001
+      const diameter = (1 + 2 * Math.pow(rng.next(), layer === 0 ? 2.65 : 1.75)) * 0.001
       const { cycles, wrapHeight } = fallCycle(diameter, size.y)
       drops.set([rng.range(-0.5, 0.5), rng.next(), rng.range(-0.5, 0.5), diameter], i * 4)
       motion.set([cycles, wrapHeight, terminalSpeed(diameter), rng.next()], i * 4)
     }
     const mesh = view.makeMesh(lights, makeRibbonGeometry(drops, motion), layer, center, size)
-    mesh.name = ['rain-near', 'rain-middle', 'rain-distance'][layer]
+    mesh.name = `rain-${key}`
     return mesh
   })
 }

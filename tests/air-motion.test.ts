@@ -1,8 +1,11 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { config, shutterSeconds } from '../src/config'
+import { LightRig } from '../src/core/lights'
 import { ImpactSurfaces, type ImpactSurfacePoint } from '../src/weather/air/impact-surfaces'
 import { fallCycle, terminalSpeed } from '../src/weather/air/motion'
+import { rainMeshes, RibbonView } from '../src/weather/air/ribbons'
+import type { WorldModule } from '../src/world'
 
 describe('air rain motion', () => {
   it('preserves physical drop speed and shutter length while closing the fall cycle', () => {
@@ -19,6 +22,33 @@ describe('air rain motion', () => {
       expect(cycles * wrapHeight * shutterSeconds / config.film.durationSeconds).toBeCloseTo(terminalSpeed(diameter) * shutterSeconds, 12)
       expect(Math.abs(wrapHeight - nominalHeight)).toBeLessThan(0.5)
     }
+  })
+
+  it('builds a repeatable field of mostly fine drops concentrated in the middle distance', () => {
+    const material = new THREE.MeshStandardMaterial()
+    const world: WorldModule = {
+      root: new THREE.Group(), lights: [], signs: [], surfaces: [], reflectionBox: new THREE.Box3(),
+      deck: { meshes: [], material, bounds: new THREE.Box2(new THREE.Vector2(-14, -10), new THREE.Vector2(14, 10)), heightMap: null },
+    }
+    const light = new LightRig([], 1).uniforms
+    const geometries = rainMeshes(new RibbonView(), world, light).map((mesh) => mesh.geometry as THREE.InstancedBufferGeometry)
+    const [near, mid, far] = geometries
+    expect(mid.instanceCount).toBeGreaterThan(far.instanceCount)
+    expect(mid.instanceCount).toBeGreaterThan(near.instanceCount * 2)
+    world.deck.bounds.max.x += 3
+    const resized = rainMeshes(new RibbonView(), world, light).map((mesh) => mesh.geometry)
+    expect(resized[0].getAttribute('aDrop').array).toEqual(near.getAttribute('aDrop').array)
+    expect(resized[2].getAttribute('aDrop').array).toEqual(far.getAttribute('aDrop').array)
+    const drops = mid.getAttribute('aDrop')
+    let fine = 0
+    let rangeMatches = true
+    for (let i = 0; i < drops.count; i++) {
+      const diameter = drops.getW(i)
+      if (diameter < 0.002) fine++
+      rangeMatches &&= diameter >= 0.001 && diameter <= 0.003
+    }
+    expect(rangeMatches).toBe(true)
+    expect(fine).toBeGreaterThan(drops.count * 0.6)
   })
 
   it('finds the highest available wet, upward face in transformed world space', () => {
