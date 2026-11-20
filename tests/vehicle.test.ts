@@ -253,6 +253,7 @@ describe('vehicle geometry and state', () => {
     for (const vehicle of [blockout, full]) {
       const { position, normal, radius } = vehicle.anchors.paint
       expect(position.z).toBeCloseTo(1.55, 2)
+      expect(position.distanceTo(new T.Vector3(.97986, .75324, 1.55))).toBeLessThan(.002)
       expect(radius).toBe(.32)
       expect(normal.x).toBeGreaterThan(.9)
       expect(normal.y).toBeGreaterThan(0)
@@ -264,6 +265,31 @@ describe('vehicle geometry and state', () => {
       expect(drop).toBeLessThan(.040)
     }
   })
+
+  it('keeps the outer wing reflection sweep smooth beside the paint anchor', () => {
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      const skin = vehicle.root.getObjectByName('closed body panels and returns')!
+      const ray = new T.Raycaster()
+      const direction = new T.Vector3(-1, 0, 0)
+      for (const y of [.745, .753, .757]) {
+        let previous: T.Vector3 | undefined
+        let sweep = 0
+        for (let step = 0; step <= 32; step++) {
+          ray.set(new T.Vector3(1.1, y, 1.622 - .008 * step), direction)
+          const normal = ray.intersectObject(skin)[0].normal!.normalize()
+          expect(normal.x).toBeGreaterThan(.95)
+          if (previous) {
+            const turn = T.MathUtils.radToDeg(normal.angleTo(previous))
+            expect(turn).toBeLessThan(1.0)
+            sweep += turn
+          }
+          previous = normal
+        }
+        expect(sweep / 32).toBeLessThan(.42)
+      }
+    }
+  }, 30_000)
 
   it('keeps a closed mirror seam and an unobstructed glass face on both sides', () => {
     for (const car of [blockout, full]) {

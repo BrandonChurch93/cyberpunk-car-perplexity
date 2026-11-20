@@ -62,6 +62,15 @@ const cabFront = (v: number) => .194 + .067 * v ** 2.40
 const cowlStep = (v: number) => mix(hoodShut(v), cabFront(v), .62)
 const wingRadius = (s: number) => .004 * smooth(s, .071, .099) * (1 - smooth(s, .295, .331))
 const paintWingDrop = .025
+const fairStep = (s: number, a: number, b: number) => {
+  const t = T.MathUtils.clamp((s - a) / (b - a), 0, 1)
+  return t ** 3 * (10 + t * (-15 + 6 * t))
+}
+const wingDraft = (s: number, drop: number) => {
+  const d = drop / paintWingDrop
+  return .00160 * d ** 3 * Math.exp(.306 * (1 - d ** 2))
+    * fairStep(s, .122, .183) * (1 - fairStep(s, .218, .292))
+}
 const sideDent = curve([[.29, 0], [.36, .020], [.53, .099], [.611, .110], [.680, .065], [.765, 0]])
 const rockerY = curve([[0, .155], [.04, .136], [.25, .136], [.69, .136], [.86, .137], [.90, .153], [.95, .187], [1, .40]])
 const shoulderInset = (s: number) => .008 * smooth(s, .322, .407) * (1 - smooth(s, .660, .743))
@@ -419,9 +428,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const span = (s - before) / (after - before)
         const crown = (rear ? .35 : .32) * section * smooth(span, 0, .10) * (1 - smooth(span, .90, 1))
         const drop = high[1] - p[1]
-        const wingDraft = rear ? 0 : .004 * smooth(drop, .009, .046) * (1 - smooth(drop, .053, .132))
-          * smooth(s, .145, .176) * (1 - smooth(s, .203, .233))
-        return [p[0] + side * (crown + wingDraft), p[1], p[2]]
+        return [p[0] + side * (crown + (rear ? 0 : wingDraft(s, drop))), p[1], p[2]]
       }
       const face: Surface = (u, v) => archPanel(u, mix(.028, 1, v))
       const columns = full ? n * 2 : n + 12
