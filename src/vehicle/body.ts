@@ -91,6 +91,7 @@ const foldAngle = T.MathUtils.degToRad(20)
 const foldSlope = Math.tan(foldAngle)
 const foldHalf = foldRadius * Math.sin(foldAngle / 2)
 const foldTangent = Math.tan(foldAngle / 2)
+const wingVentFront = .1285, wingVentBack = .1497
 const crossOffset = (s: number, y: number) => dimensions.length * (s - diagonalS(y))
 const crossStepRun = .032
 
@@ -173,7 +174,7 @@ function bonnet(s: number, v: number): Point {
   return [x, base + across + crown + wingCrown - cowlDrop - profileFall, zAt(s)]
 }
 
-function foldRows(surface: Surface, traces: ((p: Point) => number)[], broad: number | readonly number[]) {
+function foldRows(surface: Surface, traces: readonly ((p: Point) => number)[], broad: number | readonly number[]) {
   const counts = typeof broad === 'number' ? traces.map(() => broad).concat(broad) : broad
   const rows = counts.reduce((total, count) => total + count, 0) + traces.length * 4
   const cache = new Map<number, number[]>()
@@ -281,11 +282,12 @@ export function fascia(front: boolean, side: number, x: number, y: number, reces
 export function createBody(parent: T.Group, m: Palette, full: boolean): { paintPoint: Point; paintNormal: Point } {
   const n = full ? 64 : 31, k = full ? 26 : 13
   const paint: T.BufferGeometry[] = [], black: T.BufferGeometry[] = []
+  const ventLiners: T.BufferGeometry[] = []
   const cabin: T.BufferGeometry[] = []
   const part = (to: T.BufferGeometry[], surface: Surface, out: Point, length = n, width = k, thickness = .002) => {
     to.push(patch(surface, length, width, out, thickness))
   }
-  const folded = (surface: Surface, out: Point, traces: ((p: Point) => number)[], length = n, thickness = .002,
+  const folded = (surface: Surface, out: Point, traces: readonly ((p: Point) => number)[], length = n, thickness = .002,
     broad: number | readonly number[] = full ? 6 : 3) => {
     const { rows, at } = foldRows(surface, traces, broad)
     paint.push(patch(surface, length, rows, out, thickness, at))
@@ -304,18 +306,79 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const splitEnd = frontEnd(bonnetSplit) - bonnetGap
   const bonnetGrid = curve([[0, 0], [.4, .069], [.68, .154], [.84, .199], [1, splitEnd]])
   const bonnetLengthSteps = full ? 176 : 53
+  const gridU = (s: number) => {
+    let a = 0, b = 1
+    for (let i = 0; i < 24; i++) {
+      const u = (a + b) / 2
+      if (bonnetGrid(u) < s) a = u
+      else b = u
+    }
+    return (a + b) / 2
+  }
+  const mouthStart = gridU(wingVentFront), mouthEnd = gridU(wingVentBack), rollStart = gridU(.071)
+  const upperNoseStart = .114, noseStart = gridU(upperNoseStart)
+  const frontArchStart = sAt(frontWheel.z + frontWheel.arch), archStart = gridU(frontArchStart)
+  const stations = [...Array.from({ length: bonnetLengthSteps + 1 }, (_, i) => i / bonnetLengthSteps),
+    rollStart, noseStart, archStart].sort((a, b) => a - b)
+  const mouthSteps = full ? 36 : 20
+  const frontStations = stations.filter(u => u < mouthStart).concat(mouthStart)
+  const mouthStations = Array.from({ length: mouthSteps + 1 }, (_, i) => gridU(mix(wingVentFront, wingVentBack, i / mouthSteps)))
+  const backStations = [mouthEnd, ...stations.filter(u => u > mouthEnd)]
+  const bonnetStations = [...frontStations, ...mouthStations.slice(1, -1), ...backStations]
+  const sampleGrid = (samples: number[], u: number) => {
+    const p = u * (samples.length - 1), i = Math.min(Math.floor(p), samples.length - 2)
+    return mix(samples[i], samples[i + 1], p - i)
+  }
+  const ventQ = (s: number, v: number) => {
+    const t = T.MathUtils.clamp(s, wingVentFront, wingVentBack)
+    return 1 - (.083 + (1 - 2 * v) * mix(.015, .011, smooth(t, wingVentFront, wingVentBack))) / wingEdge(t).x
+  }
+  const ventIn = (s: number) => ventQ(s, 0), ventOut = (s: number) => ventQ(s, 1)
   for (const side of [1, -1]) {
     const mirror = (p: Point): Point => [p[0] * side, p[1], p[2]]
     const sided = (f: Surface): Surface => (u, v) => mirror(f(u, v))
     const uSide: Point = [side, 0, 0]
     folded(sided((u, v) => {
       const q = bonnetSplit * v
-      return bonnet(bonnetGrid(u) * (frontEnd(q) - bonnetGap) / splitEnd, q)
-    }), [0, 1, 0], hoodTraces, bonnetLengthSteps, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
-    folded(sided((u, v) => {
-      const q = mix(bonnetSplit, 1, v)
-      return bonnet(bonnetGrid(u) + (frontEnd(q) - bonnetGap - splitEnd) * fairStep(u, .81, 1), q)
-    }), [0, 1, 0], hoodTraces.slice(1), bonnetLengthSteps, 0, full ? [6, 15, 4] : [2, 6, 2])
+      return bonnet(bonnetGrid(sampleGrid(bonnetStations, u)) * (frontEnd(q) - bonnetGap) / splitEnd, q)
+    }), [0, 1, 0], hoodTraces, bonnetStations.length - 1, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
+    const outerS = (u: number, q: number) => bonnetGrid(u) + (frontEnd(q) - bonnetGap - splitEnd) * fairStep(u, .81, 1)
+    const outerSkin = (samples: number[], low: (s: number) => number, high: (s: number) => number): Surface => sided((u, v) => {
+      const t = sampleGrid(samples, u), s = bonnetGrid(t)
+      const q = mix(low(s), high(s), v)
+      return bonnet(outerS(t, q), q)
+    })
+    for (const [low, high, traces, rows] of [
+      [() => bonnetSplit, ventIn, hoodTraces.slice(1), full ? [6, 8, 5] : [2, 3, 2]],
+      [ventOut, () => 1, [hoodTraces[2]], full ? [4, 4] : [2, 2]],
+    ] as const) {
+      folded(outerSkin(bonnetStations, low, high), [0, 1, 0], traces,
+        bonnetStations.length - 1, 0, rows)
+    }
+    const capRows = [frontStations, backStations].map((samples, i) => {
+      const span = outerSkin(samples, ventIn, ventOut)
+      const { rows, at } = foldRows(span, [hoodTraces[2]], full ? 5 : 3)
+      paint.push(patch(span, samples.length - 1, rows, [0, 1, 0], 0, at))
+      return Array.from({ length: rows + 1 }, (_, j) => at(1 - i, j))
+    })
+    const vent = (u: number, v: number, bevel: number, depth: number): Point => {
+      const t = .021 * bevel
+      const s = mix(wingVentFront, wingVentBack, mix(t, 1 - t, u))
+      const q = ventQ(s, mix(.088 * bevel, 1 - .088 * bevel, v))
+      const p = bonnet(s, q)
+      return [side * p[0], p[1] - depth, p[2]]
+    }
+    for (const edge of [0, 1]) for (const crosswise of [false, true]) {
+      const lip = (u: number, bevel: number, depth: number) => crosswise
+        ? vent(edge, sampleGrid(capRows[edge], u), bevel, depth)
+        : vent(u, edge, bevel, depth)
+      const strips = crosswise ? capRows[edge].length - 1 : mouthSteps
+      const out: Point = crosswise ? [0, .25, 2 * edge - 1] : [side * (1 - 2 * edge), .25, 0]
+      part(paint, (u, v) => lip(u, v, .0025 * v ** 1.45), out, strips, full ? 5 : 3, 0)
+      part(ventLiners, (u, v) => lip(u, 1 + .19 * v, mix(.0025, .015, v)), out, strips, 3, 0)
+    }
+    part(ventLiners, (u, v) => vent(u, mix(sampleGrid(capRows[0], v), sampleGrid(capRows[1], v), u), 1.19, .015),
+      [0, 1, 0], mouthSteps, capRows[0].length - 1, 0)
     folded(sided((u, v) => {
       const s = mix(frontEnd(mix(.817, 1, v)) + bonnetGap, .599, u * (.43 + .57 * u))
       const q = mix(.817, 1, v)
@@ -337,14 +400,14 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const p = bonnet(mix(.234, .320, u), mix(.783, .912, v))
       return [p[0], p[1] - mix(.0018, .0045, smooth(u, .64, 1)), p[2]]
     }), [0, 1, 0], full ? 24 : 12, full ? 9 : 6, 0)
-    for (const [a, b] of [[.071, frontEnd(1) - bonnetGap], [frontEnd(1) + bonnetGap, .331]]) {
-      part(paint, sided((u, v) => {
-        const s = mix(a, b, u)
-        const w = wingEdge(s)
-        const angle = w.angle * (1 - v)
-        return [w.width - w.radius + w.radius * Math.cos(angle), w.outer + w.radius * Math.sin(angle), zAt(s)]
-      }), [side, 1, 0], b - a > .1 ? n : 14, 5, 0)
+    const wingRoll = (s: number, v: number): Point => {
+      const w = wingEdge(s)
+      const angle = w.angle * (1 - v)
+      return [w.width - w.radius + w.radius * Math.cos(angle), w.outer + w.radius * Math.sin(angle), zAt(s)]
     }
+    const rollStations = bonnetStations.filter(u => u >= rollStart)
+    part(paint, sided((u, v) => wingRoll(outerS(sampleGrid(rollStations, u), 1), v)), [side, 1, 0], rollStations.length - 1, 5, 0)
+    part(paint, sided((u, v) => wingRoll(mix(frontEnd(1) + bonnetGap, .331, u), v)), [side, 1, 0], 14, 5, 0)
     part(black, (u, v) => {
       const s = mix(.276, .331, u)
       const p = bonnet(s, .813)
@@ -476,12 +539,14 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const topRows = Array.from({ length: rows + 1 }, (_, j) => (face(0, at(0, j))[1] - floorY) / height)
         const bottomRows = Array.from({ length: 5 }, (_, j) => topRows[0] * j / 5)
         const stations = [...new Set([...bottomRows, ...topRows])]
+        const run = bonnetStations.filter(u => u >= noseStart && u <= archStart)
         paint.push(patch((u, v) => {
-          const s = mix(.141, before, u)
+          const t = (bonnetGrid(sampleGrid(run, u)) - upperNoseStart) / (before - upperNoseStart)
+          const s = mix(mix(.141, upperNoseStart, smooth(v, .825, 1)), before, t)
           const y = mix(floorY, shoulder(s), v)
           const p = sidePoint(s, y, side)
           return [p[0] + side * wingDraft(s, shoulder(s) - y), y, p[2]]
-        }, n, stations.length - 1, uSide, .002, (_, j) => stations[j]))
+        }, run.length - 1, stations.length - 1, uSide, .002, (_, j) => stations[j]))
       }
       for (const [start, end] of [[theta0, 0], [Math.PI, theta1]]) part(paint, (u, v) => {
         const p = lower(mix(start, end, u))
@@ -544,10 +609,6 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       return cutLeading((a + b) / 2)
     }
     const cap = (s: number, v: number): Point => sillPoint(s, mix(rockerY(s), shoulder(s), v))
-    part(black, (u, v) => {
-      const s = mix(.130, .149, u)
-      return [side * (plan(s) - .083), mix(shoulder(s) - .086, shoulder(s) + .008, v), zAt(s)]
-    }, uSide, 8, 5, .006)
     part(black, (u, v) => {
       const q = mix(.003, .996, u)
       const s = cutLeading(q) + mix(-.003, .007, v)
@@ -781,6 +842,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const nose = zAt(0)
   for (let i = 0; i < shellPositions.count; i++) if (shellPositions.getZ(i) > nose) shellPositions.setZ(i, nose)
   const skin = add(parent, 'closed body panels and returns', paintedShell, m.paint)
+  add(parent, 'recessed wing vent cavities', joined(ventLiners), m.matte)
   add(parent, 'stowage, seals and wheelhouse liners', joined(black), m.matte)
   addMirrors(parent, m, full, dimensions.mirrorWidth * .5, edgeGlass(.353, 0), zAt)
   if (cabin.length) add(parent, 'covered cockpit upholstery', joined(cabin), m.cabin)

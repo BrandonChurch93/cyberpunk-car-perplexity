@@ -179,7 +179,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const outerX = curve([[0, .835], [.25, .904], [.51, .872], [.79, .906], [1, .929]])
     const fPanel = (u: number, v: number): Point => {
       const x = mix(outerX(v), frontEdge(v), u)
-      return f(x, mix(outerY(v), mix(chin(x), noseTop(x), v), u), mix(-.007, .011, u) - .005 * Math.sin(Math.PI * u))
+      const y = mix(outerY(v), mix(chin(x), noseTop(x), v), u)
+      const tuck = smooth(x, .912, .927) * smooth(y, .655, .711)
+      return f(x - .006 * tuck, y - .024 * tuck, mix(-.007, .011, u) - .005 * Math.sin(Math.PI * u))
     }
     frontPaint.push(patch(fPanel, 22, 28, outFront, .008))
     black.push(patch((u, v) => {

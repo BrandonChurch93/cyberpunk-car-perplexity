@@ -285,6 +285,42 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('backs each wing vent with a recessed cavity and keeps paint around its perimeter', () => {
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      const ray = new T.Raycaster(new T.Vector3(), new T.Vector3(0, -1, 0))
+      const cast = (x: number, z: number) => {
+        ray.ray.origin.set(x, 2, z)
+        return ray.intersectObject(vehicle.root)[0]
+      }
+      for (const side of [-1, 1]) {
+        for (const [x, z] of [[.832, 1.830], [.850, 1.790], [.867, 1.745]]) {
+          const cavity = cast(side * x, z)
+          expect(cavity.object.name).toBe('recessed wing vent cavities')
+          const lips = [-.025, .025].map(offset => cast(side * (x + offset), z))
+          for (const lip of lips) expect(lip.object.name).toBe('closed body panels and returns')
+          const depth = (lips[0].point.y + lips[1].point.y) / 2 - cavity.point.y
+          expect(depth).toBeGreaterThan(.010)
+          expect(depth).toBeLessThan(.020)
+        }
+        for (const [x, z] of [[.832, 1.845], [.867, 1.726]]) {
+          expect(cast(side * x, z).object.name).toBe('closed body panels and returns')
+        }
+      }
+    }
+  })
+
+  it('keeps the upper nose return behind the wing in the last master paint frame', () => {
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      const { position } = cameraAt(448 / config.film.fps, config.formats.master, vehicle.anchors)
+      for (const p of [[.9248, .7156, 1.8237], [.9233, .7131, 1.8228], [.9274, .7144, 1.8184], [.9339, .7179, 1.803]]) {
+        const ray = new T.Raycaster(position, new T.Vector3().fromArray(p).sub(position).normalize())
+        expect(ray.intersectObject(vehicle.root)[0]?.object.name).toBe('closed body panels and returns')
+      }
+    }
+  })
+
   it('keeps the outer wing reflection sweep smooth beside the paint anchor', () => {
     for (const vehicle of [blockout, full]) {
       vehicle.root.updateMatrixWorld(true)
