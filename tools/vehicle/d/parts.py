@@ -52,7 +52,7 @@ def tire_profile(w):
     for ax in np.linspace(hw - 0.036, -(hw - 0.036), 18)[1:-1]:
         pts.append((R, ax))
     tail = [(r, -a) for r, a in reversed(pts)]
-    return [(rim, hw * 0.95)] + pts + tail + [(rim, -hw * 0.95)]
+    return [(rim, hw * 0.95)] + pts + tail + [(rim, -hw * 0.95), (rim - 0.003, -hw * 0.95), (rim - 0.003, hw * 0.95), (rim, hw * 0.95)]
 
 
 def _occ_obj(name, V, T, N, mat, parent=None):

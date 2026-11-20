@@ -176,9 +176,13 @@ def build(level):
         if ob.type == 'MESH':
             apply(ob)
             box_uv(ob)
-            for m in ob.data.materials:
+            for i, m in enumerate(ob.data.materials):
                 if m and m.name in RENAME:
-                    m.name = RENAME[m.name]
+                    t = bpy.data.materials.get(RENAME[m.name])
+                    if t is None:
+                        m.name = RENAME[m.name]
+                    else:
+                        ob.data.materials[i] = t
             if 'part' not in ob.keys():
                 ob['part'] = ob.name
     os.makedirs(OUT, exist_ok=True)

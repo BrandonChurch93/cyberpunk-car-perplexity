@@ -1,6 +1,9 @@
 """B-rep surfacing with OpenCascade: network edges become B-spline edges, facets become plate filled faces
 (BRepOffsetAPI_MakeFilling, C0 at creases, G1 across soft edges), the faces are sewn into one shell and
 tessellated. Output meshes are in the film's coordinates, left half mirrored about X = 0."""
+import json
+import math
+import os
 import numpy as np
 from OCP.gp import gp_Pnt
 from OCP.collections import Array1_gp_Pnt
@@ -19,9 +22,14 @@ from OCP.TopoDS import TopoDS
 from OCP.TopLoc import TopLoc_Location
 from OCP.ShapeAnalysis import ShapeAnalysis_Surface
 from kernel_np import spline
-import os
 G1 = bool(os.environ.get('OCC_G1'))
 MVS = os.environ.get('OCC_MVS', '1') == '1'
+POLY = os.environ.get('OCC_POLY', '0') == '1'
+SKIN = os.environ.get('OCC_SKIN', 'poly')
+BASE_DEG = int(os.environ.get('OCC_BASE_DEG', '2'))
+RELAX = os.environ.get('OCC_RELAX', '1') == '1'
+POLY_MOVE = os.environ.get('OCC_POLY_MOVE', '0') == '1'
+POLY_SKIP = ()
 VERBOSE = bool(os.environ.get('OCC_VERBOSE'))
 
 
@@ -89,6 +97,39 @@ def _cut(face, hole_edges):
     return TopoDS.Face(fx.Face())
 
 
+_ANISO = None
+
+
+def _aniso(name):
+    global _ANISO
+    if _ANISO is None:
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'aniso.json')
+        _ANISO = json.load(open(p)) if os.path.exists(p) and os.environ.get('ANISO', '1') == '1' else {}
+    if name.endswith('.R') and name[:-2] in _ANISO:
+        v = _ANISO[name[:-2]]
+        return None if v is None else (math.radians((180 - v[0]) % 180), v[1])
+    v = _ANISO.get(name)
+    return None if v is None else (math.radians(v[0]), v[1])
+
+
+def _poly_face(f, p, es, samples):
+    import fit
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeWire, BRepBuilderAPI_MakeFace
+    from OCP.ShapeFix import ShapeFix_Face
+    loop = np.vstack([samples[e] for e in f['loop']])
+    surf = fit.occ_surface(p, loop)
+    w = BRepBuilderAPI_MakeWire()
+    for e in es:
+        w.Add(e)
+    fx = ShapeFix_Face(BRepBuilderAPI_MakeFace(surf, w.Wire(), True).Face())
+    fx.Perform()
+    fx.FixOrientation()
+    face = TopoDS.Face(fx.Face())
+    P = np.vstack([loop] + [samples[e] for h in f['holes'] for e in h] + [samples[e] for e in f.get('inner', ())])
+    err = float(np.abs(p.g(P)[0]).max())
+    return face, err, 0.0
+
+
 def _pressure(f, es, samples, edges):
     import mvs
     from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeWire, BRepBuilderAPI_MakeFace
@@ -99,10 +140,37 @@ def _pressure(f, es, samples, edges):
     inner = [samples[e] for e in f.get('inner', ())]
     cen = [p for p in inner if np.abs(p[:, 0]).max() < 1e-6]
     oth = [p for p in inner if np.abs(p[:, 0]).max() >= 1e-6]
-    R = mvs.solve(loop, holes, np.vstack(cen) if cen else None, oth, f['crown'], f['hint'], sym=bool(cen))
+    if SKIN == 'plate':
+        R = mvs.plate(loop, holes, np.vstack(cen) if cen else None, oth, f['crown'], f['hint'], sym=bool(cen))
+        if R is None:
+            return None
+        surf = mvs.occ_surface_fit(R, np.vstack([loop] + holes + oth + ([np.vstack(cen)] if cen else [])), sym=bool(cen))
+        return _pressure_face(f, es, surf, R, loop, holes, oth, cen)
+    an = _aniso(f['name'])
+    base = None
+    if SKIN == 'poly':
+        import fit
+        P = np.vstack([loop] + holes + inner)
+        r = fit.fit(P, np.ones(len(P)), bool(cen), f['hint'], degrees=(BASE_DEG,))
+        if r is not None:
+            base, an = r[2], None
+    R = None
+    for cells in (220, 340):
+        R = mvs.solve(loop, holes, np.vstack(cen) if cen else None, oth, f['crown'], f['hint'], sym=bool(cen), n_cells=cells, aniso=an, base=base)
+        if R is None or R['err'] <= 1.5e-4:
+            break
     if R is None:
         return None
-    surf = mvs.occ_surface(R)
+    if base is not None:
+        surf = mvs.occ_surface_fit(R, np.vstack([loop] + holes + oth + ([np.vstack(cen)] if cen else [])), sym=bool(cen))
+    else:
+        surf = mvs.occ_surface(R)
+    return _pressure_face(f, es, surf, R, loop, holes, oth, cen)
+
+
+def _pressure_face(f, es, surf, R, loop, holes, oth, cen):
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeWire, BRepBuilderAPI_MakeFace
+    from OCP.ShapeFix import ShapeFix_Face
     w = BRepBuilderAPI_MakeWire()
     for e in es:
         w.Add(e)
@@ -199,12 +267,29 @@ def build(half, deflection=float(os.environ.get("OCC_DEFL", 0.0003)), angle=floa
             used.update(h)
     edges, samples = {}, {}
     for name in used:
+        samples[name] = spline([net.resolve(c) for c in net.edges[name]['ctrl']], spacing=0.002)
+    polys = {}
+    if RELAX:
+        import fit
+        samples = fit.relax(net, samples, deg=BASE_DEG, dmax=float(os.environ.get('RELAX_MAX', 0.008)), log=log)
+    if POLY_MOVE:
+        import fit
+        samples, vpos, polys, rep, shift = fit.move(net, samples, skip=POLY_SKIP)
+        verts = {n: BRepBuilderAPI_MakeVertex(gp_Pnt(*map(float, vpos.get(n, p)))).Vertex() for n, p in net.points.items()}
+        kept = [n for n, r in rep.items() if r == 'kept']
+        if kept:
+            log('poly kept as boundary filled: ' + ', '.join(kept))
+        big = sorted(((v[0], e) for e, v in shift.items() if v[0] > 3e-3), reverse=True)
+        if big:
+            log('edges moved over 3 mm: ' + ', '.join(f'{e} {d * 1000:.1f}' for d, e in big[:12]))
+        if VERBOSE:
+            for n, r in rep.items():
+                print('poly', n, r, flush=True)
+    for name in used:
         e = net.edges[name]
-        ctrl = [net.resolve(c) for c in e['ctrl']]
-        S = spline(ctrl, spacing=0.004)
-        c = _curve(S)
+        S = samples[name]
+        c = _curve(np.vstack([S[:-1:2], S[-1:]]) if len(S) > 8 else S)
         edges[name] = BRepBuilderAPI_MakeEdge(c, verts[e['ctrl'][0]], verts[e['ctrl'][-1]]).Edge()
-        samples[name] = spline(ctrl, spacing=0.002)
     faces = {}
     owner = {}
     chosen = {}
@@ -220,17 +305,25 @@ def build(half, deflection=float(os.environ.get("OCC_DEFL", 0.0003)), angle=floa
         free = [e for h in hs for e in h] if f.get('through', True) else []
         free += [edges[en] for en in f.get('inner', ())]
         pf = None
-        if MVS and not f.get('plate'):
+        if f['name'] in polys:
+            try:
+                pf = _poly_face(f, polys[f['name']], es, samples)
+            except Exception as ex:
+                log(f'poly {f["name"]}: {ex}')
+                pf = None
+        if pf is None and MVS and not f.get('plate'):
             try:
                 pf = _pressure(f, es, samples, edges)
             except Exception as ex:
                 log(f'pressure {f["name"]}: {ex}')
                 pf = None
-            if pf is not None and pf[1] > 2e-4:
+            if pf is not None and pf[1] > (6e-4 if SKIN in ('plate', 'poly') else 2e-4):
                 log(f'pressure {f["name"]}: boundary error {pf[1] * 1000:.2f} mm, plate used')
                 pf = None
         if pf is not None:
             face, err, cerr = pf
+            if f['name'] in polys and err > 5e-4:
+                log(f'poly {f["name"]}: edges off the surface by {err * 1000:.2f} mm')
             if cerr > 3e-3:
                 log(f'pressure {f["name"]}: centerline off by {cerr * 1000:.1f} mm')
             if VERBOSE:
