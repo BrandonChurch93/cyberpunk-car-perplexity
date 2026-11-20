@@ -55,6 +55,7 @@ const hoodShut = (v: number) => .166 + .089 * v ** 2.10
 const cabFront = (v: number) => .194 + .067 * v ** 2.40
 const cowlStep = (v: number) => mix(hoodShut(v), cabFront(v), .62)
 const wingRadius = (s: number) => .004 * smooth(s, .071, .099) * (1 - smooth(s, .295, .331))
+const paintWingDrop = .025
 const sideDent = curve([[.29, 0], [.36, .020], [.53, .099], [.611, .110], [.680, .065], [.765, 0]])
 const rockerY = curve([[0, .155], [.04, .136], [.25, .136], [.69, .136], [.86, .137], [.90, .153], [.95, .187], [1, .40]])
 const shoulderInset = (s: number) => .008 * smooth(s, .322, .407) * (1 - smooth(s, .660, .743))
@@ -266,6 +267,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const hoodTraces = [hoodInner, hoodOuter, lampFold].map(lateralTrace)
   const sideTrace = (line: (s: number) => number) => (p: Point) => p[1] - line(sAt(p[2]))
   const beltLine = sideTrace(doorBelt), heelLine = sideTrace(heelFold), haunchLine = sideTrace(haunchFold)
+  const wingDraftLine = sideTrace((s) => shoulder(s) - paintWingDrop)
   const crossLine = (p: Point) => crossOffset(sAt(p[2]), p[1])
   const gap = .00055
   const frontEnd = (v: number) => v <= .818 ? hoodShut(v / .818) : mix(hoodShut(1), .295, (v - .818) / .182)
@@ -391,11 +393,14 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const section = hinge(trace(p), foldHalf) - mix(hinge(trace(a), foldHalf), hinge(trace(high), foldHalf), v)
         const span = (s - before) / (after - before)
         const crown = (rear ? .35 : .32) * section * smooth(span, 0, .10) * (1 - smooth(span, .90, 1))
-        return [p[0] + side * crown, p[1], p[2]]
+        const drop = high[1] - p[1]
+        const wingDraft = rear ? 0 : .004 * smooth(drop, .009, .046) * (1 - smooth(drop, .053, .132))
+          * smooth(s, .145, .176) * (1 - smooth(s, .203, .233))
+        return [p[0] + side * (crown + wingDraft), p[1], p[2]]
       }
       const face: Surface = (u, v) => archPanel(u, mix(.028, 1, v))
       const columns = full ? n * 2 : n + 12
-      folded(face, uSide, rear ? [beltLine, haunchLine, trace] : [beltLine, trace], columns)
+      folded(face, uSide, rear ? [beltLine, haunchLine, trace] : [beltLine, trace, wingDraftLine], columns)
       for (const [start, end] of [[theta0, 0], [Math.PI, theta1]]) part(paint, (u, v) => {
         const p = lower(mix(start, end, u))
         return sidePoint(sAt(p[2]), mix(floorY, p[1], v), side)
@@ -667,13 +672,10 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   add(parent, 'stowage, seals and wheelhouse liners', joined(black), m.matte)
   addMirrors(parent, m, full, dimensions.mirrorWidth * .5, edgeGlass(.353, 0), zAt)
   if (cabin.length) add(parent, 'covered cockpit upholstery', joined(cabin), m.cabin)
-  const s = .236, v = .883
-  const paintPoint = bonnet(s, v)
-  const paintNormal = new T.Vector3(...bonnet(s, v + .001)).sub(new T.Vector3(...bonnet(s, v - .001)))
-    .cross(new T.Vector3(...bonnet(s + .001, v)).sub(new T.Vector3(...bonnet(s - .001, v)))).normalize().toArray()
-  const normal = vec(paintNormal)
-  const hit = new T.Raycaster(vec(paintPoint).addScaledVector(normal, .03), normal.clone().negate(), 0, .060)
+  const s = sAt(1.55)
+  const w = wingEdge(s), y = w.y - paintWingDrop
+  const hit = new T.Raycaster(new T.Vector3(w.width + .03, y, zAt(s)), new T.Vector3(-1, 0, 0), 0, .060)
     .intersectObject(skin, false)[0]
-  if (hit) return { paintPoint: hit.point.toArray(), paintNormal: hit.normal?.normalize().toArray() ?? paintNormal }
-  return { paintPoint, paintNormal }
+  if (!hit?.normal) throw new Error('Paint anchor missed the front wing skin')
+  return { paintPoint: hit.point.toArray(), paintNormal: hit.normal.normalize().toArray() }
 }

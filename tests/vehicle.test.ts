@@ -238,6 +238,22 @@ describe('vehicle geometry and state', () => {
     }
   }, 30_000)
 
+  it('places the paint anchor on the upward-facing outer wing below its crest', () => {
+    for (const vehicle of [blockout, full]) {
+      const { position, normal, radius } = vehicle.anchors.paint
+      expect(position.z).toBeCloseTo(1.55, 2)
+      expect(radius).toBe(.32)
+      expect(normal.x).toBeGreaterThan(.9)
+      expect(normal.y).toBeGreaterThan(0)
+      const { x, y, z } = position
+      const overhead = new T.Raycaster(new T.Vector3(x - .006, 2, z), new T.Vector3(0, -1, 0))
+      vehicle.root.updateMatrixWorld(true)
+      const drop = overhead.intersectObject(vehicle.root)[0].point.y - y
+      expect(drop).toBeGreaterThan(.020)
+      expect(drop).toBeLessThan(.040)
+    }
+  })
+
   it('keeps a closed mirror seam and an unobstructed glass face on both sides', () => {
     for (const car of [blockout, full]) {
       const mirrors = car.root.getObjectByName('door mirrors')!
