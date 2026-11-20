@@ -57,7 +57,7 @@ describe('full roof world', () => {
     const raking = world.lights.find(l => l.id === 'raking billboard')!
     const originalBillboard = world.root.getObjectByName('billboard')!
     expect(originalBillboard.position.toArray()).toEqual([4, 11.15, -46.77])
-    expect(raking.intensity).toBeGreaterThan(emitter.intensity * 4)
+    expect(raking.intensity).toBeGreaterThan(emitter.intensity * 3)
     const start = radiance(0)
     const end = radiance(durationSeconds)
     expect(end.position).toBeCloseTo(start.position, 12)
