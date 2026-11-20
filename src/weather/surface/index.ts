@@ -6,6 +6,7 @@ import { cameraAt } from '../../director/shots'
 import { beatById, events, stateAt } from '../../director/timeline'
 import type { WeatherDeps } from '../contract'
 import { applyBeads, type BeadClass, trackClear, trackPoints } from './beads'
+import { CellDrops } from './cells'
 import { DropGeometry, geometryAngle, geometryRange } from './drop-geometry'
 import { applyPorous, type Uniforms } from './porous'
 import { heroBasin, SyntheticRelief, type Basin } from './relief'
@@ -202,6 +203,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
 
   const drops = new DropGeometry(vehicleMeshes(vehicle.root, beadMaterials), uniforms)
   root.add(drops.group)
+  const cells = new CellDrops(vehicle, drops.runner, drops.plain)
   // Each format frames its own macro and wheel inserts, so each places its own rivulet and arch drips for its lens.
   const runnersByFormat = new Map<string, Runners>()
   let runners: Runners | null = null
@@ -235,6 +237,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       const runners = runnersFor(frame.format)
       // Joined late, as the drop chunks are, so the shade stage leaves water out of its screen space occlusion.
       if (!runners.group.parent) root.add(runners.group)
+      if (!cells.group.parent) root.add(cells.group)
       frameStart = t - shutter / 2
       const cam = frame.camera
       forward.set(0, 0, -1).applyQuaternion(cam.quaternion)
@@ -243,6 +246,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       if (flat.lengthSq() > 1e-6) flat.normalize()
       const center = new THREE.Vector2(cam.position.x, cam.position.z).addScaledVector(flat, ahead)
       runners.beginFrame(cam, t)
+      cells.beginFrame(cam.position)
       const extra: ExtraImpact[] = runners.impacts(frameStart - 0.6, frameStart + shutter)
       ripples.update(frameStart, frameStart + shutter, center, extra)
       drops.update(cam, frame.format.width, frame.format.width / frame.format.height, (p, r) => runners.sweptDistance(p, t) < trackClear + r)
