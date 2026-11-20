@@ -10,6 +10,9 @@ export type Uniforms = Record<string, THREE.IUniform>
  * aggregate keeps 5 to 20 mm patches rougher. Board 02: standing water is a level near-mirror with F0 0.02 and roughness
  * 0.02 to 0.05, a 2 to 5 mm meniscus, a darker damp halo outside it, and depth that hides the aggregate over the first 3 mm.
  */
+/** The rain sheet on the deck: mean depth over the slab's resting level and the spread of its broad and small dry crowns. */
+const sheet = { baseMm: 11.5, broadMm: 16, patchMm: 5 }
+
 const porousGlsl = /* glsl */ `
 uniform float surfDiag;
 uniform float surfRain;
@@ -26,13 +29,23 @@ float surfFineRelief(vec2 p, float detail) {
   return h;
 }
 
+/**
+ * Depth of rain held on the deck above its relief, in millimeters. Heavy rain floods the shallow fall of a roof deck into wide
+ * sheets, broken by drier crowns half a meter to two meters across where the slab sits high.
+ */
+float surfSheetLift(vec2 p) {
+  float broad = surfNoise2(p / 1.3 + 17.0, 31u) - 0.5;
+  float patchy = surfNoise2(p / 0.42 + 5.0, 32u) - 0.5;
+  return ${sheet.baseMm.toFixed(2)} + ${sheet.broadMm.toFixed(2)} * broad + ${sheet.patchMm.toFixed(2)} * patchy;
+}
+
 /** Height of the surface against the water line in millimeters. Negative is under water. */
 float surfDeckHeight(vec2 p, float detail) {
   float h = 3.0;
   #ifdef SURF_DECK
     vec2 uv = (p - surfReliefBounds.xy) / surfReliefBounds.zw;
     if (all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0)))) {
-      h = texture2D(surfRelief, uv).r * surfReliefScale + surfReliefOffset;
+      h = texture2D(surfRelief, uv).r * surfReliefScale + surfReliefOffset - surfSheetLift(p);
     }
   #endif
   return h + surfFineRelief(p, detail);
