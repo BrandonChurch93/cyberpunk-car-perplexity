@@ -182,6 +182,25 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('closes the upper lamp bezel without exposing the wheelhouse or cockpit', () => {
+    const timeSeconds = config.film.heroFrameSeconds
+    const { lampStage, engine, vibration } = stateAt(timeSeconds)
+    const ray = new T.Raycaster()
+    for (const vehicle of [blockout, full]) {
+      vehicle.update({ timeSeconds, lampStage, engine, vibration })
+      vehicle.root.updateMatrixWorld(true)
+      for (const format of [config.formats.master, config.formats.vertical]) {
+        const eye = cameraAt(timeSeconds, format, vehicle.anchors, timeSeconds).position
+        for (const point of [[.8731, .6783, 1.9343], [.8838, .6829, 1.9158], [.8915, .6781, 1.9094], [.8638, .6461, 1.9889]]) {
+          ray.set(eye, new T.Vector3().fromArray(point).sub(eye).normalize())
+          const hit = ray.intersectObject(vehicle.root, true)[0]
+          expect(hit, `${format.id} ${point.join(',')}`).toBeDefined()
+          expect(hit.point.z).toBeGreaterThan(point[2] - .05)
+        }
+      }
+    }
+  })
+
   it('keeps the front cheek return fair without hiding the lower running guide', () => {
     for (const vehicle of [blockout, full]) {
       vehicle.root.updateMatrixWorld(true)
