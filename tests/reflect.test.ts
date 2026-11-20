@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { createServer } from 'vite'
 import { describe, expect, it } from 'vitest'
 import { config } from '../src/config'
+import { LightRig } from '../src/core/lights'
 import { createReflections, quality } from '../src/core/reflect'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
 import { patchesOf } from '../src/materials/patch'
@@ -83,6 +84,12 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   const scene = new THREE.Scene()
   const world = new THREE.Group()
   const body = new THREE.Group()
+  const emitter = new THREE.Object3D()
+  emitter.position.set(2, 6, -31)
+  const rig = new LightRig([{
+    id: 'magenta violet tower screen', kind: 'area', object: emitter, color: new THREE.Color(1, 0, 1),
+    intensity: 2, range: 60, size: [4, 6], shadow: false, beam: false, level: () => 1,
+  }], 32)
   const dark = new THREE.MeshStandardMaterial()
   const zinc = new THREE.MeshStandardMaterial()
   const floor = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial())
@@ -98,7 +105,7 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   slot.name = 'recessed slot bed'
   grate.add(rim, slot)
   world.add(floor, stripe, rail, grate)
-  scene.add(world, body)
+  scene.add(world, body, emitter, rig.group)
   const visibility: boolean[][] = []
   const renderer = {
     coordinateSystem: THREE.WebGLCoordinateSystem,
@@ -111,13 +118,14 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
     render: () => visibility.push([floor.visible, stripe.visible, rim.visible, slot.visible, rail.visible]),
   } as unknown as THREE.WebGLRenderer
   const part = createReflections({
-    renderer, scene,
+    renderer, scene, rig,
     vehicle: { root: body, lamps: [] },
     world: { root: world, deck: { material: floor.material, meshes: [floor] }, reflectionBox: new THREE.Box3() },
   })
   const fmt = config.formats.preview
   const eye = camera()
   const state = { position: eye.position, quaternion: eye.quaternion, focalMm: 35, sensorWidthMm: 36, focusDistance: 4, fNumber: 2, near: .1, far: 50 }
+  rig.update(0, [.75, .25])
   part.beforeSample!({
     camera: eye, state, timeSeconds: 0,
     sample: {
@@ -126,6 +134,7 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
     },
   })
   expect(visibility).toEqual([[false, false, false, false, true]])
+  expect(part.planar.reflectBillboard.value.toArray()).toEqual([3, 4.5, -31, 1])
   expect([floor.visible, stripe.visible, rim.visible, slot.visible, rail.visible]).toEqual([true, true, true, true, true])
   expect(patchesOf(floor.material)).toEqual(['reflect-box', 'reflect-planar'])
   expect(patchesOf(stripe.material)).toEqual(['reflect-box', 'reflect-planar-deck-detail'])
@@ -137,6 +146,7 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
 function captureLamp(three: typeof THREE, reflections: typeof createReflections, fmt: typeof config.formats.preview) {
   const renderer = new three.WebGLRenderer()
   const scene = new three.Scene()
+  scene.environmentIntensity = .4
   const root = new three.Group()
   const sprung = new three.Group()
   const body = new three.Mesh(new three.PlaneGeometry(2, 2), new three.MeshBasicMaterial({
@@ -212,14 +222,18 @@ function captureLamp(three: typeof THREE, reflections: typeof createReflections,
   const side = new three.Vector3(1, 0, 0)
   const doorCity = read(door.material.envMap, side)
   const worldCity = read(scene.environment, side)
+  const splitIntensity = [door.material.envMapIntensity, deck.envMapIntensity]
   test(0, 0, 0)
+  const fullIntensity = [door.material.envMapIntensity, deck.envMapIntensity]
+  const usesFullCapture = door.material.envMap === scene.environment && deck.envMap === null
+  part.setDiagnostic!('normals')
   const reset = door.material.envMap === null && door.material.envMapIntensity === .65 && deck.envMap === null
   let captureOnly = false
   scene.traverse((node) => { if (node.name === 'cube lamp emitters') captureOnly = !node.visible })
   const bodyRestored = root.visible && body.visible && source.visible && source.material.side === three.FrontSide
   output.dispose()
   renderer.dispose()
-  return { off, dim, bright, tail, doorTail, deckTail, doorCity, worldCity, reset, captureOnly, bodyRestored }
+  return { off, dim, bright, tail, doorTail, deckTail, doorCity, worldCity, splitIntensity, fullIntensity, usesFullCapture, reset, captureOnly, bodyRestored }
 }
 
 it('captures the moving lamp at its current output but keeps the car body out of the cube', async () => {
@@ -256,14 +270,16 @@ it('captures the moving lamp at its current output but keeps the car body out of
       expect(errors).toEqual([])
       expect(result.off).toEqual([0, 0, 0])
       expect(result.dim[0]).toBeGreaterThan(50)
-    expect(result.bright[0]).toBeGreaterThan(result.dim[0] * 2)
-    expect(result.bright.slice(1)).toEqual([0, 0])
-    expect(result.tail[0]).toBeGreaterThan(150)
-    expect(result.doorTail).toEqual([0, 0, 0])
-    expect(result.deckTail).toEqual([0, 0, 0])
-    expect(result.doorCity[2]).toBeGreaterThan(50)
-    expect(result.worldCity).toEqual(result.doorCity)
-    expect(result.reset).toBe(true)
+      expect(result.bright[0]).toBeGreaterThan(result.dim[0] * 2)
+      expect(result.bright.slice(1)).toEqual([0, 0])
+      expect(result.tail[0]).toBeGreaterThan(150)
+      expect(result.doorTail).toEqual([0, 0, 0])
+      expect(result.deckTail).toEqual([0, 0, 0])
+      expect(result.doorCity[2]).toBeGreaterThan(50)
+      expect(result.worldCity).toEqual(result.doorCity)
+      expect(result.splitIntensity).toEqual([.65, .4])
+      expect(result.fullIntensity).toEqual([.65, 1])
+      expect(result.usesFullCapture && result.reset).toBe(true)
       expect(result.captureOnly && result.bodyRestored).toBe(true)
     } finally {
       await browser.close()

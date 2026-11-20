@@ -7,14 +7,18 @@ import { streamSeed } from '../random'
 export const atmosphere = {
   uniformExtinction: 0.0045,
   airHeight: 16.0,
+  localAirRange: 44.0,
   deckExtinction: 0.052,
   layerHeight: 0.27,
-  cityExtinction: 0.009,
-  cityLayerHeight: 13.0,
+  cityExtinction: 0.00215,
+  cityLayerHeight: 115.0,
+  outerCityStart: 630.0,
+  outerCityExtinction: 0.00125,
+  distantHaloStart: 80.0,
   airlight: [0.028, 0.028, 0.033],
-  cityAirlight: [0.095, 0.074, 0.101],
-  cityUnderlight: [0.161, 0.092, 0.147],
-  cloudUnderlight: [0.305, 0.086, 0.142],
+  cityAirlight: [0.112, 0.087, 0.126],
+  cityUnderlight: [0.174, 0.103, 0.157],
+  cloudUnderlight: [0.243, 0.073, 0.136],
   cityUnderlightAxis: [-0.55, -0.84],
   anisotropy: 0.58,
   scatterFraction: 0.56,
@@ -23,7 +27,7 @@ export const atmosphere = {
   projectorWingFraction: 0.07,
   projectorScatterFraction: 0.24,
   projectorBodyAnisotropy: 0.38,
-  projectorBodyScatterFraction: 0.28,
+  projectorBodyScatterFraction: 0.15,
   projectorBodyDistance: [0.46, 1.38],
   projectorBodyClearance: [1.0, 2.3],
   projectorFocus: [1.28, 2.1],
@@ -50,10 +54,14 @@ ${filmLightsShadowGlsl}
 
 const float airDensity = ${atmosphere.uniformExtinction};
 const float airHeight = ${atmosphere.airHeight.toFixed(1)};
+const float localAirRange = ${atmosphere.localAirRange.toFixed(1)};
 const float deckDensity = ${atmosphere.deckExtinction};
 const float layerHeight = ${atmosphere.layerHeight};
 const float cityDensity = ${atmosphere.cityExtinction};
 const float cityLayerHeight = ${atmosphere.cityLayerHeight.toFixed(1)};
+const float outerCityStart = ${atmosphere.outerCityStart.toFixed(1)};
+const float outerCityDensity = ${atmosphere.outerCityExtinction};
+const float distantHaloStart = ${atmosphere.distantHaloStart.toFixed(1)};
 const vec3 nearAirlight = vec3(${atmosphere.airlight.join(', ')});
 const vec3 cityAirlight = vec3(${atmosphere.cityAirlight.join(', ')});
 const vec3 cityUnderlight = vec3(${atmosphere.cityUnderlight.join(', ')});
@@ -79,17 +87,17 @@ float bankNoise(vec2 p) {
 vec3 cityGlow(vec3 ray) {
   vec2 axis = normalize(cityUnderlightAxis);
   float side = smoothstep(0.15, 0.88, dot(ray.xz, axis));
-  float elevation = mix(0.25, 1.0, smoothstep(0.03, 0.28, ray.y));
+  float elevation = 1.0 - 0.65 * smoothstep(0.06, 0.37, ray.y);
   vec3 glow = mix(cityAirlight, cityUnderlight, side * elevation);
-  if (ray.y > 0.035 && side > 0.0) {
+  if (ray.y > -0.045 && side > 0.0) {
     float across = dot(ray.xz, vec2(-cloudLightAxis.y, cloudLightAxis.x));
-    vec2 p = vec2(across * 19.2, ray.y * 29.8);
+    vec2 p = vec2(across * 17.1, ray.y * 22.6);
     float coarse = bankNoise(p * 0.73);
     float rolls = bankNoise(p * 2.43 + vec2(coarse * 1.6, -coarse));
     float detail = bankNoise(p * 5.8 + rolls);
     float cover = smoothstep(0.32, 0.70, 0.49 * coarse + 0.35 * rolls + 0.16 * detail);
-    vec2 band = vec2((across + 0.045) / 0.27, (ray.y - 0.142 - (rolls - 0.5) * 0.066) / 0.084);
-    glow += cloudUnderlight * side * cover * exp(-dot(band, band)) * smoothstep(0.035, 0.10, ray.y);
+    vec2 band = vec2((across + 0.04) / 0.32, (ray.y - 0.098 - (rolls - 0.5) * 0.052) / 0.121);
+    glow += cloudUnderlight * side * cover * exp(-dot(band, band)) * smoothstep(-0.045, 0.055, ray.y);
   }
   return glow;
 }
@@ -169,14 +177,18 @@ float heightOpticalDepth(float y, float dy, float distance, float density, float
 }
 
 float cityOpticalDepth(vec3 origin, vec3 ray, float start, float end) {
-  return heightOpticalDepth(origin.y + ray.y * start, ray.y, max(0.0, end - start), cityDensity, cityLayerHeight);
+  if (end <= start) return 0.0;
+  float depth = heightOpticalDepth(origin.y + ray.y * start, ray.y, end - start, cityDensity, cityLayerHeight);
+  float outer = max(start, outerCityStart);
+  if (end > outer) depth += heightOpticalDepth(origin.y + ray.y * outer, ray.y, end - outer, outerCityDensity, cityLayerHeight);
+  return depth;
 }
 
 float densityAt(float t, float y, vec2 layer, float cityStart) {
   float h = max(y, 0.0);
-  float density = airDensity * exp(-h / airHeight);
+  float density = t < localAirRange ? airDensity * exp(-h / airHeight) : 0.0;
   if (t > layer.x && t < layer.y) density += deckDensity * exp(-h / layerHeight);
-  if (t > cityStart) density += cityDensity * exp(-h / cityLayerHeight);
+  if (t > cityStart) density += (cityDensity + step(outerCityStart, t) * outerCityDensity) * exp(-h / cityLayerHeight);
   return density;
 }
 
@@ -222,18 +234,12 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   vec2 footprint = deckInterval(origin, ray);
   vec2 layer = layerInterval(origin, ray, footprint);
   float layerDepth = layerOpticalDepth(origin.y, ray.y, layer, far);
-  float airDepth = heightOpticalDepth(origin.y, ray.y, far, airDensity, airHeight);
-  float cityStart = footprint.y >= footprint.x ? footprint.y : 0.0;
+  float cityStart = footprint.y >= footprint.x ? max(localAirRange, footprint.y) : localAirRange;
+  float airDepth = heightOpticalDepth(origin.y, ray.y, min(far, localAirRange), airDensity, airHeight);
   float cityDepth = cityOpticalDepth(origin, ray, cityStart, far);
   float transmission = exp(-airDepth - layerDepth - cityDepth);
-  float nearDepth = heightOpticalDepth(origin.y, ray.y, min(far, cityStart), airDensity, airHeight);
-  vec3 airlight = nearAirlight * (1.0 - exp(-nearDepth));
-  if (cityDepth > 1e-6) {
-    float farDepth = max(0.0, airDepth - nearDepth) + cityDepth;
-    airlight += exp(-nearDepth - layerDepth) * cityGlow(ray) * (1.0 - exp(-farDepth));
-  } else {
-    airlight += nearAirlight * (exp(-nearDepth) - exp(-airDepth));
-  }
+  vec3 airlight = nearAirlight * (1.0 - exp(-airDepth));
+  if (cityDepth > 1e-6) airlight += exp(-airDepth - layerDepth) * cityGlow(ray) * (1.0 - exp(-cityDepth));
   vec3 radiance = airlight * foregroundScatter(far * 0.5);
   vec2 pixel = floor(uv * vec2(textureSize(sceneDepth, 0)));
   float pixelNoise = fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
@@ -258,6 +264,17 @@ vec4 scatterToDepth(vec2 uv, float depth) {
     bool spot = axis.w > -0.5 && shape.x >= 0.0;
     if (!beam) {
       vec2 glowSegment = spot ? clipCone(segment, -toSource, ray, axis.xyz, axis.w) : segment;
+      bool distantArea = shape.x < 0.0 && axis.w > -0.5 && dot(toSource, toSource) > distantHaloStart * distantHaloStart;
+      float haloEnvelope = 1.0;
+      if (distantArea) {
+        const float haloEdge = 4.2;
+        float haloReach = haloEdge * shape.y;
+        float haloReach2 = haloReach * haloReach - perp2;
+        if (haloReach2 <= 0.0) continue;
+        float halfPath = sqrt(haloReach2);
+        glowSegment = vec2(max(glowSegment.x, along - halfPath), min(glowSegment.y, along + halfPath));
+        haloEnvelope = 1.0 - smoothstep(2.4, haloEdge, sqrt(perp2) / shape.y);
+      }
       if (glowSegment.y <= glowSegment.x) continue;
       float glowRadius = sqrt(perp2 + shape.y * shape.y);
       float glowStart = atan((glowSegment.x - along) / glowRadius);
@@ -270,12 +287,15 @@ vec4 scatterToDepth(vec2 uv, float depth) {
       vec3 glowPoint = origin + tGlow * ray;
       float r = glowDistance / color.a;
       float falloff = max(0.0, 1.0 - r * r * r * r);
-      float glowDepth = heightOpticalDepth(origin.y, ray.y, tGlow, airDensity, airHeight)
-        + heightOpticalDepth(glowPoint.y, glowRay.y, glowDistance, airDensity, airHeight)
+      float sourceDepth = distantArea
+        ? heightOpticalDepth(glowPoint.y, glowRay.y, sourceDistance, cityDensity, cityLayerHeight)
+        : heightOpticalDepth(glowPoint.y, glowRay.y, glowDistance, airDensity, airHeight);
+      float glowDepth = heightOpticalDepth(origin.y, ray.y, min(tGlow, localAirRange), airDensity, airHeight)
+        + sourceDepth
         + layerOpticalDepth(origin.y, ray.y, layer, tGlow) + cityOpticalDepth(origin, ray, cityStart, tGlow);
       float angular = spot ? filmAngularFalloff(i, glowRay) * filmLightVisibility(i, glowPoint)
         : (axis.w < -0.5 ? 1.0 : 0.28 + 0.72 * max(0.0, dot(-glowDirection / glowDistance, axis.xyz)));
-      float glow = (glowEnd - glowStart) / glowRadius;
+      float glow = haloEnvelope * (glowEnd - glowStart) / glowRadius;
       float strength = spot ? 0.36 : 0.72;
       if (shape.x < 0.0 && axis.w > -0.5) {
         float sourceChroma = 1.0 - min(color.r, min(color.g, color.b)) / max(color.r, max(color.g, color.b));
@@ -311,7 +331,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
       if (visible < 0.01) continue;
       float weight = beamRadius * (1.0 + tangent * tangent) * stepAngle;
       float distanceToLight = length(filmLightPosition[i] - p);
-      float opticalDepth = heightOpticalDepth(origin.y, ray.y, t, airDensity, airHeight)
+      float opticalDepth = heightOpticalDepth(origin.y, ray.y, min(t, localAirRange), airDensity, airHeight)
         + heightOpticalDepth(p.y, toLight.y, distanceToLight, airDensity, airHeight)
         + layerOpticalDepth(origin.y, ray.y, layer, t) + cityOpticalDepth(origin, ray, cityStart, t);
       float cosine = dot(ray, toLight);
