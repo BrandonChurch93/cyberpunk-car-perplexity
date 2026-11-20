@@ -1,0 +1,23 @@
+### C5 blockout · Motion, Phase 2 only
+
+You are told the images are a gray-box blockout with no materials, weather or lighting.
+
+- Pack: a contact sheet for every beat and one that crosses the loop seam.
+- Judge only the camera, the timing of each beat and the loop.
+- Camera: moves a real rig could make, with eased starts and stops and no jumps.
+- Timing: each beat has room for what `kit/01-FILM.md` says happens in it.
+- Loop: the camera returns to its opening position with no jump.
+- The single score covers only these points. Score 10 when the camera work could be shot as it is.
+
+```json
+{
+  "critic": "C3",
+  "score": 7,
+  "pass": false,
+  "issues": [
+    { "severity": "severe", "file": "set-C-04.png", "where": "lower left", "what": "the puddle reflects a sign that is not in the scene", "fix": "render the planar reflection from the real scene" }
+  ]
+}
+```
+
+- `score` is 1 to 10. `severity` is `severe`, `major` or `minor`. Issues are listed most severe first.

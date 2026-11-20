@@ -1,0 +1,44 @@
+{
+  "critic": "C8",
+  "score": 7,
+  "pass": false,
+  "issues": [
+    {
+      "severity": "major",
+      "file": "set-B-19.png",
+      "where": "left edge, lower middle",
+      "what": "vertical ignition framing is not composed for 9:16: the left border slices through the front-left wheel, fender and side mirror across set-B-19.png and set-B-20.png (and stays tangent in set-B-21.png) while leaving unused space on the right",
+      "fix": "pull the vertical camera slightly wider or pan right so the full vehicle silhouette sits cleanly inside the 9:16 frame with balanced side margins, or commit to a deliberate tight rear-fascia crop"
+    },
+    {
+      "severity": "major",
+      "file": "set-C-04.png",
+      "where": "full frame across beat 4 (set-A-10.png to set-A-12.png)",
+      "what": "the wide wheel macro is too tight vertically and right-heavy horizontally—bisecting the hub at the bottom in set-A-10.png, cropping both top and bottom of the wheel in set-A-11.png while leaving ~25% blank fender on the left and crowding the right edge, and never angling onto exposed upper/shoulder tire tread",
+      "fix": "pull back or widen slightly in 16:9, re-center the wheel away from the right border, and add a slight three-quarter downward angle onto the tire shoulder so tread grooves, arch, rim, disc and caliper all read cleanly"
+    },
+    {
+      "severity": "minor",
+      "file": "set-A-15.png",
+      "where": "upper right and lower right edges",
+      "what": "the wide lamp push-in settles on an indecisive right-edge tangent where the second circular projector bezel clips the right border and a sliver of the DRL bar cuts across the lower-right corner",
+      "fix": "push slightly tighter and left to isolate the primary projector pod cleanly (matching set-B-15.png) or stop slightly wider so both projector pods clear the right margin"
+    },
+    {
+      "severity": "minor",
+      "file": "set-B-16.png",
+      "where": "middle left and middle right edges (and upper right in set-B-18.png)",
+      "what": "the vertical detail framing clips both lateral corners of the honeycomb vent bezel against the 9:16 borders while leaving large dark margins top and bottom, translates only ~2–3 hex rows across 4 seconds, and lets a bright chamfer sliver intrude at the top-right corner of set-B-18.png",
+      "fix": "rotate or tighten the 9:16 camera to align with the vent's long axis, clear the top-right corner intrusion, and increase travel distance along the mesh to match the wide pass"
+    },
+    {
+      "severity": "minor",
+      "file": "set-A-03.png",
+      "where": "lower right foreground (and left margin in set-A-01.png)",
+      "what": "the ultra-low arrival/return path starts behind a raised parking curb whose end intrudes as a blurry block in the lower-right corner across the 4.00 s arrival-to-wake boundary (set-A-03.png, set-A-04.png), and set-A-01.png frames the left-facing vehicle left-heavy with tight nose lead room",
+      "fix": "shift the opening/loop camera mark slightly forward and left to clear the foreground curb corner and give the vehicle's nose more lead room on the left"
+    }
+  ],
+  "reviewer": "reviewer_2702",
+  "family": "gemini_4_carbon"
+}

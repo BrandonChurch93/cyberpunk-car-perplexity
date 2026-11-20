@@ -5,7 +5,7 @@ The Builder's memory. Read this first in every task. Update it before every comm
 ## Status
 
 - Current phase: 2 · Blockout in motion
-- Current round: 7 (Phase 2 blockout)
+- Current round: 8 (Phase 2 blockout)
 - Blocked: no
 - Last push: see the push log, 2026-11-20
 
@@ -220,6 +220,8 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-20 | The lamp move is classed as a dolly, with the dolly limits | A push of 0.8 to 1.7 m in five seconds is beyond a slider at 0.13 m per second. A short dolly track at 0.24 to 0.50 m per second is the real rig for it | `cut/SHOTS.md` conventions and checks |
 | 2026-11-20 | The opening of the wide format is 40 degrees off the nose with the vehicle left of center, and the aim pans to right of center during the push | At 44 degrees with the vehicle centered the billboard left the opening frame, which the world test and the kit do not allow. At 40 degrees with the vehicle at the left the billboard stands at the right of the frame as its counterweight | `openAngle`, `screen` on the wide establishing shot and the crane |
 | 2026-11-20 | The loop test compares the camera rotation at 0 and at the film length component by component to 1e-12, and the operator motion takes its phase from the time as a fraction of the film | The angle between two equal rotations comes out near 3e-8 when their length is one bit short of 1, so the old check failed on equal values. The new check is tighter | `tests/camera.test.ts`, `src/director/rig.ts` |
+| 2026-11-20 | The round 7 C5 answer of 10 is logged as given and is not carried over | The wheel, the tall ignition, the lamp end and the tall detail are shot again, so C5 judges them in round 8 | `scorecards/round-007/` |
+| 2026-11-20 | Before the round 8 pack, draft sheets and frames go to three development agents on three model families for comment against the C8 brief, with the frame edges, tangents and balance named as the things to look for. This is not a round and gives no score | Three rounds in a row a fresh C8 reviewer faulted shots the reviewer before had passed. A wider informal read before the pack finds those faults at the cost of minutes, not of a round | Round 8 preparation |
 | 2026-11-20 | The round 6 C5 answer of 10 is logged as given and is not carried over | The lamp, detail and opening moves are rebuilt, so C5 judges them in round 7 | `scorecards/round-006/` |
 
 ## Config changes
@@ -240,13 +242,14 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 4 | 2 | blockout | n/a | n/a | n/a | n/a | 9 | n/a | n/a | 5 | C8 severe: the paint frame is mostly background, the detail pass misses the fine mesh, the wheel shot is not a macro | Plateau rung: lens and camera height changed on every insert. Paint from above at 100 mm, wheel at 85 mm with a boom down, detail over an enlarged hex grille at 85 mm, lamp holding the whole fork, longer tall arrival dolly, lower return start |
 | 5 | 2 | blockout | n/a | n/a | n/a | n/a | 8 | n/a | n/a | 8 | C8 major: the paint macro shows no panel landmark over the glide, and the tall paint crease sits low and flattens | Paint glide carried past a panel edge with an oblique tall path, tall ignition closer and further round, tall wake settles tighter, push added to the lamp slide, wheel boom holds on the arch then slows, longer detail ease-in, shorter stop at the loop seam |
 | 6 | 2 | blockout | n/a | n/a | n/a | n/a | 10 | n/a | n/a | 7 | C8 major: the lamp beat never goes macro or into the lens, and the opening push holds one angle with no parallax over an empty near deck | Lamp as a dolly push into one projector lens, opening track laid diagonally across the nose with a near deck object, detail pass at a grazing angle with the panel edge in frame, vent slot in the wide paint frame from the cut, wide ignition tilted down for the puddle, tall opening closer, caliper clocked clear of the spokes, margin at the tall return cut |
+| 7 | 2 | blockout | n/a | n/a | n/a | n/a | 10 | n/a | n/a | 7 | C8 major: the tall ignition frame cuts the front wheel and mirror at the left border, and the wide wheel macro is too tight and heavy on the right with no view onto the tread | Tall ignition holds the whole vehicle with margins, wide wheel further back and turned toward the tread, wide lamp stops with both projectors clear, tall detail lined up with the long axis of the grille and a longer pass, opening with room in front of the nose and the wheel stop clear of the corner. Draft sheets go to three development agents before the pack |
 
 ## Plateau log
 
 | Critic | Rounds without gain | Rung tried | Result |
 | --- | --- | --- | --- |
 | C8 | 3 (rounds 2, 3, 4: 6, 6, 5 after 5) | Composition and lighting design, rung 1: change the lens and the camera height | Round 5: C8 8, up from 5, no severe issue. Plateau broken. The count starts again |
-| C8 | 1 (round 6: 7 after 8) | none yet. The rule applies after 3 rounds without gain | Round 6 answered in the camera data. Count stands at 1 |
+| C8 | 2 (rounds 6 and 7: 7, 7 after 8) | none yet. The rule applies after 3 rounds without gain. The next rung is the second of the composition row: move the key and rim sources | Rounds 6 and 7 answered in the camera data. Each round the earlier issues cleared and the reviewer named other shots |
 
 ## QA gauntlet
 
@@ -277,10 +280,18 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | the commit titled "Round 6 shot plan" | pushed to main. Round 5 scorecards, the inline status tool, the round 6 cameras, vehicle B final-camera pass, wheel pass with the blockout triangle cut (380,930), world divider and pole, rivulet and drips for the round 5 cameras |
 | 2026-11-19 | 75752d2 | pushed to main. Merges of the wheel triangle cut, the world pole, the vehicle B vent slot (388,566 in the blockout) and the rivulet and drips for the round 6 cameras |
 | 2026-11-20 | the commit titled "Round 6 scorecards and the round 7 shot plan" | pushed to main. Round 6 scorecards, the round 7 cameras, `cut/SHOTS.md` |
+| 2026-11-20 | c5e3fff, 61bf9e1, 458a48c, 7769691, a1ccf74, 22fbd5e | pushed to main. Tall return margin, opening aim, merges of the world stop and drain, vehicle B projector housings and bay wall, grille cell water, caliper clocking. 22fbd5e is the round 7 build |
+| 2026-11-20 | the commit titled "Round 7 scorecards" | pushed to main. Round 7 scorecards |
 
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-20, session 12
+
+- Done: round 7 cameras finished (opening at 40 degrees with the billboard in frame, tall return with the whole car inside the frame), merged the wheel stop, the projector housings, the bay wall, the grille cell water and the caliper clocking, round 7 pack rendered on build 2a02be571c6e8d84 and judged: C5 10 with no issue, C8 7 with two major issues (tall ignition cut at the left border, wide wheel too tight and heavy on the right) and three minor. Scorecards written. Status posted inline.
+- Measured: 168 tests pass. Blockout vehicle 398,880 triangles, full 1,394,328. The auditor scores vehicle B lamp macro 8, detail 8, paint 8, opening 7, rear 7.
+- Next: answer the round 7 notes in the camera data, read the drafts with three development agents, round 8 pack with fresh reviewers. If C8 does not gain in round 8 the plateau rule applies and the gray-box key and rim sources move.
 
 ### 2026-11-20, session 11
 
