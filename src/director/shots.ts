@@ -44,7 +44,7 @@ function heading(yawDegrees: number, pitchDegrees: number): THREE.Vector3 {
 }
 
 const wideAngle = 26
-const openAngle = 34
+const openAngle = 15
 const nose = v(0, 0.45, 2.3)
 const center = v(0, 0.55, 0)
 
@@ -83,9 +83,9 @@ const master: Record<string, ShotMaker> = {
   establish: (t, a) => {
     const u = push(t)
     return {
-      position: mixV(frontOf(openAngle, 6.6, 0.2), frontOf(wideAngle, 4.6, 0.2), u),
+      position: mixV(frontOf(openAngle, 6.2, 0.2), frontOf(wideAngle, 4.6, 0.2), u),
       target: mixV(center, v(0, 0.55, 0.2), u),
-      screen: [mix(-0.115, 0.14, u), mix(-0.12, -0.14, u)],
+      screen: [mix(0.02, 0.14, u), mix(-0.12, -0.14, u)],
       focalMm: wideMm,
       focus: mixV(nose, a.lamp.position, u),
       tStop: 2,
@@ -94,7 +94,7 @@ const master: Record<string, ShotMaker> = {
   },
   paint: (t, a) => {
     const p = glide(t, paint.start, paint.end, 1.2, 1.2)
-    const target = a.paint.position.clone().add(v(mix(-0.09, -0.125, p), 0, mix(0.05, 0.24, p)))
+    const target = a.paint.position.clone().add(v(mix(-0.106, -0.134, p), 0.02, mix(0.14, 0.29, p)))
     return {
       position: target.clone().addScaledVector(v(0.64, 0.44, -0.26), 0.92),
       target,
@@ -108,10 +108,10 @@ const master: Record<string, ShotMaker> = {
   wheel: (t, a) => {
     const p = follow(t)
     const w = a.wheel.position
-    const angle = mix(33, 36, p)
-    const target = v(w.x, w.y + mix(0.09, -0.09, p), w.z + mix(-0.12, -0.1, p))
+    const angle = mix(34, 48, p)
+    const target = v(w.x, w.y + 0.03, w.z + mix(-0.13, -0.04, p))
     return {
-      position: v(w.x + Math.sin(rad(angle)) * 2.4, mix(0.85, 0.18, p), w.z + Math.cos(rad(angle)) * 2.4),
+      position: v(w.x + Math.sin(rad(angle)) * 2.5, mix(0.8, 0.62, p), w.z + Math.cos(rad(angle)) * 2.5),
       target,
       focalMm: portraitMm,
       focus: v(w.x + 0.1, target.y, w.z),
@@ -138,9 +138,9 @@ const master: Record<string, ShotMaker> = {
   ignition: (t, a) => {
     const p = glide(t, ignition.start + 0.8, ignition.end - 0.2, 1.5, 1.5)
     return {
-      position: behind(v(0, 0, a.exhaust.position.z), mix(38, 26, p), mix(4.0, 3.5, p), 0.25),
+      position: behind(v(0, 0, a.exhaust.position.z), mix(40, 31, p), mix(4.0, 3.6, p), 0.25),
       target: a.exhaust.position,
-      screen: [0.16, 0.06],
+      screen: [0.31, 0.06],
       focalMm: normalWideMm,
       focus: a.exhaust.position,
       tStop: 2,
@@ -150,9 +150,9 @@ const master: Record<string, ShotMaker> = {
   crane: (t, a) => {
     const q = pull(t)
     return {
-      position: frontOf(mix(openAngle + 14, openAngle, q), mix(4.7, 6.6, q), mix(0.7, 0.2, q)),
+      position: frontOf(mix(48, openAngle, q), mix(5.3, 6.2, q), mix(0.7, 0.2, q)),
       target: mixV(v(0, 0.55, 0.3), center, q),
-      screen: [mix(0, -0.115, q), mix(-0.2, -0.12, q)],
+      screen: [mix(0.06, 0.02, q), mix(-0.2, -0.12, q)],
       focalMm: wideMm,
       focus: mixV(a.lamp.position, nose, q),
       tStop: 2,
@@ -165,7 +165,7 @@ const vertical: Record<string, ShotMaker> = {
   establish: (t, a) => {
     const u = push(t)
     return {
-      position: mixV(frontOf(40, 7.2, 0.2), frontOf(30, 5.95, 0.2), u),
+      position: mixV(frontOf(40, 7.2, 0.2), frontOf(26, 5.95, 0.2), u),
       target: mixV(v(0.2, 0.55, 0.8), v(0.32, 0.5, 1.35), u),
       screen: [0, mix(-0.36, -0.15, u)],
       focalMm: wideMm,
@@ -176,7 +176,7 @@ const vertical: Record<string, ShotMaker> = {
   },
   paint: (t, a) => {
     const p = glide(t, paint.start, paint.end, 1.2, 1.2)
-    const target = a.paint.position.clone().add(v(mix(-0.05, -0.072, p), 0.006, mix(-0.05, 0.11, p)))
+    const target = a.paint.position.clone().add(v(mix(-0.058, -0.085, p), 0.006, mix(0, 0.12, p)))
     return {
       position: target.clone().add(v(0.35, 0.5, -0.5)),
       target,
@@ -206,7 +206,7 @@ const vertical: Record<string, ShotMaker> = {
     const p = glide(t, lamp.start, lamp.end, 1.2, 2.2)
     const l = a.lamp.position
     const wide = l.clone().add(v(0.049, -0.035, -0.086))
-    const close = v(l.x + 0.005, l.y - 0.03, l.z)
+    const close = v(l.x - 0.022, l.y - 0.03, l.z)
     return {
       position: mixV(wide.clone().addScaledVector(heading(4, 17), 1.48), close.clone().addScaledVector(heading(14, 16), 0.62), p),
       target: mixV(wide, close, ease(p, 0, 1)),
@@ -217,13 +217,13 @@ const vertical: Record<string, ShotMaker> = {
       near: 0.02,
     }
   },
-  detail: (t, a) => grazing(t, a, 180, 36, 1.12, -0.15, 0.03, portraitMm, 0, true),
+  detail: (t, a) => grazing(t, a, 180, 50, 0.42, -0.08, 0.04, portraitMm, 0, true),
   ignition: (t, a) => {
     const p = glide(t, ignition.start + 0.8, ignition.end - 0.2, 1.5, 1.5)
     return {
-      position: behind(v(0, 0, a.exhaust.position.z), mix(38, 22, p), mix(3.5, 3.0, p), 0.25),
-      target: mixV(v(0.3, 0.7, a.exhaust.position.z + 0.9), v(0.1, 0.7, a.exhaust.position.z + 0.9), p),
-      screen: [0, -0.24],
+      position: behind(v(0, 0, a.exhaust.position.z), mix(40, 31, p), mix(3.6, 3.35, p), 0.25),
+      target: mixV(v(0.3, 0.7, a.exhaust.position.z + 0.9), v(0.2, 0.7, a.exhaust.position.z + 0.9), p),
+      screen: [0, -0.12],
       focalMm: wideMm,
       focus: a.exhaust.position,
       tStop: 2,
@@ -233,7 +233,7 @@ const vertical: Record<string, ShotMaker> = {
   crane: (t, a) => {
     const q = pull(t)
     return {
-      position: frontOf(mix(50, 40, q), mix(6.9, 7.2, q), mix(0.9, 0.2, q)),
+      position: frontOf(mix(50, 40, q), mix(7.5, 7.2, q), mix(0.9, 0.2, q)),
       target: mixV(v(0.15, 0.55, 0.35), v(0.2, 0.55, 0.8), q),
       screen: [0, mix(-0.42, -0.36, q)],
       focalMm: wideMm,
