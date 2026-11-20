@@ -57,7 +57,7 @@ float projectorBodyPhase(float cosine, float distanceToLight, float downward, fl
   float spread = smoothstep(-0.04, 0.44, cosine) * (1.0 - smoothstep(0.91, 0.99, cosine));
   float body = smoothstep(${atmosphere.projectorBodyDistance.join(', ')}, distanceToLight);
   float lower = smoothstep(0.012, 0.097, downward);
-  float open = smoothstep(${atmosphere.projectorBodyClearance.join(', ')}, clearance);
+  float open = smoothstep(${atmosphere.projectorBodyClearance.map((edge) => edge.toFixed(2)).join(', ')}, clearance);
   return phase(cosine, ${atmosphere.projectorBodyAnisotropy}) * ${atmosphere.projectorBodyScatterFraction}
     * body * spread * lower * open;
 }
