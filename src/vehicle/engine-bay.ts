@@ -328,7 +328,7 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
     color: 0x1a1d21, emissive: 0x050607, roughness: .94, specularIntensity: .08,
   })
   const ribFinish = new T.MeshPhysicalMaterial({
-    color: 0x343b43, roughness: .86, specularIntensity: .12,
+    color: full ? 0x5b6876 : 0x343b43, roughness: .86, specularIntensity: .12, envMapIntensity: full ? 1.50 : 1,
   })
   add(parent, 'front airbox hex grilles', joined(mesh), m.tag(grilleFinish, 'none'))
   add(parent, 'flush airbox grille ducts', joined(grilleFrames), m.tag(ductFinish, 'none'))
