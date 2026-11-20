@@ -255,7 +255,6 @@ export function buildDeck(forms: Forms, roof: THREE.Group): DeckSurface {
   const deck = floors(forms, roof)
   edges(forms, roof)
   stripePattern(forms, roof)
-  foregroundStop(forms, roof, 0.6, 4.45)
   foregroundStop(forms, roof, 3.36, 4.18)
   for (const [x, z] of [[-1.7, 3.7], heroDrain, [-12.5, -15.7], [15.45, 11.4], [20.1, -14.6]]) drain(forms, roof, x, z)
   drain(forms, roof, 0.1, -2.89, 1.5)
