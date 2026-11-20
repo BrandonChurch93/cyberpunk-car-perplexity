@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import * as T from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { config, defaultPaint, paintById } from '../src/config'
+import { applyLens } from '../src/core/lens'
 import { cameraAt } from '../src/director/shots'
 import { events, lampThresholds, stateAt } from '../src/director/timeline'
 import { patchesOf } from '../src/materials/patch'
@@ -501,13 +502,26 @@ describe('vehicle geometry and state', () => {
       const baySurround = car.root.getObjectByName('thin carbon engine bay surround')!
       const bayReturns = car.root.getObjectByName('dry carbon bay wall returns')!
       const long = axis.clone().normalize(), out = across.clone().normalize()
-      const skim = cameraAt(750 / config.film.fps, config.formats.master, car.anchors).position
-      for (const [run, lateral, depth = .006] of [[-.244, .1166], [-.2328, .1143], [-.224, .112], [-.2146, .1099, .003], [-.2104, .1092, .003]]) {
-        const corner = position.clone().addScaledVector(long, run).addScaledVector(out, lateral).addScaledVector(normal, -depth)
-        const surface = look(skim, corner).object.name
-        const visible = depth === .003 ? [duct.name, 'recessed bay chamber and blank plate'] : [duct.name]
-        expect(visible).toContain(surface)
-        expect(ray.intersectObject(duct)[0]?.distance).toBeLessThan(skim.distanceTo(corner) + .018)
+      const chamber = car.root.getObjectByName('recessed bay chamber and blank plate')!
+      for (const frame of [750, 810, 869]) {
+        const skim = cameraAt(frame / config.film.fps, config.formats.master, car.anchors).position
+        for (const [run, lateral, depth] of [[-.244, .1166, .006], [-.2328, .1143, .006], [-.224, .112, .006],
+          [-.2146, .1099, .003], [-.2104, .1092, .003]]) {
+          const corner = position.clone().addScaledVector(long, run).addScaledVector(out, lateral).addScaledVector(normal, -depth)
+          const surface = look(skim, corner)
+          const flange = ray.intersectObject(duct)[0]
+          expect([duct, chamber]).toContain(surface.object)
+          expect(Math.abs(flange.distance - skim.distanceTo(corner))).toBeLessThan(.012)
+          if (surface.object === chamber) expect(flange.distance - surface.distance).toBeLessThan(.050)
+        }
+      }
+      const format = config.formats.master
+      const endCamera = new T.PerspectiveCamera()
+      applyLens(endCamera, cameraAt(869 / config.film.fps, format, car.anchors), format.width, format.height,
+        { pixel: [0, 0], aperture: [0, 0] }, 1)
+      for (const [x, y] of [[-.28125, -.91667], [-.265625, -.93519], [-.265625, -.94815]]) {
+        ray.setFromCamera(new T.Vector2(x, y), endCamera)
+        expect(ray.intersectObject(car.root, true)[0]?.object).toBe(duct)
       }
       const shellOffset = (depth: number) => {
         const eye = position.clone().addScaledVector(out, .13).addScaledVector(normal, -depth)

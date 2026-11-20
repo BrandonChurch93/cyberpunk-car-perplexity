@@ -228,6 +228,11 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
       return airFace(flange[0] - .0004 + run * v, (flange[1] + .010 * v) * w,
         mix(flange[2], .057, .40 * v + .60 * v * v))
     }, 10, 6, up.toArray(), .0022))
+    grilleFrames.push(patch((u, v) => {
+      const w = 2 * u - 1
+      return airFace(a + .004 + (.061 - .018 * w ** 2) * v, (b + .007 + .024 * v) * w,
+        mix(.050, .068, v))
+    }, 8, 4, up.toArray()))
     grilleFrames.push(patch((u, v) => airFace(mix(-shellFoot[0], shellFoot[0], u), mix(-shellFoot[1], shellFoot[1], v), shellDepth),
       1, 1, up.clone().negate().toArray()))
     grilleTrays.push(patch((u, v) => airFace(mix(-a, a, u), mix(-b, b, v), trayDepth), 1, 1, up.toArray()))
