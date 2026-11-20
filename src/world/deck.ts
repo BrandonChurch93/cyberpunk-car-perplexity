@@ -105,7 +105,8 @@ function stripePattern(forms: Forms, roof: THREE.Group): void {
   const wheelStops: Box[] = []
   for (const end of [offset, offset + stallDepth + aisle]) {
     for (let i = -6; i <= 8; i++) {
-      strips.push({ size: [stripeWidth, thickness, stallDepth], at: [i * stallWidth, thickness / 2, end] })
+      const setback = end > 0 && i === 1 ? 1.8 : 0
+      strips.push({ size: [stripeWidth, thickness, stallDepth - setback], at: [i * stallWidth, thickness / 2, end + setback / 2] })
       if (i < 8 && (end < 0 || i < 6)) {
         const z = end + (end < 0 ? -1.9 : 1.9)
         wheelStops.push({ size: [1.65, 0.1, 0.15], at: [(i + 0.5) * stallWidth, 0.05, z] })
@@ -204,7 +205,7 @@ function coreAndServices(forms: Forms, roof: THREE.Group): void {
   const camera = forms.box(core, 'security camera body', 'chalk', [0.13, 0.12, 0.24], [-3.38, 3.03, 2.73])
   camera.rotation.set(0.28, -0.55, 0)
 
-  for (const [x, z, turn] of [[-15.2, 1.2, 0.12], [-26.3, -4.9, 0], [-26.3, 2.1, 0], [-26.3, 14.1, 0], [21.4, -15.5, 0], [24.2, -3.6, 0], [24.8, 8.4, 0], [13.2, 15.4, 0.55], [0.6, 16.2, 0.28], [-11.7, 15.8, 0]]) {
+  for (const [x, z, turn] of [[-15.2, 1.2, 0.12], [-26.3, -4.9, 0], [-26.3, 2.1, 0], [-26.3, 14.1, 0], [21.4, -15.5, 0], [24.2, -3.6, 0], [24.8, 8.4, 0], [13.2, 15.4, 0.55], [0.6, 16.2, 0.28], [-19.8, 15.8, 0]]) {
     const pole = group(roof, 'deck light pole', [x, 0, z])
     pole.rotation.y = turn
     forms.box(pole, 'pole concrete plinth', 'stone', [0.39, 0.16, 0.39], [0, 0.08, 0])
