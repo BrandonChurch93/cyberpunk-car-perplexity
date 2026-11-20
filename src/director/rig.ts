@@ -121,6 +121,6 @@ export function resolveShot(shot: Shot, format: FormatSpec, timeSeconds: number)
     focusDistance,
     fNumber: shot.tStop,
     near: shot.near ?? 0.1,
-    far: 900,
+    far: 1500,
   }
 }
