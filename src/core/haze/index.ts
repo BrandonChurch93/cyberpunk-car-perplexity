@@ -13,6 +13,11 @@ export const atmosphere = {
   projectorWingAnisotropy: 0.28,
   projectorWingFraction: 0.18,
   projectorScatterFraction: 0.31,
+  projectorBodyAnisotropy: 0.38,
+  projectorBodyScatterFraction: 0.65,
+  projectorBodyDistance: [0.42, 1.35],
+  projectorBodyFocus: [1.1, 2.3],
+  projectorBodyClearance: [0.8, 2.25],
 } as const
 
 const scattering = /* glsl */ `
@@ -46,6 +51,17 @@ float phase(float cosine, float g) {
 float projectorPhase(float cosine) {
   return mix(phase(cosine, ${atmosphere.projectorAnisotropy}),
     phase(cosine, ${atmosphere.projectorWingAnisotropy}), ${atmosphere.projectorWingFraction});
+}
+
+float projectorBodyPhase(float cosine, float distanceToLight, float downward, float clearance) {
+  float spread = smoothstep(-0.04, 0.44, cosine) * (1.0 - smoothstep(0.91, 0.99, cosine));
+  float body = smoothstep(${atmosphere.projectorBodyDistance.join(', ')}, distanceToLight);
+  float wide = smoothstep(${atmosphere.projectorBodyFocus.join(', ')}, focusDistance);
+  float lower = mix(0.22, 1.0, smoothstep(0.014, 0.09, downward));
+  // Keep the broader rain lobe from becoming fill on a nearby solid surface.
+  float open = smoothstep(${atmosphere.projectorBodyClearance.join(', ')}, clearance);
+  return phase(cosine, ${atmosphere.projectorBodyAnisotropy}) * ${atmosphere.projectorBodyScatterFraction}
+    * body * wide * spread * lower * open;
 }
 
 float foregroundScatter(float t) {
@@ -178,6 +194,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
     float theta1 = atan((segment.y - along) / beamRadius);
     float stepAngle = (theta1 - theta0) / float(steps);
     float offset = fract(sampleJitter.x + pixelNoise + float(i) * 0.618034);
+    vec3 up = projector ? normalize(vec3(0.0, 1.0, 0.0) - axis.xyz * axis.y) : vec3(0.0, 1.0, 0.0);
     for (int j = 0; j < steps; j++) {
       float angle = theta0 + (float(j) + offset) * stepAngle;
       float tangent = tan(angle);
@@ -194,6 +211,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
       float cosine = dot(ray, toLight);
       float scatteringPhase = projector
         ? projectorPhase(cosine) * ${atmosphere.projectorScatterFraction} * smoothstep(0.1, 0.43, distanceToLight)
+          + projectorBodyPhase(cosine, distanceToLight, dot(toLight, up), far - t)
         : phase(cosine, anisotropy) * scatterFraction;
       radiance += light * (visible * weight * densityAt(t, p.y, layer) * scatteringPhase * exp(-opticalDepth) * foregroundScatter(t));
     }
