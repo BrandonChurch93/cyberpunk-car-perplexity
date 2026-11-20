@@ -146,6 +146,7 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
 function captureLamp(three: typeof THREE, reflections: typeof createReflections, fmt: typeof config.formats.preview) {
   const renderer = new three.WebGLRenderer()
   const scene = new three.Scene()
+  scene.environmentIntensity = .4
   const root = new three.Group()
   const sprung = new three.Group()
   const body = new three.Mesh(new three.PlaneGeometry(2, 2), new three.MeshBasicMaterial({
@@ -221,14 +222,18 @@ function captureLamp(three: typeof THREE, reflections: typeof createReflections,
   const side = new three.Vector3(1, 0, 0)
   const doorCity = read(door.material.envMap, side)
   const worldCity = read(scene.environment, side)
+  const splitIntensity = [door.material.envMapIntensity, deck.envMapIntensity]
   test(0, 0, 0)
+  const fullIntensity = [door.material.envMapIntensity, deck.envMapIntensity]
+  const usesFullCapture = door.material.envMap === scene.environment && deck.envMap === null
+  part.setDiagnostic!('normals')
   const reset = door.material.envMap === null && door.material.envMapIntensity === .65 && deck.envMap === null
   let captureOnly = false
   scene.traverse((node) => { if (node.name === 'cube lamp emitters') captureOnly = !node.visible })
   const bodyRestored = root.visible && body.visible && source.visible && source.material.side === three.FrontSide
   output.dispose()
   renderer.dispose()
-  return { off, dim, bright, tail, doorTail, deckTail, doorCity, worldCity, reset, captureOnly, bodyRestored }
+  return { off, dim, bright, tail, doorTail, deckTail, doorCity, worldCity, splitIntensity, fullIntensity, usesFullCapture, reset, captureOnly, bodyRestored }
 }
 
 it('captures the moving lamp at its current output but keeps the car body out of the cube', async () => {
@@ -265,14 +270,16 @@ it('captures the moving lamp at its current output but keeps the car body out of
       expect(errors).toEqual([])
       expect(result.off).toEqual([0, 0, 0])
       expect(result.dim[0]).toBeGreaterThan(50)
-    expect(result.bright[0]).toBeGreaterThan(result.dim[0] * 2)
-    expect(result.bright.slice(1)).toEqual([0, 0])
-    expect(result.tail[0]).toBeGreaterThan(150)
-    expect(result.doorTail).toEqual([0, 0, 0])
-    expect(result.deckTail).toEqual([0, 0, 0])
-    expect(result.doorCity[2]).toBeGreaterThan(50)
-    expect(result.worldCity).toEqual(result.doorCity)
-    expect(result.reset).toBe(true)
+      expect(result.bright[0]).toBeGreaterThan(result.dim[0] * 2)
+      expect(result.bright.slice(1)).toEqual([0, 0])
+      expect(result.tail[0]).toBeGreaterThan(150)
+      expect(result.doorTail).toEqual([0, 0, 0])
+      expect(result.deckTail).toEqual([0, 0, 0])
+      expect(result.doorCity[2]).toBeGreaterThan(50)
+      expect(result.worldCity).toEqual(result.doorCity)
+      expect(result.splitIntensity).toEqual([.65, .4])
+      expect(result.fullIntensity).toEqual([.65, 1])
+      expect(result.usesFullCapture && result.reset).toBe(true)
       expect(result.captureOnly && result.bodyRestored).toBe(true)
     } finally {
       await browser.close()
