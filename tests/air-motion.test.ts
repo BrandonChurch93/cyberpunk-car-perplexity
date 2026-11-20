@@ -29,6 +29,8 @@ describe('air rain motion', () => {
     const world: WorldModule = {
       root: new THREE.Group(), lights: [], signs: [], surfaces: [], reflectionBox: new THREE.Box3(),
       deck: { meshes: [], material, bounds: new THREE.Box2(new THREE.Vector2(-14, -10), new THREE.Vector2(14, 10)), heightMap: null },
+      beginFrame() {},
+      beginSample() {},
     }
     const light = new LightRig([], 1).uniforms
     const geometries = rainMeshes(new RibbonView(), world, light).map((mesh) => mesh.geometry as THREE.InstancedBufferGeometry)
