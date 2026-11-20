@@ -50,6 +50,37 @@ function joinRim(loop: readonly XY[], scale1: number, scale2: number, face: Face
   }, curve.length, 5, out, thickness)
 }
 
+const radiatorLeft = curve([[.184, .552], [.217, .525], [.268, .493], [.334, .458], [.389, .452], [.420, .530], [.461, .693]])
+const radiatorRight = curve([[.184, .799], [.223, .837], [.297, .875], [.346, .864], [.404, .851], [.461, .826]])
+const radiatorDepth = (x: number, y: number) => .144 + .019 * smooth(x, .60, .86) + .009 * smooth(y, .38, .461)
+
+function frontRadiator(face: Face, full: boolean, side: number, out: Point) {
+  const faceX = (u: number, y: number) => mix(radiatorLeft(y), radiatorRight(y), u)
+  const faceY = (v: number) => mix(.184, .461, v)
+  const backing = patch((u, v) => {
+    const y = faceY(v), x = faceX(u, y)
+    return face(x, y, radiatorDepth(x, y))
+  }, full ? 36 : 14, full ? 18 : 8, out)
+  const returnWall = patch((u, v) => {
+    const y = faceY(u)
+    const x = radiatorRight(y) + mix(.009, -.013, v)
+    return face(x, y, mix(.052, radiatorDepth(x, y) + .014, v))
+  }, full ? 25 : 14, 6, [-side, 0, 0])
+  const chamberWall = patch((u, v) => {
+    const y = faceY(u)
+    const x = .886 + .028 * smooth(y, .365, .450) - .026 * (1 - smooth(y, .195, .266))
+    return face(x, y, mix(-.014, .218, v))
+  }, full ? 25 : 14, 4, [-side, 0, 0])
+  const rows = full ? 20 : 11
+  const fins = joined(Array.from({ length: rows }, (_, i) => patch((u, v) => {
+    const y = faceY((i + .5) / rows) + .0040 * (v - .5)
+    const x = faceX(u, y)
+    const depth = radiatorDepth(x, y) - (.004 + .017 * (1 - Math.abs(v * 2 - 1)))
+    return face(x, y, depth)
+  }, full ? 25 : 11, full ? 4 : 2, out)))
+  return { backing: joined([backing, returnWall, chamberWall]), fins }
+}
+
 function lightGuide(face: Face, hub: XY, tips: readonly XY[], width: number, depth: number, out: Point): T.BufferGeometry {
   const origin = new T.Vector2(...hub)
   const rays = tips.map((p) => new T.Vector2(...p).sub(origin))
@@ -149,6 +180,7 @@ function profileProjector(material: T.MeshStandardMaterial) {
 export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const frontPaint: T.BufferGeometry[] = [], rearPaint: T.BufferGeometry[] = []
   const carbon: T.BufferGeometry[] = [], black: T.BufferGeometry[] = [], dark: T.BufferGeometry[] = []
+  const radiatorBacks: T.BufferGeometry[] = [], radiatorFins: T.BufferGeometry[] = []
   const outletCavities: T.BufferGeometry[] = [], diffuserShell: T.BufferGeometry[] = [], diffuserFins: T.BufferGeometry[] = []
   const optical: T.BufferGeometry[] = [], rearOptical: T.BufferGeometry[] = []
   const projectorGlass: T.BufferGeometry[] = [], projectorCollars: T.BufferGeometry[] = [], projectorBowls: T.BufferGeometry[] = []
@@ -240,16 +272,11 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const x = .438 * u
       return f(x, mix(lipY(x) + .031, .304 + .055 * smooth(x, .17, .419), v), .132 - .020 * smooth(x, .20, .46))
     }, .439, .149, .024, .00095))
-    frontPaint.push(patch((u, v) => {
-      const x = mix(0, .86, u)
-      const edge = frontHoodEdge(x)
-      const t = v * Math.PI * .64
-      const depth = .006 * Math.sin(t) + .006 * smooth(v, .65, 1)
-      return [side * x, edge[1] - (.007 + .003 * smooth(x, .49, .71)) * (1 - Math.cos(t)), edge[2] - depth]
-    }, 84, 5, outFront))
-    black.push(mapped(f, outline, outFront, .064, .031))
-    dark.push(mapped(f, points, outFront, .123, .036))
+    black.push(mapped(f, outline, outFront, .183, .018))
     black.push(joinRim(points, 1.035, .88, f, -.002, .085, outFront))
+    const radiator = frontRadiator(f, full, side, outFront)
+    radiatorBacks.push(radiator.backing)
+    radiatorFins.push(radiator.fins)
     const blade = [
       [.909, .362, .894, .360], [.929, .287, .907, .286], [.861, .182, .842, .218],
       [.818, .172, .808, .205], [.531, .167, .548, .198], [.456, .238, .467, .252],
@@ -266,18 +293,6 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return f(Math.abs(lip[0]), lip[1] + .009 * v, mix(.020, .085, v))
     }, 65, 6, [0, 1, 1], .006))
     dark.push(ribbon(f, [[.462, .395], [.578, .411], [.729, .426], [.801, .436]], .028, .024))
-    const dh = full ? .019 : .032
-    if (full) {
-      carbon.push(hexMesh((u, v) => {
-        const x = mix(.55 - .075 * v, .808 + .028 * v, u)
-        return f(x, .211 + .165 * v, .097)
-      }, .30, .18, dh, .00135))
-    } else {
-      for (let i = 0; i < 8; i++) {
-        const y = .214 + i * .021
-        black.push(ribbon(f, [[.55 - i * .008, y], [.63, y + .001], [.808 + .003 * i, y + .004]], .007, .092, 12))
-      }
-    }
     black.push(patch((u, v) => {
       const x = .546 * u
       return f(x, lipY(x) + .009 + .027 * v, mix(.003, .128, v))
@@ -292,10 +307,6 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const x = .969 * u
       return f(x, lipY(x) - .012 + .095 * v, mix(.019, .154, v))
     }, 38, 7, [0, 1, 0], .005))
-    dark.push(patch((u, v) => {
-      const y = mix(.171, .446, u)
-      return f(mix(.873, .727, v), y, mix(.012, .170, v))
-    }, 18, 9, [side, 0, 1], .009))
     const hub: XY = [.834, .429]
     const tips: XY[] = [[.877, .285], [.879, .644], [.470, .421]]
     const guideWidth = .015
@@ -594,6 +605,15 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   add(parent, 'nose blades, shield and lower lip', joined(frontPaint), m.paint)
   add(parent, 'rear bumper paint surfaces', joined(rearPaint), m.paint)
   if (carbon.length) add(parent, 'radiator mesh', joined(carbon), m.carbon)
+  const finFinish = m.tag(new T.MeshPhysicalMaterial({
+    color: full ? 0x222427 : 0x33363a, roughness: .74, metalness: .18,
+    specularIntensity: .17, envMapIntensity: .49,
+  }), 'none')
+  add(parent, 'recessed front radiator fins', joined(radiatorFins), finFinish)
+  const coreFinish = m.tag(new T.MeshPhysicalMaterial({
+    color: full ? 0x101214 : 0x222529, roughness: .92, specularIntensity: .09, envMapIntensity: .37,
+  }), 'none')
+  add(parent, 'recessed front radiator backing', joined(radiatorBacks), coreFinish)
   add(parent, 'lamp bezels and air ducts', joined(black), m.matte)
   add(parent, 'recessed backing', joined(dark), m.dark)
   const outletFinish = m.tag(new T.MeshPhysicalMaterial({
