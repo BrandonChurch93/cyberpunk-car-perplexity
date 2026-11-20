@@ -87,6 +87,7 @@ describe('full roof world', () => {
 
   it('mounts the reflection strip to the ramp without adding a film light', () => {
     const ramp = world.root.getObjectByName('drive-down ramp and control island')!
+    ramp.updateWorldMatrix(true, true)
     const fixture = ramp.getObjectByName('west ramp luminous barrier')!
     const strip = fixture.getObjectByName('graded ramp opal strip') as THREE.Mesh
     expect(fixture.parent).toBe(ramp)
@@ -97,6 +98,30 @@ describe('full roof world', () => {
     expect(strip.material).toBeInstanceOf(THREE.ShaderMaterial)
     expect(strip.getWorldPosition(new THREE.Vector3()).x).toBeLessThan(-9)
     expect(new THREE.Vector3(0, 0, 1).applyQuaternion(strip.getWorldQuaternion(new THREE.Quaternion())).x).toBeCloseTo(1, 10)
+    expect(world.lights).toHaveLength(8)
+  })
+
+  it('anchors the macro reflection sources to the city and retains the rear service light', () => {
+    const west = world.root.getObjectByName('west low block')!
+    const north = world.root.getObjectByName('northwest tower')!
+    west.updateWorldMatrix(true, true)
+    north.updateWorldMatrix(true, true)
+    for (const [tower, fixture, face, arm] of [
+      [west, 'west upper service LED cabinet', 'segmented cool white LED face', 'facade practical cantilever'],
+      [west, 'west south frontage neon badge', 'red opal neon badge', 'facade practical cantilever'],
+      [north, 'east glazed concourse return', 'feathered LED ribbon', 'concourse return standoff'],
+    ] as const) {
+      const housing = tower.getObjectByName(fixture)!
+      const emitter = housing.getObjectByName(face) as THREE.Mesh
+      expect(housing.parent).toBe(tower)
+      const mounts = housing.children.filter(o => o.name === arm)
+      expect(mounts.length).toBeGreaterThanOrEqual(3)
+      const wall = tower.children.filter(o => o.name === 'building mass').map(o => new THREE.Box3().setFromObject(o))
+      for (const mount of mounts) expect(wall.some(box => box.intersectsBox(new THREE.Box3().setFromObject(mount)))).toBe(true)
+      expect(emitter.material).toBeInstanceOf(THREE.ShaderMaterial)
+      expect(new THREE.Vector3(0, 0, 1).transformDirection(emitter.matrixWorld).x).toBeCloseTo(1, 10)
+    }
+    expect(world.root.getObjectByName('rear service flood bank')!.children.filter(o => o.name === 'rear service flood diffuser')).toHaveLength(3)
     expect(world.lights).toHaveLength(8)
   })
 
