@@ -422,7 +422,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const lead = y + mix(-.020, .023, smooth(x, .21, .74))
       const sideY = mix(lead, y, u * (1.26 - .26 * u))
       const joinY = mix(spine(s) - .009, sideY, fairStep(x, .04, .47))
-      const deckY = mix(mix(joinY, tailDeckProfile(s), fairStep(s, .919, .938)), y, fairStep(u, .82, 1))
+      const lift = fairStep(s, .919, .938) * (1 - fairStep(s, .970, .989))
+      const deckY = mix(mix(joinY, tailDeckProfile(s), lift), y, fairStep(u, .82, 1))
       return [x, mix(deckY, sideY, fairStep(x, .28, .70)), zAt(s)]
     }), [0, 1, 0])
 

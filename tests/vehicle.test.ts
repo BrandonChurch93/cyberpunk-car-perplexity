@@ -647,9 +647,11 @@ describe('vehicle geometry and state', () => {
           .intersectObject(vehicle.root)[0].point.y
         expect(top(.95)).toBeGreaterThan(.915)
         expect(top(.95)).toBeLessThan(.924)
+        expect(top(.98)).toBeGreaterThan(.895)
+        expect(top(.98)).toBeLessThan(.900)
         expect(top(.985)).toBeGreaterThan(.889)
         expect(top(.995)).toBeGreaterThan(.570)
-        expect(top(.995)).toBeLessThan(.630)
+        expect(top(.995)).toBeLessThan(.595)
       }
     }
   })
