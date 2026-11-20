@@ -80,32 +80,33 @@ function tireGeometry(w: WheelSize, full: boolean, hero = w === frontWheel): T.B
       return Math.max(.0076 * groove, .0026 * shoulderGroove)
     }
     const pitch = u * 48
-    const inner = block(pitch + .35 - (v - .346) * 2.1, .034, .092)
-      * smooth(v, .276, .292) * (1 - smooth(v, .330, .342))
-    const outerSlot = block(pitch + (v - .660) * 2.2, .032, .088)
-      * smooth(v, .664, .674) * (1 - smooth(v, .702, .716))
-    const ribOuter = block(pitch - .24 + (v - .608) * 2.2, .030, .084)
+    const inner = block(pitch + .35 - (v - .346) * 2.3, .040, .098)
+      * smooth(v, .262, .284) * (1 - smooth(v, .330, .342))
+    const dv = Math.max(0, v - .660)
+    const outerSlot = block(pitch + dv * 2.5 + dv * dv * 8.0, .042, .100)
+      * smooth(v, .660, .672) * (1 - smooth(v, .726, .762))
+    const ribOuter = block(pitch - .24 + (v - .608) * 2.2, .036, .092)
       * smooth(v, .570, .582) * (1 - smooth(v, .642, .654))
-    const ribMid = block(pitch + .18 - (v - .505) * 2.0, .028, .080)
+    const ribMid = block(pitch + .18 - (v - .505) * 2.0, .034, .088)
       * smooth(v, .466, .478) * (1 - smooth(v, .542, .554))
-    const ribInner = block(pitch - .36 + (v - .399) * 2.0, .028, .080)
+    const ribInner = block(pitch - .36 + (v - .399) * 2.0, .034, .088)
       * smooth(v, .360, .372) * (1 - smooth(v, .436, .448))
     return Math.max(
       .0076 * groove,
-      .0026 * shoulderGroove,
-      .0020 * inner,
-      .0019 * outerSlot,
-      .0018 * ribOuter,
-      .0016 * ribMid,
-      .0016 * ribInner,
+      .0028 * shoulderGroove,
+      .0022 * inner,
+      .0025 * outerSlot,
+      .0020 * ribOuter,
+      .0018 * ribMid,
+      .0018 * ribInner,
     )
   }
   const rows = [...new Set(full
     ? [
         ...Array.from({ length: 49 }, (_, i) => i / 48),
         ...grooves.flatMap((v) => [v - .0148, v - .0066, v + .0066, v + .0148]),
-        .035, .060, .276, .308,
-        .672, .684, .694, .700, .707, .716, .728, .744, .766, .792,
+        .035, .060, .262, .276, .308,
+        .672, .684, .694, .700, .707, .716, .728, .742, .756, .768, .792,
         .833, .855, .885, .913, .948, .966, .981,
       ]
     : hero
@@ -446,7 +447,7 @@ function forgedWheelAssembly(w: WheelSize, full: boolean, hero = w === frontWhee
   const rHubInner = .248 * R, rHubOuter = .260 * R
   const rWebOuter = R - .0035
   const rWinOuter = R - .0124
-  const theta0 = w === frontWheel ? .98 : .22
+  const theta0 = w === frontWheel ? 1.18 : .22
   const branchSpan = .456
   const stemRootHalf = .064 * R
   const stemForkHalf = .052 * R
@@ -677,13 +678,22 @@ function caliper(w: WheelSize, full: boolean, axis: number, hero = w === frontWh
   const outer = w.disc + (rear ? .026 : .025)
   const lowAt = curve([[0, .032], [.085, .012], [.21, 0], [.41, .001], [.58, .004], [.79, 0], [.92, .012], [1, .031]])
   const highAt = curve([[0, -.031], [.075, -.011], [.18, -.003], [.34, 0], [.58, .001], [.78, -.002], [.925, -.010], [1, -.032]])
-  const crossPts: Profile = [
-    [.0065, .054], [.0148, .105], [.0166, .155], [.0169, .32], [.0169, .62],
-    [.0166, .815], [.0160, .878], [.0146, .912], [.0102, .962], [.0032, .990],
-    [-.012, .998], [-.036, .992], [-.053, .89], [-.058, .50],
-    [-.056, .16], [-.051, .072], [-.044, .13], [-.043, .76],
-    [-.033, .83], [-.012, .84], [.004, .80], [.005, .11],
-  ]
+  const crossPts: Profile = full
+    ? [
+        [.0065, .054], [.0148, .105], [.0166, .155],
+        [.0169, .24], [.0169, .36], [.0169, .48], [.0169, .60], [.0168, .72],
+        [.0166, .815], [.0160, .878], [.0146, .912], [.0102, .962], [.0032, .990],
+        [-.012, .998], [-.036, .992], [-.053, .89], [-.058, .50],
+        [-.056, .16], [-.051, .072], [-.044, .13], [-.043, .76],
+        [-.033, .83], [-.012, .84], [.004, .80], [.005, .11],
+      ]
+    : [
+        [.0065, .054], [.0148, .105], [.0166, .155], [.0169, .32], [.0169, .62],
+        [.0166, .815], [.0160, .878], [.0146, .912], [.0102, .962], [.0032, .990],
+        [-.012, .998], [-.036, .992], [-.053, .89], [-.058, .50],
+        [-.056, .16], [-.051, .072], [-.044, .13], [-.043, .76],
+        [-.033, .83], [-.012, .84], [.004, .80], [.005, .11],
+      ]
   const nPts = crossPts.length
   const sampleStation = (v: number): Pt2 => {
     const s = ((v % 1) + 1) % 1 * nPts
@@ -691,7 +701,7 @@ function caliper(w: WheelSize, full: boolean, axis: number, hero = w === frontWh
     const a = crossPts[i % nPts], b = crossPts[(i + 1) % nPts]
     return [mix(a[0], b[0], f), mix(a[1], b[1], f)]
   }
-  const grooveAt = (u: number, center: number, halfW: number): number => 1 - smooth(Math.abs(u - center), halfW * .38, halfW)
+  const grooveAt = (u: number, center: number, halfW: number): number => 1 - smooth(Math.abs(u - center), halfW * .24, halfW)
   const placeArch = (u: number, x: number, t: number, relief = 0): Point => {
     const a = middle + half * (2 * u - 1)
     const endCurve = smooth(u, 0, .09) * (1 - smooth(u, .91, 1))
@@ -702,23 +712,23 @@ function caliper(w: WheelSize, full: boolean, axis: number, hero = w === frontWh
   }
   const body = (u: number, v: number): Point => {
     const [x, t] = sampleStation(v)
-    const cheekMask = smooth(x, .011, .0160) * smooth(t, .20, .27) * (1 - smooth(t, .76, .84))
-    const flutes = Math.max(grooveAt(u, .365, .042), grooveAt(u, .635, .042))
+    const cheekMask = smooth(x, .010, .0162) * smooth(t, .16, .34) * (1 - smooth(t, .68, .86))
+    const flutes = Math.max(grooveAt(u, .365, .048), grooveAt(u, .635, .048))
     let boss = 0
     for (const bu of rear ? [.33, .67] : [.235, .500, .765]) {
-      const du = (u - bu) / .078, dt = (t - .48) / .24
+      const du = (u - bu) / .086, dt = (t - .48) / .26
       const d = Math.hypot(du, dt)
-      boss = Math.max(boss, 1 - smooth(d, .62, 1.0))
+      boss = Math.max(boss, 1 - smooth(d, .30, 1.0))
     }
     const topWindow = smooth(t, .885, .93) * (1 - smooth(t, .968, .995)) * smooth(x, -.032, -.018) * (1 - smooth(x, .001, .009))
       * Math.max(
         smooth(u, .21, .265) * (1 - smooth(u, .435, .49)),
         smooth(u, .51, .565) * (1 - smooth(u, .735, .79)),
       )
-    return placeArch(u, x - .0030 * topWindow, t - .0060 * topWindow, (.0017 * boss - .0018 * flutes) * cheekMask)
+    return placeArch(u, x - .0030 * topWindow, t - .0060 * topWindow, (.0015 * boss - .0015 * flutes) * cheekMask)
   }
   const sections = full ? (rear ? nPts : nPts * 2) : nPts
-  const uSpan = full ? (rear ? 36 : 72) : (hero ? 34 : 12)
+  const uSpan = full ? (rear ? 36 : 74) : (hero ? 34 : 12)
   const cast: T.BufferGeometry[] = [patch(body, uSpan, sections, [-1, 0, 0])]
   for (const end of [0, 1]) {
     const a = middle + half * (2 * end - 1)
@@ -798,42 +808,47 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
         ` + shader.fragmentShader
           .replace('#include <color_fragment>', `#include <color_fragment>
             float wtGrain = wheelTireHash(floor(wheelTirePt * 1450.0));
-            float wtWeight = wheelTireGrainAmt * (1.0 - smoothstep(0.00035, 0.0022, length(fwidth(wheelTirePt))));
+            float wtWeight = wheelTireGrainAmt * (1.0 - smoothstep(0.00022, 0.00075, length(fwidth(wheelTirePt))));
             float wtU = wheelTireUv.x;
             float wtV = wheelTireUv.y;
             float wtPitch = wtU * 48.0;
-            float wtFw = min(0.22, fwidth(wtPitch));
-            float wtSipeFade = 1.0 - smoothstep(0.16, 0.34, wtFw);
-            float wtSipeOuter = wtSipePulse(wtPitch + (wtV - 0.660) * 2.2, 0.032, 0.088, wtFw)
-              * smoothstep(0.664, 0.674, wtV) * (1.0 - smoothstep(0.702, 0.716, wtV));
-            float wtSipeRib1 = wtSipePulse(wtPitch - 0.24 + (wtV - 0.608) * 2.2, 0.030, 0.084, wtFw)
+            float wtFw = min(0.20, fwidth(wtPitch));
+            float wtSipeFade = 1.0 - smoothstep(0.24, 0.46, wtFw);
+            float wtDv = max(0.0, wtV - 0.660);
+            float wtSipeOuter = wtSipePulse(wtPitch + wtDv * 2.5 + wtDv * wtDv * 8.0, 0.042, 0.100, wtFw)
+              * smoothstep(0.660, 0.672, wtV) * (1.0 - smoothstep(0.726, 0.762, wtV));
+            float wtSipeRib1 = wtSipePulse(wtPitch - 0.24 + (wtV - 0.608) * 2.2, 0.036, 0.092, wtFw)
               * smoothstep(0.570, 0.582, wtV) * (1.0 - smoothstep(0.642, 0.654, wtV));
-            float wtSipeRib2 = wtSipePulse(wtPitch + 0.18 - (wtV - 0.505) * 2.0, 0.028, 0.080, wtFw)
+            float wtSipeRib2 = wtSipePulse(wtPitch + 0.18 - (wtV - 0.505) * 2.0, 0.034, 0.088, wtFw)
               * smoothstep(0.466, 0.478, wtV) * (1.0 - smoothstep(0.542, 0.554, wtV));
-            float wtSipeRib3 = wtSipePulse(wtPitch - 0.36 + (wtV - 0.399) * 2.0, 0.028, 0.080, wtFw)
+            float wtSipeRib3 = wtSipePulse(wtPitch - 0.36 + (wtV - 0.399) * 2.0, 0.034, 0.088, wtFw)
               * smoothstep(0.360, 0.372, wtV) * (1.0 - smoothstep(0.436, 0.448, wtV));
-            float wtSipeIn = wtSipePulse(wtPitch + 0.35 - (wtV - 0.346) * 2.1, 0.034, 0.092, wtFw)
-              * smoothstep(0.276, 0.292, wtV) * (1.0 - smoothstep(0.330, 0.342, wtV));
+            float wtSipeIn = wtSipePulse(wtPitch + 0.35 - (wtV - 0.346) * 2.3, 0.040, 0.098, wtFw)
+              * smoothstep(0.262, 0.284, wtV) * (1.0 - smoothstep(0.330, 0.342, wtV));
             float wtSipe = wtSipeFade * max(max(wtSipeOuter, wtSipeRib1), max(max(wtSipeRib2, wtSipeRib3), wtSipeIn));
             float wtMainCh = max(
               max(1.0 - smoothstep(0.0066, 0.0148, abs(wtV - 0.346)), 1.0 - smoothstep(0.0066, 0.0148, abs(wtV - 0.452))),
               max(1.0 - smoothstep(0.0066, 0.0148, abs(wtV - 0.558)), 1.0 - smoothstep(0.0066, 0.0148, abs(wtV - 0.658)))
             );
             float wtShCh = 1.0 - smoothstep(0.0024, 0.0064, abs(wtV - 0.700));
-            float wtCav = clamp(max(wheelTireCav, max(wtMainCh, max(0.46 * wtShCh, 0.54 * wtSipe))), 0.0, 1.0);
-            float wtTread = smoothstep(0.26, 0.31, wtV) * (1.0 - smoothstep(0.705, 0.745, wtV));
+            float wtCav = clamp(max(wheelTireCav, max(wtMainCh, max(0.50 * wtShCh, 0.68 * wtSipe))), 0.0, 1.0);
+            float wtTread = smoothstep(0.25, 0.30, wtV) * (1.0 - smoothstep(0.730, 0.770, wtV));
             float wtYRel = wheelTirePt.y + wheelTireLoaded;
-            float wtDeckNear = 1.0 - smoothstep(0.03, 0.30, wtYRel);
-            float wtDeckWetZone = 0.50 + 0.50 * wtDeckNear;
-            float wtWetWater = clamp((smoothstep(0.34, 0.84, wtMainCh) + 0.62 * smoothstep(0.30, 0.88, wtSipe) + 0.48 * wtShCh) * wtDeckWetZone, 0.0, 1.0);
+            float wtDeckNear = 1.0 - smoothstep(0.03, 0.28, wtYRel);
+            float wtWetWater = clamp(
+              smoothstep(0.34, 0.84, wtMainCh) * (0.34 + 0.66 * wtDeckNear)
+              + (0.58 * smoothstep(0.32, 0.88, wtSipe) + 0.40 * wtShCh) * (0.14 + 0.86 * wtDeckNear),
+              0.0,
+              1.0
+            );
             float wtRibEdge = wtTread * (1.0 - smoothstep(0.04, 0.38, wtCav)) * smoothstep(0.004, 0.022, wtYRel);
             float wtFootZ = exp(-pow(wheelTirePt.z / 0.105, 2.0)) * smoothstep(0.73, 0.82, max(wtV, 1.0 - wtV));
             float wtBulgeUpper = wtFootZ * smoothstep(0.016, 0.032, wtYRel) * (1.0 - smoothstep(0.048, 0.075, wtYRel));
             float wtBulgeTuck = wtFootZ * (1.0 - smoothstep(0.003, 0.018, wtYRel));
             diffuseColor.rgb *= (1.0 + (wtGrain - 0.5) * 0.08 * wtWeight)
               * mix(1.0, 0.86, wtTread)
-              * mix(1.0, 0.24, wtCav)
-              * mix(1.0, 1.18, wtRibEdge)
+              * mix(1.0, 0.22, wtCav)
+              * mix(1.0, 1.20, wtRibEdge)
               * mix(1.0, 1.22, wtBulgeUpper)
               * mix(1.0, 0.82, wtBulgeTuck);
           `)
@@ -843,10 +858,10 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
               0.54,
               0.92
             );
-            roughnessFactor = mix(roughnessFactor, 0.14, wtWetWater);
+            roughnessFactor = mix(roughnessFactor, 0.16, wtWetWater);
           `)
           .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-            float wtReliefH = -0.0016 * wtSipe - (1.0 - 0.65 * wheelTireGrainAmt) * 0.0022 * wtMainCh - 0.0009 * wtShCh;
+            float wtReliefH = -(1.0 - 0.42 * wheelTireGrainAmt) * 0.0024 * wtSipe - (1.0 - 0.65 * wheelTireGrainAmt) * 0.0022 * wtMainCh - 0.0010 * wtShCh;
             vec3 wtDx = dFdx(vViewPosition), wtDy = dFdy(vViewPosition);
             vec3 wtR1 = cross(wtDy, normal), wtR2 = cross(normal, wtDx);
             float wtDet = dot(wtDx, wtR1);
@@ -854,15 +869,15 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
             normal = normalize(max(abs(wtDet), 1e-9) * normal - wtGrad);
           `)
           .replace('#include <clearcoat_normal_fragment_maps>', `#include <clearcoat_normal_fragment_maps>
-            float wtMeniscusH = 0.0014 * (wtMainCh * wtMainCh + 0.55 * wtSipe * wtSipe);
+            float wtMeniscusH = 0.0012 * (wtMainCh * wtMainCh + 0.45 * wtSipe * wtSipe);
             vec3 wtCcGrad = (dFdx(wtMeniscusH) * wtR1 + dFdy(wtMeniscusH) * wtR2) * sign(wtDet);
             vec3 wtCcBase = normalize(max(abs(wtDet), 1e-9) * clearcoatNormal - wtCcGrad);
-            clearcoatNormal = normalize(mix(wtCcBase, normalize(wtCcBase + 0.55 * wheelTireUpView), wtWetWater * (0.35 + 0.65 * wtDeckNear)));
+            clearcoatNormal = normalize(mix(wtCcBase, normalize(wtCcBase + 0.55 * wheelTireUpView), wtWetWater * wtDeckNear));
           `)
           .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
             #ifdef USE_CLEARCOAT
-              material.clearcoat = clamp(0.01 + 0.88 * wtWetWater, 0.0, 0.90);
-              material.clearcoatRoughness = mix(0.28, 0.08, wtWetWater);
+              material.clearcoat = clamp(0.01 + 0.85 * wtWetWater, 0.0, 0.88);
+              material.clearcoatRoughness = mix(0.28, 0.09, wtWetWater);
             #endif
           `)
       },
@@ -870,13 +885,13 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
     return mat
   }
   const sidewallBand = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x323943 : 0x464e59,
-    roughness: full ? .42 : .40,
-    metalness: .04,
-    clearcoat: full ? .20 : .12,
-    clearcoatRoughness: .34,
-    specularIntensity: .76,
-    envMapIntensity: 1.38,
+    color: full ? 0x20242a : 0x32373f,
+    roughness: full ? .48 : .45,
+    metalness: .02,
+    clearcoat: full ? .05 : .04,
+    clearcoatRoughness: .38,
+    specularIntensity: .48,
+    envMapIntensity: .92,
   }), 'none')
   const makeRotorFinish = (w: WheelSize, axis: number, label: string) => {
     const mat = m.tag(new T.MeshPhysicalMaterial({
@@ -949,7 +964,7 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
             float wrRadial = 0.085 * cos(wrTheta * wrVanes) * wrVaneFade
               + 0.095 * wrRingNoise(wrTurn, 72.0) * wrSpokeFade;
             float wrGrain = wrHash(floor(wheelRotorPt * 920.0));
-            float wrGrainW = wrGrainAmt * (1.0 - smoothstep(0.00045, 0.0022, wrFoot));
+            float wrGrainW = wrGrainAmt * (1.0 - smoothstep(0.00028, 0.00085, wrFoot));
             float wrBandGain = mix(0.50, 1.24, wrSwept);
             wrBandGain = mix(wrBandGain, 1.60, wrInSlot);
             diffuseColor.rgb *= wrBandGain
@@ -993,45 +1008,45 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
     envMapIntensity: full ? 1.42 : 1.05,
   }), 'none')
   const wheelChamfer = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x2c323c : 0x454c57,
-    metalness: full ? .56 : .38,
-    roughness: full ? .23 : .29,
-    clearcoat: full ? .48 : .28,
-    clearcoatRoughness: .22,
-    specularIntensity: full ? .94 : .74,
-    envMapIntensity: full ? 1.56 : 1.24,
+    color: full ? 0x333a46 : 0x454c57,
+    metalness: full ? .60 : .38,
+    roughness: full ? .21 : .29,
+    clearcoat: full ? .54 : .28,
+    clearcoatRoughness: .20,
+    specularIntensity: full ? .96 : .74,
+    envMapIntensity: full ? 1.64 : 1.24,
   }), 'none')
   const wheelLipLine = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x363d49 : 0x525966,
-    metalness: full ? .58 : .48,
-    roughness: .24,
-    clearcoat: .50,
-    clearcoatRoughness: .22,
-    specularIntensity: .92,
-    envMapIntensity: 1.50,
+    color: full ? 0x3c4452 : 0x525966,
+    metalness: full ? .62 : .48,
+    roughness: .22,
+    clearcoat: .54,
+    clearcoatRoughness: .20,
+    specularIntensity: .94,
+    envMapIntensity: 1.56,
   }), 'none')
   const lugFinish = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x3e444f : 0x454b55,
-    metalness: full ? .58 : .50,
-    roughness: .25,
-    clearcoat: .55,
-    envMapIntensity: 1.35,
+    color: full ? 0x444b57 : 0x454b55,
+    metalness: full ? .62 : .50,
+    roughness: .24,
+    clearcoat: .58,
+    envMapIntensity: 1.40,
   }), 'none')
   const wheelHardware = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x707884 : 0x606772,
-    metalness: full ? .86 : .55,
-    roughness: .22,
-    clearcoat: .58,
-    envMapIntensity: 1.35,
+    color: full ? 0x828b98 : 0x606772,
+    metalness: full ? .88 : .55,
+    roughness: .20,
+    clearcoat: .62,
+    envMapIntensity: 1.44,
   }), 'none')
   const caliperFinish = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x741b1f : 0x8e959f,
-    metalness: full ? .30 : .22,
-    roughness: full ? .33 : .28,
-    clearcoat: full ? .52 : .55,
-    clearcoatRoughness: full ? .20 : .19,
-    specularIntensity: .82,
-    envMapIntensity: full ? 1.24 : 1.22,
+    color: full ? 0xb82026 : 0xa8b0bc,
+    metalness: full ? .12 : .18,
+    roughness: full ? .20 : .23,
+    clearcoat: full ? .88 : .66,
+    clearcoatRoughness: full ? .09 : .14,
+    specularIntensity: .96,
+    envMapIntensity: full ? 1.68 : 1.36,
   }), 'none')
   const hatFinish = m.tag(new T.MeshPhysicalMaterial({
     color: full ? 0x1c1f24 : 0x2c3037,
