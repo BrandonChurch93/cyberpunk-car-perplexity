@@ -192,8 +192,10 @@ export function sidePoint(s: number, y: number, side: number): Point {
 }
 
 function bonnetSection(s: number, x: number) {
-  return (hinge(x - hoodInner(s), foldHalf) - hinge(x - hoodOuter(s), foldHalf))
-    * fairStep(s, hoodTipS, hoodTipS + .025) * (1 - fairStep(s, .290, .326))
+  const tip = fairStep(s, hoodTipS, .106)
+  const bend = mix(.009, foldHalf, tip)
+  return (hinge(x - hoodInner(s), bend) - hinge(x - hoodOuter(s), bend))
+    * tip * (1 - fairStep(s, .290, .326))
     + .86 * (1 - fairStep(s, .173, .203)) * hinge(x - lampFold(s), foldHalf)
 }
 
