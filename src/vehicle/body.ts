@@ -134,11 +134,13 @@ const doorBelt = fairCurve([[.237, .540], [.295, .569], [.380, .610], [.460, .65
 const heelFold = fairCurve([[.321, .244], [.382, .272], [.530, .338], [.597, .375], [.712, .432], [.747, .450]], {
   controls: 5, pins: [[.530, .338]],
 })
-const haunchFold = fairCurve([[.631, 1.009], [.646, .975], [.682, .895], [.702, .836], [.724, .774], [.756, .694], [.766, .670]], {
+const haunchFold = fairCurve([[.631, 1.009], [.646, .975], [.682, .895], [.702, .836], [.724, .774], [.756, .694], [.766, .670], [.788, .618], [.810, .566]], {
   controls: 6, pins: [[.724, .774]],
 })
-const deckIn = curve([[.610, .608], [.670, .641], [.750, .686], [.820, .729], [.856, .762], [.882, .746], [.923, .704]])
-const deckOut = curve([[.697, .942], [.741, .899], [.789, .849], [.828, .798], [.856, .762]])
+const deckIn = fairCurve([[.610, .608], [.670, .641], [.750, .686], [.820, .729], [.856, .762], [.882, .746], [.923, .704]], {
+  breaks: [[.856, .762]], pins: [[.750, .686]], controls: 5,
+})
+const deckOut = fairCurve([[.697, .942], [.741, .899], [.789, .849], [.828, .798], [.856, .762]], { pins: [[.789, .849]], controls: 5 })
 const haunchRidgeY = curve([[.625, 1.066], [.650, 1.063], [.697, 1.047], [.750, 1.015],
   [.808, .975], [.851, .938], [.887, .918], [.922, .896]])
 const foldRadius = .004
@@ -171,23 +173,26 @@ export function sidePoint(s: number, y: number, side: number): Point {
   const thickness = shoulderInset(s)
   const dent = sideDent(s) * 2.5 * q * (1 - q) ** 2
   const face = .007 * Math.sin(Math.PI * q) * fairStep(s, .27, .37)
-  const fold = (line: number, first: number, direction: number, endRound = .028) => {
+  const fold = (line: number, first: number, direction: number, endRound = .028, top = shoulder(s), band = .972) => {
     const t = y - line
-    const low = rockerY(s) - line, high = shoulder(s) - line
+    const low = rockerY(s) - line, high = top - line
+    const q = T.MathUtils.clamp((y - rockerY(s)) / (top - rockerY(s)), 0, 1)
     const interior = hinge(t, foldHalf) - mix(fairPositive(low, endRound), fairPositive(high, endRound), q)
     const edge = (fairPositive(low, endRound) - hinge(low, foldHalf)) * (1 - fairStep(q, 0, .06))
-      + (fairPositive(high, endRound) - hinge(high, foldHalf)) * fairStep(q, .972, 1)
+      + (fairPositive(high, endRound) - hinge(high, foldHalf)) * fairStep(q, band, 1)
     return direction * first * foldSlope * (interior + edge)
   }
   const belt = fold(doorBelt(s), fairStep(s, .237, .332) * (1 - fairStep(s, .895, .928)), -.88 - .05 * fairStep(s, .60, .73))
   const heel = fold(heelFold(s), fairStep(s, .321, .415) * (1 - fairStep(s, .725, .765)), .84)
-  const haunch = fold(haunchFold(s), fairStep(s, .631, .681) * (1 - fairStep(s, .770, .805)), -.88)
+  const haunch = fold(haunchFold(s), fairStep(s, .631, .681) * (1 - fairStep(s, .770, .805)), -.88, .06, shoulder(s), .7)
   const ordinary = sill + thickness * q + dent + face + belt + heel
   const rise = y - doorBelt(s)
   const run = shoulder(s) - doorBelt(s)
   const peak = .0018 + .32 * thickness
   const crest = (t: number) => peak - .137 * t + .378 * hinge(t, foldHalf)
-  const close = (thickness - crest(run)) * fairStep(rise, .003, .0031 + fairPositive(run - .003, .012))
+  const closing = mix(fairStep(rise, .003, .0031 + fairPositive(run - .003, .012)),
+    (fairPositive(rise - .003, .002) / Math.max(fairPositive(run - .003, .002), 1e-5)) ** 2, fairStep(run, .02, .05))
+  const close = (thickness - crest(run)) * closing
   const flank = fairStep(s, .572, .644) * (1 - fairStep(s, .898, .926))
     * (1 - fairStep(-rise, .02, .32))
   const diagonal = crossOffset(s, y)
@@ -566,7 +571,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const x = mix(inX, outside[0], v)
       const ridge = deckIn(s)
       const returnFold = 1 - smooth(s, .794, .874)
-      const section = (at: number) => hinge(at - ridge, foldHalf) - returnFold * hinge(at - deckOut(s), foldHalf)
+      const bend = mix(foldHalf, .024, fairStep(s, .800, .852))
+      const section = (at: number) => hinge(at - ridge, bend) - returnFold * hinge(at - deckOut(s), bend)
       const vane = section(x) - mix(section(inX), section(outside[0]), v)
       const ridgeV = T.MathUtils.clamp((ridge - inX) / (outside[0] - inX), .14, .86)
       const turn = -.37 * smooth(s, .614, .672) * smooth(ridge - inX, -.009, .055)
@@ -587,23 +593,15 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         * (1 - smooth(Math.abs(tBend), .014, .105)) * Math.sin(Math.PI * v)
       const shape = base + .22 * fade * (hinge(tBend, .006) - .5 * tBend)
       const capBlend = smooth(s, .735, .782)
-      const cap = hinge(shape - high + mix(.008, .004, capBlend), mix(.014, .004, capBlend))
+      const cap = hinge(shape - high + mix(.008, .004, capBlend), mix(mix(.014, .004, capBlend), .012, fairStep(s, .800, .840)))
       const crownTrim = .013 * smooth(s, .833, .874) * (1 - smooth(s, .895, .924))
         * smooth(x, .598, .705) * (1 - smooth(x, .758, .852))
       const sculpted = shape - cap * smooth(x, .695, .765) - crownTrim
       const calm = mix(inY, outside[1], v * (.76 + .24 * v)) + .003 * Math.sin(Math.PI * v) ** 2
-      const fair = fairStep(s, .758, .791) * (1 - fairStep(s, .883, .924)) * (1 - fairStep(x, .571, .610))
+      const fair = smooth(s, .758, .791) * (1 - smooth(s, .883, .924)) * (1 - smooth(x, .571, .610))
       return [x, mix(sculpted, calm, fair), zAt(s)]
     }
-    const deckSection = (s: number, v: number): Point => {
-      const [x, y, z] = deckShape(s, v)
-      const mask = fairStep(s, .812, .840) * (1 - fairStep(s, .893, .919))
-        * fairStep(x, .588, .648) * (1 - fairStep(x, .878, .952))
-      if (mask === 0) return [x, y, z]
-      const faired = (deckShape(s - .030, v)[1] + 4 * deckShape(s - .015, v)[1] + 6 * y
-        + 4 * deckShape(s + .015, v)[1] + deckShape(s + .030, v)[1]) / 16
-      return [x, mix(y, faired, mask), z]
-    }
+    const deckSection = deckShape
     folded(sided((u, v) => deckSection(mix(.5984, .942 - .019 * v, u), v)),
       [0, 1, 0], [haunchLine, lateralTrace(deckIn), lateralTrace(deckOut)])
     part(paint, sided((u, v) => {
