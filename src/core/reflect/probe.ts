@@ -3,6 +3,11 @@ import { layers } from '../contract'
 import type { HazeCapture } from '../haze'
 import { Prefilter } from './prefilter'
 
+type PrepareFace = (camera: THREE.PerspectiveCamera, face: number) => void
+const faceOrder = [0, 1, 2, 3, 4, 5]
+// The sky face bakes the frame's shadows before any mirror hides the deck.
+const mirrorFaceOrder = [2, 0, 1, 3, 4, 5]
+
 function cubeTarget(size: number, depthBuffer = true): THREE.WebGLCubeRenderTarget {
   return new THREE.WebGLCubeRenderTarget(size, {
     type: THREE.HalfFloatType,
@@ -24,7 +29,8 @@ export class Probe {
   private fullTarget: THREE.WebGLCubeRenderTarget | null = null
   private withEmitters: Prefilter | null = null
 
-  constructor(private readonly renderer: THREE.WebGLRenderer, size: number, near: number, far: number, private readonly haze?: HazeCapture) {
+  constructor(private readonly renderer: THREE.WebGLRenderer, size: number, near: number, far: number,
+    private readonly haze?: HazeCapture, private readonly prepareFace?: PrepareFace) {
     this.target = cubeTarget(size, !haze)
     this.source = haze ? new THREE.WebGLRenderTarget(size, size, {
       type: THREE.HalfFloatType,
@@ -56,11 +62,11 @@ export class Probe {
     renderer.setClearColor(0x000000, 1)
     try {
       if (this.haze && this.source) return this.captureScattered(scene, this.haze, this.source, emitters)
-      this.cube.children.forEach((camera, face) => {
+      this.drawFaces((camera, face) => {
         this.target.texture.generateMipmaps = face === 5
         renderer.setRenderTarget(this.target, face)
         renderer.clear(true, true, false)
-        renderer.render(scene, camera as THREE.PerspectiveCamera)
+        renderer.render(scene, camera)
         renderer.shadowMap.autoUpdate = false
         renderer.shadowMap.needsUpdate = false
       })
@@ -90,14 +96,21 @@ export class Probe {
     }
   }
 
+  private drawFaces(draw: PrepareFace): void {
+    for (const face of this.prepareFace ? mirrorFaceOrder : faceOrder) {
+      const camera = this.cube.children[face] as THREE.PerspectiveCamera
+      this.prepareFace?.(camera, face)
+      draw(camera, face)
+    }
+  }
+
   private captureScattered(scene: THREE.Scene, haze: HazeCapture, source: THREE.WebGLRenderTarget, emitters?: THREE.Object3D) {
     const renderer = this.renderer
     const full = emitters ? (this.fullTarget ??= cubeTarget(source.width, false)) : null
     const visible = emitters?.visible
     renderer.autoClear = false
     try {
-      this.cube.children.forEach((child, face) => {
-        const camera = child as THREE.PerspectiveCamera
+      this.drawFaces((camera, face) => {
         renderer.setRenderTarget(source)
         renderer.clear(true, true, false)
         renderer.render(scene, camera)
