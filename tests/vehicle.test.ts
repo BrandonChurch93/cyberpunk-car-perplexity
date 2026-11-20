@@ -726,6 +726,28 @@ describe('vehicle geometry and state', () => {
     }
   }, 15_000)
 
+  it('keeps the outer diffuser fin ahead of its liner and backs the strake slots', () => {
+    const view = new T.PerspectiveCamera(28, config.formats.master.width / config.formats.master.height)
+    view.position.set(2.8, .75, -5.25)
+    view.lookAt(0, .515, -1.93)
+    view.updateMatrixWorld(true)
+    for (const vehicle of [full, blockout]) {
+      vehicle.update(stateAt(951 / config.film.fps))
+      vehicle.root.updateMatrixWorld(true)
+      const firstAt = (x: number, y: number) => {
+        const ray = new T.Raycaster()
+        ray.setFromCamera(new T.Vector2(2 * x - 1, 1 - 2 * y), view)
+        return ray.intersectObject(vehicle.root, true)[0]?.object.name
+      }
+      for (const [x, y] of [[.411, .542], [.409, .560], [.405, .579]]) {
+        expect(firstAt(x, y)).toBe('thin graphite diffuser blades')
+      }
+      expect(firstAt(.4167, .566)).not.toBe('rear optical lens shells')
+      expect(firstAt(.4344, .665)).toBe('recessed backing')
+      vehicle.update(stateAt(0))
+    }
+  })
+
   it('keeps the painted rear fascia in front of the internal liner', () => {
     for (const vehicle of [full, blockout]) {
       vehicle.root.updateMatrixWorld(true)

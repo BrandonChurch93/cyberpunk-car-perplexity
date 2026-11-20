@@ -13,10 +13,11 @@ export const anchor = (position: Point, normal: Point, radius: number): Anchor =
 const diffuserProfile = [[.908, .159], [.929, .191], [.940, .203], [.960, .233], [.970, .265], [.975, .295], [.980, .325], [.990, .399], [.995, .430], [1, .470]] as const
 const diffuserRise = curve(diffuserProfile)
 const diffuserRun = curve(diffuserProfile.map(([s, y]) => [y, s]))
+const roundMax = (a: number, b: number, width: number): number =>
+  Math.max(a, b) + (width ? Math.max(0, width - Math.abs(a - b)) ** 2 / (4 * width) : 0)
 const diffuserZ = (x: number, y: number, z: number, blendWidth = 0): number => {
   const floor = zAt(diffuserRun(y))
-  const t = Math.max(0, blendWidth - Math.abs(z - floor))
-  return limitTailZ(x, Math.max(z, floor) + (blendWidth ? t * t / (4 * blendWidth) : 0))
+  return roundMax(limitTailZ(x, -3), roundMax(z, floor, blendWidth), blendWidth)
 }
 
 function ribbon(face: Face, knots: readonly XY[], width: number, depth: number, steps = 36): T.BufferGeometry {
@@ -445,6 +446,13 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const y = .153 + .067 * v
       return [side * x, y, diffuserZ(x, y, zAt(s))]
     }, 25, 9, [0, -1, 0], .016))
+    dark.push(patch((u, v) => {
+      const x = .926 * u, flare = smooth(x, .38, .89)
+      const tuck = smooth(x, .711, .897)
+      const y = mix(.167 + .031 * flare + .030 * tuck, .325 + .061 * flare, v)
+      const z = mix(zAt(.877), rampEdge(u) + .038, v * (.53 + .47 * v)) + .070 * tuck
+      return [side * x, y, diffuserZ(x, y, z, .017)]
+    }, full ? 33 : 22, 7, outRear))
     const rampMouth = (u: number, v: number): Point => {
       const x = mix(0, .969, u)
       const diff = diffuser(u, 1)
@@ -476,25 +484,31 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const railZ = curve(inner
         ? [[0, -2.364], [.12, -2.407], [.255, -2.446], [.36, -2.445], [.70, -2.432], [1, -2.411]]
         : [[0, -2.292], [.14, -2.311], [.27, -2.306], [.42, -2.298], [.70, -2.286], [1, -2.274]])
+      const rows = full ? 36 : 24
       const edge: Surface = (u, v) => {
-        const w = 2 * u - 1
+        const angle = Math.PI * u
         const axis = fin + (inner ? .018 : .040) * v ** 1.28
         const half = .0067 - .0013 * v
         const y = tip - (inner ? .150 : .146) * v
-        const z = diffuserZ(axis + half, y - .010, railZ(v))
-        return [side * (axis + half * w), y, z - .0034 * Math.sin(Math.PI * u)]
+        const z = diffuserZ(axis + half, y - .010, railZ(v), .009)
+        return [side * (axis - half * Math.cos(angle)), y, z - .0034 * Math.sin(angle)]
       }
-      diffuserFins.push(patch(edge, 6, 24, outRear))
+      diffuserFins.push(patch(edge, 6, rows, outRear))
       const web = (u: number, v: number, face: number): Point => {
         const p = edge(face, v)
-        const x = mix(fin - .019 + .004 * (2 * face - 1), Math.abs(p[0]), u)
-        const y = mix(.237 - .071 * v, p[1], u ** 1.28)
-        return [side * x, y, diffuserZ(x, y - .010, mix(zAt(.833), p[2], u))]
+        const ease = u + u ** 3 * (1 - u)
+        const x = mix(fin - .019 + .004 * (2 * face - 1), Math.abs(p[0]), ease)
+        const y = mix(.237 - .071 * v, p[1], ease ** 1.28)
+        const rail = mix(zAt(.833), p[2], u)
+        const run = diffuserZ(x, y - .010, rail, .009)
+        return [side * x, y, mix(run, rail, smooth(u, .965, 1))]
       }
-      for (const face of [0, 1]) diffuserFins.push(patch((u, v) => web(u, v, face), 28, 13, [side * (2 * face - 1), 0, 0]))
-      for (const v of [0, 1]) diffuserFins.push(patch((u, b) => blend(web(u, v, 0), web(u, v, 1), b), 28, 2, [0, 1 - 2 * v, 0]))
+      const columns = full ? 25 : 16
+      for (const face of [0, 1]) diffuserFins.push(patch((u, v) => web(u, v, face), columns, rows, [side * (2 * face - 1), 0, 0]))
+      for (const v of [0, 1]) diffuserFins.push(patch((u, b) => blend(web(u, v, 0), web(u, v, 1), b), columns, 2, [0, 1 - 2 * v, 0]))
+      for (const v of [0, 1]) diffuserFins.push(patch((u, b) => blend(edge(u, v), blend(edge(0, v), edge(1, v), (1 - Math.cos(Math.PI * u)) / 2), b),
+        6, 1, [0, 1 - 2 * v, 0]))
     }
-    rearOptical.push(ribbon(r, [[.545, .434], [.654, .430]], .022, .012, 18))
   }
   diffuserShell.push(patch((u, v) => {
     const lateral = 2 * v - 1, side = Math.abs(lateral)

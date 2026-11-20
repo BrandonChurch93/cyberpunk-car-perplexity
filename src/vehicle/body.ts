@@ -602,7 +602,9 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const x = mix(cap(.926, rearCorner(1))[0] * side, .512, u) - .035 * (1 - v)
       const y = mix(low, high, v)
       const recess = .155 * smooth(u, .025, .70) * smooth(y, .472, .548)
-      return [side * x, y, limitTailZ(x, zAt(s) + recess)]
+      const seat = .018 * smooth(x, .614, .652) * (1 - smooth(x, .695, .737))
+        * smooth(y, .374, .403) * (1 - smooth(y, .477, .503))
+      return [side * x, y, limitTailZ(x, zAt(s) + recess + seat)]
     }, uSide, n, 5, .007)
     const throatDepth = .165
     const intake = (u: number, v: number, inset: number): Point => {
