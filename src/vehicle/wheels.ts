@@ -379,7 +379,7 @@ function forgedWheelAssembly(w: WheelSize, full: boolean): {
   const lugCenters: Pt2[] = []
   const lugLoops: LoopSample[][] = []
   const rLug = .204 * R, rLugWell = .0066, tLugSeam = .0014
-  const cornerSegs = full ? 10 : 5
+  const cornerSegs = full ? 12 : 5
   const maxLoopEdge = full ? .0075 : .022
 
   for (let k = 0; k < 5; k++) {
@@ -398,7 +398,7 @@ function forgedWheelAssembly(w: WheelSize, full: boolean): {
       local2(thNext, rPentInner, -stemRootHalf),
       polar2(rPentArc, (th + thNext) * .5),
     ]
-    const pentRadii = [.0120, .0155, .0140, .185, .0140, .0155, .0120, .085]
+    const pentRadii = [.0132, .0165, .0148, .185, .0148, .0165, .0132, .085]
     windowLoops.push(filletConvexCCW(pentPts, pentRadii, cornerSegs, maxLoopEdge))
 
     const triPts: Pt2[] = [
@@ -407,7 +407,7 @@ function forgedWheelAssembly(w: WheelSize, full: boolean): {
       polar2(rWinOuter, th),
       polar2(rWinOuter, th + triHalfAngle),
     ]
-    const triRadii = [.0110, .0140, .210, .0140]
+    const triRadii = [.0116, .0148, .210, .0148]
     windowLoops.push(filletConvexCCW(triPts, triRadii, cornerSegs, maxLoopEdge))
 
     const lugCenter = polar2(rLug, th + tau / 10)
@@ -609,82 +609,107 @@ function caliper(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, 
 }
 
 export function createWheels(parent: T.Group, m: Palette, full: boolean): Point {
-  const tireRubber = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x1c1e21 : 0x2b2e31,
-    roughness: .86,
-    metalness: .02,
-    specularIntensity: .34,
-  }), 'none')
-  if (full) {
-    const seed = stream('wheel tire vulcanized grain').range(.1, 21)
-    patchMaterial(tireRubber, {
-      id: 'wheel tire vulcanized grain',
-      uniforms: { wheelTireSeed: { value: seed } },
-      apply(shader) {
-        shader.vertexShader = 'varying vec3 wheelTirePt;\n'
-          + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nwheelTirePt = position;')
-        shader.fragmentShader = `varying vec3 wheelTirePt;
-          uniform float wheelTireSeed;
-          float wheelTireHash(vec3 p) {
-            p = fract(p * vec3(0.1031, 0.0973, 0.1099));
-            p += dot(p, p.yzx + wheelTireSeed + 19.19);
-            return fract((p.x + p.y) * p.z);
-          }
-        ` + shader.fragmentShader
-          .replace('#include <color_fragment>', `#include <color_fragment>
-            float wtGrain = wheelTireHash(floor(wheelTirePt * 1450.0));
-            float wtWeight = 1.0 - smoothstep(0.00035, 0.0022, length(fwidth(wheelTirePt)));
-            float wtTread = 1.0 - smoothstep(0.095, 0.125, abs(wheelTirePt.x));
-            diffuseColor.rgb *= (1.0 + (wtGrain - 0.5) * 0.10 * wtWeight) * mix(1.0, 0.78, wtTread);
-          `)
-          .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-            roughnessFactor = clamp(roughnessFactor + (wtGrain - 0.5) * 0.08 * wtWeight - 0.16 * wtTread, 0.58, 0.94);
-          `)
-      },
-    })
+  const makeTireRubber = (w: WheelSize, label: string) => {
+    const mat = m.tag(new T.MeshPhysicalMaterial({
+      color: full ? 0x23272c : 0x343940,
+      roughness: full ? .78 : .70,
+      metalness: .02,
+      specularIntensity: .54,
+      envMapIntensity: 1.25,
+    }), 'none')
+    if (full) {
+      const id = `wheel tire vulcanized grain ${label}`
+      const seed = stream(id).range(.1, 21)
+      patchMaterial(mat, {
+        id,
+        uniforms: {
+          wheelTireSeed: { value: seed },
+          wheelTireRadius: { value: w.radius },
+        },
+        apply(shader) {
+          shader.vertexShader = 'varying vec3 wheelTirePt;\n'
+            + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nwheelTirePt = position;')
+          shader.fragmentShader = `varying vec3 wheelTirePt;
+            uniform float wheelTireSeed;
+            uniform float wheelTireRadius;
+            float wheelTireHash(vec3 p) {
+              p = fract(p * vec3(0.1031, 0.0973, 0.1099));
+              p += dot(p, p.yzx + wheelTireSeed + 19.19);
+              return fract((p.x + p.y) * p.z);
+            }
+          ` + shader.fragmentShader
+            .replace('#include <color_fragment>', `#include <color_fragment>
+              float wtGrain = wheelTireHash(floor(wheelTirePt * 1450.0));
+              float wtWeight = 1.0 - smoothstep(0.00035, 0.0022, length(fwidth(wheelTirePt)));
+              float wtTread = 1.0 - smoothstep(0.095, 0.125, abs(wheelTirePt.x));
+              float wtR = length(wheelTirePt.yz);
+              float wtShoulder = smoothstep(wheelTireRadius - 0.052, wheelTireRadius - 0.018, wtR)
+                * (1.0 - smoothstep(wheelTireRadius - 0.004, wheelTireRadius + 0.003, wtR));
+              float wtUpper = smoothstep(-0.02, 0.18, wheelTirePt.y);
+              float wtSheen = wtShoulder * wtUpper;
+              diffuseColor.rgb *= (1.0 + (wtGrain - 0.5) * 0.10 * wtWeight) * mix(1.0, 0.80, wtTread) * mix(1.0, 1.72, wtSheen);
+            `)
+            .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+              roughnessFactor = clamp(
+                roughnessFactor + (wtGrain - 0.5) * 0.08 * wtWeight - 0.14 * wtTread - 0.24 * wtSheen,
+                0.52,
+                0.92
+              );
+            `)
+        },
+      })
+    }
+    return mat
   }
+  const tireBead = m.tag(new T.MeshPhysicalMaterial({
+    color: full ? 0x2c3037 : 0x3a3f47,
+    roughness: .58,
+    metalness: .04,
+    specularIntensity: .60,
+    envMapIntensity: 1.25,
+  }), 'none')
   const wheelSatinFace = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x1b1e25 : 0x353a43,
-    metalness: .48,
-    roughness: full ? .25 : .29,
-    clearcoat: full ? .62 : .36,
-    clearcoatRoughness: .18,
-    specularIntensity: .95,
-    envMapIntensity: 1.50,
+    color: full ? 0x1c2027 : 0x353a43,
+    metalness: .46,
+    roughness: full ? .27 : .30,
+    clearcoat: full ? .44 : .30,
+    clearcoatRoughness: .24,
+    specularIntensity: .88,
+    envMapIntensity: 1.44,
   }), 'none')
   const wheelDeepGloss = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x090b0f : 0x181b21,
-    metalness: full ? .32 : .34,
-    roughness: full ? .12 : .16,
-    clearcoat: 1.0,
-    clearcoatRoughness: .05,
-    specularIntensity: 1.0,
-    envMapIntensity: 1.45,
+    color: full ? 0x0c0e13 : 0x1b1e25,
+    metalness: full ? .24 : .12,
+    roughness: full ? .35 : .48,
+    clearcoat: full ? .16 : 0,
+    clearcoatRoughness: .38,
+    specularIntensity: full ? .56 : .38,
+    envMapIntensity: full ? 1.08 : .90,
   }), 'none')
   const wheelBarrel = m.tag(new T.MeshPhysicalMaterial({
     color: full ? 0x1e222a : 0x232730,
-    metalness: full ? .46 : .45,
-    roughness: .24,
-    clearcoat: .90,
-    clearcoatRoughness: .10,
-    envMapIntensity: 1.55,
+    metalness: full ? .44 : .32,
+    roughness: full ? .28 : .36,
+    clearcoat: full ? .48 : .18,
+    clearcoatRoughness: .26,
+    envMapIntensity: full ? 1.42 : 1.05,
   }), 'none')
   const wheelChamfer = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x808a9a : 0x727a88,
-    metalness: full ? .52 : .58,
-    roughness: .19,
-    clearcoat: .95,
-    clearcoatRoughness: .09,
-    specularIntensity: 1.0,
-    envMapIntensity: 2.00,
+    color: full ? 0x747e8e : 0x58606d,
+    metalness: full ? .48 : .22,
+    roughness: full ? .32 : .44,
+    clearcoat: full ? .22 : .06,
+    clearcoatRoughness: .34,
+    specularIntensity: full ? .70 : .48,
+    envMapIntensity: full ? 1.42 : 1.00,
   }), 'none')
   const wheelLipLine = m.tag(new T.MeshPhysicalMaterial({
     color: full ? 0x6d7685 : 0x727a88,
-    metalness: full ? .62 : .58,
-    roughness: .20,
-    clearcoat: .94,
-    clearcoatRoughness: .09,
-    envMapIntensity: 1.60,
+    metalness: full ? .56 : .54,
+    roughness: .27,
+    clearcoat: .48,
+    clearcoatRoughness: .26,
+    envMapIntensity: 1.42,
   }), 'none')
   const lugFinish = m.tag(new T.MeshPhysicalMaterial({
     color: full ? 0x3e444f : 0x454b55,
@@ -719,6 +744,7 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
 
   let anchor: Point = [0, 0, 0]
   for (const w of [frontWheel, rearWheel]) {
+    const tireRubber = makeTireRubber(w, w === frontWheel ? 'front' : 'rear')
     const H = w.width / 2
     const axis = H - .058, face = H - .008, hubPlane = face - .030, hubFace = hubPlane + .0018
     const tire = tireGeometry(w, full)
@@ -754,7 +780,7 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
       add(group, 'fixed brake caliper', castCaliper, caliperFinish)
       add(group, 'caliper pin seats', clips, m.matte)
       add(group, 'caliper pin heads', fasteners, wheelHardware)
-      add(group, 'molded sidewall relief', sidewall, tireRubber)
+      add(group, 'molded sidewall relief', sidewall, tireBead)
       parent.add(group)
     }
     if (w === frontWheel) anchor = [w.x + hubFace, w.loaded, w.z]
