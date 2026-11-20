@@ -99,7 +99,9 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   const fasciaTop = curve([[0, .417], [.29, .419], [.36, .430], [.48, .468], [.60, .509], [.72, .552], [.84, .620], [.928, .695], [.974, .754]])
   const noseTop = (x: number) => mix(frontHoodEdge(x)[1], fasciaTop(x), smooth(x, .70, .85))
   const chin = (x: number) => lipY(x) + .025
-  const eyeTop = curve([[.48, .474], [.58, .512], [.68, .552], [.79, .600], [.889, .649], [.918, .658]])
+  const eyeCrest = curve([[.48, .474], [.58, .512], [.68, .552], [.79, .600], [.889, .649], [.918, .658]])
+  const eyeTop = (x: number) => eyeCrest(x) - .015 * (1 - smooth(x, .535, .601))
+    - .0055 * smooth(x, .784, .821) * (1 - smooth(x, .828, .859))
   const eyeLow = curve([[.48, .459], [.58, .462], [.69, .474], [.797, .497], [.865, .564], [.918, .635]])
   const outletZ = zAt(.995) + .006
   const outletCenter = .18, outletHeight = .8, halfOutletHeight = .0545
@@ -116,7 +118,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     const points: XY[] = [[.448, .398], [.519, .427], [.674, .436], [.804, .460], [.844, .421], [.869, .299], [.820, .190], [.541, .195]]
     const outline: XY[] = [[.474, .455], [.568, .501], [.685, .554], [.797, .609], [.884, .667], [.923, .675], [.931, .599], [.883, .471], [.912, .354], [.930, .283], [.858, .198], [.819, .179], [.520, .180], [.429, .245], [.405, .360]]
     const frontEdge = curve([[0, .981], [.40, .972], [.67, .939], [1, .953]])
-    const outerY = curve([[0, .191], [.42, .37], [.70, .534], [1, .735]])
+    const outerY = curve([[0, .191], [.42, .37], [.70, .534], [1, .716]])
     const outerX = curve([[0, .835], [.25, .904], [.51, .872], [.79, .906], [1, .929]])
     const fPanel = (u: number, v: number): Point => {
       const x = mix(outerX(v), frontEdge(v), u)
@@ -155,7 +157,8 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
     frontPaint.push(patch((u, v) => {
       const x = mix(0, .86, u)
       const edge = frontHoodEdge(x)
-      return [side * x, edge[1] - (.009 + .004 * smooth(x, .48, .73)) * v, edge[2] - .005 * v * v]
+      const t = v * Math.PI * .5
+      return [side * x, edge[1] - (.007 + .003 * smooth(x, .49, .71)) * (1 - Math.cos(t)), edge[2] - .006 * Math.sin(t)]
     }, 84, 4, outFront, .004))
     black.push(mapped(f, outline, outFront, .025, .055))
     dark.push(mapped(f, points, outFront, .123, .036))
@@ -217,9 +220,10 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       return f(x, y, d - .013 * Math.sin(Math.PI * v) * Math.sin(Math.PI * u))
     }
     black.push(patch((u, v) => {
-      const lower = window(u, 1, .023)
+      const lower = window(u, 1, .019)
       const upper = frontHoodEdge(Math.abs(lower[0]))
-      return [lower[0], mix(lower[1] - .002, Math.max(lower[1], upper[1] - .003), v), mix(lower[2], upper[2] - .010, v)]
+      const y = lower[1] + .5 * ((upper[1] - lower[1]) + Math.hypot(upper[1] - lower[1], .008))
+      return [lower[0], mix(lower[1] - .002, y - .003, v), mix(lower[2], upper[2] - .0075, v)]
     }, 56, 5, outFront, 0))
     black.push(patch((u, v) => window(u, v, .071), 44, 17, outFront, .009))
     optical.push(patch((u, v) => window(u, v, -.008), 52, 20, outFront, .0034))
@@ -238,15 +242,20 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const segments = full ? 52 : 24
       const ring = (r0: number, r1: number, z0: number, z1: number, crown: number, steps: number) =>
         patch((u, v) => hardware(mix(r0, r1, v), tau * u, mix(z0, z1, v) + crown * Math.sin(Math.PI * v)), segments, steps, outFront)
-      black.push(ring(1.17, 1.06, -.020, -.002, .001, 5))
-      projectorCollars.push(ring(1.07, .90, -.002, -.001, .0015, 5))
-      projectorBowls.push(patch((u, v) => hardware(mix(.27, .92, v), tau * u, -.015 + .0135 * v ** 1.9),
-        segments, 12, outFront))
+      black.push(ring(1.18, 1.075, -.021, -.003, .001, 5))
+      projectorCollars.push(ring(1.09, .94, -.003, -.0005, .0018, 5))
+      projectorCollars.push(ring(.934, .885, -.001, -.006, .0007, 3))
+      const bowl = curve([[.235, -.0235], [.33, -.023], [.40, -.018], [.43, -.0155], [.476, -.017],
+        [.53, -.0135], [.61, -.0098], [.655, -.0073], [.698, -.0095], [.78, -.0065], [.90, -.004]])
+      projectorBowls.push(patch((u, v) => {
+        const r = mix(.235, .90, v)
+        return hardware(r, tau * u, bowl(r))
+      }, segments, full ? 26 : 19, outFront))
       const glassCenter = p.clone().addScaledVector(normal, -.001)
       projectorGlass.push(new T.SphereGeometry(radius * .903, segments, 18, 0, tau, 0, Math.PI / 2)
         .rotateX(Math.PI / 2).scale(1, .84, .20).applyQuaternion(transform).translate(...glassCenter.toArray()))
-      const core = p.clone().addScaledVector(normal, -.009)
-      emit('main beam projector', new T.SphereGeometry(radius * .32, 32, 12)
+      const core = p.clone().addScaledVector(normal, -.0145)
+      emit('main beam projector', new T.SphereGeometry(radius * .27, 32, 12)
         .scale(1.10, .80, .22).applyQuaternion(transform).translate(...core.toArray()), false, true, f(x, y, -.025), intensity)
     }
     if (side === 1) {
@@ -429,7 +438,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   bladeFinish.metalness = .19
   add(parent, 'thin graphite diffuser blades', joined(diffuserFins), bladeFinish)
   add(parent, 'machined projector collars', joined(projectorCollars), m.brushed)
-  add(parent, 'smooth dark projector bowls', joined(projectorBowls), m.dark)
+  add(parent, 'ribbed dark projector bowls', joined(projectorBowls), m.dark)
   add(parent, 'convex projector lenses', joined(projectorGlass), m.projector)
   add(parent, 'front optical lens shells', joined(optical), m.optics)
   add(parent, 'rear optical lens shells', joined(rearOptical), m.rearOptics)

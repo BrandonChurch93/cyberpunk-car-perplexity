@@ -41,7 +41,12 @@ const shoulder = curve([
 ])
 const haunchCeiling = curve([[.69, 1.050], [.74, 1.006], [.78, .977], [.82, .947], [.86, .935], [.90, .925], [.94, .921], [1.02, .928]])
 const hoodLine = curve([[0, .431], [.028, .466], [.06, .523], [.105, .608], [.165, .716], [.225, .761], [.265, .769], [.33, .764], [.6, .83]])
-const hoodDome = curve([[0, .003], [.033, .046], [.074, .089], [.111, .095], [.159, .058], [.207, .009], [.235, 0]])
+const hoodDome = curve([[0, .003], [.033, .046], [.074, .095], [.111, .101], [.159, .060], [.207, .009], [.235, 0]])
+const bonnetProfileFall = curve([
+  [0, .027], [.005, .025], [.010, .015], [.015, .008], [.024, -.001], [.040, .006], [.056, .023], [.065, .028],
+  [.085, .032], [.102, .035], [.121, .035], [.150, .024], [.170, .009], [.181, 0], [.185, 0],
+])
+const noseCornerFall = curve([[0, .025], [.005, .018], [.010, .010], [.019, .003], [.026, 0], [.030, 0]])
 const spine = curve([
   [.575, 1.149], [.6, 1.146], [.62, 1.135], [.64, 1.124], [.66, 1.099], [.68, 1.085], [.70, 1.078], [.72, 1.068],
   [.742, 1.056], [.769, 1.040], [.80, 1.02], [.82, 1.011], [.85, .983], [.88, .963], [.90, .957], [.92, .941], [.94, .926], [.96, .908], [.984, .898],
@@ -50,6 +55,7 @@ const hoodTipS = .0605
 const hoodTipX = .472
 const hoodInner = (s: number) => hoodTipX - 1.425 * (s - hoodTipS)
 const hoodOuter = curve([[hoodTipS, hoodTipX], [.104, .557], [.140, .627], [.171, .688], [.211, .766], [.237, .758], [.290, .748]])
+const hoodFoldStrength = .90
 const lampFold = curve([[.044, .470], [.0875, .647], [.102, .7022], [.1292, .797], [.1709, .942], [.182, .963]])
 const hoodShut = (v: number) => .166 + .089 * v ** 2.10
 const cabFront = (v: number) => .194 + .067 * v ** 2.40
@@ -122,7 +128,7 @@ function bonnetSection(s: number, x: number) {
 
 function wingEdge(s: number) {
   const width = plan(s)
-  const center = hoodLine(s), outer = shoulder(s)
+  const center = hoodLine(s), outer = shoulder(s) - noseCornerFall(s)
   const radius = wingRadius(s)
   let angle = Math.PI / 2
   if (radius > 0) for (let i = 0; i < 3; i++) {
@@ -130,7 +136,7 @@ function wingEdge(s: number) {
     const y = outer + radius * Math.sin(angle)
     const sectionTangent = (bonnetSection(s, x + .00005) - bonnetSection(s, x - .00005)) / .0001
     const sectionRise = (bonnetSection(s, x) - bonnetSection(s, 0)) / x
-    const slope = (.95 * (y - center) + .063 * smooth(s, .127, .236)) / x - .83 * foldSlope * (sectionTangent - sectionRise)
+    const slope = (.95 * (y - center) + .063 * smooth(s, .127, .236)) / x - hoodFoldStrength * foldSlope * (sectionTangent - sectionRise)
     angle = Math.PI / 2 + Math.atan(slope)
   }
   const x = width - radius + radius * Math.cos(angle)
@@ -143,14 +149,15 @@ function bonnet(s: number, v: number): Point {
   const section = (position: number) => bonnetSection(s, position)
   const weight = v * v * (2 - v)
   const fair = mix(weight, v, smooth(v, .73, .95))
-  const across = -.83 * foldSlope * (section(x) - mix(section(0), section(w.x), fair))
+  const across = -hoodFoldStrength * foldSlope * (section(x) - mix(section(0), section(w.x), fair))
   const base = mix(w.center, w.y, weight + .05 * v ** 6 * (1 - v))
   const crown = hoodDome(s) * Math.max(0, 1 - (x / .675) ** 2) ** 2
   const wingCrown = .005 * smooth(s, .143, .223) * (1 - smooth(s, .243, .315))
     * smooth(v, .60, .84) * (1 - smooth(v, .92, 1))
   const cowlDrop = .021 * smooth(s, .127, .236) * (1 - v ** 3)
     - .015 * smooth(s, .122, .189) * (1 - smooth(s, .260, .335)) * (1 - smooth(v, .735, 1))
-  return [x, base + across + crown + wingCrown - cowlDrop, zAt(s)]
+  const profileFall = bonnetProfileFall(s) * (1 - smooth(v, .74, 1))
+  return [x, base + across + crown + wingCrown - cowlDrop - profileFall, zAt(s)]
 }
 
 function foldRows(surface: Surface, traces: ((p: Point) => number)[], broad: number) {
@@ -296,8 +303,8 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     part(black, (u, v) => cowlFace(mix(cowlStep(v), cabFront(v) + gap, u), v, mix(.006, .0026, u)), [0, 1, 0], 7, n, .003)
     part(black, (u, v) => cowlFace(mix(hoodShut(v) - .004, cabFront(v) + .003, u), v, .009), [0, 1, 0], 4, n, .003)
     part(paint, sided((u, v) => {
-      const p = bonnet(mix(.239, .318, u), mix(.770, .907, v))
-      return [p[0], p[1] - .005, p[2]]
+      const p = bonnet(mix(.234, .320, u), mix(.783, .912, v))
+      return [p[0], p[1] - mix(.0018, .0045, smooth(u, .64, 1)), p[2]]
     }), [0, 1, 0], full ? 24 : 12, full ? 9 : 6, 0)
     for (const [a, b] of [[.071, frontEnd(1) - gap], [frontEnd(1) + gap, .331]]) {
       part(paint, sided((u, v) => {
@@ -668,7 +675,11 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       part(cabin, spoke, [0, 0, -1], 11, 5, .009)
     }
   }
-  const skin = add(parent, 'closed body panels and returns', joined(paint), m.paint)
+  const paintedShell = joined(paint)
+  const shellPositions = paintedShell.getAttribute('position')
+  const nose = zAt(0)
+  for (let i = 0; i < shellPositions.count; i++) if (shellPositions.getZ(i) > nose) shellPositions.setZ(i, nose)
+  const skin = add(parent, 'closed body panels and returns', paintedShell, m.paint)
   add(parent, 'stowage, seals and wheelhouse liners', joined(black), m.matte)
   addMirrors(parent, m, full, dimensions.mirrorWidth * .5, edgeGlass(.353, 0), zAt)
   if (cabin.length) add(parent, 'covered cockpit upholstery', joined(cabin), m.cabin)

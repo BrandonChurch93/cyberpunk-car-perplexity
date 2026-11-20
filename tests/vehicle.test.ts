@@ -145,6 +145,12 @@ describe('vehicle geometry and state', () => {
       vehicle.root.updateMatrixWorld(true)
       const top = (x: number, s: number) => new T.Raycaster(new T.Vector3(x, 1.5, zAt(s)), new T.Vector3(0, -1, 0))
         .intersectObject(vehicle.root)[0]
+      for (const [x, s, height] of [
+        [0, .005, .422], [0, .010, .446], [0, .015, .463], [.535, .060, .585],
+        [0, .080, .624], [0, .100, .663], [0, .120, .697], [.344, .150, .746],
+      ]) {
+        expect(Math.abs(top(x, s).point.y - height)).toBeLessThan(.008)
+      }
       for (const s of [.075, .100, .130]) {
         for (const side of [-1, 1]) {
           const crest = top(0, s), outer = top(side * .31, s)
