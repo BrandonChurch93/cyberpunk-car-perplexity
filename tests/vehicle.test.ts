@@ -656,6 +656,23 @@ describe('vehicle geometry and state', () => {
     }
   })
 
+  it('carries the rear deck reflection through the shoulder without a local crease', () => {
+    for (const vehicle of [full, blockout]) {
+      vehicle.root.updateMatrixWorld(true)
+      for (const x of [.46, .54, .62]) {
+        let previous: T.Vector3 | undefined
+        for (let i = 0; i <= 12; i++) {
+          const ray = new T.Raycaster(new T.Vector3(x, 2, zAt(.796 + i * .006)), new T.Vector3(0, -1, 0))
+          const hit = ray.intersectObject(vehicle.root, true)[0]
+          expect(hit?.object.name).toBe('closed body panels and returns')
+          expect(hit.normal!.y).toBeGreaterThan(.94)
+          if (previous) expect(previous.angleTo(hit.normal!)).toBeLessThan(.070)
+          previous = hit.normal!
+        }
+      }
+    }
+  })
+
   it('keeps the high brake lamp clear of the bay louvers wherever a detail camera holds it', () => {
     for (const vehicle of [full, blockout]) {
       const name = 'high rear brake lamp bar'

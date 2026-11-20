@@ -206,6 +206,12 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
     grilleFrames.push(...grilleRing(airFace, edge, rimTop, vertical.map(() => up.toArray())))
     grilleFrames.push(...grilleRing(airFace, opening, edge, inward))
     grilleFrames.push(...grilleRing(airFace, rimTop, shellFoot, vertical))
+    grilleFrames.push(patch((u, v) => {
+      const w = 2 * u - 1
+      const start = airFace(rimTop[0] + .0006, rimTop[1] * w, rimTop[2] + .0012)
+      const end = airFace(rimTop[0] + .079 - .021 * w ** 2, (rimTop[1] + .011) * w, .057)
+      return [mix(start[0], end[0], v), mix(start[1], end[1], v * (.33 + v * (1.34 - .67 * v))), mix(start[2], end[2], v)]
+    }, 10, 8, [0, 1, 0]))
     grilleFrames.push(patch((u, v) => airFace(mix(-shellFoot[0], shellFoot[0], u), mix(-shellFoot[1], shellFoot[1], v), shellDepth),
       1, 1, up.clone().negate().toArray()))
     grilleTrays.push(patch((u, v) => airFace(mix(-a, a, u), mix(-b, b, v), trayDepth), 1, 1, up.toArray()))

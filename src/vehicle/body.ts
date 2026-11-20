@@ -386,9 +386,12 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const shape = base + .22 * fade * (hinge(tBend, .006) - .5 * tBend)
       const capBlend = smooth(s, .735, .782)
       const cap = hinge(shape - high + mix(.008, .004, capBlend), mix(.014, .004, capBlend))
-      const crownTrim = .013 * smooth(s, .833, .874) * (1 - smooth(s, .895, .924))
-        * smooth(x, .598, .705) * (1 - smooth(x, .758, .852))
-      return [x, shape - cap * smooth(x, .695, .765) - crownTrim, zAt(s)]
+      const crownTrim = .009 * fairStep(s, .807, .885) * (1 - fairStep(s, .898, .939))
+        * fairStep(x, .572, .704) * (1 - fairStep(x, .759, .899))
+      const sculpted = shape - cap * smooth(x, .695, .765) - crownTrim
+      const calm = mix(inY, outside[1], v * (.76 + .24 * v)) + .003 * Math.sin(Math.PI * v) ** 2
+      const fair = fairStep(s, .766, .798) * (1 - fairStep(s, .876, .924)) * (1 - fairStep(v, .76, .96))
+      return [x, mix(sculpted, calm, fair), zAt(s)]
     }
     folded(sided((u, v) => deckSection(mix(.5984, .942 - .019 * v, u), v)),
       [0, 1, 0], [haunchLine, lateralTrace(deckIn), lateralTrace(deckOut)])
@@ -424,7 +427,11 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const joinY = mix(spine(s) - .009, sideY, fairStep(x, .04, .47))
       const lift = fairStep(s, .919, .938) * (1 - fairStep(s, .970, .989))
       const deckY = mix(mix(joinY, tailDeckProfile(s), lift), y, fairStep(u, .82, 1))
-      return [x, mix(deckY, sideY, fairStep(x, .28, .70)), zAt(s)]
+      const skin = mix(deckY, sideY, fairStep(x, .28, .70))
+      const merge = fairStep(x, .102, .26) * (1 - fairStep(x, .795, .875)) * (1 - fairStep(u, .13, .55))
+      const inboard = bayEdge(s, 1)[0], outer = shoulderX(s)
+      const rim = deckSection(s, T.MathUtils.clamp((x - inboard) / (outer - inboard), 0, 1))[1]
+      return [x, mix(skin, rim - .00035, merge), zAt(s)]
     }), [0, 1, 0])
 
     const archEnds = (w: WheelSize) => {
