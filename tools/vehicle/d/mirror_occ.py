@@ -49,7 +49,24 @@ def _section(x, yb, yt, yn):
         (zr, yt - 0.10 * h), (zr + 0.36 * lz, yt), (zr + 0.78 * lz, yt - 0.55 * (yt - yn)), (zf, yn),
         (zr + 0.80 * lz, yb + 0.42 * (yn - yb)), (zr + 0.42 * lz, yb), (zr, yb + 0.12 * h),
     ]
-    return wo._wire_smooth([(x, y, z) for z, y in P])
+    return wo._wire_poly([(x, y, z) for z, y in P])
+
+
+EDGE_R = 0.0028
+
+
+def _long_edges(shape):
+    from OCP.BRepAdaptor import BRepAdaptor_Curve
+    out = []
+    ex = TopExp_Explorer(shape, TopAbs_EDGE)
+    while ex.More():
+        e = TopoDS.Edge(ex.Current())
+        c = BRepAdaptor_Curve(e)
+        a, b = c.Value(c.FirstParameter()), c.Value(c.LastParameter())
+        if abs(b.X() - a.X()) > 0.05:
+            out.append(e)
+        ex.Next()
+    return out
 
 
 def housing():
@@ -59,6 +76,12 @@ def housing():
     ts.CheckCompatibility(False)
     ts.Build()
     body = ts.Shape()
+    fl = BRepFilletAPI_MakeFillet(body)
+    for e in _long_edges(body):
+        fl.Add(EDGE_R, e)
+    fl.Build()
+    if fl.IsDone():
+        body = fl.Shape()
     d = np.array([G1[1] - G0[1], -(G1[0] - G0[0])])
     n = np.array([d[0], 0.0, d[1]])
     n /= np.linalg.norm(n)

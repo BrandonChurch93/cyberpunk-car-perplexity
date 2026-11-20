@@ -22,6 +22,7 @@ MATS = {
     'tire': ('tire rubber', (0.018, 0.018, 0.018), 0.85, 0.0),
     'disc': ('disc carbon ceramic', (0.09, 0.09, 0.095), 0.6, 0.3),
     'caliper': ('caliper graphite gloss', (0.14, 0.14, 0.15), 0.3, 0.5),
+    'dark': ('backing plate matte black', (0.02, 0.02, 0.022), 0.8, 0.2),
 }
 
 

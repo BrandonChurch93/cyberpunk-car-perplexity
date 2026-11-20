@@ -106,8 +106,9 @@ def wheel(w, side_sign, label, fine=False):
     dc = (fx - 0.095) - 0.002 - (w['disc_t'] / 2 + 0.045)
     disc.location.x = dc
     cal.location.x = dc
+    plate = _lathe([(0.0, -rimw + 0.024), (w['rim'] - 0.026, -rimw + 0.024), (w['rim'] - 0.023, -rimw + 0.019)], 96 if fine else 48, f'{label} backing plate', 'dark')
     cap = _lathe([(0.0, fx - 0.026), (0.024, fx - 0.026), (0.030, fx - 0.028), (0.034, fx - 0.034), (0.034, fx - 0.05)], 64, f'{label} center cap', 'rim')
-    for ob in (tire, rim, face, disc, cal, cap, nuts):
+    for ob in (tire, rim, face, disc, cal, cap, nuts, plate):
         ob.parent = root
     root.matrix_world = Matrix.Translation(Vector(bl.b((side_sign * w['x'], w['hub'], w['z']))))
     if side_sign < 0:
