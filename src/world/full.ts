@@ -16,7 +16,7 @@ export async function createFullWorld(): Promise<WorldModule> {
   const city = group(root, 'city')
   const forms = new Forms()
   const deck = buildDeck(forms, roof)
-  buildCity(forms, city)
+  buildCity(forms, city, true)
   const surfaces = finishRoof(deck, roof)
   const cityColors = new Map<THREE.Material, THREE.Material>()
   city.traverse(o => {

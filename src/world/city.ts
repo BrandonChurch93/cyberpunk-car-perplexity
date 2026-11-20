@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import { stream } from '../core/random'
 import { type Box, Forms, group, streetY, type Tone, type Tuple } from './forms'
 
+export const primaryBillboardSize = [5.72, 3.55] as const
+
 interface Plot {
   name: string
   x: number
@@ -105,15 +107,17 @@ function panel(
   return sign
 }
 
-function nearCity(forms: Forms, city: THREE.Group): void {
+function nearCity(forms: Forms, city: THREE.Group, full: boolean): void {
   const near = group(city, 'near city')
   for (const plot of nearPlots) {
     const building = group(near, plot.name)
     massing(plot, (tone, size, at) => forms.box(building, 'building mass', tone, size, at))
   }
   const frontage = group(near, 'billboard and south sign mounts')
-  const billboard = panel(forms, frontage, 'billboard', [4, 11.15, -46.77], 9.6, 4.8)
-  for (const x of [-3.46, 3.46]) forms.box(billboard, 'facade bracket', 'stone', [0.32, 4.35, 0.52], [x, 0.09, -0.3])
+  const [width, height] = full ? primaryBillboardSize : [9.6, 4.8]
+  const bracket = full ? width * .36 : 3.46
+  const billboard = panel(forms, frontage, 'billboard', [width / 2 - .8, 11.15, -46.77], width, height)
+  for (const x of [-bracket, bracket]) forms.box(billboard, 'facade bracket', 'stone', [0.32, height - .45, 0.52], [x, 0.09, -0.3])
   const red = panel(forms, frontage, 'red sign', [0.3, 15.8, -47.82], 2.3, 1)
   for (const x of [-0.83, 0.83]) forms.box(red, 'roof sign stanchion', 'slate', [0.14, 2, 0.2], [x, -1, 0])
 
@@ -209,8 +213,8 @@ function streetAndGuideway(forms: Forms, city: THREE.Group): void {
   forms.boxes(line, 'pier heads', 'slate', bearings)
 }
 
-export function buildCity(forms: Forms, city: THREE.Group): void {
+export function buildCity(forms: Forms, city: THREE.Group, full = false): void {
   streetAndGuideway(forms, city)
-  nearCity(forms, city)
+  nearCity(forms, city, full)
   outerCity(forms, city)
 }

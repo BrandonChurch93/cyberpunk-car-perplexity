@@ -2,7 +2,10 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { config } from '../src/config'
 import type { FrameContext, SampleContext } from '../src/core/contract'
+import { applyLens } from '../src/core/lens'
+import { cameraAt } from '../src/director/shots'
 import { patchesOf } from '../src/materials/patch'
+import { createVehicle } from '../src/vehicle'
 import { createWorld } from '../src/world'
 import { heroDrain } from '../src/world/deck'
 import { billboardState } from '../src/world/fixtures'
@@ -86,8 +89,7 @@ describe('full roof world', () => {
     const { durationSeconds } = config.film
     const emitter = world.lights.find(l => l.id === 'billboard')!
     const raking = world.lights.find(l => l.id === 'raking billboard')!
-    const originalBillboard = world.root.getObjectByName('billboard')!
-    expect(originalBillboard.position.toArray()).toEqual([4, 11.15, -46.77])
+    expect(emitter.intensity).toBeCloseTo(9.216, 10)
     expect(raking.intensity).toBeGreaterThan(emitter.intensity * 3)
     const start = radiance(0)
     const end = radiance(durationSeconds)
@@ -107,6 +109,26 @@ describe('full roof world', () => {
     expect(color.clone().multiplyScalar(emitter.level(2)).b).toBeCloseTo(expected.color.b, 10)
     world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
     expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
+  })
+
+  it('keeps the full cabinet inside the master wake and out of portrait hero', async () => {
+    const { anchors } = await createVehicle({ paint: config.paint.candidates[0], detail: 'blockout' })
+    const camera = new THREE.PerspectiveCamera()
+    const cabinet = world.root.getObjectByName('billboard')!
+    const box = new THREE.Box3().setFromObject(cabinet)
+    const screen = (format: typeof config.formats.master, seconds: number) => {
+      applyLens(camera, cameraAt(seconds, format, anchors), format.width, format.height, { pixel: [0, 0], aperture: [0, 0] }, 1)
+      const corners: THREE.Vector3[] = []
+      for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) corners.push(new THREE.Vector3(x, y, z).project(camera))
+      return corners
+    }
+    const { heroFrameSeconds, fps } = config.film
+    const { master, vertical } = config.formats
+    const wakeEnd = config.beats.find(beat => beat.id === 'wake')!.end - 1 / fps
+    for (const [time, margin] of [[0, .05], [heroFrameSeconds, .05], [wakeEnd, .02]]) {
+      expect(screen(master, time).every(p => p.x > 0 && p.x < 1 - margin && Math.abs(p.y) < 1)).toBe(true)
+    }
+    expect(screen(vertical, heroFrameSeconds).every(p => p.x > 1)).toBe(true)
   })
 
   it('uses batched geometry for room depths and utility silhouettes within the city budget', () => {

@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { config } from '../config'
 import type { FilmLight, WetSurface } from '../core/contract'
 import { stream, streamSeed } from '../core/random'
+import { primaryBillboardSize } from './city'
 import { type Tuple } from './forms'
 
 const tau = Math.PI * 2
@@ -110,7 +111,7 @@ export function addSky(root: THREE.Group): void {
   root.add(new THREE.HemisphereLight(new THREE.Color(.20, .31, .47), new THREE.Color(.072, .083, .10), .28))
 }
 
-const bbSize = [9.6, 4.8] as const
+const rakingBillboardSize = [9.6, 4.8] as const
 const bbSigma = .148
 const bbBase = .31
 const bbPeak = 3.4
@@ -150,8 +151,8 @@ export function billboardState(t: number, out: THREE.Color, cool: THREE.Color, l
 }
 
 function addBillboard(sign: THREE.Object3D, metal: THREE.Material, key: boolean, labels?: Label): { film: FilmLight; set(t: number): void } {
-  const [width, height] = bbSize
-  const direct = key ? .64 : .20
+  const [width, height] = key ? rakingBillboardSize : primaryBillboardSize
+  const intensity = key ? .64 * width * height : 9.216
   const cool = new THREE.Color(), light = new THREE.Color(), average = new THREE.Color()
   const title = labels?.(generic('LEVEL 9'), 'World Condensed', undefined, 3.25) ?? null
   const uniforms = { centerX: { value: .5 }, cool: { value: cool }, light: { value: light }, headline: { value: title }, pixelCount: { value: new THREE.Vector2(width / .008, height / .008) } }
@@ -214,7 +215,8 @@ function addBillboard(sign: THREE.Object3D, metal: THREE.Material, key: boolean,
     block(sign, 'cabinet rain shed lip', metal, [x,height*.5+.064,.13], [width*.224,.044,.49])
     block(sign, 'cabinet lower weep slot', metal, [x,-height*.5-.082,.23], [.116,.014,.072])
   }
-  for (const x of [-3.45, 3.45]) block(sign, 'cabinet maintenance rung', metal, [x, -2.63, -.14], [.68, .12, .76])
+  const rungX = key ? 3.45 : width * .359375
+  for (const x of [-rungX, rungX]) block(sign, 'cabinet maintenance rung', metal, [x, -height * .5 - .23, -.14], [.68, .12, .76])
   const color = new THREE.Color()
   const scratch = new THREE.Color(), scratchCool = new THREE.Color(), scratchLight = new THREE.Color()
   const set = (t: number) => {
@@ -225,8 +227,8 @@ function addBillboard(sign: THREE.Object3D, metal: THREE.Material, key: boolean,
   }
   set(0)
   return { set, film: {
-    id: key ? 'raking billboard' : 'billboard', kind: 'area', object: anchor, color, intensity: direct * width * height,
-    size: [width-2.4, height-.32], range: key ? 63 : 112, shadow: false, beam: false,
+    id: key ? 'raking billboard' : 'billboard', kind: 'area', object: anchor, color, intensity,
+    size: [width*.75, height-.32], range: key ? 63 : 112, shadow: false, beam: false,
     level: (t) => billboardState(t, scratch, scratchCool, scratchLight).mean,
     colorAt: (t, out) => { const { mean } = billboardState(t, out, scratchCool, scratchLight); out.multiplyScalar(1 / mean) },
   } }
