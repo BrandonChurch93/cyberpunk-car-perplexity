@@ -11,13 +11,13 @@ export const atmosphere = {
   scatterFraction: 0.56,
   projectorAnisotropy: 0.76,
   projectorWingAnisotropy: 0.28,
-  projectorWingFraction: 0.18,
-  projectorScatterFraction: 0.31,
+  projectorWingFraction: 0.07,
+  projectorScatterFraction: 0.24,
   projectorBodyAnisotropy: 0.38,
-  projectorBodyScatterFraction: 0.65,
-  projectorBodyDistance: [0.42, 1.35],
-  projectorBodyFocus: [1.1, 2.3],
-  projectorBodyClearance: [0.8, 2.25],
+  projectorBodyScatterFraction: 0.59,
+  projectorBodyDistance: [0.46, 1.38],
+  projectorBodyClearance: [1.0, 2.3],
+  projectorFocus: [1.28, 2.1],
 } as const
 
 const scattering = /* glsl */ `
@@ -56,12 +56,19 @@ float projectorPhase(float cosine) {
 float projectorBodyPhase(float cosine, float distanceToLight, float downward, float clearance) {
   float spread = smoothstep(-0.04, 0.44, cosine) * (1.0 - smoothstep(0.91, 0.99, cosine));
   float body = smoothstep(${atmosphere.projectorBodyDistance.join(', ')}, distanceToLight);
-  float wide = smoothstep(${atmosphere.projectorBodyFocus.join(', ')}, focusDistance);
-  float lower = mix(0.22, 1.0, smoothstep(0.014, 0.09, downward));
-  // Keep the broader rain lobe from becoming fill on a nearby solid surface.
+  float lower = smoothstep(0.012, 0.097, downward);
   float open = smoothstep(${atmosphere.projectorBodyClearance.join(', ')}, clearance);
   return phase(cosine, ${atmosphere.projectorBodyAnisotropy}) * ${atmosphere.projectorBodyScatterFraction}
-    * body * wide * spread * lower * open;
+    * body * spread * lower * open;
+}
+
+float projectorReceiver(vec3 hit, vec3 source, vec3 axis) {
+  vec3 delta = hit - source;
+  float nearBody = 1.0 - smoothstep(1.55, 2.3, length(delta));
+  float behindLamp = 1.0 - smoothstep(0.04, 0.32, dot(delta, axis));
+  float aboveDeck = smoothstep(0.07, 0.24, hit.y);
+  // Reserve the visible shaft for open air, not a depth hit on the nose.
+  return 1.0 - nearBody * behindLamp * aboveDeck;
 }
 
 float foregroundScatter(float t) {
@@ -137,6 +144,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   float far = length(eyePoint);
   vec3 ray = mat3(cameraWorld) * (eyePoint / far);
   vec3 origin = cameraWorld[3].xyz;
+  vec3 hit = origin + far * ray;
   vec2 layer = layerInterval(origin, ray);
   float layerDepth = layerOpticalDepth(origin.y, ray.y, layer, far);
   float airDepth = far * airDensity;
@@ -189,6 +197,10 @@ vec4 scatterToDepth(vec2 uv, float depth) {
 
     if (axis.w > -0.5) segment = clipCone(segment, -toSource, ray, axis.xyz, axis.w);
     if (segment.y <= segment.x) continue;
+    float projectorGain = projector
+      ? smoothstep(${atmosphere.projectorFocus.join(', ')}, focusDistance) * projectorReceiver(hit, filmLightPosition[i], axis.xyz)
+      : 1.0;
+    if (projectorGain < 1e-4) continue;
     float beamRadius = sqrt(perp2 + min(shape.y * shape.y, 0.01));
     float theta0 = atan((segment.x - along) / beamRadius);
     float theta1 = atan((segment.y - along) / beamRadius);
@@ -213,7 +225,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
         ? projectorPhase(cosine) * ${atmosphere.projectorScatterFraction} * smoothstep(0.1, 0.43, distanceToLight)
           + projectorBodyPhase(cosine, distanceToLight, dot(toLight, up), far - t)
         : phase(cosine, anisotropy) * scatterFraction;
-      radiance += light * (visible * weight * densityAt(t, p.y, layer) * scatteringPhase * exp(-opticalDepth) * foregroundScatter(t));
+      radiance += light * (visible * weight * densityAt(t, p.y, layer) * scatteringPhase * exp(-opticalDepth) * foregroundScatter(t) * projectorGain);
     }
   }
   return vec4(radiance, transmission);
