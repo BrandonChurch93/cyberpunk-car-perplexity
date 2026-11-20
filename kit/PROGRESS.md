@@ -5,7 +5,7 @@ The Builder's memory. Read this first in every task. Update it before every comm
 ## Status
 
 - Current phase: 3 · Look lock
-- Current round: 8 is the next round and the first of Phase 3. Step 1 in work: finishing the hero frame (195) and the macro frame (360)
+- Current round: 8 is the next round and the first of Phase 3. Addendum 002 (the approved look) is applied from 2026-11-20: step 1 now means matching the hero frame (195) to `reference/approved/hero.jpg` and finishing the macro frame (360)
 - Blocked: no
 - Last push: see the push log, 2026-11-20
 
@@ -109,6 +109,7 @@ Vetted 2026-11-19. The ledger is `reference/controls.json` (URLs, licenses and s
 - Chosen: direction C. Cold blue with one red accent, 24 mm and very low, headlamp beams and haze as the main event, a long puddle in the foreground.
 - One key frame per beat in that direction is in `reference/keyframes/`, with every prompt in `PROMPTS.md`. Four of them (arrival, wheel, ignition, return) were made again because the first takes carried a real maker name on a skyline sign or on the brake caliper.
 - What the jurors named, carried into the build as things to avoid: garbled or repeated sign text, out of focus highlights spaced evenly, a black body that recedes at phone size, sign color so saturated that it reads as a game.
+- Addendum 002, 2026-11-20: Brandon approved direction A. `reference/approved/hero.jpg` is the hero target and the style anchor. Direction C and the K1 result are retired, the direction C beat key frames are in `reference/keyframes/retired/` and are targets for nothing, and the K1 note on saturated sign color is retired. New beat key frames are generated from the approved image (at most `keyframes.maxTakes` takes each, no jury), with `02-wake.jpg` a byte copy of the approved image. State: in work on `dev/keyframes`.
 - The key frames are targets for composition, palette and mood only. They are never used as textures, backgrounds or frames.
 
 ## Judged frames
@@ -237,6 +238,22 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-20 | Phase 3 starts with the body surfaces. Every traced table in `src/vehicle/body.ts` is refitted as a fair C2 curve with few control points, and a fairness test bounds ripple per panel | Studio zebra at frame 195 shows stripes that ripple and comb over the bonnet, nose, fascia, door and flank, and in the lit frame the bonnet reads as draped cloth. Cause: `curve()` is a C1 monotone Hermite through 20 to 35 traced knots per table, so every knot is a curvature jump. This is the geometry rung "rebuild the part with a different modeling method", taken before the first round because C4 judges zebra | `src/vehicle/geometry.ts`, `src/vehicle/body.ts`, owner of vehicle B |
 | 2026-11-20 | The paint block of `src/vehicle/materials.ts` has its own owner (`dev/paint`) | Flake is not visible at native size in the macro frame, and the paint choice needs three finished candidates in the first round. The body owner is on the fairing | `src/vehicle/materials.ts` paint stack |
 | 2026-11-20 | `stageDetail` is `full` from the start of Phase 3 | The look lock judges the lit film | `src/core/detail.ts` |
+| 2026-11-20 | Addendum 002 applied. Gate check G15 added to every phase list in `tools/gate.ts`: every file in `reference/approved/MANIFEST.sha256` matches its hash | The addendum asks for it | `tools/gate.ts` |
+| 2026-11-20 | Hero camera, master: 50 mm, lens at (3.15, 0.79, 7.87) m, heading 205.1 degrees, 0.9 degrees down, 8.5 m from the vehicle center and 21.8 degrees off the nose on the +X side | Least squares fit of eight vehicle landmarks in the approved image for each listed focal length: 22 px rms at 50 mm on the 1672 px image, 30 px at 35 mm, 39 px at 24 mm, 17 px at 85 mm. 50 mm is the closest wide lens and its horizon falls on the parapet top as in the image. Checked by laying the gray box render over the approved image | `src/director/shots.ts`, `cut/SHOTS.md` |
+| 2026-11-20 | `arrival` opens 2.8 m further back on the same lens axis and pushes straight in, the push settles at 6.4 s (was 7.5 s) so the hero frame at 6.5 s is at rest on the approved framing, and `return` cuts to that framing and pulls straight back to the opening frame. Wide stop T2.8 | The addendum sets the axis. 2.8 m keeps the dolly under 0.6 m per second (0.55 on the push, 0.38 on the pull) and inside 3 m of track | `src/director/shots.ts`, `src/director/timeline.ts` |
+| 2026-11-20 | Vertical wide beats: 35 mm, the same side and angle off the nose as the master, 7.9 m out, axis 4.4 degrees up, vehicle about 72 percent of frame width and 60 percent of the way down | Reframed to suit the tall frame as the addendum allows: the billboard and the lit cloud base take the upper half, the standing water the lower band | `src/director/shots.ts` |
+| 2026-11-20 | No paint round. `paint.locked` is `black-pearl`, set by the kit owner with addendum 002 | The addendum retires the paint choice of `kit/04-LOOK.md` section 11 | `config/showcase.json` |
+| 2026-11-20 | Diagnostic views checked (Phase 3 step 2). `caps` now lists the WebGL2 limits and extensions of the machine against `config/webgl-caps.json` and marks any that differ. `normals` draws instanced meshes in place. `clay`, `zebra` and `wetness` work | `caps` showed the picture and `normals` drew every instanced tower at the origin | `src/diagnostics/caps.ts`, `src/core/film-stage.ts`, `tests/caps.test.ts` |
+| 2026-11-20 | G14 treats no `getExtension` call in `src` as an empty list | `grep` exits 1 on no match and the check threw | `tools/gate.ts` |
+| 2026-11-20 | Fifteen neon street controls are collected on `dev/neon-controls` and vetted in one pass before round 8. C9 joins the critics from round 8 | Addendum 002 | `reference/controls.json` |
+| 2026-11-20 | Every thread update from here shows the current hero frame beside the approved image, and each new beat key frame is posted as it finishes | Addendum 002 | thread |
+
+## Declined issues
+
+Addendum 002: any issue that asks for less color, fewer signs, less reflection, a darker deck or a different hero framing than the approved image is declined and listed here with the critic's words. It does not count as an open issue.
+
+| Round | Critic | The critic's words | Why declined |
+| --- | --- | --- | --- |
 
 ## Config changes
 
@@ -246,6 +263,9 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 | 2026-11-19 | `signage.invented` | NINTH CLOUD HOTEL | VAPOR SILL HOTEL | A web search found an existing business with the first name |
 | 2026-11-19 | `signage.invented` | SILVERFIN SUSHI | BRINESCALE SUSHI | A web search found an existing business with the first name |
 | 2026-11-20 | `quality.blockoutCompositionPass` | not present | 7 | Added by the kit owner with addendum 001 (main b1f81e4). The Builder added the key to the config type and the required key list in `src/config.ts` |
+| 2026-11-20 | `paint.locked` | null | black-pearl | Set by the kit owner with addendum 002 (main 88dc14c) |
+| 2026-11-20 | `keyframes.maxTakes` | not present | 4 | Added by the kit owner with addendum 002. The Builder added the key to the config type and the required key list |
+| 2026-11-20 | `quality.blind.neonControls` | not present | 15 | Added by the kit owner with addendum 002. The Builder added the key to the config type and the required key list |
 
 ## Rounds
 
@@ -303,6 +323,12 @@ Filled in Phase 3: tone map, exposure, grade, palette, sample counts, reflection
 ## Session log
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
+
+### 2026-11-20, session 14
+
+- Done: Phase 3 opened on `dev/p3` with full detail and the team merges. Diagnostic views fixed and checked. Addendum 002 merged and applied: G15, config fields, direction C key frames retired, hero camera fitted to the approved image, wide beats rebuilt on its axis in both formats, `cut/SHOTS.md` updated, the team redirected (world restage, palette and light, standing water, rain, paint on black pearl only), key frame artist and neon control scout started.
+- Measured: fit residual 22 px rms at 50 mm. Push 0.55 m per second at most, pull 0.38. Tests and build green on the new cameras.
+- Next: merge the world restage, light, water and vehicle heads as they arrive, hero frame side by side with the approved image after each, new beat key frames posted as they finish, neon controls vetted, then round 8 with C1, C2, C3, C4, C8 and C9.
 
 ### 2026-11-20, session 13
 
