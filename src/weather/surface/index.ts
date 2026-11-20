@@ -68,13 +68,25 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
   const blurAt = blurFor(camera)
   const laterBlurAt = blurFor(later)
   const paint = new Set(vehicle.surfaces.filter((s) => s.wetness === 'beads' && !s.material.transparent).map((s) => s.material))
+  const trim = new Set(vehicle.surfaces.filter((s) => s.wetness === 'sheet').map((s) => s.material))
+  const slots: THREE.Vector3[] = []
+  vehicle.root.updateMatrixWorld(true)
+  vehicle.root.traverse((o) => {
+    const mesh = o as THREE.Mesh
+    if (!mesh.isMesh || Array.isArray(mesh.material) || !trim.has(mesh.material)) return
+    const pos = mesh.geometry.getAttribute('position')
+    for (let i = 0; pos && i < pos.count; i++) {
+      const q = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld)
+      if (q.distanceTo(anchor) < 0.4) slots.push(q)
+    }
+  })
+  const clearOfSlots = (q: THREE.Vector3) => slots.every((t) => t.distanceToSquared(q) > 0.05 * 0.05)
   const ray = new THREE.Raycaster()
   const ndc = new THREE.Vector3()
   const rows: Array<{ p: THREE.Vector3; score: number }> = []
   const a = new THREE.Vector3()
   const b = new THREE.Vector3()
   const c = new THREE.Vector3()
-  vehicle.root.updateMatrixWorld(true)
   vehicle.root.traverse((o) => {
     const mesh = o as THREE.Mesh
     if (!mesh.isMesh || Array.isArray(mesh.material) || !paint.has(mesh.material)) return
@@ -97,13 +109,14 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
       const down = new THREE.Vector3(0, -1, 0).addScaledVector(n, n.y).normalize()
       const blur = Math.max(blurAt(p), blurAt(p.clone().addScaledVector(down, 0.014)))
       ndc.copy(p).project(film)
-      if (blur > 1 || Math.abs(ndc.x) > 0.8 || Math.abs(ndc.y) > 0.8) continue
+      if (blur > 1 || Math.abs(ndc.x) > 0.6 || Math.abs(ndc.y) > 0.6) continue
       const centre = Math.hypot(ndc.x, ndc.y)
       const run = p.clone().addScaledVector(down, 0.035)
       ndc.copy(run).project(laterFilm)
       const runBlur = laterBlurAt(run)
-      if (runBlur > 5 || Math.abs(ndc.x) > 0.85 || Math.abs(ndc.y) > 0.85) continue
-      rows.push({ p, score: -0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.15 * runBlur - 0.4 * centre + 4 * (p.y - anchor.y) })
+      if (runBlur > 5 || Math.abs(ndc.x) > 0.75 || Math.abs(ndc.y) > 0.75) continue
+      if (!clearOfSlots(p) || !clearOfSlots(run) || !clearOfSlots(p.clone().addScaledVector(down, 0.08))) continue
+      rows.push({ p, score: -0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.15 * runBlur - 1.5 * centre + (p.y - anchor.y) })
     }
   })
   rows.sort((x, y) => y.score - x.score)
