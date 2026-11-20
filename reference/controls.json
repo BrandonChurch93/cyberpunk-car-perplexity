@@ -1660,8 +1660,23 @@
     "category": "neon-wet-street-night",
     "description": "Red and cyan reflections run down the pavement of a dark, empty street.",
     "cacheFile": "neon-a/neon-2748715.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          88,
+          96,
+          98
+        ],
+        "median": 96
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k89d7335c",
@@ -1673,8 +1688,23 @@
     "category": "neon-wet-street-night",
     "description": "Cyan lights fill a garage opening and reflect on puddled black pavement alongside an amber lamp.",
     "cacheFile": "neon-a/neon-30831682.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          90,
+          98,
+          98
+        ],
+        "median": 98
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k6e37e42f",
@@ -1686,8 +1716,23 @@
     "category": "neon-wet-street-night",
     "description": "A low view across rain puddles catches cyan light and a small red sign near a service alley.",
     "cacheFile": "neon-a/neon-16158304.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          85,
+          94,
+          90
+        ],
+        "median": 90
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "ka220e933",
@@ -1699,8 +1744,23 @@
     "category": "neon-wet-street-night",
     "description": "Warm storefront signage throws light onto wet asphalt beneath a cyan night sky.",
     "cacheFile": "neon-a/neon-17336380.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          92,
+          98,
+          94
+        ],
+        "median": 94
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k2739d86d",
@@ -1712,8 +1772,23 @@
     "category": "neon-wet-street-night",
     "description": "Cool storefront lights reflect across the wet road outside a shuttered restaurant.",
     "cacheFile": "neon-a/neon-11017349.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          90,
+          98,
+          98
+        ],
+        "median": 98
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k039471de",
@@ -1725,8 +1800,23 @@
     "category": "neon-wet-street-night",
     "description": "An amber-red canopy illuminates a wet filling station forecourt.",
     "cacheFile": "neon-a/neon-20336899.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          88,
+          98,
+          98
+        ],
+        "median": 98
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k325b819d",
@@ -1738,8 +1828,23 @@
     "category": "neon-wet-street-night",
     "description": "Red, amber and cyan signs light the wet parking area outside a filling station.",
     "cacheFile": "neon-a/neon-31UF2atdT-A.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          88,
+          98,
+          90
+        ],
+        "median": 90
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k6f53297e",
@@ -1751,8 +1856,23 @@
     "category": "neon-wet-street-night",
     "description": "A parked car sits beneath a blue and amber canopy beyond a wet, reflective foreground.",
     "cacheFile": "neon-a/neon-AaxDhk3uWhA.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          85,
+          94,
+          92
+        ],
+        "median": 92
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k2dd45318",
@@ -1764,8 +1884,23 @@
     "category": "neon-wet-street-night",
     "description": "Two parked cars face the camera across a wet lot with broad blue-white reflections.",
     "cacheFile": "neon-a/neon-20727190.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          88,
+          98,
+          98
+        ],
+        "median": 98
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k38e879a8",
@@ -1777,8 +1912,23 @@
     "category": "neon-wet-street-night",
     "description": "A row of parked cars sits outside an illuminated building beside wet, reflective pavement.",
     "cacheFile": "neon-a/neon-18818779.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          88,
+          97,
+          96
+        ],
+        "median": 96
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k33f1f352",
@@ -1790,8 +1940,23 @@
     "category": "neon-wet-street-night",
     "description": "A parked dark sports car catches amber and cyan light beside a wet, illuminated curb.",
     "cacheFile": "neon-a/neon-12764929.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          88,
+          97,
+          85
+        ],
+        "median": 88
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "ka429d455",
@@ -1803,8 +1968,23 @@
     "category": "neon-wet-street-night",
     "description": "Storefronts reflect on wet asphalt around a dark car at a city intersection.",
     "cacheFile": "neon-a/neon-6772855.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          90,
+          97,
+          91
+        ],
+        "median": 91
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "kfa9ab979",
@@ -1816,8 +1996,23 @@
     "category": "neon-wet-street-night",
     "description": "Warm shop lighting reflects on wet concrete in an empty lot facing a shuttered storefront.",
     "cacheFile": "neon-a/neon-8628340.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          92,
+          99,
+          98
+        ],
+        "median": 98
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k7bf51682",
@@ -1829,8 +2024,23 @@
     "category": "neon-wet-street-night",
     "description": "Red traffic lights and taillights stretch across a wet roadway under amber light.",
     "cacheFile": "neon-a/neon-11020117.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          88,
+          98,
+          97
+        ],
+        "median": 97
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k1b088171",
@@ -1842,8 +2052,23 @@
     "category": "neon-wet-street-night",
     "description": "A low view of wet asphalt catches green and amber building light against a dark apartment facade.",
     "cacheFile": "neon-a/neon-10493305.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          88,
+          96,
+          90
+        ],
+        "median": 90
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k5fb5c3a6",
@@ -1855,8 +2080,23 @@
     "category": "neon-wet-street-night",
     "description": "Amber streetlamps cast long reflections on a wide rain-wet road in Seattle.",
     "cacheFile": "neon-a/neon-28058381.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          85,
+          98,
+          93
+        ],
+        "median": 93
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k1743ccca",
@@ -1868,8 +2108,23 @@
     "category": "neon-wet-street-night",
     "description": "Wet downtown traffic lanes reflect warm lamps and cyan building light beyond a plume of steam.",
     "cacheFile": "neon-a/neon-30993533.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          85,
+          97,
+          98
+        ],
+        "median": 97
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "kd840deda",
@@ -1881,8 +2136,23 @@
     "category": "neon-wet-street-night",
     "description": "An empty intersection reflects warm building lights on the road.",
     "cacheFile": "neon-a/neon-35159933.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          85,
+          99,
+          98
+        ],
+        "median": 98
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "kf86f7e13",
@@ -1894,8 +2164,23 @@
     "category": "neon-wet-street-night",
     "description": "A car crosses a flooded intersection that reflects cool shop lighting and amber signals.",
     "cacheFile": "neon-a/neon-29072500.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          88,
+          94,
+          84
+        ],
+        "median": 88
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k5bcf3a14",
@@ -1907,8 +2192,23 @@
     "category": "neon-wet-street-night",
     "description": "Parked cars and illuminated buildings border a dim, wet street with red and amber reflections.",
     "cacheFile": "neon-a/neon-14064126.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          90,
+          98,
+          93
+        ],
+        "median": 93
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k33f46e14",
@@ -1920,8 +2220,23 @@
     "category": "neon-wet-street-night",
     "description": "Magenta, red and amber light breaks up across the texture of wet road pavement.",
     "cacheFile": "neon-a/neon-35753334.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          85,
+          94,
+          93
+        ],
+        "median": 93
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k5faedda3",
@@ -1933,8 +2248,23 @@
     "category": "neon-wet-street-night",
     "description": "Wet asphalt carries broken blue, amber and red reflections from off-frame city lights.",
     "cacheFile": "neon-a/neon-11213262.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          85,
+          83,
+          88
+        ],
+        "median": 85
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k26946a60",
@@ -1946,8 +2276,23 @@
     "category": "neon-wet-street-night",
     "description": "An illuminated amber and red canopy reflects across the wet forecourt of a petrol station.",
     "cacheFile": "neon-a/neon-30134004.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          92,
+          98,
+          90
+        ],
+        "median": 92
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k34a4c892",
@@ -1959,8 +2304,23 @@
     "category": "neon-wet-street-night",
     "description": "Warm cafe lights reflect across an empty, rain-soaked Seattle street.",
     "cacheFile": "neon-a/neon-14750522.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "grok_4_7"
+        ],
+        "likelihoods": [
+          88,
+          97,
+          94
+        ],
+        "median": 94
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "k56af0a4e",
@@ -1972,8 +2332,23 @@
     "category": "neon-wet-street-night",
     "description": "Cars line a covered parking deck with warm overhead lights reflected in wet concrete.",
     "cacheFile": "neon-a/neon-8605320.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "gemini_4_carbon"
+        ],
+        "likelihoods": [
+          88,
+          97,
+          98
+        ],
+        "median": 97
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "kd7c216ee",
@@ -1985,8 +2360,23 @@
     "category": "neon-wet-street-night",
     "description": "A close view of pink, red and blue neon reflecting in a puddle on textured pavement.",
     "cacheFile": "neon-a/neon-1936741.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "pplx_computer_glm_5_3_1009"
+        ],
+        "likelihoods": [
+          85,
+          96,
+          97
+        ],
+        "median": 96
+      }
+    ],
+    "status": "kept"
   },
   {
     "id": "kd6ba11b8",
@@ -1998,7 +2388,22 @@
     "category": "neon-wet-street-night",
     "description": "City buildings and amber lights reflect in a broad, rain-filled paved lot beneath a purple evening sky.",
     "cacheFile": "neon-a/neon-13807901.jpg",
-    "vettings": [],
-    "status": "candidate"
+    "vettings": [
+      {
+        "date": "1",
+        "families": [
+          "claude_opus_5_5",
+          "gpt_6_2_sol",
+          "kimi_k3"
+        ],
+        "likelihoods": [
+          88,
+          99,
+          90
+        ],
+        "median": 90
+      }
+    ],
+    "status": "kept"
   }
 ]
