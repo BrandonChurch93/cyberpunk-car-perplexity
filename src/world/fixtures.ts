@@ -75,7 +75,14 @@ export function addSky(root: THREE.Group): void {
   const sky = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, toneMapped: false,
     uniforms: { cloudSeed: { value: streamSeed('world/city/cloud-base') / 4294967296 * 37 } },
-    vertexShader: /* glsl */ `varying vec3 skyDirection; void main() { skyDirection = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    vertexShader: /* glsl */ `
+      varying vec3 skyDirection;
+      void main() {
+        skyDirection = position;
+        gl_Position = projectionMatrix * vec4(mat3(modelViewMatrix) * position, 1.0);
+        gl_Position.z = gl_Position.w * .999999;
+      }
+    `,
     fragmentShader: /* glsl */ `
       varying vec3 skyDirection;
       uniform float cloudSeed;
@@ -117,7 +124,9 @@ export function addSky(root: THREE.Group): void {
       }
     `,
   })
-  mesh(root, new THREE.Mesh(new THREE.SphereGeometry(812, 32, 16), sky), 'city-lit cloud base', [0, 0, 0], false).renderOrder = -1000
+  const ceiling = mesh(root, new THREE.Mesh(new THREE.SphereGeometry(1600, 32, 16), sky), 'city-lit cloud base', [0, 0, 0], false)
+  ceiling.renderOrder = -1000
+  ceiling.frustumCulled = false
   root.add(new THREE.HemisphereLight(new THREE.Color(.20, .31, .47), new THREE.Color(.072, .083, .10), .28))
 }
 
