@@ -5,7 +5,7 @@
 //   npx tsx tools/vehicle/fairness.ts --base <label>     also stack the saved sheets of an earlier run above this one
 //   npx tsx tools/vehicle/fairness.ts --control true     measure a fine 1 m sphere instead of the car: the noise floor
 //
-// Options: --frames 195,360  --detail full|blockout  --formats master,vertical  --step 10 (mm)  --crease 40 (mm)  --label <name>
+// Options: --frames 195,360  --detail full|blockout  --sub N  --formats master,vertical  --step 10 (mm)  --crease 40 (mm)  --label <name>
 //
 // Rays are cast through the pixel grid of each film camera against the full-detail vehicle at rest at that frame.
 // Every hit on a painted surface keeps its world position and its interpolated shading normal, the normal that the
@@ -301,7 +301,10 @@ async function measure(frame: number, key: 'master' | 'vertical') {
   const centreHit = soup.hit(origin.x, origin.y, origin.z, ...new T.Vector3(0, 0, -1).applyQuaternion(q).toArray() as [number, number, number])
   const subject = centreHit ? centreHit[0] : origin.length()
   const pixel = subject * 2 * halfW / format.width
-  const stride = Math.max(1, Math.floor(step / 3 / pixel))
+  // --sub N (default 4) casts N rays per native pixel along each axis, so a surface that a pixel row sees at a grazing
+  // angle is still sampled finer than the step. --sub 0 restores the old one ray per pixel.
+  const sub = Number(a.sub ?? 4)
+  const stride = sub > 0 ? 1 / sub : Math.max(1, Math.floor(step / 3 / pixel))
   const W = Math.floor(format.width / stride), H = Math.floor(format.height / stride)
   const P = new Float32Array(W * H * 3), N = new Float32Array(W * H * 3), D = new Float32Array(W * H * 3)
   const panel = new Int16Array(W * H).fill(-1)
@@ -367,7 +370,7 @@ async function measure(frame: number, key: 'master' | 'vertical') {
     const length = s[s.length - 1]
     const m = Math.floor(length / step)
     if (m < 3) return
-    const normals: T.Vector3[] = [], owners: number[] = []
+    const normals: T.Vector3[] = [], owners: number[] = [], spans: number[] = []
     let j = 0
     for (let i = 0; i <= m; i++) {
       const at = i * step
@@ -376,10 +379,15 @@ async function measure(frame: number, key: 'master' | 'vertical') {
       const a = run[j] * 3, b = run[j + 1] * 3
       normals.push(new T.Vector3(N[a] + (N[b] - N[a]) * f, N[a + 1] + (N[b + 1] - N[a + 1]) * f, N[a + 2] + (N[b + 2] - N[a + 2]) * f).normalize())
       owners.push(f < 0.5 ? run[j] : run[j + 1])
+      spans.push(j)
     }
     const crease = new Uint8Array(m + 1)
     for (let i = 0; i < m; i++) {
-      if (normals[i].angleTo(normals[i + 1]) / step > kink) for (let d = -3; d <= 4; d++) if (i + d >= 0 && i + d <= m) crease[i + d] = 1
+      // A crease narrower than the pixel footprint spreads over several stations, so also test the turn across the
+      // pixel interval itself when that interval is longer than the step.
+      const a = run[spans[i]] * 3, b = run[spans[i] + 1] * 3, wide = s[spans[i] + 1] - s[spans[i]] > step
+      const pixelTurn = wide ? new T.Vector3(N[a], N[a + 1], N[a + 2]).normalize().angleTo(new T.Vector3(N[b], N[b + 1], N[b + 2]).normalize()) : 0
+      if (normals[i].angleTo(normals[i + 1]) / step > kink || pixelTurn > kink * step) for (let d = -3; d <= 4; d++) if (i + d >= 0 && i + d <= m) crease[i + d] = 1
     }
     const name = panelName(panel[run[0]], P[run[0] * 3])
     const entry = stats.get(name) ?? { u: newStat(), v: newStat() }
@@ -450,7 +458,7 @@ const rms = (s: Stat) => s.n ? Math.sqrt(s.sum / s.n) : 0
 const f0 = (x: number) => x.toFixed(0).padStart(7)
 
 const lines: string[] = [
-  `fairness ${label}  step ${(step * 1000).toFixed(0)} mm  crease radius ${(creaseRadius * 1000).toFixed(0)} mm  unit 1/m^2  (RMS of |n(s+h) - 2n(s) + n(s-h)| / h^2 along image rows u and columns v)`,
+  `fairness ${label}  sub ${a.sub ?? 4}  step ${(step * 1000).toFixed(0)} mm  crease radius ${(creaseRadius * 1000).toFixed(0)} mm  unit 1/m^2  (RMS of |n(s+h) - 2n(s) + n(s-h)| / h^2 along image rows u and columns v)`,
   `${'view'.padEnd(13)}${'panel'.padEnd(20)}${'samples'.padStart(8)}${'crease%'.padStart(8)}${'u rms'.padStart(7)}${'v rms'.padStart(7)}${'p50'.padStart(7)}${'p95'.padStart(7)}${'worst'.padStart(7)}  at native px`,
 ]
 const results = []
