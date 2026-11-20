@@ -103,6 +103,16 @@ export function addSky(root: THREE.Group): void {
         float canopy = pow(max(0.0,dot(d,normalize(vec3(-.68,.54,-.34)))), 5.2);
         float cloudBase = smoothstep(.05,.32,d.y+.05*(coarse-.5))*(.48+.55*cloud);
         c += cloudBase*(vec3(.003,.007,.012)+canopy*vec3(.017,.030,.052));
+        vec2 skyPlane = normalize(d.xz+vec2(.0001,0.0));
+        float wash = pow(max(dot(skyPlane,normalize(vec2(-.55,-.84))),0.0), 4.8);
+        float cloudAngle = smoothstep(-.025,.058,d.y) * (1.0-smoothstep(.26,.58,d.y));
+        vec2 low = vec2(d.x*11.2+d.z*6.0,(d.y+.036)*24.0);
+        float banks = cloudNoise(low*.85);
+        float layers = cloudNoise(low*2.55+vec2(3.1,banks*1.67));
+        float cover = smoothstep(.26,.83,.58*banks+.39*layers+.16*cloudNoise(low*5.04));
+        float pink = cloudNoise(low*.36+vec2(9.5,3.1));
+        vec3 reflectedCity = mix(vec3(.28,.101,.39),vec3(.62,.186,.34),pink);
+        c += wash*cloudAngle*reflectedCity*(.24+.76*cover);
         gl_FragColor = vec4(c, 1.0);
       }
     `,
@@ -519,6 +529,7 @@ function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE
   const set = (t: number, cutTime = t) => {
     // Keep the shared light slot on one physical emitter across the shutter.
     const active = cutTime >= detailBeat.start && cutTime < detailBeat.end
+    rake.position.y = active ? source.y : .38
     const progress = active ? ease(t,detailBeat.start,detailBeat.end) : 0
     aim.set(-.358+.12*progress,1.011,-1.22+.38*progress).sub(source).normalize()
     head.quaternion.setFromUnitVectors(forward,aim)

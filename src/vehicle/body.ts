@@ -646,9 +646,14 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const s = sAt(a[2])
         const p = sidePoint(s, mix(a[1], shoulder(s), v), side)
         const high = sidePoint(s, shoulder(s), side)
-        const section = hinge(trace(p), foldHalf) - mix(hinge(trace(a), foldHalf), hinge(trace(high), foldHalf), v)
+        const [offset, bottom, top] = [trace(p), trace(a), trace(high)]
+        const section = hinge(offset, foldHalf) - mix(hinge(bottom, foldHalf), hinge(top, foldHalf), v)
         const span = (s - before) / (after - before)
-        const crown = (rear ? .35 : .32) * section * smooth(span, 0, .10) * (1 - smooth(span, .90, 1))
+        const arc = section * smooth(span, 0, .10) * (1 - smooth(span, .90, 1))
+        const runIn = rear ? 0 : (1 - fairStep(span, .25, .46)) * (1 - fairStep(p[1], .675, .732))
+        const round = runIn ? (fairPositive(offset, .032) - mix(fairPositive(bottom, .032), fairPositive(top, .032), v))
+          * fairStep(span, 0, .16) : arc
+        const crown = (rear ? .35 : .32) * mix(arc, round, runIn)
         const drop = high[1] - p[1]
         return [p[0] + side * (crown + (rear ? 0 : wingDraft(s, drop))), p[1], p[2]]
       }
@@ -657,7 +662,13 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       if (rear) folded(face, uSide, [beltLine, haunchLine, trace], columns)
       else {
         const { rows, at } = foldRows(face, [beltLine, trace, wingDraftLine], full ? 6 : 3)
-        paint.push(patch(face, columns, rows, uSide, .002, at))
+        const lipRows = 6
+        const skin = (u: number, v: number): Point => {
+          const p = archPanel(u, v), bead = v < .028 ? .0016 * Math.sin(Math.PI * v / .028) ** 4 : 0
+          return [p[0] + side * bead, p[1], p[2]]
+        }
+        paint.push(patch(skin, columns, rows + lipRows, uSide, .002, (u, j) => j < lipRows
+          ? .028 * j / lipRows : mix(.028, 1, at(u, j - lipRows))))
         const height = shoulder(before) - floorY
         const topRows = Array.from({ length: rows + 1 }, (_, j) => (face(0, at(0, j))[1] - floorY) / height)
         const bottomRows = Array.from({ length: 5 }, (_, j) => topRows[0] * j / 5)
@@ -678,11 +689,11 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
         const tuck = rear && start === Math.PI ? .041 * (1 - smooth(y, .282, .405)) : 0
         return [skin[0] - side * tuck, y, skin[2]]
       }, uSide, full ? 24 : 8, 4, 0)
-      part(paint, (u, v) => {
+      if (rear) part(paint, (u, v) => {
         const p = archPanel(u, mix(0, .028, v))
-        const bead = rear ? .0025 * Math.sin(Math.PI * v) : .0016 * Math.sin(Math.PI * v) ** 2
+        const bead = .0025 * Math.sin(Math.PI * v)
         return [side * Math.min(dimensions.bodyWidth / 2, Math.abs(p[0]) + bead), p[1], p[2]]
-      }, uSide, columns, 6, rear ? .006 : .003)
+      }, uSide, columns, 6, .006)
       const wellX = w.x - w.width / 2 - .025
       const well = (u: number, v: number): Point => {
         const angle = mix(theta0, theta1, u)
