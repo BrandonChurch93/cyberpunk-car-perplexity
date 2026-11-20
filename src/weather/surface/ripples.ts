@@ -98,8 +98,14 @@ uniform float surfPulseTime;
 #define SURF_RING_SPEED ${ringSpeed.toFixed(4)}
 #define SURF_OWN_WATER ${ownWaterMark.toFixed(1)}
 
-/** Slope of one ring packet at distance r from its center. deep: 1 on standing water, 0 on a thin film. */
-float surfRing(float r, float age, float diameterMm, float deep) {
+/** Slope variance of ring detail finer than the pixel footprint, for the caller to fold into roughness. */
+float surfRingVar;
+
+/**
+ * Slope of one ring packet at distance r from its center. deep: 1 on standing water, 0 on a thin film. Wave detail finer than
+ * foot meters is filtered out of the slope and its energy goes to surfRingVar, so distant rings still break the reflection.
+ */
+float surfRing(float r, float age, float diameterMm, float deep, float foot) {
   float life = mix(0.5, 1.0, deep) * SURF_RING_LIFE;
   if (age <= 0.0 || age > life) return 0.0;
   float lambda = mix(0.0055, 0.0085 + 0.0016 * diameterMm, deep);
@@ -112,15 +118,22 @@ float surfRing(float r, float age, float diameterMm, float deep) {
   float tau = mix(0.08, 0.2, deep);
   float amp = mix(0.35, 1.0, deep) * 0.16 * (diameterMm / 2.0) * exp(-age / tau) * sqrt(0.02 / (front + 0.02));
   amp *= smoothstep(life, life * 0.6, age);
-  float slope = amp * envelope * cos(6.2831853 * s / wave);
+  float filt = exp(-2.0 * (foot / wave) * (foot / wave));
+  float osc = amp * envelope;
+  float slope = osc * filt * cos(6.2831853 * s / wave);
+  surfRingVar += 0.5 * osc * osc * (1.0 - filt * filt);
   float rb = 0.0012 * diameterMm + 0.0015;
   float young = 1.0 - smoothstep(0.0, 0.07, age);
-  slope += young * 0.9 * (r / rb) * exp(-(r * r) / (rb * rb)) * (age < 0.025 ? -1.0 : 1.0);
+  float bump = young * 0.9 * (r / rb) * exp(-(r * r) / (rb * rb));
+  float bumpFilt = exp(-2.0 * (foot / rb) * (foot / rb));
+  slope += bump * bumpFilt * (age < 0.025 ? -1.0 : 1.0);
+  surfRingVar += bump * bump * (1.0 - bumpFilt * bumpFilt);
   return slope;
 }
 
 /** Ripple slope (d height / dx, d height / dz) on the deck from the binned rain impacts and the exhaust pulses. */
-vec2 surfRipples(vec2 p, float deep, float film, float sampleOffset) {
+vec2 surfRipples(vec2 p, float deep, float film, float sampleOffset, float foot) {
+  surfRingVar = 0.0;
   vec2 slope = vec2(0.0);
   vec2 own = vec2(0.0);
   float weight = max(deep, film);
@@ -140,14 +153,15 @@ vec2 surfRipples(vec2 p, float deep, float film, float sampleOffset) {
         float r = length(d);
         if (r > 0.16) continue;
         if (e.w > SURF_OWN_WATER) {
-          own += surfRing(r, t - e.z, e.w - SURF_OWN_WATER, max(deep, 0.6)) * d / max(r, 1e-5);
+          own += surfRing(r, t - e.z, e.w - SURF_OWN_WATER, max(deep, 0.6), foot) * d / max(r, 1e-5);
         } else {
-          slope += surfRing(r, t - e.z, e.w, deep) * d / max(r, 1e-5);
+          slope += surfRing(r, t - e.z, e.w, deep, foot) * d / max(r, 1e-5);
         }
       }
     }
   }
   slope = slope * weight + own * max(weight, 0.8) * 6.0;
+  surfRingVar *= weight * weight;
   for (int i = 0; i < 2; i++) {
     vec4 pulse = surfPulse[i];
     if (pulse.z <= 0.0) continue;

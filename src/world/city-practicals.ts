@@ -4,6 +4,7 @@ import { stream, streamSeed } from '../core/random'
 import { insertAfter, patchMaterial } from '../materials/patch'
 import { block, labelFace, mesh, plate, type Label } from './fixtures'
 import { group, type Tuple } from './forms'
+import { billboardTerraceRoof } from './city'
 
 const tau = Math.PI * 2
 const duration = config.film.durationSeconds
@@ -85,7 +86,7 @@ function mountedText(city: THREE.Group, labels: Label, signs: string[]): void {
     { text: 'BRINESCALE SUSHI', lines: ['BRINESCALE','SUSHI'], tower: 'north sign terrace', x: -27.04, y: 9.89, rot: Math.PI, w: 3.48, h: 1.9, type: 'lightbox', col: [2.55,1.55,.89], standoff: .46 },
     { text: 'PHARMACY', tower: 'northwest tower', x: -47.0, y: 17.1, rot: Math.PI, w: 4.78, h: 1.08, type: 'led', col: [.73,1.85,2.01] },
     { text: 'KARAOKE', tower: 'north central tower', x: .70, y: 15.5, rot: Math.PI, w: 2.75, h: 1.13, type: 'paint', col: [.35,.49,.57] },
-    { text: 'PARKING', tower: 'billboard terrace', x: 3.2, y: 14.52, rot: 0, w: 4.26, h: .91, type: 'led', col: [.84,1.69,2.25] },
+    { text: 'PARKING', tower: 'billboard terrace', x: 3.2, y: billboardTerraceRoof+.72, rot: 0, w: 4.26, h: .91, type: 'led', col: [.84,1.69,2.25] },
     { text: 'EXIT', tower: 'southwest signal tower', x: -35, y: 41.7, rot: 0, w: 2.8, h: .90, type: 'led', col: [.71,1.14,1.72] },
     { text: 'HOTEL', tower: 'west corner slab', x: -35.8, y: 15.85, rot: 0, w: 3.35, h: .82, type: 'led', col: [.60,1.56,1.93], standoff: .46 },
   ] as const) {
