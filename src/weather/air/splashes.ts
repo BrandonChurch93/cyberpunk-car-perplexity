@@ -176,7 +176,8 @@ export class Splashes {
         const u = crown.age / crownDuration
         const edge = 0.0048 + (0.004 + size * 0.007) * u * sizeVariation
         const height = (0.007 + 0.014 * size) * Math.sin(u * Math.PI * 0.82) * sizeVariation
-        const gain = hit.power * (0.48 + 0.52 * size) * crown.weight
+        const deckContrast = hit.vehicle ? 1 : 1.25 + size * 0.45
+        const gain = hit.power * (0.48 + 0.52 * size) * crown.weight * deckContrast
         const cusps = hit.power < 0.65 ? 3 : size > 0.75 ? 7 : 5
         for (let i = 0; i < cusps; i++) {
           const angle = spin + (i / cusps) * tau
@@ -216,7 +217,7 @@ export class Splashes {
     let written = 0
     for (const hit of this.hits) {
       if (!hit.vehicle || written >= sprayCapacity) continue
-      const slope = THREE.MathUtils.smoothstep(hit.surface.up.y, 0.63, 0.91)
+      const slope = THREE.MathUtils.smoothstep(hit.surface.up.y, 0.39, 0.82)
       if (slope < 0.005) continue
       const size = (hit.diameter * 1000 - 1) * 0.5
       const lifetime = 0.146 + 0.079 * hash01(hit.seed, 11)
@@ -225,7 +226,8 @@ export class Splashes {
       const u = exposure.age / lifetime
       const rise = (0.027 + 0.071 * size) * Math.sin(u * Math.PI * 0.76)
       const bloom = 0.020 + 0.058 * u
-      this.yUp.copy(hit.surface.up).multiplyScalar(0.45).addScaledVector(THREE.Object3D.DEFAULT_UP, 0.55).normalize()
+      const normalMix = THREE.MathUtils.lerp(0.68, 0.45, slope)
+      this.yUp.copy(hit.surface.up).multiplyScalar(normalMix).addScaledVector(THREE.Object3D.DEFAULT_UP, 1 - normalMix).normalize()
       this.origin.copy(hit.base).applyMatrix4(hit.surface.mesh.matrixWorld).addScaledVector(this.yUp, 0.013 + rise)
       const spin = hash01(hit.seed, 12) * tau
       const drift = u * (0.035 + 0.06 * hash01(hit.seed, 13))
@@ -233,7 +235,7 @@ export class Splashes {
       this.origin.z += drift * (0.48 * Math.sin(spin) + 0.42 * prevailingWind[1])
       const n = written++ * 4
       this.sprayDrops.set([this.origin.x, this.origin.y, this.origin.z, bloom], n)
-      this.sprayMotion.set([drift * 0.27 * prevailingWind[0], rise * 0.32, drift * 0.27 * prevailingWind[1], hit.power * slope * exposure.weight * (0.025 + 0.095 * size)], n)
+      this.sprayMotion.set([drift * 0.27 * prevailingWind[0], rise * 0.32, drift * 0.27 * prevailingWind[1], hit.power * slope * exposure.weight * (0.031 + 0.111 * size)], n)
     }
     upload(this.sprayGeometry, written)
   }
