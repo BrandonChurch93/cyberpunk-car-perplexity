@@ -19,7 +19,8 @@
     "keep": "tsx tools/keep.ts",
     "proof": "tsx tools/proof.ts",
     "determinism": "tsx tools/determinism.ts",
-    "gate": "tsx tools/gate.ts"
+    "gate": "tsx tools/gate.ts",
+    "profile": "tsx tools/profile.ts"
   },
   "dependencies": {
     "gsap": "3.15.1",

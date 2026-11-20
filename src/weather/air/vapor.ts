@@ -65,6 +65,10 @@ vec3 vaporLight(vec3 p, vec3 toEye) {
   vec3 illumination = vec3(0.0);
   for (int i = 0; i < MAX_FILM_LIGHTS; ++i) {
     if (i >= filmLightCount) break;
+    vec4 source = filmLightColor[i];
+    if (all(equal(source.rgb, vec3(0.0)))) continue;
+    vec3 offset = filmLightPosition[i] - p;
+    if (dot(offset, offset) > source.a * source.a * 1.000001) continue;
     vec3 toLight;
     vec3 incident = filmLightAt(i, p, toLight);
     float mu = -dot(toEye, toLight);
@@ -77,11 +81,11 @@ vec3 vaporLight(vec3 p, vec3 toEye) {
 float deckSpray(vec3 p) {
   vec2 border = min(p.xz - uDeck.xy, uDeck.zw - p.xz);
   float edge = smoothstep(0.0, 1.5, min(border.x, border.y));
-  float e = exp(-max(0.0, p.y - 0.035) * 14.6) * (1.0 - smoothstep(0.16, ${slabHeight}, p.y));
+  float e = exp(-max(0.0, p.y - 0.025) * 18.0) * (1.0 - smoothstep(0.12, ${slabHeight}, p.y));
   float primary = sin(dot(p.xz, vec2(2.04, -2.14)) - TAU * 12.0 * uPhase + uNoise.x);
   float secondary = sin(dot(p.xz, vec2(3.89, 1.13)) - TAU * 15.0 * uPhase + uNoise.y);
   float pockets = 0.48 + 0.52 * smoothstep(-0.62, 0.78, primary * 0.68 + secondary * 0.32);
-  return 0.043 * edge * e * pockets;
+  return 0.050 * edge * e * pockets;
 }
 
 float plumeDensity(vec3 q, vec3 axis, float type, float index) {
@@ -119,7 +123,7 @@ void main() {
   vec3 scattered = vec3(0.0);
 
   if (abs(ray.y) > 1e-5) {
-    vec2 water = (vec2(0.035, ${slabHeight}) - uEye.y) / ray.y;
+    vec2 water = (vec2(0.025, ${slabHeight}) - uEye.y) / ray.y;
     float enter = max(uClip.x, min(water.x, water.y));
     float exit = min(scene, min(26.0 / rayLength, max(water.x, water.y)));
     if (exit > enter) {

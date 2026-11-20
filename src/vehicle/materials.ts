@@ -34,7 +34,7 @@ const flakeSpecs: Record<string, FlakeSpec> = {
 const fallbackFlake: FlakeSpec = { sizeUm: 26, coverage: .4, tiltDeg: 7.5, reflectance: .8, lobeDeg: 1, binder: .5 }
 
 /** Clear coat: about 45 micrometres of clear over the base, a slight long wave in its surface, a lobe floor for compact lights. */
-const coat = { ior: 1.5, thicknessUm: 45, peelWaveMm: 2.2, peelSlopeDeg: .022, roughness: .045, directRoughness: .14, flakeRoughness: .19 }
+const coat = { ior: 1.5, thicknessUm: 45, peelWaveMm: 2.2, peelSlopeDeg: .07, roughness: .045, directRoughness: .14, flakeRoughness: .19 }
 
 /** Flakes are dealt per cell of at most six and at most 90 micrometres, explicit up to a few cells per pixel, then a matched smooth lobe. */
 const cellFlakes = 6
