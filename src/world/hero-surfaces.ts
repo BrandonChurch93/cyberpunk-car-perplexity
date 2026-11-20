@@ -37,6 +37,9 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
       new THREE.Color(.99,1.14,1.17)
   const stripFloors = /left edge|west garage/.test(id)
   const horizontalFloors = /screen tower|amber tower|right edge/.test(id)
+  const windowTail = layer === 'near'
+    ? /left edge|hotel tower|parking tower|west garage/.test(id) ? 76 : /amber tower|right edge/.test(id) ? 22 : 0
+    : 0
   const spill = (i: number) => spills[i] ?? { point: new THREE.Vector3(), size: new THREE.Vector2(1,1), color: new THREE.Color(0,0,0) }
   const prefix = 'varying vec2 wallUv, wallUnit; varying vec3 wallPoint, wallNormal, wallTangent; varying float wallSide;'
   const mat = new THREE.MeshStandardMaterial({
@@ -50,7 +53,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
     id: 'hero tower cladding and window rooms',
     uniforms: {
       bay: { value: cell }, roomDensity: { value: density }, salt: { value: seed }, facadeFamily: { value: family }, shellLuma: { value: level },
-      facadeTint: { value: facadeTint },
+      facadeTint: { value: facadeTint }, windowTail: { value: windowTail },
       mechanicalPitch: { value: mechanicalPitch }, distanceLayer: { value: layer === 'near' ? 0 : layer === 'middle' ? 1 : 2 },
       stripFloors: { value: stripFloors ? 1 : 0 }, horizontalFloors: { value: horizontalFloors ? 1 : 0 },
       screenPoint: { value: screen.point }, screenNormal: { value: screen.normal }, screenSize: { value: screen.size },
@@ -70,7 +73,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', /* glsl */ `
         ${prefix}
         uniform vec2 bay;
-        uniform float roomDensity, salt, facadeFamily, shellLuma, mechanicalPitch, distanceLayer, stripFloors, horizontalFloors;
+        uniform float roomDensity, salt, facadeFamily, shellLuma, mechanicalPitch, distanceLayer, stripFloors, horizontalFloors, windowTail;
         uniform vec3 screenPoint,screenNormal,facadeTint;
         uniform vec3 spillPoint[2],spillTint[2];
         uniform vec2 screenSize,spillSize[2];
@@ -159,7 +162,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
           mix(vec3(1.0),vec3(.86,1.21,1.41),1.0-smoothstep(-.61,.21,wallNormal.x))+
           signGlow*(.092+.079*glass));
         totalEmissiveRadiance+=(sill+pilaster*.29+corner*.42)*skyGlass*(.57+.15*floorState)*(.59+.69*curtain+.32*banded);
-        float lampRadiance=.19+2.55*exposure*exposure+19.0*pow(exposure,8.0);
+        float lampRadiance=.19+2.55*exposure*exposure+19.0*pow(exposure,8.0)+windowTail*pow(exposure,12.0);
         vec3 litRoom=roomTint*lamp*lampRadiance*roomLight;
         vec3 subpixelRooms=vec3(.21,.146,.096)*mix(.73,1.34,distanceLayer*.5)*(1.0-mechanical);
         totalEmissiveRadiance+=glass*((.32+.68*curtain+.32*banded)*

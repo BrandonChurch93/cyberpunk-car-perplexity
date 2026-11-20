@@ -342,6 +342,21 @@ describe('full roof world', () => {
     expect(world.signs).toContain('HOTEL')
   })
 
+  it('shows the stacked accent cabinets from both hero cameras', () => {
+    const point = new THREE.Vector3()
+    for (const name of ['stacked amber arcade cabinet','stacked amber noodle cabinet']) {
+      const cabinet = world.root.getObjectByName(name)!
+      expect(cabinet.parent?.name).toBe('hero near east garage bay volume')
+      cabinet.getObjectByName('diffusing cabinet face')!.getWorldPosition(point)
+      for (const format of [config.formats.master,config.formats.vertical]) {
+        const eye = cameraAt(config.film.heroFrameSeconds,format,anchors).position
+        const delta = point.clone().sub(eye)
+        const ray = new THREE.Raycaster(eye,delta.clone().normalize(),.01,delta.length()+.025)
+        expect(ray.intersectObject(world.root,true)[0]?.object.parent).toBe(cabinet)
+      }
+    }
+  })
+
   it('mounts the reflection strip to the ramp without adding a film light', () => {
     const ramp = world.root.getObjectByName('drive-down ramp and control island')!
     ramp.updateWorldMatrix(true, true)
