@@ -327,24 +327,22 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const normal = new T.Vector3(side * .51, .12, .851).normalize()
       const transform = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), normal)
       const p = vec(f(x, y + lift, .018))
-      const hardware = (r: number, a: number, z: number, aspect = .84): Point =>
-        new T.Vector3(radius * r * Math.cos(a), radius * r * aspect * Math.sin(a), z)
-          .applyQuaternion(transform).add(p).toArray()
-      const segments = full ? 52 : 24
-      const ring = (r0: number, r1: number, z0: number, z1: number, crown: number, steps: number) =>
-        patch((u, v) => hardware(mix(r0, r1, v), tau * u, mix(z0, z1, v) + crown * Math.sin(Math.PI * v)), segments, steps, outFront)
-      black.push(ring(1.18, 1.075, -.021, -.003, .001, 5))
-      projectorCollars.push(ring(1.09, .94, -.003, -.0005, .0018, 5))
-      projectorCollars.push(ring(.934, .885, -.001, -.006, .0007, 3))
-      const bowl = curve([[.235, -.0235], [.33, -.023], [.40, -.018], [.43, -.0155], [.476, -.017],
-        [.53, -.0135], [.61, -.0098], [.655, -.0073], [.698, -.0095], [.78, -.0065], [.90, -.004]])
-      projectorBowls.push(patch((u, v) => {
-        const r = mix(.235, .90, v)
-        return hardware(r, tau * u, bowl(r))
-      }, segments, full ? 26 : 19, outFront))
-      const glassCenter = p.clone().addScaledVector(normal, -.001)
-      projectorGlass.push(new T.SphereGeometry(radius * .903, segments, 18, 0, tau, 0, Math.PI / 2)
-        .rotateX(Math.PI / 2).scale(1, .84, .20).applyQuaternion(transform).translate(...glassCenter.toArray()))
+      const segments = full ? 96 : 56
+      const turn = (profile: readonly XY[]) =>
+        new T.LatheGeometry(profile.map(([r, z]) => new T.Vector2(radius * r, z)), segments)
+          .rotateX(Math.PI / 2).scale(1, .84, 1).applyQuaternion(transform).translate(...p.toArray())
+      black.push(turn([[0, -.034], [1.12, -.034], [1.17, -.028], [1.16, -.017], [1.085, -.007], [1.063, -.005]]))
+      projectorCollars.push(turn([[1.063, -.005], [1.055, -.0023], [1.025, -.0006], [.978, -.0003],
+        [.944, -.0011], [.931, -.0024], [.927, -.0041], [.908, -.0053], [.878, -.0053], [.875, -.007]]))
+      projectorBowls.push(turn([[.875, -.007], [.857, -.0077], [.818, -.0088], [.754, -.0113], [.688, -.0137],
+        [.665, -.015], [.633, -.0153], [.608, -.0149], [.555, -.0171], [.485, -.0194], [.414, -.0212],
+        [.373, -.023], [.352, -.0244], [.311, -.0245], [.286, -.0237], [0, -.0237]]))
+      const domeSteps = full ? 24 : 12
+      const dome = Array.from({ length: domeSteps + 1 }, (_, j): XY => {
+        const a = mix(Math.PI / 2, 0, j / domeSteps)
+        return [.910 * Math.sin(a), -.0043 + radius * .235 * Math.cos(a)]
+      })
+      projectorGlass.push(turn([[0, -.0059], [.885, -.0059], [.910, -.0055], ...dome]))
       const core = p.clone().addScaledVector(normal, -.0145)
       emit('main beam projector', new T.SphereGeometry(radius * .27, 32, 12)
         .scale(1.10, .80, .22).applyQuaternion(transform).translate(...core.toArray()), false, true, f(x, y, -.025), intensity)
@@ -561,7 +559,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
   bladeFinish.metalness = .12
   add(parent, 'thin graphite diffuser blades', joined(diffuserFins), bladeFinish)
   add(parent, 'machined projector collars', joined(projectorCollars), m.brushed)
-  add(parent, 'ribbed dark projector bowls', joined(projectorBowls), m.dark)
+  add(parent, 'ribbed dark projector bowls', joined(projectorBowls), m.forged)
   add(parent, 'convex projector lenses', joined(projectorGlass), m.projector)
   add(parent, 'front optical lens shells', joined(optical), m.optics)
   add(parent, 'rear optical lens shells', joined(rearOptical), m.rearOptics)

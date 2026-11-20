@@ -79,7 +79,7 @@ const master: Record<string, ShotMaker> = {
     return {
       position: mixV(frontOf(openAngle, 6.6, 0.2), frontOf(wideAngle, 4.6, 0.2), u),
       target: mixV(center, v(0, 0.55, 0.2), u),
-      screen: [mix(-0.16, 0.14, u), mix(-0.12, -0.14, u)],
+      screen: [mix(-0.2, 0.14, u), mix(-0.12, -0.14, u)],
       focalMm: wideMm,
       focus: mixV(nose, a.lamp.position, u),
       tStop: 2,
@@ -148,7 +148,7 @@ const master: Record<string, ShotMaker> = {
     return {
       position: frontOf(mix(openAngle + 14, openAngle, q), mix(4.7, 6.6, q), mix(0.7, 0.2, q)),
       target: mixV(v(0, 0.55, 0.3), center, q),
-      screen: [mix(0, -0.16, q), mix(-0.2, -0.12, q)],
+      screen: [mix(0, -0.2, q), mix(-0.2, -0.12, q)],
       focalMm: wideMm,
       focus: mixV(a.lamp.position, nose, q),
       tStop: 2,
@@ -229,8 +229,8 @@ const vertical: Record<string, ShotMaker> = {
   crane: (t, a) => {
     const q = pull(t)
     return {
-      position: frontOf(mix(52, 40, q), mix(6.2, 7.2, q), mix(0.8, 0.2, q)),
-      target: mixV(v(0.05, 0.55, 0.9), v(0.2, 0.55, 0.8), q),
+      position: frontOf(mix(50, 40, q), mix(6.9, 7.2, q), mix(0.9, 0.2, q)),
+      target: mixV(v(0.15, 0.55, 0.35), v(0.2, 0.55, 0.8), q),
       screen: [0, mix(-0.42, -0.36, q)],
       focalMm: wideMm,
       focus: mixV(a.lamp.position, nose, q),

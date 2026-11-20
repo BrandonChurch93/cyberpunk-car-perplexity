@@ -465,9 +465,11 @@ describe('vehicle geometry and state', () => {
       }
       const duct = car.root.getObjectByName('flush airbox grille ducts') as T.Mesh
       const tray = backing.object as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
-      const obliqueEye = cameraAt(810 / config.film.fps, config.formats.master, car.anchors).position
-      const obliqueTarget = tray.localToWorld(new T.Vector3(-.39587, 1.00784, -1.06987))
-      expect([grille, tray]).toContain(look(obliqueEye, obliqueTarget).object)
+      const obliqueTarget = position.clone().addScaledVector(across.clone().normalize(), .076)
+      for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [750, 790, 830, 869]) {
+        const obliqueEye = cameraAt(frame / config.film.fps, format, car.anchors).position
+        expect([grille.name, tray.name]).toContain(look(obliqueEye, obliqueTarget).object.name)
+      }
       expect(tray.material.color.getHex()).toBe(0)
       expect(tray.material.specularIntensity).toBe(0)
       expect(tray.material.roughness).toBe(1)
@@ -491,6 +493,23 @@ describe('vehicle geometry and state', () => {
       const baySurround = car.root.getObjectByName('thin carbon engine bay surround')!
       const bayReturns = car.root.getObjectByName('dry carbon bay wall returns')!
       const long = axis.clone().normalize(), out = across.clone().normalize()
+      const skim = cameraAt(750 / config.film.fps, config.formats.master, car.anchors).position
+      for (const [run, lateral, depth = .006] of [[-.244, .1166], [-.2328, .1143], [-.224, .112], [-.2146, .1099, .003], [-.2104, .1092, .003]]) {
+        const corner = position.clone().addScaledVector(long, run).addScaledVector(out, lateral).addScaledVector(normal, -depth)
+        const surface = look(skim, corner).object.name
+        const visible = depth === .003 ? [duct.name, 'recessed bay chamber and blank plate'] : [duct.name]
+        expect(visible).toContain(surface)
+        expect(ray.intersectObject(duct)[0]?.distance).toBeLessThan(skim.distanceTo(corner) + .018)
+      }
+      const shellOffset = (depth: number) => {
+        const eye = position.clone().addScaledVector(out, .13).addScaledVector(normal, -depth)
+        ray.set(eye, out.clone().negate())
+        const hit = ray.intersectObject(duct)[0]
+        return hit.point.sub(position).dot(out)
+      }
+      const seam = shellOffset(.0143)
+      expect(shellOffset(.009) - seam).toBeGreaterThan(.0009)
+      expect(shellOffset(.020) - seam).toBeGreaterThan(.0009)
       let clearHoles = 0
       for (const u of [.060, .085, .11, .135, .160, .185]) for (const v of [.069, .075, .081, .087]) {
         const surface = position.clone().addScaledVector(long, u).addScaledVector(out, v)
@@ -743,7 +762,7 @@ describe('vehicle geometry and state', () => {
       }
       expect(points.length).toBeGreaterThan(5)
       points.sort((a, b) => a.x - b.x)
-      for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [775, 800, 849]) {
+      for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [750, 775, 800, 849, 869]) {
         const state = cameraAt(frame / config.film.fps, format, vehicle.anchors)
         const eye = state.position
         const halfW = state.sensorWidthMm / 2 / state.focalMm, halfH = halfW * format.height / format.width
@@ -855,18 +874,46 @@ describe('vehicle geometry and state', () => {
         .filter((node): node is T.Mesh => node instanceof T.Mesh && node.position.x > 0)
       expect(cores).toHaveLength(2)
       vehicle.root.updateMatrixWorld(true)
-      for (const frame of [610, 690]) {
-        const { position } = cameraAt(frame / config.film.fps, config.formats.preview, vehicle.anchors)
+      for (const format of [config.formats.master, config.formats.vertical]) for (const frame of [610, 700, 725, 749]) {
+        const { position } = cameraAt(frame / config.film.fps, format, vehicle.anchors)
         for (const core of cores) {
           core.geometry.computeBoundingBox()
           const size = core.geometry.boundingBox!.getSize(new T.Vector3()).multiplyScalar(.31)
-          for (const [x, y] of [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]]) {
+          const samples = frame === 749 ? [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]] : [[0, 0]]
+          for (const [x, y] of samples) {
             const p = core.localToWorld(new T.Vector3(size.x * x, size.y * y, 0))
             const ray = new T.Raycaster(position, p.sub(position).normalize())
-            expect(ray.intersectObject(vehicle.root, true).slice(0, 3).map(({ object }) => object.name)).toEqual([
+            expect(ray.intersectObject(vehicle.root, true).slice(0, 3).map(({ object }) => object.name),
+              `${format.id} f${frame} projector at ${core.position.x} sample ${x},${y}`).toEqual([
               'front optical lens shells', 'convex projector lenses', 'main beam projector',
             ])
           }
+        }
+      }
+    }
+  }, 15_000)
+
+  it('closes the projector socket behind the emitter and seats the lens continuously', () => {
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      const axis = new T.Vector3(.51, .12, .851).normalize()
+      const orient = new T.Quaternion().setFromUnitVectors(new T.Vector3(0, 0, 1), axis)
+      const glass = vehicle.root.getObjectByName('convex projector lenses')!
+      const bowl = vehicle.root.getObjectByName('ribbed dark projector bowls')!
+      const collar = vehicle.root.getObjectByName('machined projector collars')!
+      const cores = vehicle.root.getObjectsByProperty('name', 'main beam projector').filter((node) => node.position.x > 0)
+      for (const [i, core] of cores.entries()) {
+        const radius = i === 0 ? .029 : .023
+        const center = core.getWorldPosition(new T.Vector3())
+        for (const r of [0, .4, .8, .90, .94, 1.02]) for (const sector of [.16, .39, .82]) {
+          const a = sector * Math.PI * 2
+          const p = new T.Vector3(radius * r * Math.cos(a), radius * r * .84 * Math.sin(a), .08)
+            .applyQuaternion(orient).add(center)
+          const ray = new T.Raycaster(p, axis.clone().negate())
+          const hits = ray.intersectObjects([glass, bowl, collar])
+          if (r < .90) expect(hits.map(({ object }) => object)).toEqual([glass, bowl])
+          else if (r === .90) expect(hits[0]?.object).toBe(glass)
+          else expect(hits[0]?.object).toBe(collar)
         }
       }
     }

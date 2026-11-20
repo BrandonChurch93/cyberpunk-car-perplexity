@@ -178,9 +178,9 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
     returns.push(notchGrilleSeat(drySurround[0], center, across))
     const wall = (u: number, v: number): Point => {
       const p = frame(u, 1)
-      return [p[0] + side * (.025 - .126 * v), p[1] - (.184 - .036 * u) * v, p[2]]
+      return [p[0] - side * .101 * v, p[1] - .001 - (.183 - .036 * u) * v, p[2]]
     }
-    black.push(notchGrilleSeat(patch(wall, n, full ? 7 : 1, [0, 1, 0], .014), center, across, grilleRim + .002))
+    black.push(notchGrilleSeat(patch(wall, n, full ? 7 : 1, [0, 1, 0], .014), center, across, grilleRim - .0015))
     for (let i = 0; i < 4; i++) {
       const start = .350 + .155 * i
       const step = (u: number, v: number): Point => {
@@ -201,17 +201,33 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
     const inward = vertical.map(([x, y, z]): Point => [-x, -y, -z])
     const opening = [a, b, 0] as const, edge = [a, b, -lip] as const
     const rimTop = [a + grilleRim, b + grilleRim, -lip] as const
-    const shellFoot = [a + grilleRim + .002, b + grilleRim + .002, shellDepth] as const
+    const section = (offset: number, recess: number): GrilleRect => [a + grilleRim + offset, b + grilleRim + offset, recess]
+    const shellFoot = section(.002, shellDepth)
+    const shell = [rimTop, section(.0016, .0018), section(.0018, .0115),
+      section(.0007, .0132), section(.0007, .0154), section(.0017, .0168), shellFoot]
     mesh.push(perforatedGrille(airFace, up, side, full))
     grilleFrames.push(...grilleRing(airFace, edge, rimTop, vertical.map(() => up.toArray())))
     grilleFrames.push(...grilleRing(airFace, opening, edge, inward))
-    grilleFrames.push(...grilleRing(airFace, rimTop, shellFoot, vertical))
+    for (let i = 1; i < shell.length; i++) grilleFrames.push(...grilleRing(airFace, shell[i - 1], shell[i], vertical))
+    const mount = shell[1], start = -mount[0] + .0026
+    const flangeDepth = (u: number) => mount[2] + .001 + .006 * u
+    grilleFrames.push(patch((u, v) => {
+      const w = T.MathUtils.clamp(u * 6 / 5, 0, 1)
+      const turn = Math.max(0, u * 6 - 5)
+      return airFace(start - .117 * v, mix(-mount[1] - .012 * v, mount[1] - .001, w) + turn * (.033 + .023 * v),
+        flangeDepth(turn) + .010 * v * v)
+    }, 6, 5, up.toArray(), .0024))
+    grilleFrames.push(patch((u, v) => {
+      const width = .006 + .027 * (1 - smooth(u, .45, 1))
+      return airFace(mix(start, -a + .046, u), mount[1] - .001 + width * v, flangeDepth(v) + .001 * u)
+    }, 6, 3, up.toArray(), .0021))
     grilleFrames.push(patch((u, v) => {
       const w = 2 * u - 1
-      const start = airFace(rimTop[0] + .0006, rimTop[1] * w, rimTop[2] + .0012)
-      const end = airFace(rimTop[0] + .079 - .021 * w ** 2, (rimTop[1] + .011) * w, .057)
-      return [mix(start[0], end[0], v), mix(start[1], end[1], v * (.33 + v * (1.34 - .67 * v))), mix(start[2], end[2], v)]
-    }, 10, 8, [0, 1, 0]))
+      const flange = shell[shell.length - 2]
+      const run = .073 - .023 * w ** 2
+      return airFace(flange[0] - .0004 + run * v, (flange[1] + .010 * v) * w,
+        mix(flange[2], .057, .40 * v + .60 * v * v))
+    }, 10, 6, up.toArray(), .0022))
     grilleFrames.push(patch((u, v) => airFace(mix(-shellFoot[0], shellFoot[0], u), mix(-shellFoot[1], shellFoot[1], v), shellDepth),
       1, 1, up.clone().negate().toArray()))
     grilleTrays.push(patch((u, v) => airFace(mix(-a, a, u), mix(-b, b, v), trayDepth), 1, 1, up.toArray()))
