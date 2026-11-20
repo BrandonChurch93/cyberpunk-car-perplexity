@@ -459,6 +459,21 @@ const lensFragment = /* glsl */ `
 }
 `
 
+const defocusPars = /* glsl */ `
+uniform float surfFocus;
+uniform float surfCocScale;
+uniform float surfSampleRoot;
+uniform float surfPupil;
+`
+
+// The samples of an out of focus drop land a defocus cell apart: a highlight tighter than the dome sums to separate copies.
+const defocusFragment = /* glsl */ `
+{
+  float cell = surfPupil * surfCocScale * abs(1.0 / surfFocus - 1.0 / max(vViewPosition.z, 1e-3)) / surfSampleRoot;
+  material.roughness = max(material.roughness, 0.8 * smoothstep(1.0, 4.0, cell));
+}
+`
+
 /** Standing drops show magenta in the wetness view and running water yellow green, so the rivulet can be found in a frame. */
 function dropMaterial(uniforms: Record<string, THREE.IUniform>, contact: number | null, running = false): THREE.MeshPhysicalMaterial {
   const material = new THREE.MeshPhysicalMaterial({
@@ -471,6 +486,7 @@ function dropMaterial(uniforms: Record<string, THREE.IUniform>, contact: number 
     uniforms: { ...uniforms, surfDiagColor: { value: running ? new THREE.Color(0.6, 1, 0.1) : new THREE.Color(1, 0.1, 0.9) } },
     defines: contact === null ? {} : { SURF_CAP_LENS: 1, SURF_CAP_HS: (radius * (1 - Math.cos(theta))).toFixed(6), SURF_CAP_CY: (-radius * Math.cos(theta)).toFixed(6), SURF_CAP_R: radius.toFixed(6) },
     apply(shader) {
+      shader.fragmentShader = insertAfter(defocusPars + shader.fragmentShader, '#include <lights_physical_fragment>', defocusFragment)
       if (contact !== null) {
         shader.vertexShader = lensPars + insertAfter(shader.vertexShader, '#include <project_vertex>', lensVertex)
         let f = lensPars + 'uniform float surfDiag;\nuniform vec3 surfDiagColor;\n' + shader.fragmentShader

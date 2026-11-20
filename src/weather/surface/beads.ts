@@ -138,6 +138,11 @@ const beadsGlsl = /* glsl */ `
 uniform float surfDiag;
 uniform float surfTime;
 uniform float surfVibration;
+uniform float surfBeadTime;
+uniform float surfFocus;
+uniform float surfCocScale;
+uniform float surfSampleRoot;
+uniform float surfPupil;
 uniform float surfShakeAge;
 uniform float surfRefill;
 uniform float surfBeadSalt;
@@ -292,7 +297,7 @@ float surfMist = 0.0;
     float loose = step(shakeH.x, 0.35 * smoothstep(0.1, 0.4, slope)) * step(1.6, dMm) * smoothstep(-0.6, -1.2, surfWorldPos.z - surfVehicleCenter.z);
     vec3 d3 = surfLift(center - uv, axis, n);
     if (shake > 0.0) {
-      float w = 6.2831853 * (37.0 + 11.0 * shakeH.y) * surfTime;
+      float w = 6.2831853 * (37.0 + 11.0 * shakeH.y) * surfBeadTime;
       d3 += 0.12 * radius * shake * (sin(w) * cross(n, down) + cos(1.3 * w) * down);
     }
     if (loose > 0.0 && surfShakeAge > 0.0) {
@@ -325,7 +330,11 @@ float surfMist = 0.0;
     }
   }
   surfMist = clamp(surfMist, 0.0, 1.0);
-  float w = surfHit.cover;
+  // Out of focus, the samples of a frame land a defocus cell apart; a highlight tighter than that sums to separate copies.
+  float surfCell = surfPupil * surfCocScale * abs(1.0 / surfFocus - 1.0 / max(vViewPosition.z, 1e-3)) / surfSampleRoot;
+  float surfSpread = surfCell * pix / max(surfHit.radius, 1e-6);
+  // A bead much smaller than the cell would sum to faint copies; true defocus spreads it to almost nothing, so it fades into the film.
+  float w = surfHit.cover * (1.0 - 0.8 * smoothstep(1.0, 3.0, surfSpread));
   float shaded = w * (1.0 - surfHit.geometry);
   vec3 dropView = normalize(toView * surfHit.normal);
   diffuseColor.rgb *= mix(1.0, 0.86, surfMist) * (1.0 - 0.55 * surfHalo * (1.0 - w));
@@ -359,6 +368,7 @@ float surfMist = 0.0;
   surfBeadOut = shaded;
   // A dome a few pixels across holds every normal inside one pixel: spread its highlight, as a prefiltered normal map would.
   surfBeadRough = mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, surfHit.radius));
+  surfBeadRough = max(surfBeadRough, 0.85 * smoothstep(0.15, 0.8, surfSpread));
   surfDiagOut = vec4(vec3(1.0, 0.1, 0.9) * (0.15 + 0.85 * max(w, surfMist * 0.5)), 1.0);
 }
 `

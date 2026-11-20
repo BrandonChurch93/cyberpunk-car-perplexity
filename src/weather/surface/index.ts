@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { circleScale, pupilIsActive } from '../../core/bokeh/pupil'
 import { config } from '../../config'
 import type { FrameContext, SampleContext, SceneSystem, WetnessKind } from '../../core/contract'
 import { cameraAt } from '../../director/shots'
@@ -43,10 +44,10 @@ function rearPuddle(anchors: Parameters<typeof cameraAt>[2]): Basin {
 }
 
 /**
- * The rivulet waits on the wing beside the paint anchor, where the focus pull lands as it lets go, in plain view of both
- * formats and with its downhill run crossing the frame rather than heading into it.
+ * The rivulet waits on the outer wing face just under the crest crease, where the focus pull lands as it lets go: its first
+ * centimeter of run blurs under a pixel in both formats at the macro frame, and it runs down the face across the frame.
  */
-function rivuletStart(vehicle: WeatherDeps['vehicle']): THREE.Vector3 {
+export function rivuletStart(vehicle: WeatherDeps['vehicle']): THREE.Vector3 {
   const anchor = vehicle.anchors.paint.position
   const views = [config.formats.master, config.formats.vertical].map((format) => {
     const camera = cameraAt(config.film.macroFrameSeconds, format, vehicle.anchors)
@@ -54,7 +55,7 @@ function rivuletStart(vehicle: WeatherDeps['vehicle']): THREE.Vector3 {
     film.position.copy(camera.position)
     film.quaternion.copy(camera.quaternion)
     film.updateMatrixWorld(true)
-    return { camera, film, forward: new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion) }
+    return { camera, film, forward: new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion), circle: circleScale(camera, format.width) }
   })
   const paint = new Set(vehicle.surfaces.filter((s) => s.wetness === 'beads' && !s.material.transparent).map((s) => s.material))
   const ray = new THREE.Raycaster()
@@ -72,27 +73,27 @@ function rivuletStart(vehicle: WeatherDeps['vehicle']): THREE.Vector3 {
     const normalMatrix = new THREE.Matrix3().getNormalMatrix(mesh.matrixWorld)
     for (let i = 0; i < pos.count; i++) {
       const p = new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld)
-      if (p.distanceTo(anchor) > 0.1) continue
+      if (p.distanceTo(anchor) > 0.2) continue
       const n = new THREE.Vector3().fromBufferAttribute(nor, i).applyMatrix3(normalMatrix).normalize()
-      if (n.y < -0.2 || n.y > 0.9) continue
+      if (n.y < -0.2 || n.y > 0.97) continue
       const down = new THREE.Vector3(0, -1, 0).addScaledVector(n, n.y).normalize()
-      let s = -3 * p.distanceTo(anchor)
+      const head = p.clone().addScaledVector(down, 0.014)
+      let s = -0.6 * n.y
       let seen = true
-      for (const { camera, film, forward } of views) {
-        const depth = toLens.subVectors(p, camera.position).dot(forward) - camera.focusDistance
+      for (const { camera, film, forward, circle } of views) {
+        const blur = circle * Math.abs(1 / camera.focusDistance - 1 / toLens.subVectors(head, camera.position).dot(forward))
         ndc.copy(p).project(film)
-        if (Math.abs(depth) > 0.008 || Math.abs(ndc.x) > 0.7 || ndc.y < -0.1 || ndc.y > 0.7) {
+        if (blur > 1 || Math.abs(ndc.x) > 0.8 || Math.abs(ndc.y) > 0.8) {
           seen = false
           break
         }
-        toLens.subVectors(camera.position, p).normalize()
-        s += 0.5 * (1 - Math.abs(down.dot(forward))) + 0.3 * n.dot(toLens) - 20 * Math.abs(depth)
+        s += 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur
+      }
+      if (!seen || s <= score) continue
+      for (const { camera } of views) {
         ray.set(camera.position, p.clone().sub(camera.position).normalize())
         const hit = ray.intersectObject(vehicle.root, true)[0]
-        if (!hit || hit.point.distanceTo(p) > 0.003) {
-          seen = false
-          break
-        }
+        if (!hit || hit.point.distanceTo(p) > 0.003) seen = false
       }
       if (!seen || s <= score) continue
       score = s
@@ -116,6 +117,11 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
     surfRain: { value: 1 },
     surfTime: { value: 0 },
     surfVibration: { value: 0 },
+    surfBeadTime: { value: 0 },
+    surfFocus: { value: 1 },
+    surfCocScale: { value: 0 },
+    surfSampleRoot: { value: 1 },
+    surfPupil: { value: 0 },
     surfShakeAge: { value: 0 },
     surfRefill: { value: 0 },
     surfGeo: { value: new THREE.Vector4(0, 0, 0, 0) },
@@ -202,6 +208,16 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       uniforms.surfGeo.value.set(cam.position.x, cam.position.y, cam.position.z, drops.count > 0 ? geometryRange : 0)
       uniforms.surfGeoAngle.value = geometryAngle(cam, frame.format.width)
       runners.beginFrame(cam)
+      // Beads hold still for every sample of a frame: sub-shutter motion with few samples shows as offset copies, not blur.
+      uniforms.surfBeadTime.value = t
+      uniforms.surfFocus.value = cam.focusDistance
+      uniforms.surfCocScale.value = circleScale(cam, frame.format.width)
+      uniforms.surfSampleRoot.value = Math.sqrt(frame.frame.samples)
+      uniforms.surfPupil.value = pupilIsActive(cam, frame.format.width, frame.frame.samples) ? 1 : 0
+      uniforms.surfVibration.value = stateAt(t).vibration
+      const age = t - shakeStart
+      uniforms.surfShakeAge.value = age > 0 && t < refill.end ? age : 0
+      uniforms.surfRefill.value = t > refill.start && t < refill.end ? THREE.MathUtils.smoothstep(t, refill.start, refill.end) : 0
     },
     beginSample(sample: SampleContext) {
       const t = sample.timeSeconds
@@ -209,10 +225,6 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       uniforms.surfTime.value = t
       uniforms.surfImpactTime.value = t - frameStart
       uniforms.surfPulseTime.value = t
-      uniforms.surfVibration.value = state.vibration
-      const age = t - shakeStart
-      uniforms.surfShakeAge.value = age > 0 && t < refill.end ? age : 0
-      uniforms.surfRefill.value = t > refill.start && t < refill.end ? THREE.MathUtils.smoothstep(t, refill.start, refill.end) : 0
       const pulse = uniforms.surfPulse.value[0] as THREE.Vector4
       if (state.engine > 0) {
         const exhaust = vehicle.anchors.exhaust

@@ -3,6 +3,7 @@ import { config } from '../../config'
 import type { CameraState } from '../../core/lens'
 import { layers } from '../../core/contract'
 import { hash01, stream } from '../../core/random'
+import { cameraAt } from '../../director/shots'
 import { beatById } from '../../director/timeline'
 import type { VehicleModule } from '../../vehicle'
 import { capHeight } from './beads'
@@ -92,7 +93,7 @@ export class Runners {
         const n = new THREE.Vector3().crossVectors(b.clone().sub(a), c.clone().sub(a))
         if (n.lengthSq() < 1e-16) continue
         n.normalize()
-        if (n.y < 0.15) continue
+        if (n.y < -0.3) continue
         tris.push({ a, b, c, n })
       }
     })
@@ -254,28 +255,60 @@ export class Runners {
   }
 
   private findDrips(lower: Array<{ p: THREE.Vector3; n: THREE.Vector3 }>, vehicle: VehicleModule): void {
-    const w = vehicle.anchors.wheel
-    const arch = lower.filter((c) => Math.abs(c.p.z - w.position.z) < 0.5 && c.p.y > w.position.y + 0.15 && c.p.x > w.position.x - 0.12)
-    const floorY = 0
-    for (const [i, release] of archDrips.entries()) {
-      const targetZ = w.position.z + [-0.34, 0.33, -0.27][i]
+    const w = vehicle.anchors.wheel.position
+    const tire = w.y
+    // A drop off the lip over the tire lands on the tread shoulder; one off the lip beyond it falls to the deck.
+    const floorUnder = (p: THREE.Vector3) => {
+      const dz = Math.abs(p.z - w.z)
+      return dz < tire ? w.y + Math.sqrt(tire * tire - dz * dz) : 0
+    }
+    const arch = lower.filter((c) => {
+      const reach = Math.hypot(c.p.y - w.y, c.p.z - w.z)
+      return c.p.x > w.x - 0.01 && c.p.y > w.y + 0.05 && reach > tire + 0.02 && reach < tire + 0.3 && c.p.y - floorUnder(c.p) > 0.08
+    })
+    const films = (t: number) =>
+      [config.formats.master, config.formats.vertical].map((format) => {
+        const state = cameraAt(t, format, vehicle.anchors)
+        const film = new THREE.PerspectiveCamera(THREE.MathUtils.radToDeg(2 * Math.atan(state.sensorWidthMm / (format.width / format.height) / 2 / state.focalMm)), format.width / format.height, 0.01, 30)
+        film.position.copy(state.position)
+        film.quaternion.copy(state.quaternion)
+        film.updateMatrixWorld(true)
+        return film
+      })
+    const ndc = new THREE.Vector3()
+    const chosen: THREE.Vector3[] = []
+    for (const release of archDrips) {
+      const hang = films(release - 0.4)
+      const falling = films(release + 0.2)
       let best: THREE.Vector3 | null = null
-      let score = Infinity
+      let score = -Infinity
       for (const c of arch) {
-        const s = Math.abs(c.p.z - targetZ) * 3 - c.p.x
-        if (s < score) {
-          score = s
-          best = c.p
+        if (chosen.some((q) => q.distanceTo(c.p) < 0.015)) continue
+        const fall = Math.min(0.5 * gravity * 0.2 * 0.2, c.p.y - floorUnder(c.p))
+        let s = 4 * fall
+        let seen = true
+        for (const [k, film] of hang.entries()) {
+          ndc.copy(c.p).setY(c.p.y - fall).project(falling[k])
+          if (Math.abs(ndc.x) > 0.9 || ndc.y < -0.9) seen = false
+          ndc.copy(c.p).project(film)
+          if (Math.abs(ndc.x) > 0.9 || ndc.y > 0.9 || ndc.z > 1) seen = false
+          s -= Math.abs(ndc.x) + 0.5 * Math.abs(ndc.y - 0.3)
         }
+        if (!seen || s <= score) continue
+        score = s
+        best = c.p
       }
-      if (best) this.drips.push({ at: best.clone().add(new THREE.Vector3(0, -0.0005, 0)), release, period: 0, floorY })
+      if (best) {
+        chosen.push(best)
+        this.drips.push({ at: best.clone().add(new THREE.Vector3(0, -0.0005, 0)), release, period: 0, floorY: floorUnder(best) })
+      }
     }
     const random = stream('surface edge drips')
     const pool = lower.filter((c) => c.p.y < 0.75 && c.p.y > 0.2)
     for (let i = 0; i < 14 && pool.length > 0; i++) {
       const c = pool[random.int(pool.length)]
       const period = config.film.durationSeconds / (5 + random.int(9))
-      this.drips.push({ at: c.p.clone(), release: random.range(0, period), period, floorY })
+      this.drips.push({ at: c.p.clone(), release: random.range(0, period), period, floorY: 0 })
     }
   }
 
@@ -288,7 +321,7 @@ export class Runners {
     } else {
       age = t - d.release
     }
-    const full = 0.0021
+    const full = 0.0032
     if (age < 0) {
       const grow = THREE.MathUtils.smoothstep(age, -pendantGrowSeconds, 0)
       return { radius: 0.0004 + (full - 0.0004) * grow, fall: 0, stretch: 1 + 0.35 * grow }
@@ -302,6 +335,7 @@ export class Runners {
   impacts(t0: number, t1: number): ExtraImpact[] {
     const out: ExtraImpact[] = []
     for (const d of this.drips) {
+      if (d.floorY > 0) continue
       const height = d.at.y - d.floorY
       const fallTime = Math.sqrt((2 * height) / gravity)
       const first = d.period > 0 ? Math.floor((t0 - fallTime - d.release) / d.period) : 0
