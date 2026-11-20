@@ -15,6 +15,7 @@ const basins = [
   [14.5, -9.7, 3.3, 1.4, 0.009, 0.08],
 ] as const
 const deckSeed = streamSeed('world/deck/height') / 4294967296
+const portraitShore = new THREE.Vector2(.89, -.45).normalize()
 
 export function deckHeight(x: number, z: number): number {
   let y = 0.011 + 0.0016 * Math.sin(x * 0.86 + z * 0.41 + deckSeed * 6) + 0.0014 * Math.sin(x * -0.69 + z * 1.14)
@@ -26,6 +27,15 @@ export function deckHeight(x: number, z: number): number {
       const shelf = 0.19 * Math.sin(8 * u + 9 * v) + 0.12 * Math.sin(17 * u - 13 * v)
       y -= drop * (1 - r) * (1 + shelf)
     }
+  }
+  const poolX = x - 2.03, poolZ = z - 4.02
+  const u = (poolX * portraitShore.x + poolZ * portraitShore.y) / 1.58
+  const v = (poolZ * portraitShore.x - poolX * portraitShore.y) / 1.03
+  const r = Math.hypot(u, v)
+  if (r < 1.24) {
+    const shore = r + r * (.043 * Math.sin(u * 19 + v * 8) + .023 * Math.sin(u * 33 - v * 21))
+    const bottom = -.005 + .00065 * Math.sin(u * 5 - v * 4)
+    y = THREE.MathUtils.lerp(Math.min(y, bottom), y, THREE.MathUtils.smoothstep(shore, .81, 1.16))
   }
   const dx = x - heroDrain[0], dz = z - heroDrain[1]
   const gutterU = dx * 0.94 + dz * 0.34

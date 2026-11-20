@@ -57,6 +57,19 @@ describe('full roof world', () => {
     expect(world.lights.filter(l => l.shadow).length).toBe(3)
   })
 
+  it('holds standing water across the portrait foreground without flattening its shore', () => {
+    const { bounds, heightMap } = world.deck
+    const { data, width, height } = (heightMap as THREE.DataTexture).image
+    for (const [x, z] of [[2.03, 4.02], [2.37, 4.72], [3.32, 3.37], [.88, 4.58]]) {
+      expect(deckHeight(x, z)).toBeLessThan(-.0004)
+      const i = Math.floor((x - bounds.min.x) / (bounds.max.x - bounds.min.x) * width)
+      const j = Math.floor((z - bounds.min.y) / (bounds.max.y - bounds.min.y) * height)
+      expect((data as Float32Array)[j * width + i]).toBeLessThan(-.0004)
+    }
+    expect(deckHeight(2.64, 5.28)).toBeGreaterThan(0)
+    expect(deckHeight(3.63, 3.21)).toBeGreaterThan(0)
+  })
+
   it('retains the lit sign mount and distinguishes city cladding from wet parapet', () => {
     const cladding = world.root.getObjectByName('weathered cladding panels and spandrels') as THREE.InstancedMesh
     const parapet = world.root.getObjectByName('solid concrete') as THREE.Mesh
