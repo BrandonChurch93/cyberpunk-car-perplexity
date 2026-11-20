@@ -325,6 +325,13 @@ Addendum 002: any issue that asks for less color, fewer signs, less reflection, 
 
 Newest first. One entry per working session: what was done, what was measured, what is next.
 
+### 2026-11-20, session 15
+
+- Done: neon street controls vetted in one pass (81 one-image juror calls, 27 of 27 kept, pool now 84). C9 match pack added to the pack builder (target and current hero at one size, three crop pairs: near deck, sign groups, sky with billboard) and C1 draws wide frame controls from the neon streets first. Merged on `dev/p3`: radiator sight line check for the fitted camera, lamp emitters in cube captures, the gray layout of the city restage (parapet, rail, billboard right of center, cyan group left, amber group right), the wide standing water sheet with streak breakup. Key frames 01 arrival and 08 return received and posted.
+- Measured: suite 190 of 190 on the restage merge. C4 re-baselined by the auditor at the new hero camera: 195 master 5, tall 5 (haunch, near wing top and side lead the cost); 360 stays 8 and 8.
+- Found: lamp emitters in the cube put tail lamp red on the door and roof edge at 195, because the cube is captured from inside the hidden body. Fix in work: a lamp-free filtered cube for the vehicle and the deck fallback, the full cube for other receivers. The glitter under the nose is planar reflection taps catching the running light; a firefly clamp in `src/core/reflect` is assigned.
+- Next: world detail (windows, billboard image, sky), sign and billboard light on the deck and body, the reflect fixes, fairing of haunch and near wing, remaining key frames, then round 8.
+
 ### 2026-11-20, session 14
 
 - Done: Phase 3 opened on `dev/p3` with full detail and the team merges. Diagnostic views fixed and checked. Addendum 002 merged and applied: G15, config fields, direction C key frames retired, hero camera fitted to the approved image, wide beats rebuilt on its axis in both formats, `cut/SHOTS.md` updated, the team redirected (world restage, palette and light, standing water, rain, paint on black pearl only), key frame artist and neon control scout started.

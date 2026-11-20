@@ -430,6 +430,25 @@ describe('vehicle geometry and state', () => {
     }
   }, 30_000)
 
+  it('fairs the front arch shoulder without an abrupt change in reflected direction', () => {
+    const step = .006
+    const z = frontWheel.z + frontWheel.arch + .024
+    const ray = new T.Raycaster()
+    const across = new T.Vector3(-1, 0, 0)
+    for (const vehicle of [blockout, full]) {
+      vehicle.root.updateMatrixWorld(true)
+      const skin = vehicle.root.getObjectByName('closed body panels and returns')!
+      const normals = Array.from({ length: 29 }, (_, i) => {
+        ray.set(new T.Vector3(1.1, .66, z - i * step), across)
+        return ray.intersectObject(skin)[0].normal!.normalize()
+      })
+      for (let i = 1; i < normals.length - 1; i++) {
+        const change = normals[i - 1].clone().add(normals[i + 1]).addScaledVector(normals[i], -2)
+        expect(change.length() / step ** 2).toBeLessThan(2500)
+      }
+    }
+  }, 30_000)
+
   it('keeps a closed mirror seam and an unobstructed glass face on both sides', () => {
     for (const car of [blockout, full]) {
       const mirrors = car.root.getObjectByName('door mirrors')!

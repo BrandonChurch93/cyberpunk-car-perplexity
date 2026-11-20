@@ -77,11 +77,11 @@ vec3 vaporLight(vec3 p, vec3 toEye) {
 float deckSpray(vec3 p) {
   vec2 border = min(p.xz - uDeck.xy, uDeck.zw - p.xz);
   float edge = smoothstep(0.0, 1.5, min(border.x, border.y));
-  float e = exp(-max(0.0, p.y - 0.038) * 11.4) * (1.0 - smoothstep(0.18, ${slabHeight}, p.y));
+  float e = exp(-max(0.0, p.y - 0.035) * 14.6) * (1.0 - smoothstep(0.16, ${slabHeight}, p.y));
   float primary = sin(dot(p.xz, vec2(2.04, -2.14)) - TAU * 12.0 * uPhase + uNoise.x);
   float secondary = sin(dot(p.xz, vec2(3.89, 1.13)) - TAU * 15.0 * uPhase + uNoise.y);
   float pockets = 0.48 + 0.52 * smoothstep(-0.62, 0.78, primary * 0.68 + secondary * 0.32);
-  return 0.032 * edge * e * pockets;
+  return 0.043 * edge * e * pockets;
 }
 
 float plumeDensity(vec3 q, vec3 axis, float type, float index) {

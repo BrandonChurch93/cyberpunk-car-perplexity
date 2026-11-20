@@ -1,20 +1,23 @@
 import * as THREE from 'three'
 import { config } from '../config'
-import { labelFace, type Label } from './fixtures'
-import { group, heroCityYaw, streetY, type Tuple } from './forms'
+import type { FilmLight } from '../core/contract'
+import { labelFace, plate, type Label } from './fixtures'
+import { group, heroCityYaw, heroDrainLayout, streetY, type Tuple } from './forms'
+import { billboardMural, fixtureOpal, towerSurface } from './hero-surfaces'
+import type { finishRoof } from './roof-look'
 
-const gray = (n: number) => new THREE.MeshBasicMaterial({ color: new THREE.Color(n, n, n), toneMapped: false })
 const palette = {
-  cyan: [.055, 1.92, 3.00],
-  white: [.98, 1.29, 1.49],
-  amber: [3.48, 1.42, .24],
-  violet: [1.06, .20, 2.32],
-  magenta: [3.52, .19, 1.96],
-  strip: [2.55, 1.80, 1.04],
+  cyan: [.055, 2.55, 3.52],
+  white: [1.78, 2.19, 2.78],
+  amber: [4.72, 2.23, .46],
+  violet: [1.20, .25, 2.75],
+  magenta: [3.48, .145, 1.46],
+  strip: [5.2, 3.9, 2.65],
 } as const satisfies Record<string, Tuple>
 
 type Tint = keyof typeof palette
 type Source = { id: string; at: Tuple; size: readonly [number, number]; tint: Tint; text?: string; onWall?: boolean }
+type RoofMaterials = ReturnType<typeof finishRoof>['materials']
 
 export const approvedHeroSources = [
   { id: 'left cyan facade sail', at: [-11.76, 6.42, -29.40], size: [.139, 11.05], tint: 'cyan' },
@@ -45,19 +48,30 @@ export function approvedHeroSourceSurvey(): { id: string; at: Tuple; normal: Tup
   }))
 }
 
-export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label): { root: THREE.Group; signs: string[] } {
+export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, materials: RoofMaterials) {
   const root = group(parent, 'approved hero layout')
   root.rotation.y = heroCityYaw
   const city = group(root, 'hero tower layout')
   const roof = group(root, 'hero parapet and near deck layout')
-  const wall = gray(.18), metal = gray(.09), inset = gray(.024), concrete = gray(.25)
+  const { parapet, zinc, stripe, tar } = materials
+  const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.035,.039,.048), roughness: .54, metalness: .59 })
+  const glass = new THREE.MeshStandardMaterial({ color: new THREE.Color(.025,.027,.039), roughness: .33, metalness: .22 })
+  const lights = new Map<string, FilmLight>()
   const signs: string[] = []
+  let set = (_time: number) => {}
   const box = (parent: THREE.Object3D, name: string, at: Tuple, size: Tuple, material: THREE.Material) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material)
     mesh.name = name
     mesh.position.set(...at)
     parent.add(mesh)
     return mesh
+  }
+  const mountLight = (housing: THREE.Group, donor: string, size: readonly [number, number], color: THREE.Color, intensity: number, range: number, shadow = false) => {
+    const anchor = group(housing, 'area emitter origin', [0,0,.043])
+    const unit = color.clone().multiplyScalar(1 / Math.max(color.r, color.g, color.b))
+    const light: FilmLight = { id: housing.name, kind: 'area', object: anchor, color: unit, intensity, size: [...size], range, shadow, beam: false, level: () => 1 }
+    lights.set(donor, light)
+    return { light, anchor }
   }
   const towers = [
     ['hero left edge tower', -14.86, -29.55, 7.63, 8.21, 20.0, .098],
@@ -75,40 +89,91 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label): { 
     ['hero middle east distance', 17.27, -56.0, 2.82, 9.15, 8.33, .085],
   ] as const
   for (const [name, x, faceZ, width, depth, top, level] of towers) {
-    box(city, name, [x, (streetY + top) / 2, faceZ - depth / 2], [width, top - streetY, depth], gray(level))
+    const distant = faceZ < -50
+    const tower = group(city, name + ' volume')
+    const shell = towerSurface(name, level, distant)
+    box(tower, name, [x, (streetY + top) / 2, faceZ - depth / 2], [width, top - streetY, depth], shell)
+    box(tower, 'coated coping band', [x,top-.043,faceZ-depth/2], [width+.08,.12,depth+.09], frame)
+    if (distant || width < 1) continue
+    for (const side of [-1,1]) {
+      box(tower, 'rainwater jamb', [x+side*(width/2-.068), (top-2.2)/2, faceZ + .021], [.092, top+2.20, .092], frame)
+    }
+    if (top > 7) {
+      box(tower, 'roof service machine room', [x+width*.07,top+.34,faceZ-depth*.61], [width*.42,.68, depth*.32], shell)
+      box(tower, 'raised inspection access lid', [x+width*.07,top+.70,faceZ-depth*.61], [width*.48,.078,depth*.36], frame)
+    }
   }
-  box(roof, 'hero full span concrete parapet', [0, .39, -10.025], [29, .78, .34], wall)
-  box(roof, 'hero full span steel top rail', [0, 1.014, -10.015], [29, .053, .067], metal)
-  for (let i = -6; i <= 6; i++) box(roof, 'hero rail post', [i * 2.35, .889, -10.015], [.057, .236, .057], metal)
+  box(roof, 'hero full span concrete parapet', [0, .39, -10.025], [29, .78, .34], parapet)
+  box(roof, 'hero concrete wall cap', [0, .767, -10.02], [29, .042, .377], parapet)
+  box(roof, 'hero full span steel top rail', [0, 1.014, -10.015], [29, .053, .067], zinc)
+  box(roof, 'hero steel intermediate rail', [0, .876, -10.015], [29, .027, .040], zinc)
+  for (let i = -6; i <= 6; i++) {
+    box(roof, 'hero rail post', [i * 2.35, .889, -10.015], [.057, .236, .057], zinc)
+    box(roof, 'hero steel post mounting plate', [i * 2.35, .792, -10.015], [.125,.016,.112], zinc)
+  }
   for (const source of approvedHeroSources as readonly Source[]) {
     const [x, y, z] = source.at
     const [width, height] = source.size
     const parent = source.onWall || source.id === 'amber parapet exit' ? roof : city
     const housing = group(parent, source.id, source.at)
-    box(housing, 'layout casing', [0, 0, -.081], [width + .09, height + .09, .16], inset)
+    const lip = Math.min(width, height, .07) * .67
+    box(housing, 'folded weatherproof cabinet', [0, 0, -.081], [width + 2*lip, height + 2*lip, .16], frame)
     const color = new THREE.Color(...palette[source.tint])
     if (source.id === 'magenta violet tower screen') {
-      for (let i = 0; i < 8; i++) {
-        const section = color.clone().lerp(new THREE.Color(.76, .13, 3.48), i / 7)
-        box(housing, 'layout billboard color bay', [width * ((i + .5) / 8 - .5), 0, 0], [width / 8, height, .012], new THREE.MeshBasicMaterial({ color: section, toneMapped: false }))
+      const mural = billboardMural(width, height)
+      plate(housing, 'animated magenta violet mural', mural.material, [0,0,.002], width,height)
+      for (const dx of [-.38,.38]) for (const dy of [-.36,0,.36]) {
+        box(housing, 'billboard facade tie bracket', [dx*width,dy*height,-.19], [.12,.19,.30], zinc)
       }
+      const { light } = mountLight(housing,'billboard',source.size,color,188,75)
+      light.colorAt = mural.colorAt
+      light.level = mural.level
+      set = mural.set
     } else if (!source.text) {
-      box(housing, 'layout luminous face', [0, 0, 0], [width, height, .012], new THREE.MeshBasicMaterial({ color, toneMapped: false }))
+      const segments = source.onWall ? 1 : Math.round(height / (source.tint === 'cyan' ? .34 : .50))
+      plate(housing, 'weather-sealed opal face', fixtureOpal(color, segments), [0,0,.002], width,height)
+      if (!source.onWall) for (const fraction of [-.40,-.17,.17,.40]) {
+        box(housing, 'opal rail standoff', [0,fraction*height,-.184], [Math.max(width*.79,.081),.14,.27], zinc)
+      }
     }
     if (source.id === 'amber parapet exit') {
-      for (const dx of [-.39, .39]) box(roof, 'layout exit anchor', [x + dx, .96, z - .23], [.073, .41, .12], metal)
+      for (const dx of [-.39, .39]) {
+        box(roof, 'steel wayfinding upright', [x + dx, .98, z - .23], [.073, .41, .12], zinc)
+        box(housing, 'exit housing mount heel', [dx, -.11, -.16], [.12,.12,.26], frame)
+      }
     }
     if (source.text) {
       const allowed = config.signage.generic.find(text => text === source.text)
       if (!allowed) throw new Error(`Unapproved hero layout sign: ${source.text}`)
       const rows = allowed === 'PARKING' ? [...allowed] : [allowed]
-      box(housing, 'layout translucent sign face', [0, 0, 0], [width, height, .012], new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(.028), toneMapped: false }))
-      labelFace(housing, allowed, [0, 0, .009], [width * .92, height * .91], labels, color, 'World Condensed', rows)
+      plate(housing, 'recessed sign face', glass, [0,0,.002],width,height)
+      const exit = allowed === 'EXIT'
+      labelFace(housing, allowed, [exit ? -.16 : 0, 0, .009], [width * (exit ? .53 : .92), height * .91], labels, color, 'World Condensed', rows)
+      if (exit) {
+        const led = new THREE.MeshBasicMaterial({ color, toneMapped: false })
+        box(housing, 'wayfinding arrow stem', [.293,.0,.012], [.244,.026,.005], led)
+        for (const dir of [-1,1]) box(housing, 'wayfinding arrow head', [.386,dir*.038,.012], [.108,.025,.005],led).rotation.z = -dir*Math.PI/4
+      } else if (allowed === 'HOTEL') {
+        for (const dir of [-1,1]) box(housing, 'rooftop sign pedestal', [dir*width*.34,-height*.53,-.25], [.13,.23,.32], zinc)
+      } else {
+        for (const dir of [-1,1]) box(housing, 'facade sign mount cleat', [dir*width*.34,-height*.24,-.195], [.10,.11,.30], zinc)
+      }
       signs.push(allowed)
     }
+    if (source.id === 'left cyan facade sail') mountLight(housing,'east parking canopy fascia',source.size,color,67,66,true)
+    if (source.id === 'right amber facade sail') mountLight(housing,'red deck marker',source.size,color,94,63)
+    if (source.onWall) {
+      const { anchor } = mountLight(housing, x < 0 ? 'doorway' : 'lane separator opal',source.size,color,7.2,18)
+      anchor.rotation.x = .51
+      for (const side of [-1,1]) box(housing, 'sealed parapet light end bracket', [side*(width/2+.012),0,-.022], [.045,height+.037,.15], zinc)
+    }
   }
-  box(roof, 'hero near bay line', [.48, .0018, 3.06], [.113, .0036, 2.85], concrete).rotation.y = .342
-  box(roof, 'hero near drain rim', [.82, .0032, 3.82], [.53, .0064, .24], metal).rotation.y = -.08
-  box(roof, 'hero near drain slot placeholder', [.82, .0064, 3.82], [.46, .0016, .185], inset).rotation.y = -.08
-  return { root, signs }
+  box(roof, 'hero near bay line', [.48, .0014, 3.06], [.113, .0028, 2.85], stripe).rotation.y = .342
+  const drain = group(roof,'hero near drain grate',[heroDrainLayout[0],0,heroDrainLayout[1]])
+  drain.rotation.y = -.08
+  for (const x of [-.253,.253]) box(drain,'iron grate end rim',[x,.0041,0],[.025,.0082,.24],zinc)
+  for (const z of [-.111,.111]) box(drain,'iron grate side rim',[0,.0041,z],[.50,.0082,.018],zinc)
+  box(drain,'recessed slot bed',[0,.0007,0],[.50,.0014,.22],tar)
+  for (let i=0;i<21;i++) box(drain,'iron drainage bar',[(i-10)*.0234,.0059,0],[.010,.0047,.211],zinc)
+  return { root, signs, lights, set }
 }
