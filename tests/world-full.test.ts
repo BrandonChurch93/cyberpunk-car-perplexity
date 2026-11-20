@@ -108,6 +108,16 @@ describe('full roof world', () => {
     expect(deckHeight(3.63, 3.21)).toBeGreaterThan(0)
   })
 
+  it('keeps the hero drain slotted and the bay line porous', () => {
+    const drain = world.root.getObjectByName('hero near drain grate')!
+    const { x, z } = drain.getWorldPosition(new THREE.Vector3())
+    expect(deckHeight(x,z)).toBeLessThan(.003)
+    expect(deckHeight(x-.18,z+.38)).toBeGreaterThan(deckHeight(x,z))
+    expect(drain.children.filter(o=>o.name==='iron drainage bar')).toHaveLength(21)
+    const bayLine = world.root.getObjectByName('hero near bay line') as THREE.Mesh
+    expect(world.surfaces.find(s=>s.material===bayLine.material)?.wetness).toBe('porous')
+  })
+
   it('retains the lit sign mount and distinguishes city cladding from wet parapet', () => {
     const cladding = world.root.getObjectByName('weathered cladding panels and spandrels') as THREE.InstancedMesh
     const parapet = world.root.getObjectByName('solid concrete') as THREE.Mesh
@@ -162,10 +172,8 @@ describe('full roof world', () => {
 
   it('sets the billboard for both capture times and supplies a periodic mean to the rig', () => {
     const { durationSeconds } = config.film
-    const emitter = world.lights.find(l => l.id === 'billboard')!
     const raking = world.lights.find(l => l.id === 'raking billboard')!
-    expect(emitter.intensity).toBeCloseTo(9.216, 10)
-    expect(raking.intensity).toBeGreaterThan(emitter.intensity * 3)
+    expect(raking.intensity).toBeGreaterThan(9.216 * 3)
     const start = radiance(0)
     const end = radiance(durationSeconds)
     expect(end.position).toBeCloseTo(start.position, 12)
@@ -176,14 +184,38 @@ describe('full roof world', () => {
     expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
     world.beginSample({ timeSeconds: 2 } as SampleContext)
     expect(face.material.uniforms.centerX.value).toBeCloseTo(expected.position, 12)
-    expect(raking.level(2)).toBeCloseTo(emitter.level(2), 10)
     expect(world.lights.some(l => l.id === 'wheel deck pole' && l.shadow)).toBe(true)
     expect(Math.abs(expected.position - start.position)).toBeGreaterThan(.025)
     const color = new THREE.Color()
-    emitter.colorAt!(2, color)
-    expect(color.clone().multiplyScalar(emitter.level(2)).b).toBeCloseTo(expected.color.b, 10)
+    raking.colorAt!(2, color)
+    expect(color.clone().multiplyScalar(raking.level(2)).b).toBeCloseTo(expected.color.b, 10)
     world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
     expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
+  })
+
+  it('drives the tower mural periodically while leaving macro emitter slots on their original mounts', () => {
+    const id = 'magenta violet tower screen'
+    const emitter = world.lights.find(l => l.id === id)!
+    const face = world.root.getObjectByName('animated magenta violet mural') as THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>
+    const firstFrame = (timeSeconds: number) => world.beginFrame({ frame: { timeSeconds } } as FrameContext)
+    firstFrame(0)
+    const first = face.material.uniforms.flow.value.clone()
+    const wall = world.root.getObjectByName(id)
+    const rate = emitter.level(0)
+    expect(emitter.object.parent).toBe(wall)
+    expect(emitter.intensity).toBeGreaterThan(150)
+    const wake = config.beats.find(beat=>beat.id==='wake')!
+    world.beginSample({ timeSeconds: wake.end+.003, sample: { frame: { timeSeconds: wake.end-.001 } } } as SampleContext)
+    expect(emitter.object.parent).toBe(wall)
+    expect(face.material.uniforms.flow.value.distanceTo(first)).toBeGreaterThan(.2)
+    firstFrame(config.film.macroFrameSeconds)
+    expect(emitter.object.parent?.name).toBe('billboard')
+    expect(emitter.intensity).toBeCloseTo(9.216,10)
+    firstFrame(config.film.durationSeconds)
+    expect(emitter.object.parent).toBe(wall)
+    expect(face.material.uniforms.flow.value.toArray()).toEqual(first.toArray())
+    expect(emitter.level(config.film.durationSeconds)).toBeCloseTo(rate,12)
+    firstFrame(0)
   })
 
   it('holds the hero screen, parapet, cyan and amber division in the fitted master', () => {

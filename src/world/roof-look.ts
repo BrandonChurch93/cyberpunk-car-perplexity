@@ -3,6 +3,7 @@ import { streamSeed } from '../core/random'
 import { insertAfter, patchMaterial } from '../materials/patch'
 import type { DeckSurface } from './contract'
 import { deckJoint, heroDrain } from './deck'
+import { heroCityYaw, heroDrainLayout } from './forms'
 
 const basins = [
   [0.92, 3.13, 4.12, 1.38, 0.016, -0.16],
@@ -16,6 +17,7 @@ const basins = [
 ] as const
 const deckSeed = streamSeed('world/deck/height') / 4294967296
 const portraitShore = new THREE.Vector2(.89, -.45).normalize()
+const heroSump = new THREE.Vector3(heroDrainLayout[0], 0, heroDrainLayout[1]).applyAxisAngle(new THREE.Vector3(0,1,0), heroCityYaw)
 
 export function deckHeight(x: number, z: number): number {
   let y = 0.011 + 0.0016 * Math.sin(x * 0.86 + z * 0.41 + deckSeed * 6) + 0.0014 * Math.sin(x * -0.69 + z * 1.14)
@@ -41,6 +43,8 @@ export function deckHeight(x: number, z: number): number {
   const gutterU = dx * 0.94 + dz * 0.34
   const gutterV = dz * 0.94 - dx * 0.34
   y -= 0.0041 * Math.exp(-((gutterU / .81) ** 2 + (gutterV / .18) ** 2))
+  const nearX = x - heroSump.x, nearZ = z - heroSump.z
+  y -= .0039 * Math.exp(-(((nearX*.94-nearZ*.34)/.61)**2+((nearZ*.94+nearX*.34)/.14)**2))
   const joint = Math.abs(z - deckJoint.z)
   if (joint < 0.14 && x > deckJoint.startX) y += 0.004 * (1 - joint / 0.14)
   return y
@@ -89,7 +93,7 @@ function textureMaterial(material: THREE.MeshStandardMaterial, type: Type): void
     id: `world-roof-${type}`,
     uniforms: {
       roofSeed: { value: streamSeed(`world/roof/${type}`) / 4294967296 * 37 },
-      roofDrain: { value: new THREE.Vector2(...heroDrain) },
+      roofDrain: { value: new THREE.Vector2(heroSump.x, heroSump.z) },
     },
     defines: { ['ROOF_' + type.toUpperCase()]: 1 },
     apply(shader) {
@@ -159,7 +163,7 @@ function textureMaterial(material: THREE.MeshStandardMaterial, type: Type): void
   })
 }
 
-export function finishRoof(deck: DeckSurface, roof: THREE.Group): { material: THREE.MeshStandardMaterial; wetness: 'porous' | 'sheet' }[] {
+export function finishRoof(deck: DeckSurface, roof: THREE.Group) {
   const floor = new THREE.MeshPhysicalMaterial({ color: new THREE.Color(.12, .129, .141), roughness: .73, metalness: 0 })
   const concrete = new THREE.MeshStandardMaterial({ color: new THREE.Color(.116, .133, .15), roughness: .83 })
   const parapet = new THREE.MeshStandardMaterial({ color: new THREE.Color(.111, .128, .145), roughness: .79 })
@@ -181,5 +185,7 @@ export function finishRoof(deck: DeckSurface, roof: THREE.Group): { material: TH
     else o.material = concrete
     if (/stripes|arrow paint|joint nosing/.test(n)) o.castShadow = false
   })
-  return [{ material: floor, wetness: 'porous' }, { material: concrete, wetness: 'porous' }, { material: parapet, wetness: 'porous' }, { material: zinc, wetness: 'sheet' }, { material: stripe, wetness: 'porous' }]
+  const surfaces: { material: THREE.MeshStandardMaterial; wetness: 'porous' | 'sheet' }[] =
+    [{ material: floor, wetness: 'porous' }, { material: concrete, wetness: 'porous' }, { material: parapet, wetness: 'porous' }, { material: zinc, wetness: 'sheet' }, { material: stripe, wetness: 'porous' }]
+  return { surfaces, materials: { concrete, parapet, zinc, stripe, tar } }
 }
