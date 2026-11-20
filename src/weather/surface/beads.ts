@@ -18,18 +18,45 @@ export interface BeadLayer {
   steep: number
   /** Number of lobes merged into one drop. */
   lobes: number
+  /** Density scale where the coverage field is sparse and where it is dense. */
+  sparse: number
+  dense: number
 }
 
 export const beadLayers: BeadLayer[] = [
-  { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.55, steep: 0.35, lobes: 1 },
-  { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.72, steep: 0.45, lobes: 1 },
-  { cellMm: 10, minMm: 1.6, maxMm: 4.8, flat: 0.62, steep: 0.28, lobes: 1 },
-  { cellMm: 36, minMm: 5, maxMm: 9, flat: 0.14, steep: 0.03, lobes: 2 },
+  { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.55, steep: 0.35, lobes: 1, sparse: 0.6, dense: 1.3 },
+  { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.72, steep: 0.45, lobes: 1, sparse: 0.3, dense: 1.25 },
+  { cellMm: 10, minMm: 1.6, maxMm: 5.4, flat: 0.62, steep: 0.28, lobes: 1, sparse: 0.3, dense: 1.3 },
+  { cellMm: 36, minMm: 5, maxMm: 10, flat: 0.3, steep: 0.05, lobes: 2, sparse: 0.1, dense: 2.4 },
 ]
+
+/** Rain leaves the beads in drifts: a slow coverage field thins some patches to mist and packs others with large drops. */
+const coverageCm = [6, 2.2]
+const coverageSalt = 40
+
+function valueNoise(x: number, y: number, z: number, salt: number): number {
+  const ix = Math.floor(x), iy = Math.floor(y)
+  const fx = x - ix, fy = y - iy
+  const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy)
+  const a = surfHash3(ix, iy, z, salt)[0], b = surfHash3(ix + 1, iy, z, salt)[0]
+  const c = surfHash3(ix, iy + 1, z, salt)[0], d = surfHash3(ix + 1, iy + 1, z, salt)[0]
+  return a + (b - a) * ux + (c - a + (a - b - c + d) * ux) * uy
+}
+
+export function coverageAt(u: number, v: number, axis: number, salt: number): number {
+  const z = axis + coverageSalt
+  const n = 0.72 * valueNoise(u / (coverageCm[0] / 100), v / (coverageCm[0] / 100), z, salt) + 0.28 * valueNoise(u / (coverageCm[1] / 100), v / (coverageCm[1] / 100), z + 4, salt)
+  return THREE.MathUtils.smoothstep(n, 0.28, 0.72)
+}
+
+/** The highest chance any cell of the layer holds a drop, for culling before the coverage field is read. */
+export function maxDensity(layer: BeadLayer): number {
+  return Math.min(0.95, Math.max(layer.flat, layer.steep) * Math.max(layer.sparse, layer.dense))
+}
 
 /** Points of the runner's track handed to the shader, and the half width it sweeps clear of beads. */
 export const trackPoints = 40
-export const trackClear = 0.0026
+export const trackClear = 0.0045
 
 /** Drops at or above this diameter are real geometry near the lens. Smaller ones stay in the shader at every distance. */
 export const geometryMinMm = 0.8
@@ -74,7 +101,7 @@ export function cellDrops(layerIndex: number, cx: number, cy: number, axis: numb
   const layer = beadLayers[layerIndex]
   const cell = layer.cellMm / 1000
   const [hx, hy, hz] = surfHash3(cx, cy, axis * 4 + layerIndex, bead.salt)
-  const density = densityFor(layer, level)
+  const density = densityFor(layer, level, coverageAt((cx + 0.5) * cell, (cy + 0.5) * cell, axis, bead.salt))
   if (hx >= density) return []
   const size = hx / density
   const diameterMm = layer.minMm + (layer.maxMm - layer.minMm) * Math.pow(size, 1.7)
@@ -94,16 +121,17 @@ export function cellDrops(layerIndex: number, cx: number, cy: number, axis: numb
   return drops
 }
 
-function densityFor(layer: BeadLayer, level: number): number {
+function densityFor(layer: BeadLayer, level: number, coverage: number): number {
   const up = THREE.MathUtils.smoothstep(level, 0.2, 0.95)
   const under = THREE.MathUtils.smoothstep(-level, 0.3, 0.9)
-  return (layer.steep + (layer.flat - layer.steep) * up) * (1 - 0.8 * under)
+  const d = (layer.steep + (layer.flat - layer.steep) * up) * (1 - 0.8 * under) * (layer.sparse + (layer.dense - layer.sparse) * coverage)
+  return Math.min(0.95, d)
 }
 
 export { axisUV }
 
 const layerGlsl = beadLayers
-  .map((l, i) => `  if (i == ${i}) { cellMm = ${l.cellMm.toFixed(3)}; minMm = ${l.minMm.toFixed(3)}; maxMm = ${l.maxMm.toFixed(3)}; flatD = ${l.flat.toFixed(3)}; steepD = ${l.steep.toFixed(3)}; lobes = ${l.lobes}; }`)
+  .map((l, i) => `  if (i == ${i}) { cellMm = ${l.cellMm.toFixed(3)}; minMm = ${l.minMm.toFixed(3)}; maxMm = ${l.maxMm.toFixed(3)}; flatD = ${l.flat.toFixed(3)}; steepD = ${l.steep.toFixed(3)}; lobes = ${l.lobes}; sparseD = ${l.sparse.toFixed(3)}; denseD = ${l.dense.toFixed(3)}; }`)
   .join('\n')
 
 const beadsGlsl = /* glsl */ `
@@ -115,6 +143,7 @@ uniform float surfRefill;
 uniform float surfBeadSalt;
 uniform float surfBeadContact;
 uniform vec4 surfGeo;
+uniform float surfGeoAngle;
 uniform vec3 surfVehicleCenter;
 uniform vec4 surfTrack[${trackPoints}];
 uniform vec4 surfTrackBox;
@@ -136,9 +165,27 @@ float surfTrackDistance(vec3 p) {
 }
 ${filmLightsGlsl.replaceAll("filmCompactBeamFalloff", "surfCompactBeamFalloff")}
 
-void surfLayer(int i, out float cellMm, out float minMm, out float maxMm, out float flatD, out float steepD, out int lobes) {
-  cellMm = 1.0; minMm = 0.1; maxMm = 0.2; flatD = 0.0; steepD = 0.0; lobes = 1;
+void surfLayer(int i, out float cellMm, out float minMm, out float maxMm, out float flatD, out float steepD, out int lobes, out float sparseD, out float denseD) {
+  cellMm = 1.0; minMm = 0.1; maxMm = 0.2; flatD = 0.0; steepD = 0.0; lobes = 1; sparseD = 1.0; denseD = 1.0;
 ${layerGlsl}
+}
+
+float surfValueNoise(vec2 p, int z, uint salt) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  ivec2 c = ivec2(i);
+  float a = surfHash3(ivec3(c, z), salt).x;
+  float b = surfHash3(ivec3(c + ivec2(1, 0), z), salt).x;
+  float d = surfHash3(ivec3(c + ivec2(0, 1), z), salt).x;
+  float e = surfHash3(ivec3(c + ivec2(1, 1), z), salt).x;
+  return a + (b - a) * u.x + (d - a + (a - b - d + e) * u.x) * u.y;
+}
+
+float surfCoverage(vec2 uv, int axis, uint salt) {
+  int z = axis + ${coverageSalt};
+  float n = 0.72 * surfValueNoise(uv / ${(coverageCm[0] / 100).toFixed(4)}, z, salt) + 0.28 * surfValueNoise(uv / ${(coverageCm[1] / 100).toFixed(4)}, z + 4, salt);
+  return smoothstep(0.28, 0.72, n);
 }
 
 float surfCapHeight(float radius) {
@@ -160,6 +207,9 @@ vec3 surfLift(vec2 d, int axis, vec3 n) {
   return o;
 }
 
+/** Contact shadow just outside the foot of the drops near this fragment: the meniscus blocks the low sky. */
+float surfHalo = 0.0;
+
 struct SurfHit {
   float cover;
   float r;
@@ -176,6 +226,7 @@ void surfCap(inout SurfHit hit, vec3 d3, float radius, float height, vec3 n, vec
   float stretch = along < 0.0 ? 1.0 + 1.1 * slope : 1.0 + 0.2 * slope;
   vec3 q = d3 - down * along * (1.0 - 1.0 / stretch);
   float r = length(q) / radius;
+  if (r < 1.3) surfHalo = max(surfHalo, (1.0 - smoothstep(0.92, 1.3, r)) * clamp(height / radius, 0.0, 1.0));
   if (r >= 1.0) return;
   float aspect = height / radius;
   float qexp = 2.0 + 3.0 * clamp(1.0 - aspect, 0.0, 1.0);
@@ -219,16 +270,17 @@ float surfMist = 0.0;
   float shake = surfVibration;
   bool nearTrack = surfTrackLen > 0.0 && distance(surfWorldPos, surfTrackBox.xyz) < surfTrackBox.w && surfTrackDistance(surfWorldPos) < ${trackClear} + 0.007;
   for (int i = 0; i < ${beadLayers.length}; i++) {
-    float cellMm, minMm, maxMm, flatD, steepD;
+    float cellMm, minMm, maxMm, flatD, steepD, sparseD, denseD;
     int lobes;
-    surfLayer(i, cellMm, minMm, maxMm, flatD, steepD, lobes);
+    surfLayer(i, cellMm, minMm, maxMm, flatD, steepD, lobes, sparseD, denseD);
     float cell = cellMm * 0.001;
     float density = mix(steepD, flatD, up) * (1.0 - 0.8 * under);
     if (maxMm * 0.001 < 0.6 * pix) {
-      surfMist += density * 0.6 * (maxMm / cellMm) * (maxMm / cellMm);
+      surfMist += density * mix(sparseD, denseD, surfCoverage(uv, axis, salt)) * 0.6 * (maxMm / cellMm) * (maxMm / cellMm);
       continue;
     }
     ivec2 c = ivec2(floor(uv / cell));
+    density = min(0.95, density * mix(sparseD, denseD, surfCoverage((vec2(c) + 0.5) * cell, axis, salt)));
     vec3 h = surfHash3(ivec3(c, axis * 4 + i), salt);
     if (h.x >= density) continue;
     float size = h.x / density;
@@ -256,9 +308,12 @@ float surfMist = 0.0;
     float height = surfCapHeight(radius);
     vec3 worldCenter = surfWorldPos + (vec4(toView * d3, 0.0) * viewMatrix).xyz;
     if (nearTrack && surfTrackDistance(worldCenter) < ${trackClear} + radius) continue;
-    float geometry = surfGeo.w > 0.5 && i > 0 && dMm >= ${geometryMinMm.toFixed(2)} && distance(worldCenter, surfGeo.xyz) < surfGeo.w ? 1.0 : 0.0;
-    float sizeBefore = surfHit.height;
-    surfCap(surfHit, d3, radius, height, n, down, slope, pix, geometry);
+    float geometry = surfGeo.w > 0.5 && i > 0 && dMm >= ${geometryMinMm.toFixed(2)} && distance(worldCenter, surfGeo.xyz) < surfGeo.w && dMm * 0.001 >= surfGeoAngle * distance(worldCenter, surfGeo.xyz) ? 1.0 : 0.0;
+    // Drops under two pixels across alias into glitter: they join the mist sheen instead of drawing a sharp lens.
+    float resolved = smoothstep(0.6 * pix, 1.4 * pix, radius);
+    if (resolved < 1.0) surfMist += density * (1.0 - resolved) * 0.6 * (dMm / cellMm) * (dMm / cellMm);
+    if (resolved <= 0.0) continue;
+    surfCap(surfHit, d3, radius, height * resolved, n, down, slope, pix, geometry);
     if (lobes > 1) {
       vec3 lh = surfHash3(ivec3(c, axis * 4 + i), salt + 1u);
       float angle = lh.x * 6.2831853;
@@ -273,7 +328,7 @@ float surfMist = 0.0;
   float w = surfHit.cover;
   float shaded = w * (1.0 - surfHit.geometry);
   vec3 dropView = normalize(toView * surfHit.normal);
-  diffuseColor.rgb *= mix(1.0, 0.86, surfMist);
+  diffuseColor.rgb *= mix(1.0, 0.86, surfMist) * (1.0 - 0.55 * surfHalo * (1.0 - w));
   diffuseColor.rgb *= mix(1.0, mix(0.72, 0.3, surfHit.rim), w);
   if (shaded > 0.0) {
     vec3 tilt = dropView - normal;
@@ -302,17 +357,20 @@ float surfMist = 0.0;
     totalEmissiveRadiance += caustic * w * (diffuseColor.rgb + 0.08);
   }
   surfBeadOut = shaded;
+  // A dome a few pixels across holds every normal inside one pixel: spread its highlight, as a prefiltered normal map would.
+  surfBeadRough = mix(0.26, 0.012, smoothstep(1.5 * pix, 9.0 * pix, surfHit.radius));
   surfDiagOut = vec4(vec3(1.0, 0.1, 0.9) * (0.15 + 0.85 * max(w, surfMist * 0.5)), 1.0);
 }
 `
 
 const beadsSpecular = /* glsl */ `
 #ifdef USE_CLEARCOAT
+  material.clearcoat *= 1.0 - 0.6 * surfHalo * (1.0 - surfBeadOut);
   material.clearcoat = mix(material.clearcoat, 1.0, surfBeadOut);
-  material.clearcoatRoughness = mix(material.clearcoatRoughness, 0.012, surfBeadOut);
+  material.clearcoatRoughness = mix(material.clearcoatRoughness, surfBeadRough, surfBeadOut);
   material.clearcoatRoughness = mix(material.clearcoatRoughness, max(material.clearcoatRoughness, 0.16), surfMist * 0.5);
 #else
-  material.roughness = mix(material.roughness, 0.03, surfBeadOut);
+  material.roughness = mix(material.roughness, max(0.03, surfBeadRough), surfBeadOut);
 #endif
 `
 
@@ -324,7 +382,7 @@ export function applyBeads(material: THREE.Material, uniforms: Uniforms, bead: B
       shader.vertexShader = surfaceVaryingsGlsl(true) + insertAfter(shader.vertexShader, '#include <project_vertex>', surfaceVertexGlsl(true))
       let f = shader.fragmentShader
       f = surfaceVaryingsGlsl(true) + surfaceCommonGlsl + beadsGlsl + f
-      f = insertBefore(f, '#include <map_fragment>', 'float surfBeadOut = 0.0;\nvec4 surfDiagOut = vec4(0.0);')
+      f = insertBefore(f, '#include <map_fragment>', 'float surfBeadOut = 0.0;\nfloat surfBeadRough = 0.012;\nvec4 surfDiagOut = vec4(0.0);')
       f = insertAfter(f, '#include <clearcoat_normal_fragment_maps>', beadsFragment)
       f = insertAfter(f, '#include <lights_physical_fragment>', beadsSpecular)
       f = insertBefore(f, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { outgoingLight = surfDiagOut.rgb; }')
