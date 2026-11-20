@@ -69,8 +69,8 @@ vec3 wrapAround(vec3 point, vec3 anchor, vec3 span) {
 
 vec3 veilHighlights(vec3 peak, float weight) {
   float brightest = max(peak.r, max(peak.g, peak.b));
-  const float knee = 0.055;
-  const float span = 0.10;
+  const float knee = 0.031;
+  const float span = 0.068;
   float excess = max(0.0, brightest - knee);
   float scale = 1.0 - weight * excess * excess / max(1e-6, brightest * (span + excess));
   return peak * scale;
@@ -144,8 +144,8 @@ void main() {
   vec3 radiance = scatterRain(p, normalize(eye - p));
   float gain = uLayer < 0.0 ? 0.64 : uLayer < 0.5 ? 0.92 : 4.2;
   float coverage = min(1.0, diameter * 0.39894228 / sigmaSide) * min(1.0, max(len, diameter) / (1.35 * sigmaEnd));
-  float angularTravel = len / max(1.0, pixelFocal.y);
-  float veil = uLayer >= 0.0 && uLayer < 1.5 ? uFilmView * smoothstep(0.018, 0.045, angularTravel) : 0.0;
+  float frameTravel = len / max(uViewport.x, uViewport.y);
+  float veil = uLayer >= 0.0 && uLayer < 1.5 ? uFilmView * smoothstep(0.008, 0.028, frameTravel) : 0.0;
   vHead = ap;
   vTail = bp;
   vSigma = vec2(sigmaSide, sigmaEnd);
