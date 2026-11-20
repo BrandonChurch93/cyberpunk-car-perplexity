@@ -238,7 +238,7 @@ RELAX_WAVE = float(os.environ.get('RELAX_WAVE', '0.3'))
 RELAX_SKIP = set(os.environ.get('RELAX_SKIP', 'lip,splitter,intake~back,diffuser,nose_face').split(','))
 
 
-def relax(net, samples, deg=2, dmax=0.008, iters=2, log=print):
+def relax(net, samples, deg=2, dmax=0.008, iters=int(os.environ.get('RELAX_ITERS', '2')), log=print):
     """Pull each edge toward the intersection of its two facets' fitted low order surfaces, vertices fixed, the
     move a few sine modes along the edge, zero at the ends and capped, so the boundary curves agree with fair facet surfaces."""
     inc = {}

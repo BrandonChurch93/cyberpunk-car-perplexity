@@ -35,6 +35,20 @@ def zp(x):
     return float(np.interp(x, *zip(*ZP)))
 
 
+SPL = ((0.15, 2.454), (0.30, 2.4075), (0.45, 2.375), (0.60, 2.290), (0.75, 2.178), (0.85, 2.075), (0.90, 1.951),
+       (0.937, 1.84), (0.981, 1.70))
+
+
+def inset(pts, y, d, ends):
+    """Plan polyline pts moved inward by d at height y, between fixed end points."""
+    P = np.array([ends[0]] + list(pts) + [ends[1]], float)
+    t = np.gradient(P, axis=0)
+    n = np.stack([t[:, 1], -t[:, 0]], 1) / np.linalg.norm(t, axis=1)[:, None]
+    n *= np.sign((n * P).sum(1))[:, None]
+    Q = P[1:-1] - d * n[1:-1]
+    return [(float(q[0]), y, float(q[1])) for q in Q]
+
+
 def zb(x):
     """Lamp band surface: 50 mm ahead of the blade across the centre, 45 mm on the swept sides."""
     return float(np.interp(x, (0.0, 0.22, KX, 0.65, 0.872), (-2.415, -2.413, -2.405, -2.262, -2.098)))
@@ -57,7 +71,7 @@ def network():
     P('Pb', f=(1245, 230), t=(700, 1075))
     P('Pc', f=(1283, 238), t=(690, 1122))
     P('Lo', f=(1270, 322), s=(390, 295))
-    E('hood_le', ['N0', (0.18, 0.421, 2.455), 'N1'])
+    E('hood_le', ['N0', (0.18, 0.421, 2.44), 'N1'])
     E('hood_ctr', ['N0', (0.0, 0.62, 2.10), 'C0'])
     E('hood_cr', ['N1', 'Ap'])
     E('crease_out', ['Ap', 'Pb'])
@@ -89,8 +103,8 @@ def network():
     E('int_top', ['I0', (0.18, 0.385, 2.425), 'N1'])
     E('nose_ctr', ['N0', 'I0'])
     E('int_ctr', ['I0', 'I1'])
-    E('lip_top', ['I1', (0.23, 0.1915, 2.425), 'Db'])
-    E('bl_base', ['Db', (0.62, 0.183, 2.27), 'Bc'])
+    E('lip_top', ['I1', (0.23, 0.1915, 2.416), 'Db'])
+    E('bl_base', ['Db', (0.62, 0.183, 2.258), 'Bc'])
     E('bl_in', ['Db', 'Dt'])
     F('nose_face', ['hood_le', 'int_top', 'nose_ctr'], mat='black', hint=(0, 0.3, 1))
     recess(n, 'lamp', ['lamp_top', 'lamp_outer', 'lamp_low'], (-0.01, -0.01, -0.13), hint=(0.2, 0.3, 1))
@@ -99,25 +113,25 @@ def network():
     # front corner, lip, splitter
     Q('Aft', arc(FH, 140, 0.986))
     Q('Af', arc(FH, -156, 0.99))
-    Q('Afb', (0.985, 0.155, 1.635))
+    Q('Afb', (0.993, 0.155, 1.633))
     Q('Sp0', (0.0, 0.13, 2.4725))
-    Q('Sp1', (0.975, 0.13, 1.65))
+    Q('Sp1', (0.996, 0.13, 1.630))
     E('corner_up', ['Lo', 'Aft'])
     E('bl_top', ['Dt', (0.60, 0.232, 2.276), 'Bc1'])
     E('bl_end', ['Bc', 'Bc1'])
     recess(n, 'intake', ['int_top', 'lamp_low', 'arm_low', 'arm_down', 'bl_top', 'bl_in', 'lip_top', 'int_ctr'], (0.0, 0.0, -0.16), hint=(0, 0, 1))
     E('arch_f1', ['Aft', arc(FH, 160, 0.987), arc(FH, 180, 0.988), arc(FH, -165, 0.989), 'Af'])
-    E('lip_side', ['Bc', (0.93, 0.172, 1.85), 'Af'])
+    E('lip_side', ['Bc', (0.919, 0.172, 1.85), 'Af'])
     E('lip_end', ['Af', 'Afb'])
-    E('lip_bot', ['I2', (0.35, 0.155, 2.395), (0.6, 0.155, 2.285), (0.82, 0.155, 2.112), (0.93, 0.155, 1.87), 'Afb'])
+    E('lip_bot', ['I2'] + inset(SPL, 0.155, 0.006, ((0.0, 2.4725), (0.996, 1.630))) + ['Afb'])
     E('lip_ctr', ['I1', 'I2'])
     E('spl_ctr', ['I2', 'Sp0'])
     E('spl_end', ['Afb', 'Sp1'])
-    E('spl_edge', ['Sp0', (0.35, 0.13, 2.402), (0.6, 0.13, 2.292), (0.83, 0.13, 2.115), (0.935, 0.13, 1.875), 'Sp1'])
+    E('spl_edge', ['Sp0'] + [(x, 0.13, z) for x, z in SPL] + ['Sp1'])
     F('corner', ['lamp_outer', 'arm_low', 'arm_down', 'bl_end', 'lip_side', 'arch_f1', 'corner_up'], crown=0.004, hint=(0.6, 0.1, 0.8))
     Q('Lm0', (0.0, 0.174, 2.467))
     Q('Lm1', (0.72, 0.171, 2.20))
-    E('lip_mid', ['Lm0', (0.35, 0.173, 2.397), (0.61, 0.171, 2.282), 'Lm1'], kind='guide')
+    E('lip_mid', ['Lm0', (0.35, 0.173, 2.383), (0.61, 0.171, 2.274), 'Lm1'], kind='guide')
     F('blade', ['bl_in', 'bl_top', 'bl_end', 'bl_base'], crown=0.002, hint=(0.3, 0.1, 1))
     F('lip', ['lip_top', 'bl_base', 'lip_side', 'lip_end', 'lip_bot', 'lip_ctr'], hint=(0.3, 0, 1), guides=['lip_mid'])
     F('splitter', ['lip_bot', 'spl_end', 'spl_edge', 'spl_ctr'], mat='black', hint=(0, -0.3, 1))

@@ -1,6 +1,8 @@
 """Pressure surfaces: each facet is the graph over its best-fit plane of the solution of Poisson's equation
 (uniform pressure, so a uniform mean curvature crown) taking the facet's boundary curves as Dirichlet data.
-Centerline facets are solved symmetric, with the pressure fitted to the centerline profile."""
+Centerline facets are solved symmetric, with the pressure fitted to the centerline profile. With a base surface the
+correction to it minimises thin plate bending energy (OCC_CORR=tp) instead of the harmonic one."""
+import os
 import numpy as np
 import scipy.sparse as sp
 import scipy.sparse.linalg as sla
@@ -60,6 +62,9 @@ def _bilinear(uv, u0, v0, h, nx, ny):
     cols = np.stack([j * nx + i, j * nx + i + 1, (j + 1) * nx + i, (j + 1) * nx + i + 1], 1).ravel()
     w = np.stack([(1 - a) * (1 - b), a * (1 - b), (1 - a) * b, a * b], 1).ravel()
     return sp.csr_matrix((w, (rows, cols)), shape=(len(uv), nx * ny))
+
+
+CORR = os.environ.get('OCC_CORR', 'tp')
 
 
 def solve(loop, holes=(), center=None, inner=(), crown=0.0, hint=None, sym=False, n_cells=220, max_slope=2.75, aniso=None, base=None):
@@ -135,7 +140,17 @@ def solve(loop, holes=(), center=None, inner=(), crown=0.0, hint=None, sym=False
         st = np.array([-2 * cuu - 2 * cvv, cuu, cuu, cvv, cvv, cuv / 4, -cuv / 4, -cuv / 4, cuv / 4])
         vv = np.tile(st, k) / h ** 2
         return sp.csr_matrix((vv, (rr, cc)), shape=(k, N))
-    Li = lap(rows_in)
+    def hess(r):
+        k = len(r)
+        rr = np.repeat(np.arange(3 * k), 4)
+        cu = np.stack([r - 1, r, r + 1, r], 1)
+        cv = np.stack([r - nx, r, r + nx, r], 1)
+        cx = np.stack([r + nx + 1, r + nx - 1, r - nx + 1, r - nx - 1], 1)
+        cc = np.concatenate([cu, cv, cx]).ravel()
+        vv = np.concatenate([np.tile([1.0, -2.0, 1.0, 0.0], k), np.tile([1.0, -2.0, 1.0, 0.0], k),
+                             np.tile(np.array([1.0, -1.0, -1.0, 1.0]) * np.sqrt(2) / 4, k)]) / h ** 2
+        return sp.csr_matrix((vv, (rr, cc)), shape=(3 * k, N))
+    Li = hess(rows_in) if base is not None and CORR == 'tp' else lap(rows_in)
     out_mask = ~inside
     rr, cc, vv, k = [], [], [], 0
     for (di, dj) in ((1, 0), (0, 1)):
