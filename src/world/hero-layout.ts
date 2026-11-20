@@ -5,6 +5,7 @@ import { plate, type Label } from './fixtures'
 import { group, heroCityYaw, heroDrainLayout, streetY, type Tuple } from './forms'
 import { heroPoint, heroScale as scale, heroSize } from './hero-scale'
 import { billboardMural, fixtureOpal, signGlass, towerSurface, type Facade, type FacadeLayer, type SignSpill } from './hero-surfaces'
+import { reflectionPracticalBuilder } from './reflection-practicals'
 import type { finishRoof } from './roof-look'
 
 const palette = {
@@ -73,7 +74,8 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   offset(distantGlass,-2)
   const lights = new Map<string, FilmLight>()
   const signs: string[] = []
-  let set = (_time: number) => {}
+  const practical = reflectionPracticalBuilder(labels, frame, zinc)
+  const animation: ((time: number) => void)[] = []
   const survey = approvedHeroSourceSurvey()
   const screen = survey.find(source => source.id === 'magenta violet tower screen')!
   const screenReflection = { point: new THREE.Vector3(...screen.at), normal: new THREE.Vector3(...screen.normal), size: new THREE.Vector2(...screen.size) }
@@ -214,13 +216,45 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const base = 77, crownW = 9.4
       box(tower,'left upper service setback',[wx+w*.5+crownW*.19,(wy+base)*.5,wz-d*.04],[crownW,wy-base,d*.73],shell)
       box(tower,'left wing folded floor lip',[wx+w*.5+crownW*.19,base-.28,wz-d*.04],[crownW+.2,.56,d*.75],frame)
+      for (const [side, length, radiance] of [[-.35,147,24],[-.09,216,31],[.22,191,28]]) {
+        const x = wx+side*w
+        practical.opal(tower,'upper cyan facade lightwell',[x,156+length*.5,pz+.48],[2.16,length],[.06,radiance*.67,radiance],13)
+        practical.opal(tower,'pale cyan lightwell core',[x+.69,156+length*.5,pz+.57],[.30,length*.97],[6.8,23,31],13)
+      }
+      animation.push(practical.screen(tower,'west violet media blade',[wx+.381*w,188,pz+.63],[5.45,60],
+        [10.2,.32,3.39],[1.91,.45,11.7],1.04,.78))
     } else if (index === 6) {
       const pz = wz+d*.50
+      const riser = group(tower,'billboard upper media riser')
+      const [wingX,wingZ] = [wx-w*.63,pz-7.2]
+      box(riser,'screen tower upper service skybridge',[49,332,pz-13.0],[208,25.6,25.0],shell)
+      box(riser,'skybridge east abutment',[148,332,pz+6.0],[15,25.6,20.3],shell)
+      box(riser,'upper advertising wing',[wingX,438,wingZ],[w*.82,214,14.4],shell)
+      for (const [j,cy] of [347,428,508].entries()) {
+        const x = wx-34-j*6
+        animation.push(practical.screen(riser,'upper magenta violet screen '+(j+1),[x,cy,pz+.68],
+          [67-j*3,59+j*6],j%2 ? [3.24,.47,13.5] : [13.8,.46,5.4],[3.3,.51,16.4],j*.23,.87))
+        practical.opal(riser,'screen riser ventilation status band',[x+4,cy-37-j*3,pz+.74],[34-j*3,.82],[4.1,.18,.92],1)
+      }
+      practical.opal(riser,'media crown violet sign band',[wx-19,541,pz+.68],[47,4.3],[5.2,.59,15.8],1)
       for (const [ladder,width] of [[.447,.49],[.473,.67]]) {
         for (let j=0;j<8;j++) {
           addRail('recessed red-orange tower tracer',wx+w*ladder,wy-(wy-streetY)*.35-j*5.4,pz,3.10,edgeRust,false,width)
         }
       }
+    } else if (index === 9) {
+      const pz = wz+d*.5
+      for (const [j, y] of [269,281,290,313,337,361,391,407,420].entries()) {
+        const ribbon = j%3 === 0
+        const n = ribbon ? 3 : 4+(j%3)
+        for (let i=0;i<n;i++) {
+          const cx = wx+(i-(n-1)*.5)*7.5+(j%2 ? .12 : -.12)*w
+          practical.opal(tower,'warm tower service floor',[cx,y,pz+.38],[ribbon ? 7.26 : 5.1,ribbon ? 2.7 : 3.3],
+            j%3 === 1 ? [19,12.4,5.6] : [24,9.1,1.9],1)
+        }
+      }
+      practical.cabinet(tower,'high amber rooftop wayfinding',[wx-10,372,pz+.67],[20,8.0],[28,10.2,2.4],'24H')
+      practical.cabinet(tower,'high amber hotel wayfinding',[wx+5,446,pz+.66],[30,5.2],[22,11.1,3.9],'HOTEL')
     } else if ([7,11,19,20,24,26].includes(index)) {
       const litH = (wy-streetY)*.49
       addRail('recessed facade edge tracer',wx+w*(index%2 ? -.44 : .45),streetY+litH*.98,wz+d*.5,litH,
@@ -285,7 +319,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const { light } = mountLight(housing,'billboard',source.size,color,91,75)
       light.colorAt = mural.colorAt
       light.level = mural.level
-      set = mural.set
+      animation.push(mural.set)
     } else if (!source.text) {
       const segments = source.onWall ? 1 : Math.round(height / (source.tint === 'cyan' ? .34 : .50))
       const opal = fixtureOpal(color, segments)
@@ -340,5 +374,5 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   for (const z of [-.111,.111]) box(drain,'iron grate side rim',[0,.0041,z],[.50,.0082,.018],zinc)
   box(drain,'recessed slot bed',[0,.0007,0],[.50,.0014,.22],tar)
   for (let i=0;i<21;i++) box(drain,'iron drainage bar',[(i-10)*.0234,.0059,0],[.010,.0047,.211],zinc)
-  return { root, signs, lights, set }
+  return { root, signs, lights, set: (time: number) => animation.forEach(update => update(time)) }
 }

@@ -161,21 +161,21 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   return mat
 }
 
-export function billboardMural(width: number, height: number, magenta: THREE.Color) {
-  const violet = new THREE.Color(.165,.061,2.39)
+export function billboardMural(width: number, height: number, magenta: THREE.Color, violet = new THREE.Color(.165,.061,2.39),
+  offset = 0, banded = 0) {
   const shade = new THREE.Color()
   const uniforms = {
     flow: { value: new THREE.Vector2(1,0) }, pixelCount: { value: new THREE.Vector2(width / .041, height / .041) },
     cabinetCount: { value: new THREE.Vector2(Math.round(width/3.12), Math.round(height/3.02)) },
     cabinetSalt: { value: stream('world/hero/mural modules').range(0,61) },
-    magenta: { value: magenta }, violet: { value: violet },
+    magenta: { value: magenta }, violet: { value: violet }, banded: { value: banded },
   }
   const material = new THREE.ShaderMaterial({
     uniforms, toneMapped: false, vertexShader: opalVertex,
     fragmentShader: /* glsl */ `
       varying vec2 face;
       uniform vec2 flow, pixelCount, cabinetCount;
-      uniform float cabinetSalt;
+      uniform float cabinetSalt, banded;
       uniform vec3 magenta, violet;
       ${noise}
       void main() {
@@ -203,6 +203,11 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
         float level=(1.06+.30*veil+.20*billow+.34*ribbon)*(.74+.26*edge)*tile*mix(1.0,.64+.36*diode,pixelAA);
         vec3 led=mix(magenta, violet, sweep);
         led+=(1.0-sweep)*vec3(.52,.047,.12)*ribbon;
+        float stripe=abs(fract(curve*3.29+.45*billow+.32)-.5);
+        float lightwell=1.0-smoothstep(.11,.21,stripe);
+        float cap=smoothstep(.0,.13,face.y)*(1.0-smoothstep(.91,.996,face.y));
+        led=mix(led,led*.81+vec3(.83,.44,1.27),banded*lightwell*.66);
+        level*=mix(1.0,.065+.935*lightwell*cap,banded);
         gl_FragColor = vec4(led*level,1.0);
       }
     `,
@@ -211,7 +216,7 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
   return {
     material,
     set(time: number) {
-      const a = phase(time), y = Math.sin(a)
+      const a = phase(time)+offset, y = Math.sin(a)
       uniforms.flow.value.set(Math.cos(a), Math.abs(y) < 1e-14 ? 0 : y)
     },
     colorAt(time: number, color: THREE.Color) {
