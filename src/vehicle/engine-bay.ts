@@ -31,7 +31,7 @@ function finishFaces(g: T.BufferGeometry, skin: number, wet: T.BufferGeometry[],
 
 export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   const surround: T.BufferGeometry[] = [], covers: T.BufferGeometry[] = [], steps: T.BufferGeometry[] = []
-  const returns: T.BufferGeometry[] = []
+  const returns: T.BufferGeometry[] = [], padWalls: T.BufferGeometry[] = []
   const mesh: T.BufferGeometry[] = [], ribs: T.BufferGeometry[] = [], internals: T.BufferGeometry[] = [], black: T.BufferGeometry[] = []
   const rearLouvers: T.BufferGeometry[] = []
   const n = full ? 40 : 18
@@ -99,7 +99,7 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
           })
         const outline = roundedPath(hex, 2, .16)
         const pad = polygon(outline, [0, 1, 0], .007)
-        finishFaces(pad, (pad.getAttribute('position').count - outline.length * 6) / 2, covers, returns)
+        finishFaces(pad, (pad.getAttribute('position').count - outline.length * 6) / 2, covers, padWalls)
       }
     }
     const pad: Point[] = [[.325, .465], [.345, .435], [.614, .435], [.649, .469], [.649, .534], [.623, .569],
@@ -154,6 +154,10 @@ export function createEngineBay(parent: T.Group, m: Palette, full: boolean) {
   add(parent, 'carbon cam covers with hex relief', joined(covers), m.bayCover)
   add(parent, 'stepped carbon bay vents', joined(steps), m.ventCarbon)
   add(parent, 'dry carbon bay wall returns', joined(returns), m.dark)
+  const padEdge = m.dark.clone()
+  padEdge.color.setHex(full ? 0x272a2e : 0x414448)
+  padEdge.roughness = .72
+  add(parent, 'matte hex pad walls', joined(padWalls), m.tag(padEdge, 'none'))
   add(parent, 'front airbox hex grilles', joined(mesh), m.dark)
   add(parent, 'paired cam cover rib groups and blank pads', joined(ribs), m.diffuser)
   add(parent, 'dark intake plenum and engine hardware', joined(internals), m.engine)

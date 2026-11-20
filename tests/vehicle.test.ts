@@ -398,6 +398,7 @@ describe('vehicle geometry and state', () => {
         ['carbon cam covers with hex relief', 'beads'],
         ['stepped carbon bay vents', 'beads'],
         ['dry carbon bay wall returns', 'none'],
+        ['matte hex pad walls', 'none'],
         ['front airbox hex grilles', 'none'],
         ['dark chevron rear bay louvers', 'none'],
       ]) {
