@@ -78,4 +78,59 @@ describe('closed-web forged wheel', () => {
       expect(radialDotSum / samples).toBeGreaterThan(0.75)
     }
   })
+
+  it('builds the molded sidewall band, front shoulder tread blocks, contact patch bulge and rotor edge vanes in both LODs', () => {
+    for (const lod of [blockout, full]) {
+      const wheel = lod.root.getObjectByName('front wheel')!
+      const tire = wheel.getObjectByName('loaded rubber and tread') as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
+      const band = wheel.getObjectByName('molded sidewall relief') as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
+      const rotor = wheel.getObjectByName('drilled ceramic rotor') as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
+
+      expect(band.material.roughness).toBeLessThan(tire.material.roughness - 0.25)
+
+      const bandPos = band.geometry.getAttribute('position')
+      let midCollarVerts = 0
+      for (let i = 0; i < bandPos.count; i++) {
+        const r = Math.hypot(bandPos.getY(i), bandPos.getZ(i))
+        if (r > frontWheel.rim + 0.020 && r < frontWheel.radius - 0.035) midCollarVerts++
+      }
+      expect(midCollarVerts).toBeGreaterThan(100)
+
+      const pos = tire.geometry.getAttribute('position')
+      const cav = tire.geometry.getAttribute('tireCavity')
+      expect(cav).toBeDefined()
+      let maxTopX = 0
+      let maxFootX = 0
+      let minFrontR = Infinity
+      let maxFrontR = 0
+      let maxFrontCav = 0
+      let minFrontCav = 1
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i)
+        if (y > 0.16 && Math.abs(z) < 0.06) maxTopX = Math.max(maxTopX, x)
+        if (y < -0.17 && Math.abs(z) < 0.06) maxFootX = Math.max(maxFootX, x)
+        if (z > 0.28 && Math.abs(y) < 0.10 && x > 0.04 && x < 0.118) {
+          const r = Math.hypot(y, z)
+          minFrontR = Math.min(minFrontR, r)
+          maxFrontR = Math.max(maxFrontR, r)
+          const c = cav.getX(i)
+          maxFrontCav = Math.max(maxFrontCav, c)
+          minFrontCav = Math.min(minFrontCav, c)
+        }
+      }
+      expect(maxFootX - maxTopX).toBeGreaterThan(0.007)
+      expect(maxFrontR - minFrontR).toBeGreaterThan(0.004)
+      expect(maxFrontCav - minFrontCav).toBeGreaterThan(0.55)
+
+      const rotorPos = rotor.geometry.getAttribute('position')
+      rotor.geometry.computeBoundingBox()
+      const midX = 0.5 * (rotor.geometry.boundingBox!.min.x + rotor.geometry.boundingBox!.max.x)
+      let vaneVerts = 0
+      for (let i = 0; i < rotorPos.count; i++) {
+        const rx = rotorPos.getX(i), rr = Math.hypot(rotorPos.getY(i), rotorPos.getZ(i))
+        if (Math.abs(rx - midX) < 0.0098 && rr > frontWheel.disc - 0.016) vaneVerts++
+      }
+      expect(vaneVerts).toBeGreaterThan(60)
+    }
+  })
 })

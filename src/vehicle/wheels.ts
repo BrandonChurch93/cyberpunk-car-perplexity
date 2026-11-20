@@ -50,54 +50,127 @@ function tireShell(w: WheelSize) {
   const place = (u: number, v: number, depthOffset: number, extraX = 0): Point => {
     const th = u * tau
     const p = axisRoll(axial(v) + extraX, cross(v) - depthOffset, th)
-    const ground = p[1] + w.loaded
-    const cushion = ground > .010 ? ground : ground < 0 ? 0 : ground ** 2 * (20 - 1000 * ground) * 1000 / 100
-    const bulge = .0015 * Math.exp(-((ground - .026) ** 2) / .0016) * Math.sin(Math.PI * v) * Math.sign(p[0])
-    return [p[0] + bulge - (p[0] > 0 ? treadInset(w, cross(v)) : 0), cushion - w.loaded, p[2]]
+    const sv = v > .5 ? v : 1 - v
+    const cheek = Math.sin(Math.PI * T.MathUtils.clamp((sv - .725) / .225, 0, 1)) ** 1.15
+    const footChord = Math.exp(-((p[2] / .098) ** 2))
+    const shoulderSpan = 1 - smooth(Math.abs(v - .5), .245, .315)
+    const loadPress = .0042 * footChord * smooth(-p[1], w.loaded - .062, w.loaded - .004) * shoulderSpan
+    const bellyZone = Math.exp(-((p[2] / .102) ** 2)) * smooth(-p[1], w.loaded - .102, w.loaded - .024)
+    const cheekSag = .0048 * bellyZone * cheek
+    const rawGround = p[1] - loadPress - cheekSag + w.loaded
+    const h = .0135
+    const s = rawGround / h
+    const cushion = rawGround <= 0 ? 0 : rawGround >= h ? rawGround : h * s * s * (2 - s)
+    const bulge = .0138 * bellyZone * cheek * Math.sign(p[0])
+    const outerInset = smooth(v, .46, .66) * treadInset(w, cross(v))
+    return [p[0] + bulge - outerInset, cushion - w.loaded, p[2]]
   }
   return { place }
 }
 
 function tireGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
   const { place } = tireShell(w)
-  const grooves = [.345, .460, .568, .668]
+  const front = w === frontWheel
+  const grooves = [.346, .452, .558, .658]
+  const block = (p: number, narrow: number, wide: number) => 1 - smooth(Math.abs(p - Math.round(p)), narrow, wide)
   const depth = (u: number, v: number): number => {
-    const groove = grooves.reduce((r, g) => Math.max(r, 1 - smooth(Math.abs(v - g), .0062, .0160)), 0)
-    const block = (p: number, narrow: number, wide: number) => 1 - smooth(Math.abs(p - Math.round(p)), narrow, wide)
-    const pitch = u * (full ? 30 : 20)
-    const inner = block(pitch + .43 + (v - .5) * 6, .09, .22) * smooth(v, .275, .305) * (1 - smooth(v, .335, .348))
-    const outer = block(pitch + (v - .668) * 6.5, .09, .21)
-      * smooth(v, .666, .678) * (1 - smooth(v, .700, .718))
-    const sipes = block(pitch - .3 + (v - .51) * 5.5, .055, .15)
-      * smooth(v, .465, .482) * (1 - smooth(v, .552, .568))
-    return Math.max(.0068 * groove, .0030 * inner, .0030 * outer, .0020 * sipes)
+    const groove = grooves.reduce((r, g) => Math.max(r, 1 - smooth(Math.abs(v - g), .0066, .0148)), 0)
+    const shoulderGroove = 1 - smooth(Math.abs(v - .700), .0024, .0064)
+    if (!full) {
+      return Math.max(.0076 * groove, .0026 * shoulderGroove)
+    }
+    const pitch = u * 48
+    const inner = block(pitch + .35 - (v - .346) * 2.1, .034, .092)
+      * smooth(v, .276, .292) * (1 - smooth(v, .330, .342))
+    const outerSlot = block(pitch + (v - .660) * 2.2, .032, .088)
+      * smooth(v, .664, .674) * (1 - smooth(v, .702, .716))
+    const ribOuter = block(pitch - .24 + (v - .608) * 2.2, .030, .084)
+      * smooth(v, .570, .582) * (1 - smooth(v, .642, .654))
+    const ribMid = block(pitch + .18 - (v - .505) * 2.0, .028, .080)
+      * smooth(v, .466, .478) * (1 - smooth(v, .542, .554))
+    const ribInner = block(pitch - .36 + (v - .399) * 2.0, .028, .080)
+      * smooth(v, .360, .372) * (1 - smooth(v, .436, .448))
+    return Math.max(
+      .0076 * groove,
+      .0026 * shoulderGroove,
+      .0020 * inner,
+      .0019 * outerSlot,
+      .0018 * ribOuter,
+      .0016 * ribMid,
+      .0016 * ribInner,
+    )
   }
-  const rows = [...new Set([
-    ...Array.from({ length: full ? 57 : 15 }, (_, i) => i / (full ? 56 : 14)),
-    ...(full
-      ? [...grooves.flatMap((v) => [v - .016, v - .006, v + .006, v + .016]), .035, .060, .720, .745, .790, .855, .918, .942, .966, .984]
-      : [...grooves.flatMap((v) => [v - .014, v, v + .014]), .740, .855, .942, .968]),
-  ])].sort((a, b) => a - b)
-  // At u=0.5, v=0.5 the contact flatten + center bulge flip toNormal upward, so [0, 1, 0] keeps the rubber shell outward.
-  return patch((u, v) => place(u, v, depth(u, v)), full ? 480 : 64, rows.length - 1, [0, 1, 0], 0, (_, i) => rows[i])
+  const rows = [...new Set(full
+    ? [
+        ...Array.from({ length: 49 }, (_, i) => i / 48),
+        ...grooves.flatMap((v) => [v - .0148, v - .0066, v + .0066, v + .0148]),
+        .035, .060, .276, .308,
+        .672, .684, .694, .700, .707, .716, .728, .744, .766, .792,
+        .833, .855, .885, .913, .948, .966, .981,
+      ]
+    : front
+      ? [
+          0, .276,
+          ...grooves.flatMap((v) => [v - .0148, v, v + .0148]),
+          .700, .728, .762, .802, .833, .873, .913, .952, 1,
+        ]
+      : [0, .22, .36, .50, .64, .74, .84, .94, 1],
+  )].sort((a, b) => a - b)
+  const uSteps = full ? (front ? 480 : 288) : (front ? 128 : 28)
+  const geom = patch((u, v) => place(u, v, depth(u, v)), uSteps, rows.length - 1, [0, -1, 0], 0, (_, i) => rows[i])
+  const cavity = new Float32Array((uSteps + 1) * rows.length)
+  const tireUv = new Float32Array((uSteps + 1) * rows.length * 2)
+  let ptr = 0
+  let uvPtr = 0
+  for (let j = 0; j < rows.length; j++) {
+    const v = rows[j]
+    for (let i = 0; i <= uSteps; i++) {
+      const u = i / uSteps
+      cavity[ptr++] = Math.min(1, depth(u, v) / .0076)
+      tireUv[uvPtr++] = u
+      tireUv[uvPtr++] = v
+    }
+  }
+  geom.setAttribute('tireCavity', new T.Float32BufferAttribute(cavity, 1))
+  geom.setAttribute('tireUv', new T.Float32BufferAttribute(tireUv, 2))
+  return geom
 }
 
 function sidewallReliefGeometry(w: WheelSize, full: boolean): T.BufferGeometry {
   const { place } = tireShell(w)
-  return patch(
-    (u, t) => {
-      const crown = Math.max(0, 1 - Math.abs(t * 2 - 1))
-      return place(u, mix(.956, .978, t), 0, .00030 + .00085 * crown * crown * (3 - 2 * crown))
+  const uSteps = full ? (w === frontWheel ? 360 : 240) : (w === frontWheel ? 72 : 28)
+  const bandKnots: Profile = full
+    ? [
+        [.833, -.0008], [.837, .00160], [.843, .00160], [.847, .00065],
+        [.869, .00065], [.872, .00128], [.875, .00128], [.878, .00065],
+        [.899, .00065], [.903, .00160], [.909, .00160], [.913, -.0008],
+      ]
+    : [
+        [.833, -.0008], [.840, .00160], [.847, .00065], [.873, .00128],
+        [.899, .00065], [.906, .00160], [.913, -.0008],
+      ]
+  const beadKnots: Profile = full
+    ? [[.948, -.0008], [.955, .00135], [.966, .00140], [.974, .00070], [.981, -.0008]]
+    : [[.948, -.0008], [.960, .00140], [.973, .00070], [.981, -.0008]]
+  const buildBand = (knots: Profile) => patch(
+    (u, s) => {
+      const idx = T.MathUtils.clamp(s * (knots.length - 1), 0, knots.length - 1)
+      const i = Math.min(knots.length - 2, Math.floor(idx)), f = idx - i
+      const v = mix(knots[i][0], knots[i + 1][0], f)
+      const h = mix(knots[i][1], knots[i + 1][1], f)
+      return place(u, v, 0, h)
     },
-    full ? 480 : 64,
-    4,
+    uSteps,
+    knots.length - 1,
     [1, 0, 0],
   )
+  return joined([buildBand(bandKnots), buildBand(beadKnots)])
 }
 
 function rotor(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, T.BufferGeometry, T.BufferGeometry] {
+  const front = w === frontWheel
   const face = new T.Shape()
-  const segments = full ? 160 : 96
+  const segments = full ? 180 : (front ? 96 : 40)
   const radius = w.disc, ring = .104, lip = radius - .0018
   face.moveTo(lip, 0)
   for (let i = 1; i < segments; i++) {
@@ -113,40 +186,66 @@ function rotor(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, T.
   }
   center.closePath()
   face.holes.push(center)
+  const bevels: T.BufferGeometry[] = []
   const wells: T.BufferGeometry[] = []
-  const count = full ? 24 : 16, edges = full ? 10 : 6
-  for (let i = 0; i < count; i++) for (let j = 0; j < 4; j++) {
+  const count = (full || front) ? 24 : 8
+  const drillRows = (full || front) ? 4 : 2
+  const edges = full ? (front ? 14 : 10) : (front ? 10 : 5)
+  const qOuter = (full || front) ? .0043 : .0036
+  const qInner = .0032
+  for (let i = 0; i < count; i++) for (let j = 0; j < drillRows; j++) {
     const a = (i / count) * tau + .043 * j + .0105 * j ** 2
     const r = radius - .018 - .018 * j
     const drill = new T.Path(), y = Math.sin(a) * r, z = -Math.cos(a) * r
-    for (let k = 0; k <= edges; k++) {
+    for (let k = 0; k < edges; k++) {
       const phi = -tau * k / edges
-      const q = .0036
-      if (k === 0) drill.moveTo(-z + q, y)
-      else drill.lineTo(-z + q * Math.cos(phi), y + q * Math.sin(phi))
+      if (k === 0) drill.moveTo(-z + qOuter, y)
+      else drill.lineTo(-z + qOuter * Math.cos(phi), y + qOuter * Math.sin(phi))
     }
+    drill.closePath()
     face.holes.push(drill)
+    if (full || front) {
+      bevels.push(patch((u, v) => {
+        const phi = -u * tau, q = mix(qOuter, qInner, v)
+        return [axis + .00002 - .00095 * v, y + q * Math.sin(phi), z - q * Math.cos(phi)]
+      }, edges, 1, [1, 0, 0]))
+    }
     wells.push(patch((u, v) => {
-      const phi = -u * tau, q = mix(.0036, .00285, v)
-      return [axis - .007 * v, y + q * Math.sin(phi), z - q * Math.cos(phi)]
+      const phi = -u * tau, q = mix(qInner, .0027, v)
+      return [axis - .00095 - .0065 * v, y + q * Math.sin(phi), z - q * Math.cos(phi)]
     }, edges, 1, [1, 0, 0]))
   }
-  const rear = axis - w.discDepth, cheek = .0095
-  const back = lathe([[rear, ring], [rear, lip], [rear + .0018, radius], [rear + cheek, radius], [rear + cheek, ring]], full ? segments : 64)
+  const rear = axis - w.discDepth, cheek = .0090
+  const back = lathe([[rear, ring], [rear, lip], [rear + .0018, radius], [rear + cheek, radius], [rear + cheek, ring]], full ? segments : (front ? 56 : 32))
+  const vaneCount = full ? 40 : (front ? 32 : 12)
+  const edgeVanes: T.BufferGeometry[] = []
+  for (let i = 0; i < vaneCount; i++) {
+    const a = tau * i / vaneCount + .04
+    const thick = .0038
+    const halfAng = (.5 * thick) / radius
+    edgeVanes.push(patch(
+      (u, v) => axisRoll(mix(rear + cheek + .0005, axis - cheek - .0005, v), mix(radius - .0145, radius - .0002, u), a + halfAng),
+      1,
+      1,
+      [0, -Math.sin(a), Math.cos(a)],
+      thick,
+    ))
+  }
   const ceramic = joined([
     new T.ShapeGeometry(face, 1).rotateY(Math.PI / 2).translate(axis + .00002, 0, 0),
-    lathe([[axis - cheek, ring], [axis - cheek, radius], [axis - .0018, radius], [axis, lip]], segments), back,
+    ...bevels,
+    lathe([[axis - cheek, ring], [axis - cheek, radius], [axis - .0018, radius], [axis, lip]], segments),
+    back,
+    ...edgeVanes,
   ])
-  const ventRibs: T.BufferGeometry[] = [lathe([[rear + cheek, .122], [axis - cheek, .122]], segments / 2)]
-  for (let i = 0; i < (full ? 42 : 26); i++) {
-    const a = tau * i / (full ? 42 : 26)
-    ventRibs.push(patch((u, v) => axisRoll(mix(rear + cheek, axis - cheek, v), mix(.127, lip - .0015, u), a + .23 * u),
-      full ? 2 : 1, 1, [0, -Math.sin(a), Math.cos(a)], .0038))
-  }
-  return [ceramic, joined([...wells, ...ventRibs]), lathe([
+  const slotFloor = lathe([
+    [rear + cheek, .122], [rear + cheek, radius - .0148],
+    [axis - cheek, radius - .0148], [axis - cheek, .122],
+  ], full ? 80 : (front ? 36 : 20))
+  return [ceramic, joined([...wells, slotFloor]), lathe([
     [axis - .008, .115], [axis - .004, .112], [axis - .004, .105], [axis - .015, .104],
     [axis - .015, .098], [axis - .009, .088], [axis - .005, .081], [axis - .005, .047],
-  ], full ? segments / 2 : 48)]
+  ], full ? segments / 2 : (front ? 40 : 24))]
 }
 
 function filletConvexCCW(pts: readonly Pt2[], radii: readonly number[], cornerSegs: number, maxEdge = .0075): LoopSample[] {
@@ -340,11 +439,12 @@ function forgedWheelAssembly(w: WheelSize, full: boolean): {
   cap: T.BufferGeometry
   lugs: T.BufferGeometry
 } {
+  const front = w === frontWheel
   const H = w.width / 2, R = w.rim
   const face = H - .008, hubPlane = face - .030, hubFace = hubPlane + .0018
   const rCap = .148 * R, rCollar = .161 * R
   const rHubInner = .248 * R, rHubOuter = .260 * R
-  const rWebOuter = R - .0038
+  const rWebOuter = R - .0035
   const rWinOuter = R - .0124
   const theta0 = .22
   const branchSpan = .456
@@ -379,8 +479,23 @@ function forgedWheelAssembly(w: WheelSize, full: boolean): {
   const lugCenters: Pt2[] = []
   const lugLoops: LoopSample[][] = []
   const rLug = .204 * R, rLugWell = .0066, tLugSeam = .0014
-  const cornerSegs = full ? 12 : 5
-  const maxLoopEdge = full ? .0075 : .022
+  const cornerSegs = full ? 16 : (front ? 7 : 2)
+  const maxLoopEdge = full ? .0055 : (front ? .015 : .045)
+  const rimArcPts = (a0: number, a1: number, count: number): { pts: Pt2[]; radii: number[] } => {
+    const pad = .088
+    const pts: Pt2[] = [polar2(rWinOuter, a0)]
+    const radii: number[] = [.0148]
+    if (a1 - a0 > 2 * pad && count > 1) {
+      for (let m = 0; m < count; m++) {
+        pts.push(polar2(rWinOuter, mix(a0 + pad, a1 - pad, count === 1 ? .5 : m / (count - 1))))
+        radii.push(0)
+      }
+    }
+    pts.push(polar2(rWinOuter, a1))
+    radii.push(.0148)
+    return { pts, radii }
+  }
+  const arcSub = full ? 9 : (front ? 4 : 0)
 
   for (let k = 0; k < 5; k++) {
     const th = theta0 + (k / 5) * tau
@@ -388,50 +503,49 @@ function forgedWheelAssembly(w: WheelSize, full: boolean): {
 
     const aPent0 = th + pentBranchOuterAngle
     const aPent1 = thNext - pentBranchOuterAngle
+    const pentOuterArc = rimArcPts(aPent0, aPent1, arcSub)
     const pentPts: Pt2[] = [
       local2(th, rPentInner, stemRootHalf),
       local2(th, elbowX, stemForkHalf),
-      polar2(rWinOuter, aPent0),
-      polar2(rWinOuter, (aPent0 + aPent1) * .5),
-      polar2(rWinOuter, aPent1),
+      ...pentOuterArc.pts,
       local2(thNext, elbowX, -stemForkHalf),
       local2(thNext, rPentInner, -stemRootHalf),
       polar2(rPentArc, (th + thNext) * .5),
     ]
-    const pentRadii = [.0132, .0165, .0148, .185, .0148, .0165, .0132, .085]
+    const pentRadii = [.0132, .0165, ...pentOuterArc.radii, .0165, .0132, .085]
     windowLoops.push(filletConvexCCW(pentPts, pentRadii, cornerSegs, maxLoopEdge))
 
+    const triOuterArc = rimArcPts(th - triHalfAngle, th + triHalfAngle, arcSub)
     const triPts: Pt2[] = [
       polar2(crotchR, th),
-      polar2(rWinOuter, th - triHalfAngle),
-      polar2(rWinOuter, th),
-      polar2(rWinOuter, th + triHalfAngle),
+      ...triOuterArc.pts,
     ]
-    const triRadii = [.0116, .0148, .210, .0148]
+    const triRadii = [.0116, ...triOuterArc.radii]
     windowLoops.push(filletConvexCCW(triPts, triRadii, cornerSegs, maxLoopEdge))
 
     const lugCenter = polar2(rLug, th + tau / 10)
     lugCenters.push(lugCenter)
-    lugLoops.push(circleLoopCCW(lugCenter, rLugWell, full ? 20 : 10))
+    lugLoops.push(circleLoopCCW(lugCenter, rLugWell, full ? 20 : (front ? 12 : 8)))
   }
 
   const hubBowlX = hubPlane + .0042
-  const dishAt = (r: number): number => mix(hubPlane + .0068, face - .0006, smooth(r, rHubOuter, rWebOuter) ** .76)
+  const dishAt = (r: number): number => mix(hubPlane + .0068, face - .0008, smooth(r, rHubOuter, rWebOuter) ** .76)
   const backAt = (r: number): number => dishAt(r) - .0135
   const webHeight = (y: number, z: number): number => dishAt(Math.hypot(y, z))
   const backHeight = (y: number, z: number): number => backAt(Math.hypot(y, z))
   const hubFlatHeight = (): number => hubBowlX
 
-  const collarLoop = circleLoopCCW([0, 0], rCollar, full ? 48 : 24)
+  const collarLoop = circleLoopCCW([0, 0], rCollar, full ? 48 : (front ? 28 : 16))
   const collarSeamOffset = .0018
   const collarSeamPts = collarLoop.map(({ p, n }) => [p[0] + n[0] * collarSeamOffset, p[1] + n[1] * collarSeamOffset] as Pt2)
 
-  const hubDiscSegs = full ? 72 : 28
+  const hubDiscSegs = full ? 72 : (front ? 36 : 18)
   const hubInnerPts = Array.from({ length: hubDiscSegs }, (_, i) => polar2(rHubInner, (i / hubDiscSegs) * tau))
   const hubOuterLoop = circleLoopCCW([0, 0], rHubOuter, hubDiscSegs)
   const hubOuterPts = hubOuterLoop.map(({ p }) => p)
 
-  const outerCount = full ? 120 : 50
+  const barrelCount = full ? 180 : (front ? 75 : 30)
+  const outerCount = barrelCount
   const outerWebPts = Array.from({ length: outerCount }, (_, i) => polar2(rWebOuter, (i / outerCount) * tau))
   const windowSeamHoles = windowLoops.map((loop) => loop.map(({ p, n }) => [p[0] + n[0] * tSeam, p[1] + n[1] * tSeam] as Pt2))
   const lugSeamHoles = lugLoops.map((loop) => loop.map(({ p, n }) => [p[0] + n[0] * tLugSeam, p[1] + n[1] * tLugSeam] as Pt2))
@@ -468,9 +582,13 @@ function forgedWheelAssembly(w: WheelSize, full: boolean): {
 
   for (const loop of windowLoops) {
     const sidewall: Profile = full
-      ? [[.0006, -.0135], [0, -.0126], [.0008, -.0074], [tDraft, -.0026]]
-      : [[.0006, -.0135], [0, -.0126], [tDraft, -.0026]]
-    const chamfer: Profile = [[tDraft, -.0026], [tSeam, 0]]
+      ? [[.0006, -.0135], [0, -.0126], [.0008, -.0074], [tDraft, -.0027]]
+      : [[.0006, -.0135], [0, -.0126], [tDraft, -.0027]]
+    const chamfer: Profile = full
+      ? [[tDraft, -.0027], [tDraft + .0009, -.0013], [tDraft + .0020, -.00035], [tSeam, 0]]
+      : front
+        ? [[tDraft, -.0027], [tDraft + .0013, -.0010], [tSeam, 0]]
+        : [[tDraft, -.0027], [tSeam, 0]]
     forgedParts.push(sweepLoopRibbon(loop, sidewall, webHeight))
     machinedParts.push(sweepLoopRibbon(loop, chamfer, webHeight))
   }
@@ -492,7 +610,6 @@ function forgedWheelAssembly(w: WheelSize, full: boolean): {
     machinedParts.push(sweepLoopRibbon(loop, [[.0007, -.0011], [tLugSeam, 0]], hubFlatHeight))
   }
 
-  const barrelCount = full ? 144 : 44
   // Connected stepped barrel behind the outset spoke web: decreasing axial coordinates keep barrel normals inward toward the hub/lens.
   const barrel = lathe([
     [face - .012, R + .0065], [face - .0020, R + .0024], [face - .0056, R + .0020],
@@ -504,10 +621,10 @@ function forgedWheelAssembly(w: WheelSize, full: boolean): {
 
   const flange = lathe([
     [face - .0020, R + .0024], [face + .0007, R + .0014], [face + .0016, R - .0006],
-    [face + .0008, R - .0024], [face - .0006, R - .0038],
+    [face + .0008, R - .0024], [face - .0006, R - .0038], [face - .0014, R - .0042],
   ], barrelCount)
 
-  const ringSegs = full ? 60 : 28
+  const ringSegs = full ? 60 : (front ? 32 : 16)
   const hub = lathe([
     [hubPlane - .0030, rCollar + .003], [hubPlane, rCollar], [hubPlane, rCap - .002],
     [hubPlane - .0020, rCap - .003], [hubPlane - .0020, .0002],
@@ -557,34 +674,51 @@ function caliper(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, 
   const half = rear ? .735 : 1.05
   const low = w.disc - (rear ? .058 : .066)
   const outer = w.disc + (rear ? .026 : .025)
-  const lowAt = curve([[0, .031], [.085, .012], [.21, 0], [.41, .001], [.58, .004], [.79, 0], [.92, .012], [1, .030]])
-  const highAt = curve([[0, -.029], [.08, -.011], [.19, -.004], [.34, 0], [.58, .001], [.76, -.002], [.92, -.008], [1, -.030]])
+  const lowAt = curve([[0, .032], [.085, .012], [.21, 0], [.41, .001], [.58, .004], [.79, 0], [.92, .012], [1, .031]])
+  const highAt = curve([[0, -.031], [.075, -.011], [.18, -.003], [.34, 0], [.58, .001], [.78, -.002], [.925, -.010], [1, -.032]])
   const crossPts: Profile = [
-    [.007, .052], [.0162, .125], [.0168, .175], [.0168, .765], [.0154, .825],
-    [.0055, .955], [-.014, 1], [-.040, .99], [-.055, .86], [-.058, .50],
-    [-.056, .16], [-.051, .071], [-.044, .13], [-.043, .76], [-.033, .83],
-    [-.012, .84], [.004, .80], [.005, .11],
+    [.0065, .054], [.0148, .105], [.0166, .155], [.0169, .32], [.0169, .62],
+    [.0166, .815], [.0160, .878], [.0146, .912], [.0102, .962], [.0032, .990],
+    [-.012, .998], [-.036, .992], [-.053, .89], [-.058, .50],
+    [-.056, .16], [-.051, .072], [-.044, .13], [-.043, .76],
+    [-.033, .83], [-.012, .84], [.004, .80], [.005, .11],
   ]
-  const sampleProfile = (v: number): Pt2 => {
-    const s = ((v % 1) + 1) % 1 * crossPts.length
+  const nPts = crossPts.length
+  const sampleStation = (v: number): Pt2 => {
+    const s = ((v % 1) + 1) % 1 * nPts
     const i = Math.floor(s), f = s - i
-    const a = crossPts[i % crossPts.length], b = crossPts[(i + 1) % crossPts.length]
+    const a = crossPts[i % nPts], b = crossPts[(i + 1) % nPts]
     return [mix(a[0], b[0], f), mix(a[1], b[1], f)]
   }
-  const grooveAt = (u: number, center: number, halfW: number): number => 1 - smooth(Math.abs(u - center), halfW * .42, halfW)
-  const body = (u: number, v: number): Point => {
-    const [x, t] = sampleProfile(v)
+  const grooveAt = (u: number, center: number, halfW: number): number => 1 - smooth(Math.abs(u - center), halfW * .38, halfW)
+  const placeArch = (u: number, x: number, t: number, relief = 0): Point => {
     const a = middle + half * (2 * u - 1)
-    const radius = mix(low + lowAt(u), outer + highAt(u), t)
-    const frontMask = smooth(x, .009, .0155) * smooth(t, .16, .22) * (1 - smooth(t, .74, .82))
-    const channels = Math.max(grooveAt(u, .36, .046), grooveAt(u, .64, .046))
-    const endTaper = .78 + .22 * smooth(u, 0, .11) * (1 - smooth(u, .89, 1))
-    const padPocket = -(.0038 * smooth(t, .77, .83) * (1 - smooth(t, .92, .97)) * smooth(u, .22, .27) * (1 - smooth(u, .73, .78)) * (1 - grooveAt(u, .50, .048)))
-    const bossRelief = -.0028 * channels * frontMask + padPocket
-    return axisRoll(axis + x * endTaper + bossRelief, radius, a)
+    const endCurve = smooth(u, 0, .09) * (1 - smooth(u, .91, 1))
+    const endTaper = .58 + .42 * endCurve
+    const noseDrop = .0038 * (1 - endCurve) * smooth(t, .55, .96)
+    const radius = mix(low + lowAt(u), outer + highAt(u) - noseDrop, t)
+    return axisRoll(axis + x * endTaper + relief, radius, a)
   }
-  const sections = full ? 36 : 18
-  const cast: T.BufferGeometry[] = [patch(body, full ? 64 : 32, sections, [-1, 0, 0])]
+  const body = (u: number, v: number): Point => {
+    const [x, t] = sampleStation(v)
+    const cheekMask = smooth(x, .011, .0160) * smooth(t, .20, .27) * (1 - smooth(t, .76, .84))
+    const flutes = Math.max(grooveAt(u, .365, .042), grooveAt(u, .635, .042))
+    let boss = 0
+    for (const bu of rear ? [.33, .67] : [.235, .500, .765]) {
+      const du = (u - bu) / .078, dt = (t - .48) / .24
+      const d = Math.hypot(du, dt)
+      boss = Math.max(boss, 1 - smooth(d, .62, 1.0))
+    }
+    const topWindow = smooth(t, .885, .93) * (1 - smooth(t, .968, .995)) * smooth(x, -.032, -.018) * (1 - smooth(x, .001, .009))
+      * Math.max(
+        smooth(u, .21, .265) * (1 - smooth(u, .435, .49)),
+        smooth(u, .51, .565) * (1 - smooth(u, .735, .79)),
+      )
+    return placeArch(u, x - .0030 * topWindow, t - .0060 * topWindow, (.0017 * boss - .0018 * flutes) * cheekMask)
+  }
+  const sections = full ? (rear ? nPts : nPts * 2) : nPts
+  const uSpan = full ? (rear ? 36 : 72) : (rear ? 12 : 34)
+  const cast: T.BufferGeometry[] = [patch(body, uSpan, sections, [-1, 0, 0])]
   for (const end of [0, 1]) {
     const a = middle + half * (2 * end - 1)
     const normal = axisRoll(0, 2 * end - 1, a + Math.PI / 2)
@@ -592,82 +726,245 @@ function caliper(w: WheelSize, full: boolean, axis: number): [T.BufferGeometry, 
     cast.push(polygon(rim, normal))
   }
   const rail = patch((u, v) => {
-    const p = body(mix(.135, .864, u), mix(.135, .178, v))
+    const p = body(mix(.135, .864, u), mix(.065, .115, v))
     const taper = Math.sin(Math.PI * u) ** .45
-    return [p[0] + .0022 * taper * Math.sin(Math.PI * v), p[1], p[2]]
+    return [p[0] + .0020 * taper * Math.sin(Math.PI * v), p[1], p[2]]
   }, full ? 24 : 10, 3, [1, 0, 0])
   const clips: T.BufferGeometry[] = []
   const fasteners: T.BufferGeometry[] = []
-  for (const [u, vPos] of [[.15, .11], [.36, .19], [.64, .19], [.85, .11]] as const) {
+  for (const [u, vPos] of [[.15, .09], [.365, .24], [.635, .24], [.85, .09]] as const) {
     const [x, y, z] = body(u, vPos)
-    clips.push(disk(.0062, .0030, x + .0008, full ? 16 : 8).translate(0, y, z))
+    clips.push(disk(.0058, .0028, x + .0006, full ? 16 : 8).translate(0, y, z))
     fasteners.push(lathe([
-      [x + .0008, .0042], [x + .0032, .0038], [x + .0032, .0020], [x + .0014, .0017], [x + .0014, .0002],
+      [x + .0006, .0039], [x + .0028, .0035], [x + .0028, .0019], [x + .0012, .0016], [x + .0012, .0002],
     ], full ? 12 : 6).translate(0, y, z))
+  }
+  if (!rear) {
+    const [bx, by, bz] = body(.908, .31)
+    clips.push(disk(.0052, .0022, bx + .0005, full ? 14 : 8).translate(0, by, bz))
+    fasteners.push(lathe([
+      [bx + .0006, .0036], [bx + .0036, .0032], [bx + .0052, .0021], [bx + .0066, .0026], [bx + .0076, .0017], [bx + .0076, .0002],
+    ], full ? 12 : 8).translate(0, by, bz))
   }
   return [joined([...cast, rail]), joined(clips), joined(fasteners)]
 }
 
 export function createWheels(parent: T.Group, m: Palette, full: boolean): Point {
+  const lodTag = full ? 'full' : 'blockout'
   const makeTireRubber = (w: WheelSize, label: string) => {
     const mat = m.tag(new T.MeshPhysicalMaterial({
-      color: full ? 0x23272c : 0x343940,
-      roughness: full ? .78 : .70,
+      color: full ? 0x24282e : 0x343941,
+      roughness: full ? .77 : .73,
       metalness: .02,
-      specularIntensity: .54,
-      envMapIntensity: 1.25,
+      clearcoat: .01,
+      clearcoatRoughness: .16,
+      specularIntensity: .58,
+      envMapIntensity: 1.30,
     }), 'none')
-    if (full) {
-      const id = `wheel tire vulcanized grain ${label}`
-      const seed = stream(id).range(.1, 21)
-      patchMaterial(mat, {
-        id,
-        uniforms: {
-          wheelTireSeed: { value: seed },
-          wheelTireRadius: { value: w.radius },
-        },
-        apply(shader) {
-          shader.vertexShader = 'varying vec3 wheelTirePt;\n'
-            + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nwheelTirePt = position;')
-          shader.fragmentShader = `varying vec3 wheelTirePt;
-            uniform float wheelTireSeed;
-            uniform float wheelTireRadius;
-            float wheelTireHash(vec3 p) {
-              p = fract(p * vec3(0.1031, 0.0973, 0.1099));
-              p += dot(p, p.yzx + wheelTireSeed + 19.19);
-              return fract((p.x + p.y) * p.z);
-            }
-          ` + shader.fragmentShader
-            .replace('#include <color_fragment>', `#include <color_fragment>
-              float wtGrain = wheelTireHash(floor(wheelTirePt * 1450.0));
-              float wtWeight = 1.0 - smoothstep(0.00035, 0.0022, length(fwidth(wheelTirePt)));
-              float wtTread = 1.0 - smoothstep(0.095, 0.125, abs(wheelTirePt.x));
-              float wtR = length(wheelTirePt.yz);
-              float wtShoulder = smoothstep(wheelTireRadius - 0.052, wheelTireRadius - 0.018, wtR)
-                * (1.0 - smoothstep(wheelTireRadius - 0.004, wheelTireRadius + 0.003, wtR));
-              float wtUpper = smoothstep(-0.02, 0.18, wheelTirePt.y);
-              float wtSheen = wtShoulder * wtUpper;
-              diffuseColor.rgb *= (1.0 + (wtGrain - 0.5) * 0.10 * wtWeight) * mix(1.0, 0.80, wtTread) * mix(1.0, 1.72, wtSheen);
-            `)
-            .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-              roughnessFactor = clamp(
-                roughnessFactor + (wtGrain - 0.5) * 0.08 * wtWeight - 0.14 * wtTread - 0.24 * wtSheen,
-                0.52,
-                0.92
-              );
-            `)
-        },
-      })
-    }
+    const id = `wheel tire vulcanized grain ${lodTag} ${label}`
+    const seed = stream(id).range(.1, 21)
+    patchMaterial(mat, {
+      id,
+      uniforms: {
+        wheelTireSeed: { value: seed },
+        wheelTireRadius: { value: w.radius },
+        wheelTireLoaded: { value: w.loaded },
+        wheelTireGrainAmt: { value: full ? 1 : 0 },
+      },
+      apply(shader) {
+        shader.vertexShader = 'attribute float tireCavity;\nattribute vec2 tireUv;\nvarying float wheelTireCav;\nvarying vec2 wheelTireUv;\nvarying vec3 wheelTirePt;\nvarying vec3 wheelTireUpView;\n'
+          + shader.vertexShader.replace(
+            '#include <begin_vertex>',
+            '#include <begin_vertex>\nwheelTirePt = position;\nwheelTireCav = tireCavity;\nwheelTireUv = tireUv;\nwheelTireUpView = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);',
+          )
+        shader.fragmentShader = `varying float wheelTireCav;
+          varying vec2 wheelTireUv;
+          varying vec3 wheelTirePt;
+          varying vec3 wheelTireUpView;
+          uniform float wheelTireSeed;
+          uniform float wheelTireRadius;
+          uniform float wheelTireLoaded;
+          uniform float wheelTireGrainAmt;
+          float wheelTireHash(vec3 p) {
+            p = fract(p * vec3(0.1031, 0.0973, 0.1099));
+            p += dot(p, p.yzx + wheelTireSeed + 19.19);
+            return fract((p.x + p.y) * p.z);
+          }
+          float wtSipePulse(float p, float w0, float w1, float fw) {
+            float d = abs(p - floor(p + 0.5));
+            return 1.0 - smoothstep(w0, w1 + fw, d);
+          }
+        ` + shader.fragmentShader
+          .replace('#include <color_fragment>', `#include <color_fragment>
+            float wtGrain = wheelTireHash(floor(wheelTirePt * 1450.0));
+            float wtWeight = wheelTireGrainAmt * (1.0 - smoothstep(0.00035, 0.0022, length(fwidth(wheelTirePt))));
+            float wtU = wheelTireUv.x;
+            float wtV = wheelTireUv.y;
+            float wtPitch = wtU * 48.0;
+            float wtFw = min(0.22, fwidth(wtPitch));
+            float wtSipeFade = 1.0 - smoothstep(0.16, 0.34, wtFw);
+            float wtSipeOuter = wtSipePulse(wtPitch + (wtV - 0.660) * 2.2, 0.032, 0.088, wtFw)
+              * smoothstep(0.664, 0.674, wtV) * (1.0 - smoothstep(0.702, 0.716, wtV));
+            float wtSipeRib1 = wtSipePulse(wtPitch - 0.24 + (wtV - 0.608) * 2.2, 0.030, 0.084, wtFw)
+              * smoothstep(0.570, 0.582, wtV) * (1.0 - smoothstep(0.642, 0.654, wtV));
+            float wtSipeRib2 = wtSipePulse(wtPitch + 0.18 - (wtV - 0.505) * 2.0, 0.028, 0.080, wtFw)
+              * smoothstep(0.466, 0.478, wtV) * (1.0 - smoothstep(0.542, 0.554, wtV));
+            float wtSipeRib3 = wtSipePulse(wtPitch - 0.36 + (wtV - 0.399) * 2.0, 0.028, 0.080, wtFw)
+              * smoothstep(0.360, 0.372, wtV) * (1.0 - smoothstep(0.436, 0.448, wtV));
+            float wtSipeIn = wtSipePulse(wtPitch + 0.35 - (wtV - 0.346) * 2.1, 0.034, 0.092, wtFw)
+              * smoothstep(0.276, 0.292, wtV) * (1.0 - smoothstep(0.330, 0.342, wtV));
+            float wtSipe = wtSipeFade * max(max(wtSipeOuter, wtSipeRib1), max(max(wtSipeRib2, wtSipeRib3), wtSipeIn));
+            float wtMainCh = max(
+              max(1.0 - smoothstep(0.0066, 0.0148, abs(wtV - 0.346)), 1.0 - smoothstep(0.0066, 0.0148, abs(wtV - 0.452))),
+              max(1.0 - smoothstep(0.0066, 0.0148, abs(wtV - 0.558)), 1.0 - smoothstep(0.0066, 0.0148, abs(wtV - 0.658)))
+            );
+            float wtShCh = 1.0 - smoothstep(0.0024, 0.0064, abs(wtV - 0.700));
+            float wtCav = clamp(max(wheelTireCav, max(wtMainCh, max(0.46 * wtShCh, 0.54 * wtSipe))), 0.0, 1.0);
+            float wtTread = smoothstep(0.26, 0.31, wtV) * (1.0 - smoothstep(0.705, 0.745, wtV));
+            float wtYRel = wheelTirePt.y + wheelTireLoaded;
+            float wtDeckNear = 1.0 - smoothstep(0.03, 0.30, wtYRel);
+            float wtDeckWetZone = 0.50 + 0.50 * wtDeckNear;
+            float wtWetWater = clamp((smoothstep(0.34, 0.84, wtMainCh) + 0.62 * smoothstep(0.30, 0.88, wtSipe) + 0.48 * wtShCh) * wtDeckWetZone, 0.0, 1.0);
+            float wtRibEdge = wtTread * (1.0 - smoothstep(0.04, 0.38, wtCav)) * smoothstep(0.004, 0.022, wtYRel);
+            float wtFootZ = exp(-pow(wheelTirePt.z / 0.105, 2.0)) * smoothstep(0.73, 0.82, max(wtV, 1.0 - wtV));
+            float wtBulgeUpper = wtFootZ * smoothstep(0.016, 0.032, wtYRel) * (1.0 - smoothstep(0.048, 0.075, wtYRel));
+            float wtBulgeTuck = wtFootZ * (1.0 - smoothstep(0.003, 0.018, wtYRel));
+            diffuseColor.rgb *= (1.0 + (wtGrain - 0.5) * 0.08 * wtWeight)
+              * mix(1.0, 0.86, wtTread)
+              * mix(1.0, 0.24, wtCav)
+              * mix(1.0, 1.18, wtRibEdge)
+              * mix(1.0, 1.22, wtBulgeUpper)
+              * mix(1.0, 0.82, wtBulgeTuck);
+          `)
+          .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+            roughnessFactor = clamp(
+              roughnessFactor + (wtGrain - 0.5) * 0.06 * wtWeight - 0.07 * wtTread - 0.08 * wtRibEdge,
+              0.54,
+              0.92
+            );
+            roughnessFactor = mix(roughnessFactor, 0.14, wtWetWater);
+          `)
+          .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+            float wtReliefH = -0.0016 * wtSipe - (1.0 - 0.65 * wheelTireGrainAmt) * 0.0022 * wtMainCh - 0.0009 * wtShCh;
+            vec3 wtDx = dFdx(vViewPosition), wtDy = dFdy(vViewPosition);
+            vec3 wtR1 = cross(wtDy, normal), wtR2 = cross(normal, wtDx);
+            float wtDet = dot(wtDx, wtR1);
+            vec3 wtGrad = (dFdx(wtReliefH) * wtR1 + dFdy(wtReliefH) * wtR2) * sign(wtDet);
+            normal = normalize(max(abs(wtDet), 1e-9) * normal - wtGrad);
+          `)
+          .replace('#include <clearcoat_normal_fragment_maps>', `#include <clearcoat_normal_fragment_maps>
+            float wtMeniscusH = 0.0014 * (wtMainCh * wtMainCh + 0.55 * wtSipe * wtSipe);
+            vec3 wtCcGrad = (dFdx(wtMeniscusH) * wtR1 + dFdy(wtMeniscusH) * wtR2) * sign(wtDet);
+            vec3 wtCcBase = normalize(max(abs(wtDet), 1e-9) * clearcoatNormal - wtCcGrad);
+            clearcoatNormal = normalize(mix(wtCcBase, normalize(wtCcBase + 0.55 * wheelTireUpView), wtWetWater * (0.35 + 0.65 * wtDeckNear)));
+          `)
+          .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+            #ifdef USE_CLEARCOAT
+              material.clearcoat = clamp(0.01 + 0.88 * wtWetWater, 0.0, 0.90);
+              material.clearcoatRoughness = mix(0.28, 0.08, wtWetWater);
+            #endif
+          `)
+      },
+    })
     return mat
   }
-  const tireBead = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x2c3037 : 0x3a3f47,
-    roughness: .58,
+  const sidewallBand = m.tag(new T.MeshPhysicalMaterial({
+    color: full ? 0x323943 : 0x464e59,
+    roughness: full ? .42 : .40,
     metalness: .04,
-    specularIntensity: .60,
-    envMapIntensity: 1.25,
+    clearcoat: full ? .20 : .12,
+    clearcoatRoughness: .34,
+    specularIntensity: .76,
+    envMapIntensity: 1.38,
   }), 'none')
+  const makeRotorFinish = (w: WheelSize, axis: number, label: string) => {
+    const mat = m.tag(new T.MeshPhysicalMaterial({
+      color: full ? 0x525862 : 0x60666f,
+      metalness: full ? .42 : .35,
+      roughness: full ? .48 : .47,
+      clearcoat: full ? .16 : .10,
+      clearcoatRoughness: .34,
+      specularIntensity: .80,
+      envMapIntensity: 1.36,
+    }), 'none')
+    const id = `wheel rotor swept finish ${lodTag} ${label}`
+    const seed = stream(id).range(.1, 21)
+    patchMaterial(mat, {
+      id,
+      uniforms: {
+        wrSeed: { value: seed },
+        wrOuterR: { value: w.disc },
+        wrMidX: { value: axis - .5 * w.discDepth },
+        wrHalfSlot: { value: .5 * w.discDepth - .0088 },
+        wrVanes: { value: full ? 40 : (w === frontWheel ? 32 : 12) },
+        wrGrainAmt: { value: full ? 1 : 0 },
+      },
+      apply(shader) {
+        shader.vertexShader = 'varying vec3 wheelRotorPt;\n'
+          + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nwheelRotorPt = position;')
+        shader.fragmentShader = `varying vec3 wheelRotorPt;
+          uniform float wrSeed;
+          uniform float wrOuterR;
+          uniform float wrMidX;
+          uniform float wrHalfSlot;
+          uniform float wrVanes;
+          uniform float wrGrainAmt;
+          float wrHash(vec3 p) {
+            p = fract(p * vec3(0.1031, 0.0973, 0.1099));
+            p += dot(p, p.yzx + wrSeed + 19.19);
+            return fract((p.x + p.y) * p.z);
+          }
+          float wrNoise1(float x) {
+            float i = floor(x);
+            float f = fract(x);
+            float u = f * f * (3.0 - 2.0 * f);
+            float a = wrHash(vec3(i, 3.1, 7.7));
+            float b = wrHash(vec3(i + 1.0, 3.1, 7.7));
+            return mix(a, b, u) - 0.5;
+          }
+          float wrRingNoise(float t, float period) {
+            float x = fract(t) * period;
+            float i = floor(x);
+            float f = fract(x);
+            float u = f * f * (3.0 - 2.0 * f);
+            float a = wrHash(vec3(mod(i, period), 11.3, 5.9));
+            float b = wrHash(vec3(mod(i + 1.0, period), 11.3, 5.9));
+            return mix(a, b, u) - 0.5;
+          }
+        ` + shader.fragmentShader
+          .replace('#include <color_fragment>', `#include <color_fragment>
+            float wrR = length(wheelRotorPt.yz);
+            float wrFoot = length(fwidth(wheelRotorPt.yz));
+            float wrSwept = smoothstep(0.111, 0.117, wrR) * (1.0 - smoothstep(wrOuterR - 0.0088, wrOuterR - 0.0038, wrR));
+            float wrInSlot = 1.0 - smoothstep(wrHalfSlot - 0.0012, wrHalfSlot + 0.0006, abs(wheelRotorPt.x - wrMidX));
+            float wrOct1 = (1.0 - smoothstep(0.16, 0.42, wrFoot * 105.0)) * wrNoise1(wrR * 105.0);
+            float wrOct2 = (1.0 - smoothstep(0.16, 0.42, wrFoot * 235.0)) * wrNoise1(wrR * 235.0);
+            float wrRings = 0.70 * wrOct1 + 0.45 * wrOct2;
+            float wrTheta = atan(wheelRotorPt.y, wheelRotorPt.z);
+            float wrTurn = wrTheta * 0.15915494 + 0.5;
+            float wrAngFoot = wrFoot / max(0.08, wrR);
+            float wrVaneFade = 1.0 - smoothstep(0.025, 0.075, wrAngFoot);
+            float wrSpokeFade = 1.0 - smoothstep(0.012, 0.036, wrAngFoot);
+            float wrRadial = 0.085 * cos(wrTheta * wrVanes) * wrVaneFade
+              + 0.095 * wrRingNoise(wrTurn, 72.0) * wrSpokeFade;
+            float wrGrain = wrHash(floor(wheelRotorPt * 920.0));
+            float wrGrainW = wrGrainAmt * (1.0 - smoothstep(0.00045, 0.0022, wrFoot));
+            float wrBandGain = mix(0.50, 1.24, wrSwept);
+            wrBandGain = mix(wrBandGain, 1.60, wrInSlot);
+            diffuseColor.rgb *= wrBandGain
+              * (1.0 + wrSwept * (0.24 * wrRings + wrRadial) + (wrGrain - 0.5) * 0.16 * wrGrainW);
+          `)
+          .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+            roughnessFactor = clamp(
+              roughnessFactor + mix(0.16, -0.11, wrSwept) - 0.17 * wrInSlot - 0.08 * wrSwept * wrRings + (wrGrain - 0.5) * 0.11 * wrGrainW,
+              0.25,
+              0.88
+            );
+          `)
+      },
+    })
+    return mat
+  }
   const wheelSatinFace = m.tag(new T.MeshPhysicalMaterial({
     color: full ? 0x1c2027 : 0x353a43,
     metalness: .46,
@@ -695,21 +992,22 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
     envMapIntensity: full ? 1.42 : 1.05,
   }), 'none')
   const wheelChamfer = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x747e8e : 0x58606d,
-    metalness: full ? .48 : .22,
-    roughness: full ? .32 : .44,
-    clearcoat: full ? .22 : .06,
-    clearcoatRoughness: .34,
-    specularIntensity: full ? .70 : .48,
-    envMapIntensity: full ? 1.42 : 1.00,
+    color: full ? 0x2c323c : 0x454c57,
+    metalness: full ? .56 : .38,
+    roughness: full ? .23 : .29,
+    clearcoat: full ? .48 : .28,
+    clearcoatRoughness: .22,
+    specularIntensity: full ? .94 : .74,
+    envMapIntensity: full ? 1.56 : 1.24,
   }), 'none')
   const wheelLipLine = m.tag(new T.MeshPhysicalMaterial({
-    color: full ? 0x6d7685 : 0x727a88,
-    metalness: full ? .56 : .54,
-    roughness: .27,
-    clearcoat: .48,
-    clearcoatRoughness: .26,
-    envMapIntensity: 1.42,
+    color: full ? 0x363d49 : 0x525966,
+    metalness: full ? .58 : .48,
+    roughness: .24,
+    clearcoat: .50,
+    clearcoatRoughness: .22,
+    specularIntensity: .92,
+    envMapIntensity: 1.50,
   }), 'none')
   const lugFinish = m.tag(new T.MeshPhysicalMaterial({
     color: full ? 0x3e444f : 0x454b55,
@@ -725,16 +1023,15 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
     clearcoat: .58,
     envMapIntensity: 1.35,
   }), 'none')
-  const caliperFinish = full
-    ? m.tag(new T.MeshPhysicalMaterial({
-        color: 0x5c171b,
-        metalness: .28,
-        roughness: .44,
-        clearcoat: .20,
-        clearcoatRoughness: .36,
-        envMapIntensity: .85,
-      }), 'none')
-    : m.caliper
+  const caliperFinish = m.tag(new T.MeshPhysicalMaterial({
+    color: full ? 0x741b1f : 0x6a6f77,
+    metalness: full ? .30 : .32,
+    roughness: full ? .33 : .31,
+    clearcoat: full ? .52 : .55,
+    clearcoatRoughness: full ? .20 : .19,
+    specularIntensity: .82,
+    envMapIntensity: full ? 1.24 : 1.18,
+  }), 'none')
   const hatFinish = m.tag(new T.MeshPhysicalMaterial({
     color: full ? 0x1c1f24 : 0x2c3037,
     metalness: full ? .68 : .45,
@@ -744,9 +1041,11 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
 
   let anchor: Point = [0, 0, 0]
   for (const w of [frontWheel, rearWheel]) {
-    const tireRubber = makeTireRubber(w, w === frontWheel ? 'front' : 'rear')
+    const axleLabel = w === frontWheel ? 'front' : 'rear'
+    const tireRubber = makeTireRubber(w, axleLabel)
     const H = w.width / 2
     const axis = H - .058, face = H - .008, hubPlane = face - .030, hubFace = hubPlane + .0018
+    const rotorFinish = makeRotorFinish(w, axis, axleLabel)
     const tire = tireGeometry(w, full)
     const { satinWeb, forging, barrel, machinedSpokes, flange, hub, cap, lugs } = forgedWheelAssembly(w, full)
     const [brake, apertures, hat] = rotor(w, full, axis)
@@ -755,7 +1054,7 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
       const [, y, z] = axisRoll(0, .1065, tau * i / 10 + .134)
       return lathe([
         [axis - .0035, .0064], [axis + .0018, .0058], [axis + .0018, .0031], [axis - .0030, .0027],
-      ], full ? 16 : 10).translate(0, y, z)
+      ], full ? (w === frontWheel ? 16 : 10) : 6).translate(0, y, z)
     }))
     const sidewall = sidewallReliefGeometry(w, full)
     for (const side of [1, -1]) {
@@ -772,7 +1071,7 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
       add(group, 'flat recessed hub plate', hub, wheelDeepGloss)
       add(group, 'flat center cap', cap, wheelSatinFace)
       add(group, 'five lug nuts', lugs, lugFinish)
-      add(group, 'drilled ceramic rotor', brake, m.brake)
+      add(group, 'drilled ceramic rotor', brake, rotorFinish)
       add(group, 'recessed drill wells and rotor vents', apertures, m.dark)
       add(group, 'floating rotor hat', hat, hatFinish)
       add(group, 'rotor hat bobbins', pins, wheelHardware)
@@ -780,7 +1079,7 @@ export function createWheels(parent: T.Group, m: Palette, full: boolean): Point 
       add(group, 'fixed brake caliper', castCaliper, caliperFinish)
       add(group, 'caliper pin seats', clips, m.matte)
       add(group, 'caliper pin heads', fasteners, wheelHardware)
-      add(group, 'molded sidewall relief', sidewall, tireBead)
+      add(group, 'molded sidewall relief', sidewall, sidewallBand)
       parent.add(group)
     }
     if (w === frontWheel) anchor = [w.x + hubFace, w.loaded, w.z]
