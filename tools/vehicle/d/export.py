@@ -28,7 +28,7 @@ PART = {
     'paint': 'closed body panels and returns', 'matte': 'black trim, splitter and frames', 'glass': 'windscreen and side glass',
     'dark': 'recessed backing and intake walls', 'hot': 'formed hexagonal outlet', 'optics': 'headlamp outer lens',
 }
-RENAME = {'rim': 'forged', 'disc': 'brake', 'black': 'matte'}
+RENAME = {'rim': 'forged', 'nut': 'forged', 'disc': 'brake', 'black': 'matte'}
 
 
 def matlib(name):

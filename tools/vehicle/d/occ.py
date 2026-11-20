@@ -21,6 +21,7 @@ from OCP.ShapeAnalysis import ShapeAnalysis_Surface
 from kernel_np import spline
 import os
 G1 = bool(os.environ.get('OCC_G1'))
+MVS = os.environ.get('OCC_MVS', '1') == '1'
 VERBOSE = bool(os.environ.get('OCC_VERBOSE'))
 
 
@@ -78,10 +79,54 @@ def _cut(face, hole_edges):
     wire = sfw.Wire()
     mf = BRepBuilderAPI_MakeFace(face)
     mf.Add(TopoDS.Wire(wire.Reversed()))
+    import time
+    t0 = time.time()
     fx = ShapeFix_Face(mf.Face())
     fx.Perform()
+    if VERBOSE:
+        print('fix', f['name'], round(time.time() - t0, 2), flush=True)
     fx.FixOrientation()
     return TopoDS.Face(fx.Face())
+
+
+def _pressure(f, es, samples, edges):
+    import mvs
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeWire, BRepBuilderAPI_MakeFace
+    from OCP.ShapeFix import ShapeFix_Face
+    from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
+    loop = mvs.chain([samples[e] for e in f['loop']])
+    holes = [mvs.chain([samples[e] for e in h]) for h in f['holes']]
+    inner = [samples[e] for e in f.get('inner', ())]
+    cen = [p for p in inner if np.abs(p[:, 0]).max() < 1e-6]
+    oth = [p for p in inner if np.abs(p[:, 0]).max() >= 1e-6]
+    R = mvs.solve(loop, holes, np.vstack(cen) if cen else None, oth, f['crown'], f['hint'], sym=bool(cen))
+    if R is None:
+        return None
+    surf = mvs.occ_surface(R)
+    w = BRepBuilderAPI_MakeWire()
+    for e in es:
+        w.Add(e)
+    mf = BRepBuilderAPI_MakeFace(surf, w.Wire(), True)
+    import time
+    t0 = time.time()
+    fx = ShapeFix_Face(mf.Face())
+    fx.Perform()
+    if VERBOSE:
+        print('fix', f['name'], round(time.time() - t0, 2), flush=True)
+    fx.FixOrientation()
+    face = TopoDS.Face(fx.Face())
+    c, e1, e2, n = R['c'], R['e1'], R['e2'], R['n']
+    def dev(P):
+        P = np.asarray(P, float)[::4]
+        uv = np.stack([(P - c) @ e1, (P - c) @ e2], 1)
+        d = 0.0
+        for (u, v), p in zip(uv, P):
+            q = surf.Value(float(u), float(v))
+            d = max(d, abs((np.array([q.X(), q.Y(), q.Z()]) - p) @ n))
+        return d
+    err = dev(np.vstack([loop] + holes + oth))
+    cerr = dev(np.vstack(cen)) if cen else 0.0
+    return face, err, cerr
 
 
 def _center(face, hint):
@@ -174,6 +219,28 @@ def build(half, deflection=float(os.environ.get("OCC_DEFL", 0.0003)), angle=floa
         hs = [[edges[en] for en in h] for h in f['holes']]
         free = [e for h in hs for e in h] if f.get('through', True) else []
         free += [edges[en] for en in f.get('inner', ())]
+        pf = None
+        if MVS and not f.get('plate'):
+            try:
+                pf = _pressure(f, es, samples, edges)
+            except Exception as ex:
+                log(f'pressure {f["name"]}: {ex}')
+                pf = None
+            if pf is not None and pf[1] > 2e-4:
+                log(f'pressure {f["name"]}: boundary error {pf[1] * 1000:.2f} mm, plate used')
+                pf = None
+        if pf is not None:
+            face, err, cerr = pf
+            if cerr > 3e-3:
+                log(f'pressure {f["name"]}: centerline off by {cerr * 1000:.1f} mm')
+            if VERBOSE:
+                print('pressure', f['name'], f'{err * 1000:.3f} mm', flush=True)
+            for h in hs:
+                face = _cut(face, h)
+            faces[f['name']] = face
+            for en in f['loop']:
+                owner.setdefault(en, f['name'])
+            continue
         try:
             base = f['name'][:-2] if f['name'].endswith('.R') else f['name']
             cands = [chosen[base]] if base in chosen else CANDIDATES

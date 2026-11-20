@@ -80,7 +80,8 @@ def _solids(w, fine):
         d = 0.00015 if fine else 0.0006
         a = 0.12 if fine else 0.35
         _SOLIDS[key] = {
-            'spokes': wheel_occ.mesh(wheel_occ.spoke_face(w), d, a),
+            'spokes': wheel_occ.mesh(wheel_occ.spoke_face(w, pockets=True), d, a),
+            'nuts': wheel_occ.mesh(wheel_occ.nuts(w), d, a),
             'disc': wheel_occ.mesh(wheel_occ.disc(w, holes=True), d, a),
             'caliper': wheel_occ.mesh(wheel_occ.caliper(w), d, a),
         }
@@ -100,12 +101,13 @@ def wheel(w, side_sign, label, fine=False):
     face = _occ_obj(f'{label} spokes', *S['spokes'], 'rim')
     disc = _occ_obj(f'{label} disc', *S['disc'], 'disc')
     cal = _occ_obj(f'{label} caliper', *S['caliper'], 'caliper')
+    nuts = _occ_obj(f'{label} nuts', *S['nuts'], 'nut')
     fx = rimw - 0.010
     dc = (fx - 0.095) - 0.002 - (w['disc_t'] / 2 + 0.045)
     disc.location.x = dc
     cal.location.x = dc
-    cap = _lathe([(0.0, fx - 0.026), (0.030, fx - 0.026), (0.038, fx - 0.028), (0.042, fx - 0.034), (0.042, fx - 0.05)], 64, f'{label} center cap', 'rim')
-    for ob in (tire, rim, face, disc, cal, cap):
+    cap = _lathe([(0.0, fx - 0.026), (0.024, fx - 0.026), (0.030, fx - 0.028), (0.034, fx - 0.034), (0.034, fx - 0.05)], 64, f'{label} center cap', 'rim')
+    for ob in (tire, rim, face, disc, cal, cap, nuts):
         ob.parent = root
     root.matrix_world = Matrix.Translation(Vector(bl.b((side_sign * w['x'], w['hub'], w['z']))))
     if side_sign < 0:

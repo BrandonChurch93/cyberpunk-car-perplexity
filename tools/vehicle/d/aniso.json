@@ -1,0 +1,456 @@
+{
+ "a_pillar": [
+  30,
+  0.04
+ ],
+ "a_pillar.R": [
+  150,
+  0.04
+ ],
+ "band": [
+  0,
+  0.04
+ ],
+ "band_s": [
+  0,
+  0.04
+ ],
+ "band_s.R": [
+  0,
+  0.04
+ ],
+ "blade": [
+  120,
+  0.04
+ ],
+ "blade.R": [
+  60,
+  0.04
+ ],
+ "blade_face": [
+  90,
+  0.12
+ ],
+ "blade_face_s": [
+  0,
+  0.04
+ ],
+ "blade_face_s.R": [
+  0,
+  0.04
+ ],
+ "blade_top": [
+  90,
+  0.04
+ ],
+ "blade_top_s": [
+  30,
+  0.04
+ ],
+ "blade_top_s.R": [
+  120,
+  0.04
+ ],
+ "blade_under": null,
+ "blade_under_s": [
+  90,
+  0.04
+ ],
+ "blade_under_s.R": [
+  30,
+  0.04
+ ],
+ "corner": [
+  90,
+  0.04
+ ],
+ "corner.R": [
+  60,
+  0.04
+ ],
+ "diffuser": [
+  0,
+  0.04
+ ],
+ "door_low": [
+  90,
+  0.04
+ ],
+ "door_low.R": [
+  90,
+  0.04
+ ],
+ "door_mid": [
+  90,
+  0.04
+ ],
+ "door_mid.R": [
+  90,
+  0.04
+ ],
+ "door_up": [
+  90,
+  0.04
+ ],
+ "door_up.R": [
+  90,
+  0.04
+ ],
+ "exh~back": null,
+ "exh~back.R": null,
+ "exh~wall~hex0": [
+  90,
+  0.04
+ ],
+ "exh~wall~hex0.R": [
+  90,
+  0.04
+ ],
+ "exh~wall~hex1": null,
+ "exh~wall~hex1.R": null,
+ "exh~wall~hex2": [
+  90,
+  0.04
+ ],
+ "exh~wall~hex2.R": [
+  90,
+  0.04
+ ],
+ "exh~wall~hex3": [
+  90,
+  0.04
+ ],
+ "exh~wall~hex3.R": [
+  90,
+  0.04
+ ],
+ "exh~wall~hex4": null,
+ "exh~wall~hex4.R": null,
+ "exh~wall~hex5": [
+  90,
+  0.04
+ ],
+ "exh~wall~hex5.R": [
+  90,
+  0.04
+ ],
+ "fender": [
+  0,
+  0.04
+ ],
+ "fender.R": [
+  0,
+  0.04
+ ],
+ "frame_top": [
+  0,
+  0.04
+ ],
+ "frame_top.R": [
+  0,
+  0.04
+ ],
+ "haunch_side": [
+  150,
+  0.04
+ ],
+ "haunch_side.R": [
+  30,
+  0.04
+ ],
+ "haunch_top": [
+  150,
+  0.04
+ ],
+ "haunch_top.R": [
+  30,
+  0.04
+ ],
+ "hood": [
+  90,
+  0.04
+ ],
+ "intake~back": null,
+ "intake~wall~arm_down": [
+  150,
+  0.12
+ ],
+ "intake~wall~arm_down.R": [
+  30,
+  0.12
+ ],
+ "intake~wall~arm_low": [
+  120,
+  0.12
+ ],
+ "intake~wall~arm_low.R": [
+  60,
+  0.12
+ ],
+ "intake~wall~bl_in": [
+  90,
+  0.04
+ ],
+ "intake~wall~bl_in.R": [
+  90,
+  0.04
+ ],
+ "intake~wall~bl_top": [
+  0,
+  0.04
+ ],
+ "intake~wall~bl_top.R": [
+  0,
+  0.04
+ ],
+ "intake~wall~int_top": [
+  0,
+  0.04
+ ],
+ "intake~wall~lamp_low": [
+  0,
+  0.04
+ ],
+ "intake~wall~lamp_low.R": [
+  0,
+  0.04
+ ],
+ "intake~wall~lip_top": [
+  0,
+  0.04
+ ],
+ "lamp_lens": [
+  150,
+  0.04
+ ],
+ "lamp_lens.R": [
+  30,
+  0.04
+ ],
+ "lamp~back": [
+  120,
+  0.04
+ ],
+ "lamp~back.R": [
+  30,
+  0.04
+ ],
+ "lamp~wall~lamp_low": [
+  0,
+  0.04
+ ],
+ "lamp~wall~lamp_low.R": [
+  0,
+  0.04
+ ],
+ "lamp~wall~lamp_outer": [
+  90,
+  0.04
+ ],
+ "lamp~wall~lamp_outer.R": [
+  90,
+  0.04
+ ],
+ "lamp~wall~lamp_top": [
+  0,
+  0.04
+ ],
+ "lamp~wall~lamp_top.R": [
+  0,
+  0.04
+ ],
+ "lip": null,
+ "nose_face": [
+  0,
+  0.12
+ ],
+ "notch": [
+  150,
+  0.04
+ ],
+ "notch.R": [
+  30,
+  0.04
+ ],
+ "q_front": [
+  120,
+  0.04
+ ],
+ "q_front.R": [
+  60,
+  0.04
+ ],
+ "q_tri": null,
+ "q_tri.R": null,
+ "q_up": [
+  60,
+  0.04
+ ],
+ "q_up.R": [
+  120,
+  0.04
+ ],
+ "rear_corner": [
+  90,
+  0.04
+ ],
+ "rear_corner.R": [
+  60,
+  0.04
+ ],
+ "rear_deck": [
+  90,
+  0.04
+ ],
+ "rear_low": [
+  0,
+  0.04
+ ],
+ "rear_low.R": [
+  0,
+  0.04
+ ],
+ "roof": null,
+ "side_glass": [
+  0,
+  0.04
+ ],
+ "side_glass.R": [
+  0,
+  0.04
+ ],
+ "sideint~back": [
+  60,
+  0.04
+ ],
+ "sideint~back.R": [
+  90,
+  0.04
+ ],
+ "sideint~wall~blade_a": [
+  0,
+  0.12
+ ],
+ "sideint~wall~blade_a.R": [
+  0,
+  0.12
+ ],
+ "sideint~wall~blade_b": null,
+ "sideint~wall~blade_b.R": null,
+ "sideint~wall~int_bot": null,
+ "sideint~wall~int_bot.R": null,
+ "sideint~wall~int_rear": [
+  90,
+  0.04
+ ],
+ "sideint~wall~int_rear.R": [
+  90,
+  0.04
+ ],
+ "sideint~wall~int_top_e": [
+  0,
+  0.04
+ ],
+ "sideint~wall~int_top_e.R": [
+  0,
+  0.04
+ ],
+ "sill": [
+  120,
+  0.04
+ ],
+ "sill.R": [
+  60,
+  0.04
+ ],
+ "splitter": null,
+ "strake_in": [
+  150,
+  0.04
+ ],
+ "strake_in.R": [
+  30,
+  0.04
+ ],
+ "tail_up": [
+  90,
+  0.04
+ ],
+ "tlamp~back": [
+  90,
+  0.12
+ ],
+ "tlamp~back.R": null,
+ "tlamp~wall~tl0": null,
+ "tlamp~wall~tl0.R": null,
+ "tlamp~wall~tl1": null,
+ "tlamp~wall~tl1.R": null,
+ "tlamp~wall~tl2": [
+  120,
+  0.12
+ ],
+ "tlamp~wall~tl2.R": [
+  60,
+  0.12
+ ],
+ "tlamp~wall~tl3": [
+  0,
+  0.04
+ ],
+ "tlamp~wall~tl3.R": [
+  0,
+  0.04
+ ],
+ "vent~back": [
+  30,
+  0.04
+ ],
+ "vent~back.R": [
+  60,
+  0.04
+ ],
+ "vent~wall~arch_f3": [
+  90,
+  0.04
+ ],
+ "vent~wall~arch_f3.R": [
+  90,
+  0.04
+ ],
+ "vent~wall~dd": [
+  0,
+  0.04
+ ],
+ "vent~wall~dd.R": [
+  0,
+  0.04
+ ],
+ "vent~wall~dlf": [
+  90,
+  0.04
+ ],
+ "vent~wall~dlf.R": [
+  90,
+  0.04
+ ],
+ "vent~wall~vent_bot": [
+  90,
+  0.04
+ ],
+ "vent~wall~vent_bot.R": [
+  90,
+  0.04
+ ],
+ "windshield": [
+  0,
+  0.04
+ ],
+ "wing_top": [
+  150,
+  0.04
+ ],
+ "wing_top.R": [
+  30,
+  0.04
+ ]
+}

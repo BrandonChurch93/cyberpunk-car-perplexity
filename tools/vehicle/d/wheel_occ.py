@@ -115,7 +115,7 @@ def _ccw(P):
     return P if a > 0 else P[::-1]
 
 
-def windows(rh=0.070, rs=0.125, rw=0.226, hs=0.019, ha0=0.019, ha1=0.016, delta=math.radians(25), n=5, phase=math.pi / 2):
+def windows(rh=0.054, rs=0.115, rw=0.226, hs=0.0165, ha0=0.0135, ha1=0.0115, delta=math.radians(17), n=5, phase=math.pi / 2):
     """2D window polygons of a five-arm Y spoke: one between each pair of Ys and one inside each Y."""
     out = []
     rt = rw + 0.01
@@ -207,26 +207,26 @@ def _chamfer_front(shape, d, pick):
     return ch.Shape()
 
 
-def spoke_face(w, draft=math.radians(3.5)):
+def spoke_face(w, draft=math.radians(3.5), pockets=False):
     """The five Y spoke face: a dished disc revolved from its section, windows cut as drafted lofts, front edges chamfered."""
     rimw = w['rim_w'] / 2
     fx = rimw - 0.010
-    r_end = w['rim'] - 0.010
-    front = [(0.0, fx - 0.034), (0.06, fx - 0.034), (0.10, fx - 0.027), (0.16, fx - 0.016), (0.20, fx - 0.010), (r_end, fx - 0.008)]
+    r_end = w['rim'] - 0.004
+    front = [(0.0, fx - 0.034), (0.06, fx - 0.034), (0.10, fx - 0.027), (0.16, fx - 0.016), (0.20, fx - 0.010), (r_end, fx - 0.006)]
     back = [(r_end, fx - 0.050), (0.20, fx - 0.054), (0.14, fx - 0.070), (0.085, fx - 0.095), (0.0, fx - 0.095)]
     disc = _revolve(front + back)
     a_top, a_ref, a_bot = rimw + 0.03, fx - 0.020, fx - 0.11
     cut = []
     k = w['rim'] / 0.254
     af = lambda r: float(np.interp(r, [p[0] for p in front], [p[1] for p in front]))
-    wins = windows(rh=0.070 * k, rs=0.125 * k, rw=w['rim'] - 0.013)
+    wins = windows(rh=0.054 * k, rs=0.115 * k, rw=w['rim'] - 0.009)
     for P in wins[1::2]:
         rr = np.hypot(P[:, 0], P[:, 1])
         apex = P[np.argmin(rr)]
         ra, phi = float(rr.min()), math.atan2(apex[1], apex[0])
         e = np.array([math.cos(phi), math.sin(phi), 0.0])
         t = np.array([-math.sin(phi), math.cos(phi), 0.0])
-        r0, r1 = 0.076 * k, ra - 0.004
+        r0, r1 = 0.060 * k, ra - 0.004
         prof = [r0 * e + [0, 0, a_top], r1 * e + [0, 0, a_top], r1 * e + [0, 0, af(r1) - 0.005], r0 * e + [0, 0, af(r0) - 0.005]]
         prof = [p - 0.0035 * t for p in prof]
         f = BRepBuilderAPI_MakeFace(_wire_poly(prof)).Face()
@@ -247,9 +247,38 @@ def spoke_face(w, draft=math.radians(3.5)):
         return n[2] > 0.8 and abs(p.Z() - af(r)) < 0.002 and r < r_end - 0.004
     try:
         body = _chamfer_front(body, 0.0025, is_front)
-    except RuntimeError:
+    except Exception:
         pass
+    if pockets:
+        pk = [BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(x, y, fx - 0.046), gp_Dir(0, 0, 1)), NUT_POCKET, a_top - fx + 0.046).Shape() for x, y in nut_xy(w)]
+        body = BRepAlgoAPI_Cut(body, _compound(pk)).Shape()
     return body
+
+
+NUT_PCD, NUT_AF, NUT_POCKET = 0.040, 0.013, 0.0090
+
+
+def nut_xy(w, n=5, phase=math.pi / 2):
+    return [(NUT_PCD * math.cos(phase + math.pi / n + 2 * math.pi * k / n), NUT_PCD * math.sin(phase + math.pi / n + 2 * math.pi * k / n)) for k in range(n)]
+
+
+def nuts(w):
+    """Hex nuts sunk in the hub pockets, tops 3 mm below the hub face, top edges chamfered."""
+    fx = w['rim_w'] / 2 - 0.010
+    out = []
+    rc = NUT_AF / 2 / math.cos(math.pi / 6)
+    for x, y in nut_xy(w):
+        P = [(x + rc * math.cos(math.pi / 6 + k * math.pi / 3), y + rc * math.sin(math.pi / 6 + k * math.pi / 3), fx - 0.046) for k in range(6)]
+        f = BRepBuilderAPI_MakeFace(_wire_poly(P)).Face()
+        body = BRepPrimAPI_MakePrism(f, gp_Vec(0, 0, 0.009)).Shape()
+        tip = BRepPrimAPI_MakeCylinder(gp_Ax2(gp_Pnt(x, y, fx - 0.040), gp_Dir(0, 0, 1)), 0.0055, 0.004).Shape()
+        body = BRepAlgoAPI_Fuse(body, tip).Shape()
+        try:
+            body = _chamfer_front(body, 0.0012, lambda fc: _face_normal(fc)[0][2] > 0.9 and _face_normal(fc)[1].Z() > fx - 0.0375 - 1e-4 and _face_normal(fc)[1].Z() < fx - 0.0365)
+        except RuntimeError:
+            pass
+        out.append(body)
+    return _compound(out)
 
 
 def disc(w, holes=True):
@@ -275,9 +304,9 @@ def disc(w, holes=True):
 def caliper(w):
     """Angular caliper straddling the disc at the trailing top: a faceted sector with a slot for the disc, edges chamfered."""
     R, t = w['disc'], w['disc_t']
-    r0, r1 = R - 0.065, R + 0.022
+    r0, r1 = R - 0.068, R + 0.026
     hw = t / 2 + 0.032
-    a0, a1 = math.radians(18), math.radians(82)
+    a0, a1 = math.radians(12), math.radians(84)
     na = 6
     ring_o = [(r1 * math.cos(a), r1 * math.sin(a)) for a in np.linspace(a0, a1, na)]
     ring_i = [(r0 * math.cos(a), r0 * math.sin(a)) for a in np.linspace(a1, a0, 3)]

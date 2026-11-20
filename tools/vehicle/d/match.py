@@ -13,6 +13,16 @@ glb, outdir, cams = argv[0], argv[1], argv[2:]
 os.makedirs(outdir, exist_ok=True)
 bl.reset()
 bpy.ops.import_scene.gltf(filepath=glb)
+if os.environ.get('WHEEL'):
+    old = bpy.data.objects['front wheel']
+    mw = old.matrix_world.copy()
+    for ob in [old] + list(old.children_recursive):
+        bpy.data.objects.remove(ob)
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=os.environ['WHEEL'])
+    root = next(ob for ob in set(bpy.data.objects) - before if ob.parent is None)
+    root.name = 'front wheel'
+    root.matrix_world = mw
 bl.mirror_wheels()
 COL = {'paint': ((0.75, 0.22, 0.05), 0.25, 0.0), 'black': ((0.03, 0.03, 0.03), 0.5, 0.0), 'glass': ((0.02, 0.02, 0.025), 0.05, 0.0),
        'dark': ((0.01, 0.01, 0.01), 0.7, 0.0), 'tire': ((0.02, 0.02, 0.02), 0.8, 0.0), 'rim': ((0.18, 0.18, 0.19), 0.3, 1.0),
@@ -31,6 +41,10 @@ for m in bpy.data.materials:
         bs.inputs['Metallic'].default_value = mt
     if key == 'glass':
         bs.inputs['Alpha'].default_value = 1.0
+for k, v in json.loads(os.environ.get('RECOLOR', '{}')).items():
+    for m in bpy.data.materials:
+        if m.name.startswith(k) and m.node_tree and 'Principled BSDF' in m.node_tree.nodes:
+            m.node_tree.nodes['Principled BSDF'].inputs['Base Color'].default_value = (*v, 1)
 bl.world_clay(float(os.environ.get('WORLD', '1.0')))
 for cj in cams:
     mj = json.load(open(cj))
