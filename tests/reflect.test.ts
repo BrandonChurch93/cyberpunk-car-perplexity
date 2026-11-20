@@ -101,6 +101,7 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   scene.add(world, body)
   const visibility: boolean[][] = []
   const renderer = {
+    coordinateSystem: THREE.WebGLCoordinateSystem,
     getRenderTarget: () => null,
     getClearColor: (color: THREE.Color) => color,
     getClearAlpha: () => 1,
