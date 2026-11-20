@@ -55,6 +55,9 @@ describe('full roof world', () => {
     const { durationSeconds } = config.film
     const emitter = world.lights.find(l => l.id === 'billboard')!
     const raking = world.lights.find(l => l.id === 'raking billboard')!
+    const originalBillboard = world.root.getObjectByName('billboard')!
+    expect(originalBillboard.position.toArray()).toEqual([4, 11.15, -46.77])
+    expect(raking.intensity).toBeGreaterThan(emitter.intensity * 4)
     const start = radiance(0)
     const end = radiance(durationSeconds)
     expect(end.position).toBeCloseTo(start.position, 12)
@@ -70,7 +73,7 @@ describe('full roof world', () => {
     expect(Math.abs(expected.position - start.position)).toBeGreaterThan(.025)
     const color = new THREE.Color()
     emitter.colorAt!(2, color)
-    expect(color.clone().multiplyScalar(4.5 * emitter.level(2)).b).toBeCloseTo(expected.color.b, 10)
+    expect(color.clone().multiplyScalar(emitter.level(2)).b).toBeCloseTo(expected.color.b, 10)
     world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
     expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
   })
