@@ -287,7 +287,7 @@ export function createEnds(parent: T.Group, m: Palette, full: boolean) {
       const y = mix(low, edge + .004, v)
       const d = .0005 + .039 * smooth(edge - y, -.004, .085)
         - .017 * smooth(x, .833, .887) * smooth(y, .276, .36)
-        + .010 * smooth(x, .823, .859)
+        + .010 * smooth(x, .823, .859) + .031 * smooth(x, .889, .929) * smooth(y, .548, .624)
       return f(x, y, d)
     }, 100, 16, outFront))
     for (const edge of [0, 1]) {

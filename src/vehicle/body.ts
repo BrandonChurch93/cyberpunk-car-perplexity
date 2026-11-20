@@ -132,8 +132,8 @@ function sidePoint(s: number, y: number, side: number): Point {
 
 function bonnetSection(s: number, x: number) {
   return (hinge(x - hoodInner(s), foldHalf) - hinge(x - hoodOuter(s), foldHalf))
-    * smooth(s, hoodTipS - .00025, hoodTipS + .001) * (1 - smooth(s, .290, .326))
-    + .86 * smooth(s, .041, .050) * (1 - smooth(s, .174, .199)) * hinge(x - lampFold(s), foldHalf)
+    * fairStep(s, hoodTipS - .00025, hoodTipS + .001) * (1 - fairStep(s, .290, .326))
+    + .86 * fairStep(s, .038, .053) * (1 - fairStep(s, .173, .203)) * hinge(x - lampFold(s), foldHalf)
 }
 
 function wingEdge(s: number) {
@@ -162,10 +162,10 @@ function bonnet(s: number, v: number): Point {
   const across = -hoodFoldStrength * foldSlope * (section(x) - mix(section(0), section(w.x), fair))
   const base = mix(w.center, w.y, weight + .05 * v ** 6 * (1 - v))
   const crown = hoodDome(s) * Math.max(0, 1 - (x / .675) ** 2) ** 2
-  const wingCrown = .005 * smooth(s, .143, .223) * (1 - smooth(s, .243, .315))
-    * smooth(v, .60, .84) * (1 - smooth(v, .92, 1))
-  const cowlDrop = .021 * smooth(s, .127, .236) * (1 - v ** 3)
-    - .015 * smooth(s, .122, .189) * (1 - smooth(s, .260, .335)) * (1 - smooth(v, .735, 1))
+  const wingCrown = .005 * fairStep(s, .143, .223) * (1 - fairStep(s, .243, .315))
+    * fairStep(v, .60, .84) * (1 - fairStep(v, .92, 1))
+  const cowlDrop = .021 * fairStep(s, .127, .236) * (1 - v ** 3)
+    - .015 * fairStep(s, .122, .189) * (1 - fairStep(s, .260, .335)) * (1 - fairStep(v, .735, 1))
   const profileFall = bonnetProfileFall(s) * (1 - smooth(v, .74, 1))
   return [x, base + across + crown + wingCrown - cowlDrop - profileFall, zAt(s)]
 }
@@ -298,6 +298,7 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
   const bonnetSplit = .72
   const splitEnd = frontEnd(bonnetSplit) - gap
   const bonnetGrid = curve([[0, 0], [.4, .069], [.68, .154], [.84, .199], [1, splitEnd]])
+  const bonnetLengthSteps = full ? 176 : 53
   for (const side of [1, -1]) {
     const mirror = (p: Point): Point => [p[0] * side, p[1], p[2]]
     const sided = (f: Surface): Surface => (u, v) => mirror(f(u, v))
@@ -305,11 +306,11 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
     folded(sided((u, v) => {
       const q = bonnetSplit * v
       return bonnet(bonnetGrid(u) * (frontEnd(q) - gap) / splitEnd, q)
-    }), [0, 1, 0], hoodTraces, full ? 148 : 45, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
+    }), [0, 1, 0], hoodTraces, bonnetLengthSteps, 0, full ? [10, 9, 6, 3] : [3, 2, 2, 1])
     folded(sided((u, v) => {
       const q = mix(bonnetSplit, 1, v)
       return bonnet(bonnetGrid(u) + (frontEnd(q) - gap - splitEnd) * fairStep(u, .81, 1), q)
-    }), [0, 1, 0], hoodTraces.slice(1), full ? 148 : 45, 0, full ? [6, 15, 4] : [2, 6, 2])
+    }), [0, 1, 0], hoodTraces.slice(1), bonnetLengthSteps, 0, full ? [6, 15, 4] : [2, 6, 2])
     folded(sided((u, v) => {
       const s = mix(frontEnd(mix(.817, 1, v)) + gap, .599, u * (.43 + .57 * u))
       const q = mix(.817, 1, v)
@@ -317,13 +318,14 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const inside = edgeGlass(s, 0)
       const w = wingEdge(s)
       const cabin: Point = [mix(inside[0], w.x - shoulderInset(s), v), mix(inside[1], w.y, v), zAt(s)]
-      return blend(front, cabin, smooth(s, .266, .355))
+      return blend(front, cabin, fairStep(s, .266, .355))
     }), [0, 1, 0], [hoodTraces[1]], full ? 88 : 36, .002, full ? 10 : 4)
     const cowlFace = (s: number, v: number, drop: number): Point => {
       const p = bonnet(s, v * .818)
       return [side * p[0], p[1] - drop * (1 - .67 * v * v), p[2]]
     }
-    part(paint, (u, v) => cowlFace(mix(hoodShut(v) + gap, cowlStep(v), u), v, .0015), [0, 1, 0], 6, n)
+    part(paint, (u, v) => cowlFace(mix(hoodShut(v) + gap, cowlStep(v), u), v, mix(.00025, .0015, fairStep(u, .22, 1))),
+      [0, 1, 0], 6, n)
     part(black, (u, v) => cowlFace(mix(cowlStep(v), cabFront(v) + gap, u), v, mix(.006, .0026, u)), [0, 1, 0], 7, n, .003)
     part(black, (u, v) => cowlFace(mix(hoodShut(v) - .004, cabFront(v) + .003, u), v, .009), [0, 1, 0], 4, n, .003)
     part(paint, sided((u, v) => {
