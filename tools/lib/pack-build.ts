@@ -179,6 +179,9 @@ async function c8Blockout(ctx: PackContext): Promise<CriticPack> {
   return { critic: 'C8', folder: 'c8', brief: ctx.brief('C8 blockout ·'), items }
 }
 
+const neonKind = 'neon-wet-street-night'
+const wideKinds = new Set(['arrival', 'wake', 'return'])
+
 const controlKinds: Record<string, string[]> = {
   arrival: ['low-wide-single-car-rain', 'supercar-wet-night', 'empty-deck-night'],
   wake: ['supercar-wet-night', 'low-wide-single-car-rain'],
@@ -250,7 +253,8 @@ async function c1(ctx: PackContext): Promise<CriticPack> {
     const size = await sizeAfterFit(s.item.source, s.item.fit)
     for (let k = 0; k < config.quality.blind.controlsPerRender; k++) {
       const kinds = controlKinds[s.kind] ?? []
-      let pool = ledger.filter((c) => kinds.includes(c.category) && !used.has(c.id))
+      let pool = wideKinds.has(s.kind) ? ledger.filter((c) => c.category === neonKind && !used.has(c.id)) : []
+      if (pool.length === 0) pool = ledger.filter((c) => kinds.includes(c.category) && !used.has(c.id))
       if (pool.length === 0) pool = ledger.filter((c) => !used.has(c.id))
       if (pool.length === 0) pool = ledger
       if (pool.length === 0) throw new Error('reference/controls.json holds no kept control')
@@ -389,13 +393,68 @@ async function c8(ctx: PackContext): Promise<CriticPack> {
   return { critic: 'C8', folder: 'c8', brief: ctx.brief('C8 ·'), items }
 }
 
+interface MatchArea {
+  id: string
+  shows: string
+  parts: Array<{ left: number; top: number; width: number; height: number }>
+}
+
+const matchAreas: MatchArea[] = [
+  { id: 'deck', shows: 'the near deck', parts: [{ left: 0, top: 0.56, width: 1, height: 0.44 }] },
+  { id: 'signs', shows: 'the sign groups, the left group beside the right group', parts: [{ left: 0, top: 0.04, width: 0.36, height: 0.5 }, { left: 0.64, top: 0.04, width: 0.36, height: 0.5 }] },
+  { id: 'sky', shows: 'the sky with the billboard', parts: [{ left: 0.22, top: 0, width: 0.64, height: 0.44 }] },
+]
+
+async function matchCrop(source: string, area: MatchArea, size: { width: number; height: number }, file: string): Promise<void> {
+  const m = await sharp(source).metadata()
+  const w = m.width ?? 0
+  const h = m.height ?? 0
+  const each = { width: Math.round(size.width / area.parts.length), height: size.height }
+  const tiles: Array<{ input: Buffer; left: number; top: number }> = []
+  for (const [i, p] of area.parts.entries()) {
+    const rect = { left: Math.round(p.left * w), top: Math.round(p.top * h), width: Math.min(w - Math.round(p.left * w), Math.round(p.width * w)), height: Math.min(h - Math.round(p.top * h), Math.round(p.height * h)) }
+    tiles.push({ input: await sharp(source).extract(rect).resize(each.width, each.height, { fit: 'fill', kernel: 'lanczos3' }).png().toBuffer(), left: i * each.width, top: 0 })
+  }
+  await sharp({ create: { width: each.width * area.parts.length, height: each.height, channels: 3, background: { r: 0, g: 0, b: 0 } } }).composite(tiles).png().toFile(file)
+}
+
+async function c9(ctx: PackContext): Promise<CriticPack> {
+  const target = join(repoRoot, 'reference', 'approved', 'hero.jpg')
+  const spec = ctx.spec(heroFrame(), 'final', config.formats.master)
+  const current = await ctx.still(spec)
+  const limit = config.critics.maxImageLongEdgePx
+  const tm = await sharp(target).metadata()
+  const tw = tm.width ?? 0
+  const th = tm.height ?? 0
+  const whole = { width: Math.min(limit, tw), height: Math.round((Math.min(limit, tw) / tw) * th) }
+  const items: PackItem[] = [
+    { set: 'A', source: target, fit: 'native', size: whole, shows: 'the target', what: 'approved image reference/approved/hero.jpg', meta: { role: 'target' } },
+    { set: 'B', source: current, fit: 'native', size: whole, shows: `the current frame, at ${seconds(heroFrame())}`, what: stillName(spec), meta: { role: 'current', frame: heroFrame() } },
+  ]
+  const dir = ensureDir(join(workDir, 'match', roundName(ctx.round)))
+  for (const area of matchAreas) {
+    const span = area.parts.reduce((a, p) => a + p.width, 0)
+    const width = Math.min(limit, Math.round(span * tw))
+    const size = { width, height: Math.round((width / (span * tw)) * area.parts[0].height * th) }
+    for (const [set, source, role] of [['C', target, 'target'], ['D', current, 'current frame']] as const) {
+      const file = join(dir, `${area.id}-${set}.png`)
+      await matchCrop(source, area, size, file)
+      items.push({ set, source: file, fit: 'native', shows: `${area.shows}, ${role}, the same area in both`, what: `match crop ${area.id} of ${role === 'target' ? 'the approved image' : stillName(spec)}`, meta: { area: area.id, role, parts: area.parts } })
+    }
+  }
+  const addendum = readFileSync(join(repoRoot, 'kit', 'addenda', '002-approved-look.md'), 'utf8')
+  const section = extractSection(addendum, 'C9 ·')
+  const values = configValues(section)
+  return { critic: 'C9', folder: 'c9', brief: `${section}\n\n${values ? `${values}\n\n` : ''}${returnFormat(ctx.quality)}\n`, items }
+}
+
 export type PackBuilder = (ctx: PackContext) => Promise<CriticPack>
 
 /** Which critics each phase packs for. Extra critics from kit/02-VEHICLE.md join phases 3 and 4 here. */
 export const packTable: Record<number, Record<string, PackBuilder>> = {
   2: { C5: c5Blockout, C8: c8Blockout },
-  3: { C1: c1, C2: c2, C3: c3, C4: c4, C8: c8 },
-  4: { C1: c1, C2: c2, C3: c3, C4: c4, C5: c5, C6: c6, C7: c7, C8: c8 },
+  3: { C1: c1, C2: c2, C3: c3, C4: c4, C8: c8, C9: c9 },
+  4: { C1: c1, C2: c2, C3: c3, C4: c4, C5: c5, C6: c6, C7: c7, C8: c8, C9: c9 },
 }
 
 const imageChunks = new Set(['IHDR', 'PLTE', 'IDAT', 'IEND'])
