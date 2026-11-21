@@ -118,7 +118,7 @@ export function honeycomb(f: Frame, ha: number, hb: number, cell: number, gauge:
 }
 
 /** Closed loop of a rounded rectangle in a frame, with the outward direction at each point. */
-function roundLoop(ha: number, hb: number, rad: number, k = 6): Array<{ p: V2; o: V2 }> {
+export function roundLoop(ha: number, hb: number, rad: number, k = 6): Array<{ p: V2; o: V2 }> {
   const out: Array<{ p: V2; o: V2 }> = []
   const cs: V2[] = [[ha - rad, hb - rad], [-ha + rad, hb - rad], [-ha + rad, -hb + rad], [ha - rad, -hb + rad]]
   cs.forEach((c, q) => {
@@ -132,7 +132,7 @@ function roundLoop(ha: number, hb: number, rad: number, k = 6): Array<{ p: V2; o
 }
 
 /** Rounded rectangle section from (s0, d0) to (s1, d1), counter-clockwise. */
-function roundSection(s0: number, s1: number, d0: number, d1: number, rad: number, k = 3): V2[] {
+export function roundSection(s0: number, s1: number, d0: number, d1: number, rad: number, k = 3): V2[] {
   const out: V2[] = []
   const cs: V2[] = [[s1 - rad, d1 - rad], [s0 + rad, d1 - rad], [s0 + rad, d0 + rad], [s1 - rad, d0 + rad]]
   cs.forEach((c, q) => {

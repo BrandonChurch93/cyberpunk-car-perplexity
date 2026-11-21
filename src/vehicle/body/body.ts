@@ -1,10 +1,10 @@
-import type * as THREE from 'three'
+import * as THREE from 'three'
 import type { Surface } from '../geom/cuts'
 import { toGeometry } from '../geom/mesh'
 import { tessellate, type TessOptions, type TessResult, type TrimFn } from '../geom/tessellate'
 import { cross, norm, sub, type V3 } from '../geom/vec'
 import { makeCuts, paintTrim, wheelOpenings, type BodyCuts } from './cuts'
-import { gapChannel, onGapEdge, withoutGapEdges } from './gaps'
+import { gapChannel, gapMask, onGapEdge, withoutGapEdges } from './gaps'
 import { fitFascia, tessellateFascia, type FasciaEdge } from './nose'
 import { rearFace } from './tail'
 import { backingLoft, dims, mainLoft } from './shape'
@@ -136,8 +136,8 @@ export function buildBody(q: BodyQuality): BodyGeometry {
   const front: Surface = fascia.surface
   const nose = tessellateFascia(cuts.maps.front, cuts.front.holes, fascia.uEdge, fascia.vEdge, fascia.surface.fieldStops)
   const paint = [mainPaint, run(rear, faceGrid, paintTrim(cuts.rear))]
-  // Openings roll over 4 mm. Shut gaps roll over 2 mm from paint edges cut 4 mm off the line, so the gap between the
-  // two walls stays 4 mm. The fascia rolls and returns its own openings.
+  // Openings roll over 4 mm. Shut gap edges roll over 1.5 mm into walls 2 mm off the line, so the gap between the two
+  // walls is an open 4 mm slot, 11 mm deep onto a dark floor. The fascia rolls and returns its own openings.
   const allGaps = [cuts.main, cuts.rear].flatMap((c) => c.gaps)
   const channel = gapChannel(paint, allGaps)
   paint.push(flange(withoutGapEdges(paint, onGapEdge(allGaps)), 0.014, () => 0.004), channel.lips, ...nose.paint)
@@ -161,5 +161,8 @@ export function buildBody(q: BodyQuality): BodyGeometry {
   const frontBand = 0.015 / dims.length
   const mainBacking: TrimFn = (u, v, p) => Math.max(bayTrim(u, v, p), (frontBand - u) * dims.length)
   const shell = [backing(mainBack, mainGrid, mainBacking), nose.shell, backing(rear, faceGrid, openings(cuts.rear))]
-  return { paint: toGeometry(paint, true), gapFloor: toGeometry([channel.floor], true), shell: toGeometry(shell, true), cuts, surfaces: { main, front, rear }, grids: { main: mainGrid } }
+  // The gap mask rides on the paint as the 'gap' attribute: 1 on gap edges and walls, easing to 0 beside them.
+  const paintGeometry = toGeometry(paint, true)
+  paintGeometry.setAttribute('gap', new THREE.Float32BufferAttribute(gapMask(paint, channel.lips, allGaps, true), 1))
+  return { paint: paintGeometry, gapFloor: toGeometry([channel.floor], true), shell: toGeometry(shell, true), cuts, surfaces: { main, front, rear }, grids: { main: mainGrid } }
 }
