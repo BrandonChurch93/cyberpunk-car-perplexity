@@ -483,6 +483,7 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
     })
   }
   const open = at(receiver, 6)
+  const nose = at(receiver.clone().setZ(.18), 6)
   const closed = at(receiver.clone().lerp(eye.position, .74), 6)
   const macro = at(receiver, .8)
   const point = new three.Vector3()
@@ -522,7 +523,7 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
   input.dispose()
   output.dispose()
   renderer.dispose()
-  return { open: open[1] - open[0], closed: closed[1] - closed[0], macro: macro[1] - macro[0], footprint }
+  return { open: open[1] - open[0], nose: nose[1] - nose[0], closed: closed[1] - closed[0], macro: macro[1] - macro[0], footprint }
 }
 
 function captureWetDeck(three: typeof THREE, reflections: typeof createReflections, porous: typeof applyPorous,
@@ -934,6 +935,7 @@ it('matches camera and probe reflections, bounds planar taps, and resumes review
       const projector: ReturnType<typeof captureProjector> = await page.evaluate(`import("${id}").then(module => module.projector())`)
       expect(errors).toEqual([])
       expect(projector.open).toBeGreaterThan(.002)
+      expect(projector.nose).toBeLessThan(projector.open)
       expect(projector.closed).toBeLessThan(projector.open * .1)
       expect(projector.macro).toBe(0)
       expect(projector.footprint[0]).toEqual({ air: 0, deck: 0 })
