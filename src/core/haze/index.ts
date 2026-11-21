@@ -26,9 +26,9 @@ export const atmosphere = {
   anisotropy: 0.58,
   scatterFraction: 0.56,
   projectorAnisotropy: 0.76,
-  projectorWingAnisotropy: 0.34,
-  projectorWingFraction: 0.40,
-  projectorScatterFraction: 0.58,
+  projectorWingAnisotropy: 0.38,
+  projectorWingFraction: 0.18,
+  projectorScatterFraction: 0.38,
   projectorScatterDistance: [0.10, 0.28],
   projectorBodyAnisotropy: 0.38,
   projectorBodyScatterFraction: 0.05,
@@ -37,6 +37,9 @@ export const atmosphere = {
   projectorFocus: [1.28, 2.1],
   projectorAerosolHeight: 0.29,
   projectorSuspendedFraction: 0.24,
+  projectorSuspendedWingAnisotropy: 0.34,
+  projectorSuspendedWingFraction: 0.40,
+  projectorSuspendedScatterFraction: 0.58,
   projectorSuspendedHeight: [0.13, 0.27, 0.50, 0.72],
   projectorSuspendedReach: [1.12, 2.48],
 } as const
@@ -127,6 +130,11 @@ float projectorPhase(float cosine) {
     phase(cosine, ${atmosphere.projectorWingAnisotropy}), ${atmosphere.projectorWingFraction});
 }
 
+float projectorSuspendedPhase(float cosine) {
+  return mix(phase(cosine, ${atmosphere.projectorAnisotropy}),
+    phase(cosine, ${atmosphere.projectorSuspendedWingAnisotropy}), ${atmosphere.projectorSuspendedWingFraction});
+}
+
 float projectorBodyPhase(float cosine, float distanceToLight, float downward, float clearance) {
   float spread = smoothstep(-0.04, 0.44, cosine) * (1.0 - smoothstep(0.91, 0.99, cosine));
   float body = smoothstep(${atmosphere.projectorBodyDistance.join(', ')}, distanceToLight);
@@ -144,7 +152,7 @@ float projectorReceiver(vec3 hit, vec3 source, vec3 axis) {
   return 1.0 - nearBody * noseDepth * aboveDeck;
 }
 
-float projectorDensity(float t, float height, float distanceToLight) {
+vec2 projectorDensities(float t, float height, float distanceToLight) {
   float h = max(0.0, height);
   float taper = 1.0 - exp(-h / ${atmosphere.projectorAerosolHeight});
   float air = airDensity * exp(-h / airHeight) * taper * taper * taper * taper;
@@ -152,7 +160,7 @@ float projectorDensity(float t, float height, float distanceToLight) {
     * (1.0 - smoothstep(${atmosphere.projectorSuspendedHeight.slice(2).join(', ')}, h));
   float near = 1.0 - smoothstep(${atmosphere.projectorSuspendedReach.join(', ')}, distanceToLight);
   float wake = ${atmosphere.projectorSuspendedFraction} * deckDensity * exp(-h / layerHeight) * suspended * near;
-  return (air + wake) * (1.0 - step(localAirRange, t));
+  return vec2(air, wake) * (1.0 - step(localAirRange, t));
 }
 
 float foregroundScatter(float t) {
@@ -401,14 +409,19 @@ vec4 scatterToDepth(vec2 uv, float depth) {
         + heightOpticalDepth(p.y, toLight.y, distanceToLight, airDensity, airHeight)
         + layerOpticalDepth(origin.y, ray.y, layer, t) + cityOpticalDepth(origin, ray, cityStart, t);
       float cosine = dot(ray, toLight);
-      float scatteringPhase = projector
-        ? projectorPhase(cosine) * ${atmosphere.projectorScatterFraction} * smoothstep(${atmosphere.projectorScatterDistance.join(', ')}, distanceToLight)
-          + projectorBodyPhase(cosine, distanceToLight, dot(toLight, up), far - t)
-        : phase(cosine, anisotropy) * scatterFraction;
-      float density = projector
-        ? projectorDensity(t, p.y, distanceToLight)
-        : densityAt(t, p.y, layer, cityStart);
-      radiance += light * (visible * weight * density * scatteringPhase * receiver
+      float inScatter;
+      if (projector) {
+        float onset = smoothstep(${atmosphere.projectorScatterDistance.join(', ')}, distanceToLight);
+        float body = projectorBodyPhase(cosine, distanceToLight, dot(toLight, up), far - t);
+        vec2 densities = projectorDensities(t, p.y, distanceToLight);
+        inScatter = dot(densities, vec2(
+          projectorPhase(cosine) * ${atmosphere.projectorScatterFraction},
+          projectorSuspendedPhase(cosine) * ${atmosphere.projectorSuspendedScatterFraction}
+        ) * onset + body);
+      } else {
+        inScatter = densityAt(t, p.y, layer, cityStart) * phase(cosine, anisotropy) * scatterFraction;
+      }
+      radiance += light * (visible * weight * inScatter * receiver
         * exp(-opticalDepth) * foregroundScatter(t) * projectorGain);
     }
   }
