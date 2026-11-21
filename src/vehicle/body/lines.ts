@@ -66,11 +66,11 @@ export const fasciaBreak: P3[] = [
 ]
 
 /**
- * The feature lines of the front, each a path in z through (z, x, y) nodes. Two nodes make a straight span; an
- * interior node without its own slope (dx/dz, dy/dz) is passed through smoothly. Every crease is one line from its
- * start on the front edge to its end, shared by the two fields either side of it. The center facet is one plane, level
- * across, through the nose tip and the cowl center, so the bonnet corner, the V end and the cowl lie on it and the
- * center line is no crease at all.
+ * The feature lines of the front, each a path in z through (z, x, y) nodes. Two nodes without slopes make a straight
+ * span, two with slopes (dx/dz, dy/dz) a smooth curve; an interior node without its own slope is passed through
+ * smoothly. Every crease is one line from its start on the front edge to its end, shared by the two fields either side
+ * of it. The bonnet is crowned both ways: along z every line falls in a convex sweep from the cowl to the front edge,
+ * and across it is one convex section from the center out to the wing ridge, so no part of it is planar.
  */
 export interface PathNode {
   z: number
@@ -81,33 +81,31 @@ export interface PathNode {
 }
 
 export const featureLines = {
-  /** Bonnet center line: straight from the nose tip to the cowl, a small break at the cowl, the windscreen one convex
-   * arc into the roof. */
+  /** Bonnet center line: one convex sweep from the cowl down to the nose tip, falling ever more steeply toward the
+   * nose, a small break at the cowl, the windscreen one convex arc into the roof. */
   center: [
-    { z: 2.4737, x: 0, y: 0.41 },
-    { z: 1.51, x: 0, y: 0.736 },
+    { z: 2.4737, x: 0, y: 0.41, d: [0, -0.5] },
+    { z: 1.51, x: 0, y: 0.736, d: [0, -0.19] },
   ] as PathNode[],
-  /** Bonnet inner crease: straight from the bonnet corner to the windscreen base. The center facet stays level
-   * across; outboard of this line the bonnet's outer facet falls 17 degrees more steeply to the wing ridge. */
+  /** Bonnet inner line: from the bonnet corner to the windscreen base on the same convex sweep as the center line.
+   * Behind the front edge it is no crease: the bonnet is one crowned surface from the center out to the wing ridge. */
   inner: [
-    { z: 2.173, x: 0.476, y: 0.5117 },
-    { z: 1.513, x: 0.29, y: 0.735 },
+    { z: 2.173, x: 0.476, y: 0.5117, d: [0.282, -0.47] },
+    { z: 1.513, x: 0.29, y: 0.735, d: [0.282, -0.2] },
   ] as PathNode[],
-  /** V end: the outer end of the leading V, carried straight back to the cowl inside the flat center facet. */
+  /** V end: the outer end of the leading V, carried back to the cowl on the bonnet's convex sweep. */
   vee: [
-    { z: 2.384, x: 0.354, y: 0.4403 },
-    { z: 1.51, x: 0.15, y: 0.736 },
+    { z: 2.384, x: 0.354, y: 0.4403, d: [0.233, -0.49] },
+    { z: 1.51, x: 0.15, y: 0.736, d: [0.233, -0.19] },
   ] as PathNode[],
   /**
-   * Wing ridge: the valley where the bonnet's outer facet meets the wing top, straight from the front edge to the
-   * cowl. The outer facet is the plane through the bonnet corner turned 17 degrees down about the inner crease, the
-   * wing top the plane through this line's front end, the A-pillar base and the brow tip; the line is where they
-   * meet, so the crease turns 32 degrees along its whole length. Behind the cowl the line turns out along the
-   * windscreen's lower corner to the A-pillar base, staying in the wing top's plane: dy = 0.2866 dx - 0.2255 dz.
+   * Wing ridge: the crisp valley where the bonnet meets the wing crown, from the front edge to the cowl on the
+   * bonnet's convex sweep in side view. Behind the cowl the line turns out along the windscreen's lower corner to the
+   * A-pillar base, so it runs from the lamp tip to the A-pillar in one crease.
    */
   rail: [
-    { z: 2.168, x: 0.5, y: 0.5057 },
-    { z: 1.513, x: 0.5301, y: 0.6621 },
+    { z: 2.168, x: 0.5, y: 0.5057, d: [-0.046, -0.33] },
+    { z: 1.513, x: 0.5301, y: 0.6621, d: [-0.046, -0.15] },
   ] as PathNode[],
   /** The windscreen's lower corner, from the cowl out to the A-pillar base, in the wing top's plane. */
   pillarFoot: [
