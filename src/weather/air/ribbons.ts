@@ -16,18 +16,21 @@ interface RibbonField {
   center: THREE.Vector3
   local?: boolean
   paint?: boolean
-  hero?: boolean
+  hero?: 'beam' | 'media'
   selection?: WorldRibbonSelection
 }
 
 const scatter = /* glsl */ `
 ${filmLightsGlsl}
 
-vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool local, float paint, bool hero, out vec3 flash, out vec3 trace) {
+vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool local, float paint, float hero, out vec3 flash, out vec3 trace) {
   vec3 light = vec3(0.0);
   flash = vec3(0.0);
   trace = vec3(1.0);
   vec3 beamExposure = vec3(0.0);
+  bool sampleBeam = local && hero > 0.5;
+  bool fineBeam = local && hero > 1.5;
+  bool media = hero > 2.5;
   for (int i = 0; i < MAX_FILM_LIGHTS; ++i) {
     if (i >= filmLightCount) break;
     vec4 source = filmLightColor[i];
@@ -38,6 +41,8 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
     bool compact = filmLightShape[i].w > 0.5;
     bool sharpSpot = compact || (filmLightShape[i].x > 0.0 && filmLightAxis[i].w > 0.94);
     if (local && (!compact || distance2 > 42.25)) continue;
+    float extent = filmLightShape[i].y;
+    if (media && (filmLightShape[i].x >= 0.0 || extent < 6.5)) continue;
     vec3 toSource;
     vec3 incident = filmLightAt(i, p, toSource);
     vec3 early = incident;
@@ -46,16 +51,22 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
       vec3 unused;
       early = filmLightAt(i, p - delta * 0.774597, unused);
       late = filmLightAt(i, p + delta * 0.774597, unused);
-      if (!(local && hero)) incident = (incident * 4.0 + (early + late) * 2.5) / 9.0;
+      if (!sampleBeam) incident = (incident * 4.0 + (early + late) * 2.5) / 9.0;
     }
     if (all(equal(incident + early + late, vec3(0.0)))) continue;
     float mu = clamp(-dot(toEye, toSource), -1.0, 1.0);
+    if (media) {
+      float spread = min(0.032, extent * extent * 0.38 / max(0.01, distance2));
+      float forward = exp(-(1.0 - mu) / (0.019 + spread));
+      light += incident * forward;
+      continue;
+    }
     if (local) {
-      float forward = 2.4 * exp(-(1.0 - mu) / 0.23);
+      float forward = fineBeam ? 2.15 * exp(-(1.0 - mu) / 0.36) : 2.4 * exp(-(1.0 - mu) / 0.23);
       float rim = 0.32 * exp2(-24.0 * abs(mu - 0.774));
       float reach = smoothstep(0.015, 0.16, distance2) * (1.0 - smoothstep(16.0, 42.25, distance2));
       float scatter = (forward + rim) * reach;
-      if (hero) {
+      if (sampleBeam) {
         const vec3 luma = vec3(0.2126, 0.7152, 0.0722);
         beamExposure += vec3(dot(early, luma), dot(incident, luma), dot(late, luma)) * scatter;
         flash += max(incident, max(early, late)) * scatter;
@@ -72,7 +83,6 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
     bool area = filmLightShape[i].x < 0.0;
     bool splash = field < 0.0;
     float width = area ? 0.067 : compact ? (splash ? 0.15 : 0.078) : 0.043;
-    float extent = filmLightShape[i].y;
     float spread = area ? min(0.045, extent * extent * 0.38 / max(0.01, distance2)) : 0.0;
     float forward = exp(-(1.0 - mu) / (width + spread)) * width / (width + spread);
     float rim = exp2(-(compact ? 26.0 : 55.0) * abs(mu - 0.774));
@@ -84,7 +94,7 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
     else light += scattered;
   }
   vec3 total = light + flash;
-  if (local && hero) trace = beamExposure / max(1e-6, max(beamExposure.r, max(beamExposure.g, beamExposure.b)));
+  if (sampleBeam) trace = beamExposure / max(1e-6, max(beamExposure.r, max(beamExposure.g, beamExposure.b)));
   float response = 1.0 + max(max(total.r, total.g), total.b) * 0.21;
   flash /= response;
   return light / response;
@@ -184,6 +194,7 @@ void main() {
       amount *= (1.0 - smoothstep(0.30, 0.49, max(across.x, across.y)))
         * (1.0 - smoothstep(1.16, 2.62, p.y - origin.y + 0.5 * span.y));
     }
+    if (uHero > 2.5) amount *= smoothstep(0.84, 1.58, p.y);
     float gustSheet = sin(dot(p, vec3(1.45, 0.32, -1.73)) - tau * 3.0 * uPhase);
     amount *= mix(0.77, 1.16, smoothstep(-0.85, 0.86, gustSheet));
     if (amount < 0.0003) return;
@@ -211,7 +222,7 @@ void main() {
   vec2 coc = uAperture * abs(1.0 - depth / uFocus) * pixelFocal / depth;
   float physical = diameter * 0.5;
   bool mist = uLayer < -1.5;
-  float sigma = physical * physical * (mist ? 0.5 : 0.25) + 0.17;
+  float sigma = physical * physical * (mist ? 0.5 : 0.25) + (uHero > 1.5 ? 1.0 / 12.0 : 0.17);
   float sigmaSide = sqrt(pow(length(normal * coc) * 0.5, 2.0) + sigma);
   float sigmaEnd = sqrt(pow(length(axis * coc) * 0.5, 2.0) + sigma);
   vec3 eye = uFilmView > 0.5 ? uOpticalEye : cameraPosition;
@@ -219,7 +230,7 @@ void main() {
   float paint = uPaint;
   if (paint > 1.5 && depth > uFocus * 1.4) paint = 0.0;
   vec3 trace;
-  vec3 radiance = scatterRain(p, delta, normalize(eye - p), mist, uLayer, uLocalFine > 0.5, paint, uHero > 0.5, flash, trace);
+  vec3 radiance = scatterRain(p, delta, normalize(eye - p), mist, uLayer, uLocalFine > 0.5, paint, uHero, flash, trace);
   if (all(equal(radiance + flash, vec3(0.0)))) return;
   float gain = uLayer < 0.0 ? (mist ? 1.0 : 0.64) : uGain;
   float paintDefocus = smoothstep(0.10, 0.34, abs(depth / uFocus - 1.0));
@@ -238,10 +249,10 @@ void main() {
     if (uHero > 1.5) {
       float oscillations = floor(78.0 * uDuration * pow(0.001 / aDrop.w, 1.5) + 0.5);
       float crest = 0.5 + 0.31 * sin(6.28318530718 * (uPhase * oscillations + aMotion.w));
-      float glintSigma = length(vec2(sigmaEnd, min(len * 0.26, 0.0031 * longSide)));
+      float glintSigma = length(vec2(sigmaEnd, min(len * 0.24, 0.00245 * longSide)));
       vGlint = vec2(crest * len, glintSigma);
-      float clean = (1.0 - smoothstep(0.00025, 0.00065, opticalWidth)) * (1.0 - 0.66 * smoothstep(0.016, 0.031, frameTravel));
-      gain *= mix(0.006, 2.65, clean);
+      float clean = (1.0 - smoothstep(0.00016, 0.00047, opticalWidth)) * (1.0 - 0.51 * smoothstep(0.016, 0.033, frameTravel));
+      gain *= uHero > 2.5 ? 17.8 * clean : mix(0.003, 2.28, clean);
     } else gain *= uLocalFine > 0.5 ? mix(0.008, 0.82, narrow) : mix(defocused, 0.77, narrow);
   }
   float nearVeil = smoothstep(0.009, 0.028, frameTravel);
@@ -321,7 +332,7 @@ export class RibbonView {
   private paint = false
   private hero = false
   private paintField?: { geometry: THREE.InstancedBufferGeometry; count: number }
-  private heroField?: THREE.Mesh
+  private readonly heroFields: THREE.Mesh[] = []
   readonly nearAnchor = new THREE.Vector3()
   phase = 0
 
@@ -334,7 +345,7 @@ export class RibbonView {
     this.paint = beat === 'paint'
     this.hero = beat === 'arrival' || beat === 'wake' || beat === 'return'
     if (this.paintField) this.paintField.geometry.instanceCount = this.paint ? this.paintField.count : 0
-    if (this.heroField) this.heroField.visible = this.hero
+    for (const mesh of this.heroFields) mesh.visible = this.hero
   }
 
   beginSample(sample: SampleContext): void {
@@ -347,7 +358,7 @@ export class RibbonView {
   }
 
   registerHeroField(mesh: THREE.Mesh): void {
-    this.heroField = mesh
+    this.heroFields.push(mesh)
     mesh.visible = false
   }
 
@@ -405,7 +416,7 @@ export class RibbonView {
       const s = this.sample
       uniform.uFilmView.value = s && camera === s.camera ? 1 : 0
       uniform.uPaint.value = this.paint && uniform.uFilmView.value ? field?.paint ? 1 : layer === -1 ? 2 : 0 : 0
-      uniform.uHero.value = this.hero && uniform.uFilmView.value ? field?.hero ? 2 : 1 : 0
+      uniform.uHero.value = this.hero && uniform.uFilmView.value ? field?.hero === 'media' ? 3 : field?.hero ? 2 : 1 : 0
       uniform.uAperture.value.set(0, 0)
       uniform.uFocusAperture.value.set(0, 0)
       uniform.uLensShift.value.set(0, 0)
@@ -431,14 +442,15 @@ export class RibbonView {
 export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLightUniforms, body = new THREE.Vector3()): THREE.Mesh[] {
   const deckCenter = world.deck.bounds.getCenter(new THREE.Vector2())
   const deckSpan = world.deck.bounds.getSize(new THREE.Vector2())
-  const specs: { key: string; layer: number; density: number; fine: number; size: THREE.Vector3; fade: Fade; gain: number; local?: boolean; paint?: boolean; hero?: boolean }[] = [
+  const specs: { key: string; layer: number; density: number; fine: number; size: THREE.Vector3; fade: Fade; gain: number; local?: boolean; paint?: boolean; hero?: RibbonField['hero'] }[] = [
     { key: 'near', layer: 0, density: 8.5, fine: 5.2, size: new THREE.Vector3(9.4, 9.4, 9.4), fade: [0.63, 1.51, 3.25, 4.8], gain: 0.88 },
     { key: 'close', layer: 1, density: 8.15, fine: 4.8, size: new THREE.Vector3(21, 7.8, 21), fade: [2.55, 4.8, 8.1, 13.0], gain: 2.45 },
     { key: 'middle', layer: 2, density: 4.45, fine: 5.6, size: new THREE.Vector3(Math.min(deckSpan.x, 41), 11.6, Math.min(deckSpan.y, 40)), fade: [7.2, 11.25, 22, 31], gain: 6.4 },
     { key: 'distance', layer: 3, density: 0.56, fine: 5.1, size: new THREE.Vector3(Math.max(deckSpan.x, 96), 20.5, Math.max(deckSpan.y, 96)), fade: [17.4, 25, 43, 61], gain: 3.0 },
     { key: 'beam', layer: 1, density: 76, fine: 7.0, size: new THREE.Vector3(12, 3.2, 14), fade: [1.05, 2.15, 9, 13], gain: 2.45, local: true },
     { key: 'paint', layer: 0, density: 930, fine: 7.8, size: new THREE.Vector3(1.75, 2.15, 1.75), fade: [0.28, 0.45, 0.76, 0.92], gain: 0.92, paint: true },
-    { key: 'beam-grain', layer: 1, density: 280, fine: 9.8, size: new THREE.Vector3(7.6, 1.65, 7.9), fade: [3.25, 4.55, 11.2, 15.8], gain: 1.08, local: true, hero: true },
+    { key: 'beam-grain', layer: 1, density: 510, fine: 11, size: new THREE.Vector3(7.6, 1.65, 7.9), fade: [3.25, 4.55, 11.2, 15.8], gain: 1.08, local: true, hero: 'beam' },
+    { key: 'media-grain', layer: 2, density: 81, fine: 11, size: new THREE.Vector3(12, 4.8, 7.6), fade: [6.1, 7.2, 10.4, 13.4], gain: 1.0, hero: 'media' },
   ]
   return specs.map(({ key, layer, density, fine, size, fade, gain, local, paint, hero }) => {
     const rng = stream(`air-streaks-${key}`)
@@ -452,7 +464,10 @@ export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLig
       drops.set([rng.range(-0.5, 0.5), rng.next(), rng.range(-0.5, 0.5), diameter], i * 4)
       motion.set([cycles, wrapHeight, terminalSpeed(diameter), rng.next()], i * 4)
     }
-    const center = layer === 0 ? new THREE.Vector3() : local ? body.clone().add(new THREE.Vector3(0, size.y * 0.48, hero ? 5.15 : 0)) : new THREE.Vector3(deckCenter.x, size.y * 0.48, deckCenter.y)
+    const center = layer === 0 ? new THREE.Vector3()
+      : local ? body.clone().add(new THREE.Vector3(0, size.y * 0.48, hero ? 5.15 : 0))
+      : hero === 'media' ? body.clone().add(new THREE.Vector3(-2.65, size.y * 0.48, -2.55))
+      : new THREE.Vector3(deckCenter.x, size.y * 0.48, deckCenter.y)
     const selection = layer > 0 ? new WorldRibbonSelection(drops, motion, size, center, [fade[0], fade[3]]) : undefined
     const geometry = selection?.geometry ?? (() => {
       const ribbons = makeRibbonGeometry(drops, motion)
