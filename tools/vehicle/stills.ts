@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { build } from 'vite'
 import { config, defaultPaint } from '../../src/config.ts'
-import { args, ensureDir, repoRoot, workDir } from '../lib/env.ts'
+import { args, buildHash, ensureDir, repoRoot, workDir } from '../lib/env.ts'
 import { RenderSession, runTool, specFromArgs, stillName } from '../lib/render.ts'
 
 void runTool(async () => {
@@ -11,11 +11,14 @@ void runTool(async () => {
   const frames = (a.frames ?? '195,360,520,690,800,950').split(',').map(Number)
   const diagnostics = (a.diags ?? 'beauty,clay').split(',')
   const studio = a.studio === 'true'
+  const audit = a.audit === 'true'
+  const backfaces = JSON.stringify((a.backfaces ?? '').split(',').map((s) => s.trim()).filter(Boolean))
+  if (audit && !studio) throw new Error('--audit true requires --studio true')
   const matched = a.match?.split(',').map(Number)
   if (matched && (!studio || matched.length !== 7 || matched.some((n) => !Number.isFinite(n)) || matched[6] <= 0 || matched[6] >= 180)) {
     throw new Error('Use --studio true --match with eye X,Y,Z, target X,Y,Z, vertical FOV.')
   }
-  const dir = ensureDir(join(workDir, 'vehicle', studio ? matched ? 'studio-matched' : 'studio' : detail))
+  const dir = ensureDir(join(workDir, 'vehicle', studio ? audit ? 'studio-audit' : matched ? 'studio-matched' : 'studio' : detail))
   const root = studio ? join(dir, 'dist') : undefined
   if (studio) {
     await build({
@@ -42,7 +45,14 @@ void runTool(async () => {
               focalMm: state.sensorWidthMm / (2 * aspect * Math.tan(THREE.MathUtils.degToRad(${matched[6]}) / 2)),
               focusDistance: eye.distanceTo(target), fNumber: 16 };
           ` : camera
-          return "import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';\n" + code.replace(effects, 'const weather = null').replace(camera, pose).replace(key, `
+          const override = 'this.scene.overrideMaterial = view === \'clay\' ? this.clay : view === \'normals\' ? normalsMaterial : null'
+          if (audit && !code.includes(override)) throw new Error('The diagnostic switch changed. Update the studio audit hook.')
+          const auditImports = audit ? `
+            import { auditOverrides } from '../../tools/vehicle/audit/diagnostic-material';
+            import { stripeEnvironment } from './reflect/zebra';
+          ` : ''
+          const prepared = "import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';\n" + auditImports + code
+            .replace(effects, 'const weather = null').replace(camera, pose).replace(key, `
             this.scene.add(vehicle.root);
             this.scene.background = new THREE.Color(0x303745);
             const inspectionRoom = new RoomEnvironment();
@@ -50,7 +60,10 @@ void runTool(async () => {
             this.scene.environment = env.fromScene(inspectionRoom, 0.035).texture;
             this.scene.environmentIntensity = 0.45;
             this.scene.userData.neutral = this.scene.environment;
-            if (${diagnostics.includes('zebra')}) {
+            ${audit ? `
+              this.scene.userData.auditOverrides = auditOverrides(vehicle.root, new Set(${backfaces}));
+              if (${diagnostics.includes('zebra')}) this.scene.userData.stripes = stripeEnvironment(renderer);
+            ` : `if (${diagnostics.includes('zebra')}) {
               const width = 2048, height = 1024;
               const bands = new Uint8Array(width * height * 4);
               for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
@@ -67,7 +80,7 @@ void runTool(async () => {
               stripes.needsUpdate = true;
               this.scene.userData.stripes = env.fromEquirectangular(stripes).texture;
               stripes.dispose();
-            }
+            }`}
             inspectionRoom.dispose();
             env.dispose();
             const bounce = new THREE.HemisphereLight(0xe6ecff, 0x66646c, 0.74);
@@ -78,18 +91,27 @@ void runTool(async () => {
             key.shadow.mapSize.set(1024, 1024);
             const fill = new THREE.DirectionalLight(0xa7c5ff, 0.70);
             fill.position.set(2.2, 4.3, -5.7);
-            const deck = new THREE.Mesh(new THREE.PlaneGeometry(150, 150), new THREE.MeshPhysicalMaterial({ color: 0x333a46, roughness: 0.77 }));
+            const deck = new THREE.Mesh(new THREE.PlaneGeometry(150, 150), new THREE.MeshPhysicalMaterial({ color: 0x333a46, roughness: 0.77${audit ? ', envMapIntensity: 0' : ''} }));
             deck.rotation.x = -Math.PI / 2;
             deck.receiveShadow = true;
             this.scene.add(bounce, key, fill, deck);
-          `).replace("this.scene.overrideMaterial = view === 'clay'", `
+          `)
+          if (audit) return prepared.replace(override, `
+            this.scene.environment = view === 'zebra' ? this.scene.userData.stripes : this.scene.userData.neutral;
+            this.scene.environmentIntensity = view === 'zebra' ? 1 : 0.45;
+            this.scene.userData.auditOverrides(view);
+            this.scene.overrideMaterial = view === 'normals' ? normalsMaterial : null;
+          `)
+          return prepared.replace("this.scene.overrideMaterial = view === 'clay'", `
             this.scene.environment = view === 'zebra' ? this.scene.userData.stripes : this.scene.userData.neutral;
             this.scene.overrideMaterial = view === 'zebra' ? new THREE.MeshPhysicalMaterial({ color: 0xececec, metalness: 1, roughness: 0.025 }) : view === 'clay'`)
         },
       }],
     })
   }
-  const session = await RenderSession.open(studio ? { build: false, root } : {})
+  const budgetMinutes = a.budget === undefined ? undefined : Number(a.budget)
+  const session = await RenderSession.open(studio ? { build: false, root, budgetMinutes } : { budgetMinutes })
+  if (audit) session.buildHash = buildHash()
   try {
     for (const diag of diagnostics) for (const frame of frames) {
       const spec = specFromArgs({ ...a, frame: String(frame), diag }, { paint: defaultPaint, format: config.formats.master })
