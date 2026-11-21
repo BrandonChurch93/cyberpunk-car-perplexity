@@ -35,7 +35,7 @@ const probeHeight = 0.6
 const captureNear = 0.05
 const captureFar = 1500
 const cubePlanarGuard = 1.18
-const planarTuning = {
+export const planarTuning = {
   taps: 4, filter: 0.7, roughStart: 0.55, roughEnd: 0.9, far: 4000, tail: 0.2,
   fireflyStart: 0.12, fireflyEnd: 0.18, fireflyRatio: 4, fireflyFloor: 0.35,
 }
