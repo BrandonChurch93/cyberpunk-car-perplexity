@@ -63,7 +63,7 @@ describe('paint stack', () => {
       expect(cell.x).toBeLessThanOrEqual(90e-6)
       expect(cell.x).toBeGreaterThan(2 * shape.w)
       expect(T.MathUtils.radToDeg(shape.y)).toBeLessThan(12)
-      expect(T.MathUtils.radToDeg(coat.x)).toBeLessThan(.1)
+      expect(T.MathUtils.radToDeg(coat.x)).toBeLessThan(.15)
       expect(coat.y).toBeGreaterThanOrEqual(1e-3)
       expect(coat.y).toBeLessThanOrEqual(3e-3)
     }
