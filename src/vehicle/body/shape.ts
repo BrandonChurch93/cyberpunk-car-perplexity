@@ -531,8 +531,11 @@ const waistRoll = ((): ReadonlyArray<readonly [number, number]> => {
   k.push([1, creaseRoll])
   return k
 })()
-const cowlIn = uOf(1.53)
-const screenIn = uOf(1.4)
+/** Crown of the wing top over the front wheel, radians at the shoulder crease. */
+const wingCrown = 0.07
+/** The bonnet's crown across, radians off the chord at the outboard end of each span: wing ridge to inner line, inner
+ * line to V end, V end to center line. */
+const bonnetCrown = [0.06, 0.045, 0.035] as const
 
 export const mainDef: LoftDef = {
   keys: [
@@ -541,18 +544,19 @@ export const mainDef: LoftDef = {
     { fn: frontKeys.crease, roll: waistRoll, sharp: 1 },
     { fn: frontKeys.shoulder, roll: creaseRoll, sharp: 1 },
     { fn: frontKeys.rail, roll: creaseRoll, sharp: 1 },
-    // Crisp along the bonnet, dying out tangent under the windscreen.
+    // The bonnet corner: a crisp kink at the front edge only, dying out within 0.17 m, so behind it the bonnet is one
+    // crowned surface from the wing ridge to the center line.
     {
       fn: frontKeys.inner,
       roll: creaseRoll,
-      sharp: [[0, 1], [cowlIn, 1], [screenIn, 0], [1, 0]],
+      sharp: [[0, 1], [uOf(2.12), 1], [uOf(2.0), 0], [1, 0]],
     },
-    // Unseen: it only carries the V end of the front edge back inside the flat center facet.
-    { fn: frontKeys.vee, sharp: [[0, 1], [cowlIn, 1], [screenIn, 0], [1, 0]] },
-    // The center facet is level across, so the center line is no crease; on the screen and roof it is smooth. The
+    // The V end of the front edge, smooth inside the bonnet's crown a few centimeters behind the edge.
+    { fn: frontKeys.vee, sharp: [[0, 1], [uOf(2.34), 1], [uOf(2.26), 0], [1, 0]] },
+    // Level across the center line everywhere, so the bonnet's crown and the screen's run smoothly over it. The
     // screen's crown is level across the center line already, so it takes no blend there: a blend would bunch its
     // curvature into a band down the middle of the glass.
-    { fn: frontKeys.center, round: [[0, 0], [uOf(zRoof), 0], [uOf(0.2), 0.15], [1, 0.15]], sharp: [[0, 1], [uCowl, 1], [screenIn, 0], [1, 0]] },
+    { fn: frontKeys.center, round: [[0, 0], [uOf(zRoof), 0], [uOf(0.2), 0.15], [1, 0.15]], sharp: [[0, 1], [uOf(2.43), 1], [uOf(2.38), 0], [1, 0]] },
   ],
   segs: [
     refDef.segs[0],
@@ -562,14 +566,19 @@ export const mainDef: LoftDef = {
     // fuller there and easing to the door spreads that lean over the whole face instead of a tight band above the
     // crease.
     { bulgeA: [[0, 0.2], [0.1, 0.1], [0.2, 0.02], [1, 0.02]], bulgeB: [[0, 0.025], [0.3, 0.02], [1, 0.02]] },
-    refDef.segs[3],
-    // Bonnet outer facet, flat; on the screen the span from the A-pillar ridge carries the screen's crown right out to
-    // the ridge.
-    { ...refDef.segs[4], fairA: [[0, 0], [uOf(1.47), 0], [uOf(1.4), 1], [uOf(zRoof), 1], [uOf(0.3), 0], [1, 0]] },
-    // Bonnet center, then the windscreen's middle: flat facets. Roof and deck: a little crowned, the old crown split
+    // Wing top: a round crown over the front wheel, from the brow back to the A-pillar base. Behind it the pillar side
+    // and side glass as before.
+    { bulgeA: [[0, wingCrown], [uOf(1.45), wingCrown], [uOf(1.36), 0], [0.225, 0], [0.3, 0.01], [0.55, 0.01], [0.65, 0.03], [1, 0.03]] },
+    // Bonnet outside the inner line, crowned on into the wing ridge; on the screen the span from the A-pillar ridge
+    // carries the screen's crown right out to the ridge.
+    {
+      bulgeA: [[0, bonnetCrown[0]], [uOf(1.6), bonnetCrown[0]], [uCowl, 0], [0.4, 0], [0.47, 0.02], [0.55, 0.03], [0.7, 0.06], [1, 0.06]],
+      fairA: [[0, 0], [uOf(1.47), 0], [uOf(1.4), 1], [uOf(zRoof), 1], [uOf(0.3), 0], [1, 0]],
+    },
+    // Bonnet center, crowned across, then the windscreen's middle. Roof and deck: a little crowned, the old crown split
     // over the two halves.
-    { bulgeA: [[0, 0], [0.4, 0], [0.47, 0.01], [0.55, 0.015], [0.7, 0.03], [1, 0.03]] },
-    { bulgeA: [[0, 0], [0.4, 0], [0.47, 0.01], [0.55, 0.015], [0.7, 0.03], [1, 0.03]] },
+    { bulgeA: [[0, bonnetCrown[1]], [uOf(1.6), bonnetCrown[1]], [uCowl, 0], [0.4, 0], [0.47, 0.01], [0.55, 0.015], [0.7, 0.03], [1, 0.03]] },
+    { bulgeA: [[0, bonnetCrown[2]], [uOf(1.6), bonnetCrown[2]], [uCowl, 0], [0.4, 0], [0.47, 0.01], [0.55, 0.015], [0.7, 0.03], [1, 0.03]] },
   ],
   vAt: [0, 0.1, 0.22, 0.4, 0.6, 0.72, 0.86, 1],
   mirrorTop: true,
