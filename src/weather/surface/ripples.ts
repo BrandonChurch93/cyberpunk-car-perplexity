@@ -106,17 +106,18 @@ float surfRingVar;
  * foot meters is filtered out of the slope and its energy goes to surfRingVar, so distant rings still break the reflection.
  */
 float surfRing(float r, float age, float diameterMm, float deep, float foot, float radialFoot) {
-  float life = mix(0.5, 1.0, deep) * SURF_RING_LIFE;
+  float life = mix(0.8, 1.0, deep) * SURF_RING_LIFE;
   if (age <= 0.0 || age > life) return 0.0;
-  float lambda = mix(0.012, min(0.018 + 0.0018 * diameterMm, 0.027), deep);
-  float width = mix(2.0, 4.0, deep * smoothstep(1.0, 4.0, diameterMm)) * lambda;
+  float lambda = mix(0.018, min(0.018 + 0.0018 * diameterMm, 0.027), deep);
+  float width = mix(1.3, 4.0, deep * smoothstep(1.0, 4.0, diameterMm)) * lambda;
   float front = 0.002 + 0.0006 * diameterMm + SURF_RING_SPEED * age;
   float s = front - r;
   if (s < -0.6 * lambda || s > width) return 0.0;
   float envelope = smoothstep(-0.6 * lambda, 0.25 * lambda, s) * (1.0 - smoothstep(0.35 * width, width, s));
   float wave = lambda * (1.0 - 0.3 * clamp(s / width, 0.0, 1.0));
-  float tau = mix(0.08, 0.2, deep);
-  float amp = mix(0.35, 1.0, deep) * 0.16 * (diameterMm / 2.0) * exp(-age / tau) * sqrt(0.02 / (front + 0.02));
+  // Bottom friction damps a wave on a film of depth h in about h * h / viscosity: a quarter second at the deck's 0.5 to 1 mm.
+  float tau = 0.2;
+  float amp = mix(0.8, 1.0, deep) * 0.16 * (diameterMm / 2.0) * exp(-age / tau) * sqrt(0.02 / (front + 0.02));
   amp *= smoothstep(life, life * 0.6, age);
   // A crest left with a third of its slope still aliases into sparkle through a sharp reflection, so the cut sits a little early.
   float filt = exp(-4.5 * (radialFoot / wave) * (radialFoot / wave));
