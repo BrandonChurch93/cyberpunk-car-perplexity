@@ -29,7 +29,7 @@ export interface BeadLayer {
 export const beadLayers: BeadLayer[] = [
   { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.55, steep: 0.35, lobes: 1, sparse: 0.6, dense: 1.3, hang: 0 },
   { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.72, steep: 0.45, lobes: 1, sparse: 0.3, dense: 1.25, hang: 0 },
-  { cellMm: 7.5, minMm: 1.5, maxMm: 3.6, flat: 0.85, steep: 0.3, lobes: 1, sparse: 0.5, dense: 1.8, hang: 0.4 },
+  { cellMm: 6.4, minMm: 1.5, maxMm: 3.1, flat: 0.85, steep: 0.3, lobes: 1, sparse: 0.55, dense: 1.9, hang: 0.4 },
   { cellMm: 36, minMm: 5, maxMm: 16, flat: 1.0, steep: 0.06, lobes: 2, sparse: 0.1, dense: 2.4, hang: 1.2 },
 ]
 
@@ -50,7 +50,7 @@ const coatFilm = [
 /** The sheet on glass creeps down the pane at this speed in meters per second, a whole number of wavelengths over the film. */
 const glassSheetSpeed = 0.06
 const glassCycles = (w: number) => Math.max(1, Math.round((glassSheetSpeed * config.film.durationSeconds) / w))
-const runTrack = { spacing: 0.03, ridge: 0.12, width: 0.004, length: 0.3, height: 0.0004 }
+const runTrack = { spacing: 0.03, width: 0.004, length: 0.3, height: 0.0004 }
 /** Footprints in meters over which the distant film takes over from the drops the macro lens resolves. */
 const coatFade = [0.0014, 0.0026]
 
@@ -302,24 +302,34 @@ vec3 surfCoatSlope(vec3 p, vec3 n, vec3 down, float slope, float pix, float cove
     s += sheet * ${amp.toFixed(3)} * filt * g.yz;
     surfCoatVar += sheet * sheet * ${(amp * amp * 0.4).toFixed(6)} * (1.0 - filt * filt);
   }`).join('\n  ')}
+  return b * s.x + a * s.y;
+}
+
+/** A rivulet is a cylinder of water down a lane: its ridge tilts the coat across the lane where the lens resolves it, and past that it is a glint line. */
+float surfRunVar = 0.0;
+vec3 surfRunSlope(vec3 p, vec3 n, vec3 down, float slope, float pix, uint salt) {
+  surfRunLine = 0.0;
+  surfRunVar = 0.0;
   float steep = smoothstep(0.15, 0.6, slope);
-  if (steep > 0.0) {
-    vec2 scale = vec2(${runTrack.spacing.toFixed(4)}, ${runTrack.length.toFixed(4)});
-    vec3 t = surfGradNoise(q / scale, 63, salt);
-    float live = smoothstep(0.45, 0.7, surfGradNoise(q / (scale * vec2(2.0, 1.5)), 64, salt).x);
-    float d = (t.x - 0.5) / ${runTrack.ridge.toFixed(3)};
-    vec2 grad = live * ${runTrack.height.toFixed(5)} * step(abs(d), 1.0) * (-2.0 * d / ${runTrack.ridge.toFixed(3)}) * t.yz / scale;
-    float filt = exp(-2.0 * pow(pix / ${runTrack.width.toFixed(4)}, 2.0));
-    s += steep * filt * grad;
-    // Past the lens a run is a thin cylinder across the pixel: it keeps its share of the pixel and sends out its own glint line.
-    float lane = q.x / ${runTrack.spacing.toFixed(4)} + 0.8 * surfGradNoise(vec2(0.0, q.y / ${(runTrack.length * 0.5).toFixed(4)}), 65, salt).x;
-    float laneId = floor(lane);
-    float across = abs(fract(lane) - 0.5) * ${runTrack.spacing.toFixed(4)};
-    float run = step(0.65, surfHash3(ivec3(int(laneId), 5, 0), salt).x) * smoothstep(0.4, 0.6, surfGradNoise(vec2(laneId * 1.7, q.y / ${runTrack.length.toFixed(4)}), 66, salt).x);
-    float band = max(surfPixA, ${runTrack.width.toFixed(4)});
-    surfRunLine = steep * run * (1.0 - filt) * min(${runTrack.width.toFixed(4)} / surfPixA, 1.0) * (1.0 - smoothstep(0.5 * band, band, across));
-    surfCoatVar += steep * steep * live * ${(((2 * runTrack.height) / runTrack.width) ** 2 * 0.5).toFixed(6)} * (1.0 - filt * filt);
-  }
+  if (steep <= 0.0) return vec3(0.0);
+  vec3 a = down;
+  vec3 b = normalize(cross(n, a));
+  vec2 q = vec2(dot(p, b), dot(p, a));
+  vec3 m = surfGradNoise(vec2(0.0, q.y / ${(runTrack.length * 0.5).toFixed(4)}), 65, salt);
+  vec3 w = surfGradNoise(vec2(0.0, q.y / ${(runTrack.length * 0.12).toFixed(4)}), 67, salt);
+  float lane = q.x / ${runTrack.spacing.toFixed(4)} + 0.8 * m.x + 0.2 * w.x;
+  vec2 gl = vec2(1.0 / ${runTrack.spacing.toFixed(4)}, 0.8 * m.z / ${(runTrack.length * 0.5).toFixed(4)} + 0.2 * w.z / ${(runTrack.length * 0.12).toFixed(4)});
+  float laneId = floor(lane);
+  float u = (fract(lane) - 0.5) / length(gl);
+  float run = steep * step(0.65, surfHash3(ivec3(int(laneId), 5, 0), salt).x) * smoothstep(0.4, 0.6, surfGradNoise(vec2(laneId * 1.7, q.y / ${runTrack.length.toFixed(4)}), 66, salt).x);
+  if (run <= 0.0) return vec3(0.0);
+  float rh = ${(runTrack.width / 2).toFixed(4)} * (0.6 + 0.8 * surfHash3(ivec3(int(laneId), 6, 0), salt).x);
+  float filt = exp(-2.0 * pow(pix / ${runTrack.width.toFixed(4)}, 2.0));
+  float inside = step(abs(u), rh);
+  vec2 s = run * filt * inside * (-2.0 * ${runTrack.height.toFixed(5)} * u / (rh * rh)) * gl / length(gl);
+  float band = max(surfPixA, ${runTrack.width.toFixed(4)});
+  surfRunLine = run * (1.0 - filt) * min(${runTrack.width.toFixed(4)} / surfPixA, 1.0) * (1.0 - smoothstep(0.5 * band, band, abs(u)));
+  surfRunVar = run * run * ${(((2 * runTrack.height) / runTrack.width) ** 2 * 0.5).toFixed(6)} * (1.0 - filt * filt) * (1.0 - smoothstep(0.5 * band, band, abs(u)));
   return b * s.x + a * s.y;
 }
 
@@ -497,7 +507,8 @@ float surfGlint = 0.0;
   float coatFar = smoothstep(${coatFade[0].toFixed(4)}, ${coatFade[1].toFixed(4)}, pix) * (1.0 - 0.7 * surfLane);
   vec3 coatTilt = coatFar > 0.0 ? toView * surfCoatSlope(p, n, down, slope, pix, surfCoverage(uv, axis, salt), salt) * coatFar : vec3(0.0);
   surfCoatVar *= coatFar * coatFar;
-  surfRunLine *= coatFar;
+  coatTilt += toView * surfRunSlope(p, n, down, slope, pix, salt);
+  surfCoatVar += surfRunVar;
   surfGlint += surfRunLine * ${(runTrack.width / 2).toFixed(4)} / (6.2831853 * pixA);
   #ifdef USE_CLEARCOAT
     clearcoatNormal = surfSafeNormalize(clearcoatNormal - coatTilt, clearcoatNormal);
