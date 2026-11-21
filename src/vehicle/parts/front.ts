@@ -297,7 +297,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   const guideCurves = [drlU, drlL, drlS], half = .008
   guideOptics(drl, guideCurves, half)
   add('front Y guide seat', guide(map, guideCurves, half * 1.65, .019), m.housing, true)
-  add('front Y running guide', guide(map, guideCurves, half, .003), drl, true)
+  add('front Y running guide', guide(map, guideCurves, half, -.002), drl, true)
   emit('front running guide', vector(drlL.p[0]).addScaledVector(forward, .008), false, drl, 3.99)
   const beam = tag(m.beamLens.clone(), 'none')
   beam.emissive.setHex(0xe4f3ff)
