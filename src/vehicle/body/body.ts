@@ -4,7 +4,8 @@ import { toGeometry } from '../geom/mesh'
 import { tessellate, type TessOptions, type TessResult, type TrimFn } from '../geom/tessellate'
 import { cross, norm, sub, type V3 } from '../geom/vec'
 import { arches, glassTrim, makeCuts, paintTrim, type BodyCuts } from './cuts'
-import { frontFace, rearFace } from './faces'
+import { frontFace } from './nose'
+import { rearFace } from './tail'
 import { mainLoft } from './shape'
 
 export interface BodyGeometry {
@@ -95,18 +96,21 @@ export function buildBody(q: BodyQuality): BodyGeometry {
     run(rear, faceGrid, paintTrim(cuts.rear)),
   ]
   paint.push(flange(paint, 0.014))
-  const glass = [run(main, mainGrid, glassTrim(cuts.main, 0.004)), run(front, faceGrid, glassTrim(cuts.front, 0.002))]
+  // The eye is a real opening for the front module's lens, not glass in the body.
+  const glass = [run(main, mainGrid, glassTrim(cuts.main, 0.004))]
   glass.push(flange(glass, 0.006))
   const inner = -0.014
-  const noGlass = (c: typeof cuts.main): TrimFn => {
-    const g = glassTrim(c, 0)
-    return (u, v, p) => Math.max(arches(p), -g(u, v, p))
+  // The backing is open wherever the skin has an opening (glass, bay, intakes, eyes, ducts, outlets), so every opening
+  // goes through the thick panel and its returned walls are the paint flange. Shut gaps stay closed behind.
+  const openings = (c: typeof cuts.main, extra?: (p: V3) => number): TrimFn => {
+    const keep = paintTrim({ ...c, gaps: [], bands: [] }, extra)
+    return (u, v, p) => keep(u, v, p)
   }
-  const bayTrim: TrimFn = (u, v, p) => Math.max(noGlass(cuts.main)(u, v, p), -cuts.curves.bay.signed(u, v, p, 0.3) - 0.02)
+  const bayTrim: TrimFn = (u, v, p) => Math.max(openings(cuts.main, arches)(u, v, p), -cuts.curves.bay.signed(u, v, p, 0.3) - 0.02)
   // The backing shell is the paint pushed inward. It keeps the paint's normal: the offset folds on itself where a crease
   // is tighter than the offset, and its own tangents vanish there.
   const backing = (S: Surface, grid: Pick<TessOptions, 'us' | 'vs'>, trim?: TrimFn): TessResult =>
     run(offsetSurface(S, inner), grid, trim, 3, (u, v) => surfaceNormal(S, u, v))
-  const shell = [backing(main, mainGrid, bayTrim), backing(front, faceGrid), backing(rear, faceGrid)]
+  const shell = [backing(main, mainGrid, bayTrim), backing(front, faceGrid, openings(cuts.front)), backing(rear, faceGrid, openings(cuts.rear))]
   return { paint: toGeometry(paint, true), glass: toGeometry(glass, true), shell: toGeometry(shell, true), cuts, surfaces: { main, front, rear } }
 }
