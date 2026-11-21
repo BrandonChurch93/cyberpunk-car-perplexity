@@ -298,6 +298,8 @@ function reflectorReturns(g: T.BufferGeometry): T.BufferGeometry {
   return returns
 }
 
+const projectorAxis = new T.Vector3(.51, .12, .851).normalize()
+
 function projectorTurn(center: T.Vector3, axis: T.Vector3, radius: number, full: boolean, profile: readonly V2[]): T.BufferGeometry {
   const rotation = new T.Quaternion().setFromUnitVectors(forward, axis)
   return new T.LatheGeometry(profile.map(([r, z]) => new T.Vector2(radius * r, z)), full ? 80 : 32)
@@ -375,7 +377,7 @@ function collarPickup(material: T.Material): void {
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
         float lowerArc = 0.15 + 0.85 * smoothstep(-0.55, 0.52, cos(PI2 * vCollarUV.x + 0.19));
         float rimFace = smoothstep(0.02, 0.11, collarSection()) * (1.0 - smoothstep(0.53, 0.76, collarSection()));
-        totalEmissiveRadiance *= 1.0 - 0.91 * satinFlange() + compactProjector() * 27.0 * lowerArc * rimFace;
+        totalEmissiveRadiance *= 1.0 - 0.91 * satinFlange() + compactProjector() * 53.0 * lowerArc * rimFace;
       `)
     },
   })
@@ -386,15 +388,25 @@ function lensPickup(material: T.Material, flux: T.IUniform<number>): void {
     id: 'front-projector-internal-pickup',
     uniforms: { projectorFlux: flux },
     apply(shader) {
-      projectorFootprint(shader)
-      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'uniform float projectorFlux;')
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec3 vProjectorAxis;')
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', `
+        vProjectorAxis = normalMatrix * (vec3(sign(position.x), 1.0, 1.0) * vec3(${projectorAxis.toArray().join(', ')}));
+      `)
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', `
+        uniform float projectorFlux;
+        varying vec3 vProjectorAxis;
+      `)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
-        float compactDome = compactProjector();
-        float lensAngle = max(0.0, dot(normal, normalize(vViewPosition)));
-        float lensGlint = (1.0 + 21.0 * compactDome) * exp(-mix(134.0, 67.0, compactDome) * (1.0 - lensAngle));
+        vec3 lensView = normalize(vViewPosition);
+        float lensAngle = dot(normal, lensView);
+        float incidence = dot(normalize(vProjectorAxis), lensView);
+        float primary = smoothstep(0.971, 0.983, incidence) * (1.0 - smoothstep(0.991, 0.996, incidence));
+        float oblique = smoothstep(0.23, 0.38, incidence) * (1.0 - smoothstep(0.48, 0.62, incidence));
+        float core = (540.0 * primary + 360.0 * oblique) * exp(-285.0 * (1.0 - lensAngle));
         float caustic = (lensAngle - 0.91) * 46.0;
         float arc = 0.15 * exp(-caustic * caustic) * smoothstep(-0.24, 0.58, normal.y);
-        totalEmissiveRadiance += projectorFlux * (lensGlint + arc) * vec3(0.85, 0.94, 1.0);
+        float lensGlint = exp(-134.0 * (1.0 - lensAngle));
+        totalEmissiveRadiance += projectorFlux * (core + 0.32 * (lensGlint + arc)) * vec3(0.85, 0.94, 1.0);
       `)
     },
   })
@@ -536,7 +548,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
     const min = Math.min(...ys), max = Math.max(...ys)
     const y = (min + max) / 2, r = Math.min(maxRadius, .42 * (max - min))
     const seat = vector(map.S(...fasciaUV(map, x, y)))
-    const axis = new T.Vector3(.51, .12, .851).normalize()
+    const axis = projectorAxis
     const p = seat.clone().addScaledVector(forward, -.022)
     const parts = projectorParts(p, axis, r, full)
     const trim = projectorFront(p, axis, r, flange, full)
@@ -567,9 +579,9 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
       const running = stage * stage
       const level = T.MathUtils.smoothstep(stage, lampThresholds.beamStart, lampThresholds.beamFull)
       for (const l of lamps) l.level = l.beam ? level : running
-      drl.emissiveIntensity = 144 * running
+      drl.emissiveIntensity = 432 * running
       beam.emissiveIntensity = 260 * level
-      lensFlux.value = .32 * level
+      lensFlux.value = level
       rimMetal.emissiveIntensity = .74 * level
     },
   }
