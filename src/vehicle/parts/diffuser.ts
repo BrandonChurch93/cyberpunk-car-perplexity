@@ -216,19 +216,21 @@ function rounded(poly: V2[], radii: number[]): V2[] {
 
 /** One closed strake: a flat slab with a full round on its leading edge, foot and tail; its root sits inside the plate. */
 function strake(b: MeshBuilder, s: (typeof strakes)[number]): void {
-  const tail = tailZ(s.x) - r
+  const midX = (y: number): number => s.x - ((y - leanAxis) / Math.cos(s.lean)) * Math.sin(s.lean)
   const root = (z: number): number => centreY(z) + sheet + 0.002
+  const top = tailZ(midX(root(tailZ(s.x))) + r) - r
+  const bottom = tailZ(midX(s.low) + r) - r
   const poly: V2[] = []
   const radii: number[] = []
   const n = 32
   for (let i = 0; i <= n; i++) {
-    const z = tail + ((s.lead - tail) * i) / n
+    const z = top + ((s.lead - top) * i) / n
     poly.push([z, root(z)])
     radii.push(i === 0 || i === n ? 0.006 : 0)
   }
   poly.push([s.foot, s.low + r])
   radii.push(0.06)
-  poly.push([tail, s.low + r])
+  poly.push([bottom, s.low + r])
   radii.push(0.015)
   slab(b, dedupe(rounded(poly, radii)), s)
 }
