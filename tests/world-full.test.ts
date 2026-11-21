@@ -893,6 +893,37 @@ describe('full roof world', () => {
     expect(tallScreen.y).toBeLessThan(1)
   })
 
+  it('opens the hero skyline on both sides of the screen and separates the east ranks', () => {
+    const { master } = config.formats
+    const camera = new THREE.PerspectiveCamera()
+    applyLens(camera,cameraAt(config.film.heroFrameSeconds,master,anchors),master.width,master.height,{pixel:[0,0],aperture:[0,0]},1)
+    world.root.updateMatrixWorld(true)
+    const ray = new THREE.Raycaster()
+    const hit = (x: number, y: number) => {
+      ray.setFromCamera(new THREE.Vector2(2*x-1,1-2*y),camera)
+      return ray.intersectObject(world.root,true)[0]!
+    }
+    for (const x of [.494,.738,.864,.879]) for (const y of [.095,.140,.190,.240]) {
+      expect(hit(x,y).object.name,`${x}, ${y}`).toBe('city-lit cloud base')
+    }
+    const near = hit(.805,.091)
+    const far = hit(.924,.025)
+    expect(near.object.name).toBe('hero amber tower')
+    expect(far.object.name).toBe('far east financial tower')
+    expect(far.distance-near.distance).toBeGreaterThan(350)
+    const amber = world.root.getObjectByName('hero amber tower volume')!
+    const bounds = new THREE.Box3().setFromObject(near.object)
+    for (const id of ['west jamb pink opal','east jamb amber opal']) {
+      const carriers = amber.getObjectsByProperty('name',`${id} carrier`)
+      expect(carriers).toHaveLength(5)
+      expect(carriers.every(carrier=>bounds.intersectsBox(new THREE.Box3().setFromObject(carrier)))).toBe(true)
+    }
+    for (const id of ['amber upper tower cabinet','amber lower tower cabinet']) {
+      const back = world.root.getObjectByName(id)!.getObjectByName('cabinet anchor channel')!
+      expect(bounds.intersectsBox(new THREE.Box3().setFromObject(back))).toBe(true)
+    }
+  })
+
   it('uses batched geometry for room depths and utility silhouettes within the city budget', () => {
     const rooms: THREE.InstancedMesh[] = []
     let triangles = 0

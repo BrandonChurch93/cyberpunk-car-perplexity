@@ -33,7 +33,7 @@ const floors: Partial<Record<string,readonly Run[]>> = {
   'c9 center clock stack': [[-.13,96,'cyan',3,1.39,1.15],[.16,109,'magenta',3,1.61,1.20]],
   'hero tower setback glass wing': [[-.15,48,'cyan',3,1.71,.78],[.22,59,'magenta',2,1.49,1.13]],
   'hero screen tower': [[-.456,69,'magenta',2,1.48,.93],[-.466,88,'cyan',2,1.64,1.12],[.47,62,'magenta',2,1.7,1.25],[.46,79,'ivory',2,1.94,1.31]],
-  'hero amber tower': [[.28,43,'amber',4,1.72,.94],[-.20,63,'magenta',3,1.65,1.21],[.24,83,'amber',4,1.81,1.19],[-.16,94,'ivory',3,1.89,1.3]],
+  'hero amber tower': [[.28,43,'amber',4,1.72,.94],[-.20,63,'magenta',3,1.65,1.21],[.252,70.2,'ivory',3,1.25,.94],[.24,83,'amber',4,1.81,1.19],[-.16,94,'ivory',3,1.89,1.3]],
   'hero near east garage bay': [[-.31,39,'cyan',3,1.12,.71],[.13,58,'magenta',3,1.47,.96],[-.20,75,'ivory',3,1.48,.81]],
   'hero right edge tower': [[-.448,60,'amber',3,1.58,.87],[-.42,79,'ivory',3,1.80,1.08],[-.32,101,'magenta',3,1.81,1.16]],
   'c9 east narrow stair': [[-.08,86,'cyan',3,1.57,1.22],[.06,103,'cyan',2,1.58,1.35]],
