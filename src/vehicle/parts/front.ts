@@ -13,7 +13,6 @@ import { forward, projectorOptics, projectorParts } from './front-optics'
 type FrontMaterials = Pick<import('../materials').Materials, 'housing' | 'mesh' | 'carbon' | 'drl' | 'beamLens'> & {
   optics?: T.Material
   projector?: T.Material
-  brushed?: T.Material
   reflector?: T.Material
   tag?: (material: T.Material, wetness: WetnessKind) => T.Material
 }
@@ -298,11 +297,48 @@ function reflectorReturns(g: T.BufferGeometry): T.BufferGeometry {
   return returns
 }
 
+function projectorTurn(center: T.Vector3, axis: T.Vector3, radius: number, full: boolean, profile: readonly V2[]): T.BufferGeometry {
+  const rotation = new T.Quaternion().setFromUnitVectors(forward, axis)
+  return new T.LatheGeometry(profile.map(([r, z]) => new T.Vector2(radius * r, z)), full ? 80 : 32)
+    .rotateX(Math.PI / 2).scale(1, .84, 1).applyQuaternion(rotation).translate(...center.toArray())
+}
+
+function projectorFront(center: T.Vector3, axis: T.Vector3, radius: number, full: boolean) {
+  const intervals = full ? 24 : 12
+  const apex = -.0043 + radius * .235
+  const shoulder = apex - radius * .30
+  const dome = Array.from({ length: intervals + 1 }, (_, i): V2 => {
+    const a = Math.PI * .5 * (1 - i / intervals)
+    return [Math.max(1e-5, .913 * Math.sin(a)), shoulder + (apex - shoulder) * Math.cos(a)]
+  })
+  const lens = projectorTurn(center, axis, radius, full, [[.920, shoulder - .0011], [.925, shoulder - .0003], ...dome])
+  const shroud = projectorTurn(center, axis, radius, full, [[1.063, -.005], [1.080, -.0026], [1.077, -.0004],
+    [1.058, .0013], [1.028, .0020], [1.006, .0011]])
+  const rim = projectorTurn(center, axis, radius, full, [[1.006, .0011], [.991, .00155], [.967, .00155],
+    [.943, .0001], [.928, -.002], [.919, shoulder - .00055], [.900, shoulder - .0007], [.875, -.007]])
+  return { lens, shroud, rim }
+}
+
+function lensPickup(material: T.Material, flux: T.IUniform<number>): void {
+  patchMaterial(material, {
+    id: 'front-projector-internal-pickup',
+    uniforms: { projectorFlux: flux },
+    apply(shader) {
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'uniform float projectorFlux;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
+        float lensAngle = max(0.0, dot(normal, normalize(vViewPosition)));
+        float lensGlint = exp(-59.0 * (1.0 - lensAngle));
+        totalEmissiveRadiance += projectorFlux * lensGlint * vec3(0.85, 0.94, 1.0);
+      `)
+    },
+  })
+}
+
 function lensRetainers(center: T.Vector3, axis: T.Vector3, radius: number): T.BufferGeometry {
   const rotation = new T.Quaternion().setFromUnitVectors(forward, axis)
   return merged(Array.from({ length: 4 }, (_, i) =>
     new T.BoxGeometry(radius * .14, radius * .045, .00055)
-      .translate(0, radius * .973, 0)
+      .translate(0, radius * .978, .00165)
       .rotateZ((i + .5) * Math.PI / 2)
       .scale(1, .84, 1).applyQuaternion(rotation).translate(...center.toArray())))
 }
@@ -384,7 +420,10 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
 
   const lensMaterial = m.optics ?? tag(new T.MeshPhysicalMaterial({ color: 0xc1c7cd, roughness: .06, transmission: 1, ior: 1.46, thickness: .003, side: T.FrontSide }), 'beads')
   const projector = m.projector ?? tag(new T.MeshPhysicalMaterial({ color: 0xbec6d0, roughness: .09, transmission: .96, ior: 1.51, thickness: .007 }), 'none')
-  const brushed = m.brushed ?? tag(new T.MeshStandardMaterial({ color: 0x9ca4ae, metalness: .9, roughness: .26 }), 'none')
+  const lensFlux = { value: 0 }
+  lensPickup(projector, lensFlux)
+  const rimMetal = tag(new T.MeshStandardMaterial({ color: 0xbac0c6, metalness: .74, roughness: .24,
+    envMapIntensity: .60, emissive: 0xe2f0ff, emissiveIntensity: 0 }), 'none')
   const reflector = m.reflector ?? tag(new T.MeshStandardMaterial({ color: 0xc4c9ce, metalness: 1, roughness: .11 }), 'none')
   const facetReturn = tag(new T.MeshStandardMaterial({ color: 0x626262, metalness: .71, roughness: .32 }), 'none')
   const bowl = outline(eye)
@@ -418,7 +457,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   beam.emissiveIntensity = 0
   projectorOptics(beam)
   const eyeBox = new T.Box3().setFromPoints(bowl)
-  const [cases, collars, bowls, rings, retainers, lenses, dies] = Array.from({ length: 7 }, () => [] as T.BufferGeometry[])
+  const [cases, shrouds, collars, bowls, rings, retainers, lenses, dies] = Array.from({ length: 8 }, () => [] as T.BufferGeometry[])
   for (const [along, maxRadius, intensity] of [[.46, .029, 170], [.76, .023, 80]]) {
     const x = T.MathUtils.lerp(eyeBox.min.x, eyeBox.max.x, along)
     const ys: number[] = []
@@ -433,17 +472,21 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
     const axis = new T.Vector3(.51, .12, .851).normalize()
     const p = seat.clone().addScaledVector(forward, -.022)
     const parts = projectorParts(p, axis, r, full)
+    const trim = projectorFront(p, axis, r, full)
+    parts.collar.dispose()
+    parts.lens.dispose()
     cases.push(parts.casework)
-    collars.push(parts.collar)
+    shrouds.push(trim.shroud)
+    collars.push(trim.rim)
     rings.push(reflectorReturns(parts.bowl))
     bowls.push(parts.bowl)
     retainers.push(lensRetainers(p, axis, r))
-    lenses.push(parts.lens)
+    lenses.push(trim.lens)
     dies.push(parts.source)
     emit('main beam projector', seat.addScaledVector(forward, .022), true, beam, intensity)
   }
-  add('front projector casings', merged(cases), m.housing, true)
-  add('front machined projector collars', merged(collars), brushed, true)
+  add('front projector casings', merged([...cases, ...shrouds]), m.housing, true)
+  add('front machined projector collars', merged(collars), rimMetal, true)
   add('front projector lens retainers', merged(retainers), m.housing, true)
   add('front faceted projector reflector bowls', merged(bowls), reflector, true)
   add('front projector reflector step returns', merged(rings), facetReturn, true)
@@ -458,6 +501,8 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
       for (const l of lamps) l.level = l.beam ? level : running
       drl.emissiveIntensity = 144 * running
       beam.emissiveIntensity = 260 * level
+      lensFlux.value = 2.2 * level
+      rimMetal.emissiveIntensity = .74 * level
     },
   }
 }
