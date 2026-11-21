@@ -311,14 +311,14 @@ export function signGlass(glyphs: THREE.Texture, tint: THREE.Color, width: numbe
   })
 }
 
-export function fixtureOpal(color: THREE.Color, segments: number): THREE.ShaderMaterial {
+export function fixtureOpal(color: THREE.Color, segments: number, shaped = false): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     toneMapped: false, vertexShader: opalVertex,
-    uniforms: { tint: { value: color }, segments: { value: segments } },
+    uniforms: { tint: { value: color }, segments: { value: segments }, shaped: { value: Number(shaped) } },
     fragmentShader: /* glsl */ `
       varying vec2 face;
       uniform vec3 tint;
-      uniform float segments;
+      uniform float segments, shaped;
       void main() {
         vec2 d=abs(face-.5);
         float rim=1.0-smoothstep(.42,.51,max(d.x,d.y));
@@ -328,7 +328,15 @@ export function fixtureOpal(color: THREE.Color, segments: number): THREE.ShaderM
           seam=.085+.915*smoothstep(.026,.098+fwidth(t),abs(fract(t+.5)-.5));
         }
         float diffusion=.74+.26*cos((face.x-.5)*2.4);
-        gl_FragColor=vec4(tint*(.12+.88*rim)*seam*diffusion,1);
+        vec3 lens=tint*diffusion;
+        if (shaped>.5) {
+          float x=face.x-.5;
+          float shoulder=exp(-16.9*x*x), core=exp(-123.0*x*x);
+          float feed=.96+.04*cos(face.y*5.2);
+          lens=(tint*(.28+.35*shoulder+.35*core)+tint.b*vec3(.081,.048,0.0)*core)*feed;
+          seam=.61+.39*seam;
+        }
+        gl_FragColor=vec4(lens*(.12+.88*rim)*seam,1);
       }
     `,
   })
