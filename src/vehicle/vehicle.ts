@@ -137,6 +137,7 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const tl = taillamps(cuts.maps.rear, [cuts.curves.stem, cuts.curves.lampU, cuts.curves.lampL], cuts.curves.lens, cuts.curves.slot, { map: cuts.maps.main, curve: cuts.curves.lampWrap })
   addPair(tl.guide, m.tail, 'tail-guide')
   addPair(tl.housing, m.under, 'tail-housing')
+  addPair(tl.reflector, m.rearOptics, 'tail-reflector')
 
   // Front module: eyes, Y guides, projectors, ducts, grille and splitter (parts/front.ts).
   // The registry accepts any material; the front module tags its own lens, guide and die finishes.
@@ -160,8 +161,8 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   add(sprung, by.mesh, m.mesh, 'bay-mesh')
 
   const ub = underbody()
-  addPair(ub.floor, m.under, 'diffuser')
-  addPair(ub.strakes, m.carbon, 'diffuser-fin')
+  addPair(ub.floor, m.carbon, 'diffuser')
+  addPair(ub.strakes, m.matte, 'diffuser-fin')
   const va = valance(cuts.curves.lower, cuts.maps.rear)
   addPair(va.wall, m.under, 'diffuser-wall')
   addPair(va.panel, m.mesh, 'diffuser-mesh')
