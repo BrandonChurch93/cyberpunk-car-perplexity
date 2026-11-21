@@ -47,8 +47,8 @@ export type P3 = readonly [number, number, number]
  */
 export const frontSection = {
   brow: [
-    { v: 1, p: [0, 0.41, 2.4737] as P3, name: 'tip' },
-    { v: 0.86, p: [0.354, 0.4403, 2.384] as P3, name: 'vee' },
+    { v: 1, p: [0, 0.385, 2.4737] as P3, name: 'tip' },
+    { v: 0.86, p: [0.3, 0.425, 2.355] as P3, name: 'vee' },
     { v: 0.72, p: [0.476, 0.5117, 2.173] as P3, name: 'corner' },
     { v: 0.6, p: [0.5, 0.5057, 2.168] as P3, name: 'rail' },
     { v: 0.4, p: [0.8, 0.598, 2.14] as P3, name: 'brow' },
@@ -66,7 +66,7 @@ export const frontSection = {
 /** The fascia's plane breaks, from the splitter up to the V end of the brow. */
 export const fasciaBreak: P3[] = [
   [0.285, 0.15, 2.282],
-  [0.354, 0.4403, 2.384],
+  [0.3, 0.425, 2.355],
 ]
 
 /**
@@ -88,19 +88,19 @@ export const featureLines = {
   /** Bonnet center line: one convex sweep from the cowl down to the nose tip, falling ever more steeply toward the
    * nose, a small break at the cowl, the windscreen one convex arc into the roof. */
   center: [
-    { z: 2.4737, x: 0, y: 0.41, d: [0, -0.5] },
-    { z: 1.51, x: 0, y: 0.736, d: [0, -0.19] },
+    { z: 2.4737, x: 0, y: 0.385, d: [0, -0.7] },
+    { z: 1.51, x: 0, y: 0.736, d: [0, -0.17] },
   ] as PathNode[],
   /** Bonnet inner line: from the bonnet corner to the windscreen base on the same convex sweep as the center line.
    * Behind the front edge it is no crease: the bonnet is one crowned surface from the center out to the wing ridge. */
   inner: [
-    { z: 2.173, x: 0.476, y: 0.5117, d: [0.282, -0.47] },
-    { z: 1.513, x: 0.29, y: 0.735, d: [0.282, -0.2] },
+    { z: 2.173, x: 0.476, y: 0.5117, d: [0.282, -0.4] },
+    { z: 1.513, x: 0.29, y: 0.735, d: [0.282, -0.26] },
   ] as PathNode[],
   /** V end: the outer end of the leading V, carried back to the cowl on the bonnet's convex sweep. */
   vee: [
-    { z: 2.384, x: 0.354, y: 0.4403, d: [0.233, -0.49] },
-    { z: 1.51, x: 0.15, y: 0.736, d: [0.233, -0.19] },
+    { z: 2.355, x: 0.3, y: 0.425, d: [0.1775, -0.53] },
+    { z: 1.51, x: 0.15, y: 0.736, d: [0.1775, -0.19] },
   ] as PathNode[],
   /**
    * Wing ridge: the crisp valley where the bonnet meets the wing crown, from the front edge to the cowl on the
@@ -133,7 +133,7 @@ export const featureLines = {
   ] as P3[],
   /** Arch shoulder: the outer crease from the brow tip over the front arch to the door. */
   shoulder: [
-    { z: 2.14, x: 0.8, y: 0.598, d: [-0.727, -0.427] },
+    { z: 2.14, x: 0.8, y: 0.598, d: [-0.727, -0.6] },
     { z: 1.4, x: 0.982, y: 0.808 },
     { z: 0.6, x: 0.922, y: 0.772 },
   ] as PathNode[],

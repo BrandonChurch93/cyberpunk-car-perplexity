@@ -639,16 +639,16 @@ export async function makeMaterials(detail: VehicleDetail, paint: PaintSpec): Pr
   if (!p.surfaces.some((x) => x.material === p.cabin)) p.tag(p.cabin, 'none')
   const std = (color: number, roughness: number): T.MeshStandardMaterial =>
     p.tag(new T.MeshStandardMaterial({ color, roughness, metalness: 0, side: T.DoubleSide }), 'none') as T.MeshStandardMaterial
-  const emitter = (color: number, roughness: number, emissive: T.Color): T.MeshPhysicalMaterial =>
-    p.tag(new T.MeshPhysicalMaterial({ color, roughness, metalness: 0, emissive, emissiveIntensity: 0 }), 'beads') as T.MeshPhysicalMaterial
+  const emitter = (color: number, roughness: number, emissive: T.Color, wetness: 'beads' | 'none' = 'beads'): T.MeshPhysicalMaterial =>
+    p.tag(new T.MeshPhysicalMaterial({ color, roughness, metalness: 0, emissive, emissiveIntensity: 0 }), wetness) as T.MeshPhysicalMaterial
   const drl = emitter(0xb9bcc0, .4, new T.Color(.86, .92, 1))
-  const tail = emitter(0x3a3c40, .4, new T.Color(1, .02, .01))
+  const tail = emitter(0x3a3c40, .4, new T.Color(1, .02, .01), 'none')
   const beamLens = emitter(0x55585c, .2, new T.Color(1, .96, .9))
   const darkCarbon = p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x0e0f11 : 0x1a1b1e, metalness: .15, roughness: .4, clearcoat: .7, clearcoatRoughness: .1, anisotropy: full ? .3 : 0, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial
   if (darkCarbon.anisotropy > 0) tangentFallback(darkCarbon)
   const cabinTrim = p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x3e4146 : 0x1c1e21, roughness: .38, clearcoat: full ? .45 : 0, clearcoatRoughness: .2, envMapIntensity: full ? 2 : 1, side: T.DoubleSide }), 'none') as T.MeshPhysicalMaterial
   if (full) clusterSpill(cabinTrim)
-  const tailInner = emitter(0x3a3c40, .4, new T.Color(1, .02, .01))
+  const tailInner = emitter(0x3a3c40, .4, new T.Color(1, .02, .01), 'none')
   const wet = (color: number, metalness: number, roughness: number, clearcoat: number, clearcoatRoughness: number): T.MeshPhysicalMaterial =>
     p.tag(new T.MeshPhysicalMaterial({ color, metalness, roughness, clearcoat, clearcoatRoughness, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial
   return {

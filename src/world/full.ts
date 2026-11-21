@@ -45,10 +45,7 @@ export async function createFullWorld(): Promise<WorldModule> {
   const hero = addApprovedHeroLayout(root, labels, materials)
   articulateSouthTowers(root)
   const survey = approvedHeroSourceSurvey()
-  const district = (id: string) => {
-    const { at: [x,,z] } = survey.find(source=>source.id===id)!
-    return new THREE.Vector2(x,z)
-  }
+  const district = (id: string) => new THREE.Vector3(...survey.find(source=>source.id===id)!.at)
   const northSkyline = addNorthSkyline(root,labels)
   addSky(root,[district('magenta violet tower screen'),district('left cyan facade sail')],hero.muralCloud,northSkyline.district)
   const reflections = addReflectionFrontages(root,labels)

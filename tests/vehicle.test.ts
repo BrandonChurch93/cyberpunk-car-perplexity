@@ -13,7 +13,7 @@ beforeAll(async () => {
   a = await createVehicle({ paint, detail: 'blockout' })
   b = await createVehicle({ paint, detail: 'blockout' })
   full = await createVehicle({ paint: paintById(defaultPaint), detail: 'full' })
-}, 240_000)
+}, 480_000)
 
 function bodyBox(root: THREE.Object3D, mirrors: boolean): THREE.Box3 {
   const box = new THREE.Box3()

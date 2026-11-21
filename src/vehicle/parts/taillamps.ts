@@ -284,8 +284,8 @@ function lensShell(top: Rim[], bottom: Rim[]): MeshBuilder {
   return solid(rows, rows.map(() => false), true, false)
 }
 
-/** The quarter seam's end at the lamp's front tip: a dark return across its 4 mm channel, deeper than its 11 mm walls. */
-export const seamSpec = { t: [-0.214, -0.226, -0.951] as V3, half: 0.0026, top: 0.0004, depth: 0.0125, thick: 0.0014, round: 0.0015 } as const
+/** The quarter seam's end at the lamp's front tip: the channel's upper 4.5 mm runs open into the lamp gap, a dark return closes it below, past its 11 mm walls. */
+export const seamSpec = { t: [-0.214, -0.226, -0.951] as V3, half: 0.0026, top: 0.0045, depth: 0.0125, thick: 0.0014, round: 0.0015 } as const
 
 function seamReturn(tip: Rim): MeshBuilder {
   const q = seamSpec

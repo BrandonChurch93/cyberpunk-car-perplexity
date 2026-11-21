@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { config, frameCount, shutterSeconds } from '../src/config'
 import { layers } from '../src/core/contract'
 import { LightRig } from '../src/core/lights'
+import { sampleSet } from '../src/core/sampler'
 import { ImpactSurfaces, type ImpactSurfacePoint } from '../src/weather/air/impact-surfaces'
 import { fallCycle, terminalSpeed } from '../src/weather/air/motion'
-import { rainMeshes, RibbonView } from '../src/weather/air/ribbons'
+import { makeRibbonGeometry, rainMeshes, RibbonView } from '../src/weather/air/ribbons'
 import type { WorldModule } from '../src/world'
 
 describe('air rain motion', () => {
@@ -103,6 +104,43 @@ describe('air rain motion', () => {
     expect(heroFields.some(mesh => mesh.visible)).toBe(false)
     expect(expose(config.film.durationSeconds)).toBe(0)
     expect(heroFields.every(mesh => mesh.visible)).toBe(true)
+  })
+
+  it('uses patch-relative blending only for falling rain on the film camera in the paint beat', () => {
+    const view = new RibbonView()
+    const lights = new LightRig([], 1).uniforms
+    const make = (layer: number) => view.makeMesh(lights, makeRibbonGeometry(new Float32Array(), new Float32Array()), layer)
+    const rain = make(0)
+    const crown = make(-1)
+    const scene = new THREE.Scene()
+    const group = new THREE.Group()
+    const camera = new THREE.PerspectiveCamera()
+    const probe = new THREE.PerspectiveCamera()
+    const format = config.formats.master
+    const renderer = {
+      getCurrentViewport: (rect: THREE.Vector4) => rect.set(0, 0, format.width, format.height),
+      getRenderTarget: () => null,
+    } as unknown as THREE.WebGLRenderer
+    const state = { position: camera.position, quaternion: camera.quaternion, focusDistance: 0.75,
+      fNumber: 11, focalMm: config.lens.focalLengthsMm[4], sensorWidthMm: 36, near: 0.02, far: 100 }
+    const at = (timeSeconds: number) => {
+      const frameIndex = Math.round(timeSeconds * config.film.fps)
+      const frame = { frameIndex, frameKey: frameIndex % frameCount, timeSeconds, tier: 'draft' as const,
+        samples: config.tiers.draft.samplesPerFrame, format }
+      view.beginFrame({ frame, camera: state, format })
+      view.beginSample({ camera, state, timeSeconds, sample: { ...sampleSet(frameIndex, 0), frame, sampleIndex: 0, timeSeconds } })
+    }
+    const use = (mesh: THREE.Mesh, target: THREE.Camera) => {
+      const material = mesh.material as THREE.ShaderMaterial
+      mesh.onBeforeRender(renderer, scene, target, mesh.geometry, material, group)
+      return [material.uniforms.uMacro.value, material.blendSrc]
+    }
+    at(config.film.macroFrameSeconds)
+    expect(use(rain, camera)).toEqual([true, THREE.DstColorFactor])
+    expect(use(crown, camera)).toEqual([false, THREE.OneFactor])
+    expect(use(rain, probe)).toEqual([false, THREE.OneFactor])
+    at(config.film.heroFrameSeconds)
+    expect(use(rain, camera)).toEqual([false, THREE.OneFactor])
   })
 
   it('finds the highest available wet, upward face in transformed world space', () => {
