@@ -71,12 +71,15 @@ export function labelFace(parent: THREE.Object3D, name: string, at: Tuple, size:
   plate(parent, `lettering ${name}`, new THREE.MeshBasicMaterial({ color, map: tx, toneMapped: false, alphaTest: .22 }), at, ...size).rotation.z = rotation
 }
 
-export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector2,THREE.Vector2]): void {
+export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector2,THREE.Vector2], muralCloud: THREE.Color, northDistrict?: THREE.Vector2): void {
   const sky = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, toneMapped: false,
     uniforms: {
       cloudSeed: { value: streamSeed('world/city/cloud-base') / 4294967296 * 37 },
       cloudDistricts: { value: cloudDistricts },
+      muralCloud: { value: muralCloud },
+      northDistrict: { value: northDistrict ?? new THREE.Vector2() },
+      northGlow: { value: northDistrict ? 1 : 0 },
     },
     vertexShader: /* glsl */ `
       varying vec3 skyDirection;
@@ -90,6 +93,9 @@ export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector
       varying vec3 skyDirection;
       uniform float cloudSeed;
       uniform vec2 cloudDistricts[2];
+      uniform vec3 muralCloud;
+      uniform vec2 northDistrict;
+      uniform float northGlow;
       float cloudHash(vec2 p) {
         vec3 q = fract(vec3(p.xyx+cloudSeed)*.1031);
         q += dot(q,q.yzx+33.33);
@@ -174,8 +180,25 @@ export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector
           float slots = smoothstep(.34,.61,cloudNoise(fold*1.65+vec2(-4.8,8.6)));
           float rim = smoothstep(.018,.26,cloudNoise(fold*2.35+vec2(3.55,lobe*.91-.29))-billows);
           float radiance = (.043+.41*canopyBelly)*(.31+.69*slots)+.88*pow(rim,1.6)*(.32+.68*slots);
-          vec3 magentaCloud = mix(vec3(1.43,.36,.72),vec3(.68,.34,1.40),smoothstep(.23,.73,curl.y));
+          vec3 magentaCloud = muralCloud*mix(vec3(1.38,1.02,.69),vec3(.66,.97,1.33),smoothstep(.23,.73,curl.y));
           c += highBand*radiance*(mainUpglow*magentaCloud+cyanUpglow*vec3(.013,.046,.105));
+        }
+        float northBand = northGlow*smoothstep(.15,.36,d.y)*(1.0-smoothstep(.80,.96,d.y))*smoothstep(0.0,.32,d.z);
+        if (northBand > .0) {
+          vec2 northFoot = d.xz*(410.0/d.y);
+          vec2 northOffset = (northFoot-northDistrict)/vec2(230.0,270.0);
+          float northUpglow = pow(1.0+dot(northOffset,northOffset),-1.38);
+          vec2 northWind = mat2(.83,-.56,.56,.83)*(northFoot/148.0);
+          vec2 northCurl = vec2(cloudNoise(northWind*.71+vec2(-8.4,2.7)),cloudNoise(northWind*.79+vec2(5.2,-9.6)));
+          vec2 northFold = northWind+1.31*(northCurl-.5);
+          float northLobe = cloudNoise(northFold*vec2(1.04,.88)+vec2(-2.9,7.1));
+          float northBillows = cloudNoise(northFold*2.21+vec2(-5.6,northLobe*.87));
+          float northDensity = .58*northLobe+.42*northBillows;
+          float northBelly = smoothstep(.30,.72,northDensity);
+          float northRim = smoothstep(.02,.27,cloudNoise(northFold*2.21+vec2(-5.4,northLobe*.87-.31))-northBillows);
+          float northRadiance = (.05+.38*northBelly)+.62*pow(northRim,1.6)*(.4+.6*northBelly);
+          vec3 northCloud = mix(vec3(1.18,.30,.70),vec3(.62,.30,1.32),smoothstep(.25,.75,northCurl.x));
+          c += northBand*northRadiance*northUpglow*northCloud;
         }
         gl_FragColor = vec4(c, 1.0);
       }

@@ -80,7 +80,7 @@ function beamLight(lamp: Lamp, i: number): FilmLight {
   }
 }
 
-/** Lamps that are not beams light the ground near them. They are merged into one light per corner, set just outside the body and aimed out and down, so it never lights the parts around the lamp itself. */
+/** Non-beam lamps share one light per corner. */
 function glowLights(vehicle: VehicleModule, lamps: Lamp[]): FilmLight[] {
   vehicle.root.updateWorldMatrix(true, true)
   const toVehicle = vehicle.root.matrixWorld.clone().invert()
@@ -106,20 +106,29 @@ function glowLights(vehicle: VehicleModule, lamps: Lamp[]): FilmLight[] {
       color.g += c.g * w
       color.b += c.b * w
     })
-    const outward = Math.sign(anchor.position.z) || 1
-    anchor.position.z += outward * glowStandOff
-    anchor.lookAt(anchor.position.x, anchor.position.y - 0.7, anchor.position.z + outward)
-    vehicle.root.add(anchor)
+    const tail = corner.lamps.find(({ object }) => /^tail--?1$/.test(object.name))?.object
+    const sprung = tail?.parent
+    const seated = tail !== undefined && sprung != null
+    if (seated) {
+      const side = Math.sign(tail.position.x)
+      anchor.position.copy(tail.position).add(new THREE.Vector3(side * .018, -.008, -.045))
+      anchor.lookAt(anchor.position.clone().add(new THREE.Vector3(side * .35, -.72, -.57)))
+      sprung.add(anchor)
+    } else {
+      const outward = Math.sign(anchor.position.z) || 1
+      anchor.position.z += outward * glowStandOff
+      anchor.lookAt(anchor.position.x, anchor.position.y - 0.7, anchor.position.z + outward)
+      vehicle.root.add(anchor)
+    }
     return {
       id: `vehicle-glow-${key}`,
-      kind: 'spot',
+      kind: seated ? 'area' : 'spot',
       object: anchor,
       color,
-      intensity: total,
-      size: [0.3, 0.1],
-      angle: THREE.MathUtils.degToRad(80),
-      penumbra: 1,
-      range: 14,
+      intensity: seated ? total * .26 : total,
+      size: seated ? [.12, .018] : [0.3, 0.1],
+      ...(seated ? {} : { angle: THREE.MathUtils.degToRad(80), penumbra: 1 }),
+      range: seated ? 2.3 : 14,
       shadow: false,
       beam: false,
       level: () => corner.lamps.reduce((sum, lamp, i) => sum + (lamp.level ?? 0) * weights[i], 0) / total,

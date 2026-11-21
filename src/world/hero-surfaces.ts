@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { config } from '../config'
 import { stream } from '../core/random'
 import { insertAfter, patchMaterial } from '../materials/patch'
+import { muralMean, muralPainting, pictureLookup } from './mural-picture'
 
 const opalVertex = /* glsl */ `
   varying vec2 face;
@@ -22,7 +23,7 @@ const noise = /* glsl */ `
 
 export type Facade = 'curtain' | 'concrete' | 'banded' | 'hotel'
 export type SignSpill = { point: THREE.Vector3; size: THREE.Vector2; color: THREE.Color }
-export type ScreenReflection = { point: THREE.Vector3; normal: THREE.Vector3; size: THREE.Vector2 }
+export type ScreenReflection = { point: THREE.Vector3; normal: THREE.Vector3; size: THREE.Vector2; picture: ReturnType<typeof billboardMural>['picture']; spill: THREE.Color }
 export type FacadeLayer = 'near' | 'middle' | 'far'
 
 export function towerSurface(id: string, level: number, facade: Facade, screen: ScreenReflection, spills: readonly SignSpill[], layer: FacadeLayer, frontageDistance: number): THREE.MeshStandardMaterial {
@@ -47,6 +48,8 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
     ? new THREE.Color(.030,.038,.068) : new THREE.Color(.014,.015,.024)
   const stripFloors = /left edge|west garage/.test(id)
   const claddingShade = id === 'hero amber tower' ? .71 : 1
+  const tenantGate = layer === 'near' ? new THREE.Vector3(.115,.428,.785) : layer === 'middle'
+    ? new THREE.Vector3(.143,.477,.833) : new THREE.Vector3(.20,.550,.913)
   const windowTail = layer !== 'far' && /left edge|hotel tower|parking tower|west garage/.test(id) ? 94
     : layer !== 'far' && /amber tower|right edge|east garage/.test(id) ? 53
     : layer !== 'far' && /screen tower|bar tower|center exchange|center clock|center fluted/.test(id) ? 46 : 0
@@ -64,6 +67,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   mat.userData.litOpeningMeters = clearOpening.toArray()
   mat.userData.mechanicalFloorPitch = mechanicalPitch
   mat.userData.roomDepthMeters = roomDepthMeters.toArray()
+  mat.userData.tenantGate = tenantGate.toArray()
   patchMaterial(mat, {
     id: 'hero tower cladding and window rooms',
     uniforms: {
@@ -72,8 +76,10 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
       paneHalfWidth: { value: paneHalfWidth }, litOpening: { value: litOpening },
       facadeTint: { value: facadeTint }, reflectedVeil: { value: reflectedVeil }, windowTail: { value: windowTail }, claddingShade: { value: claddingShade },
       mechanicalPitch: { value: mechanicalPitch }, distanceLayer: { value: layer === 'near' ? 0 : layer === 'middle' ? 1 : 2 },
-      stripFloors: { value: stripFloors ? 1 : 0 },
+      stripFloors: { value: stripFloors ? 1 : 0 }, tenantGate: { value: tenantGate },
       screenPoint: { value: screen.point }, screenNormal: { value: screen.normal }, screenSize: { value: screen.size },
+      screenSpill: { value: screen.spill },
+      screenInk: screen.picture.artwork, screenFlow: screen.picture.flow, screenTravel: screen.picture.travel, screenGain: screen.picture.artworkGain,
       spillPoint: { value: [spill(0).point,spill(1).point] }, spillSize: { value: [spill(0).size,spill(1).size] },
       spillTint: { value: [spill(0).color,spill(1).color] },
     },
@@ -91,10 +97,14 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         ${prefix}
         uniform vec2 bay, roomDepthMeters, litOpening;
         uniform float salt, facadeFamily, shellLuma, whiteBalance, mechanicalPitch, distanceLayer, stripFloors, windowTail, paneHalfWidth, claddingShade;
-        uniform vec3 screenPoint,screenNormal,facadeTint,reflectedVeil;
+        uniform vec3 screenPoint,screenNormal,facadeTint,reflectedVeil,screenSpill,tenantGate;
         uniform vec3 spillPoint[2],spillTint[2];
         uniform vec2 screenSize,spillSize[2];
+        uniform sampler2D screenInk;
+        uniform vec2 screenFlow;
+        uniform float screenTravel,screenGain;
         ${noise}
+        ${pictureLookup}
         float windowMask(vec2 p,vec2 halfPane,vec2 aa) {
           vec2 w=1.0-smoothstep(halfPane-aa,halfPane+aa,abs(p));
           return w.x*w.y;
@@ -144,9 +154,9 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         float concrete=1.0-step(.5,abs(facadeFamily-1.0));
         float banded=1.0-step(.5,abs(facadeFamily-2.0));
         float curtain=1.0-max(concrete,max(banded,hotel));
-        float tenantOn=step(.53,mix(suite,tenantStack,.58));
-        float occupied=step(.18,floorState)*max(tenantOn*step(.13,roomId),step(.976,roomId));
-        float broadTenant=step(.883+.024*hotel,floorState)*step(.075,roomId);
+        float tenantOn=step(tenantGate.y,mix(suite,tenantStack,.63));
+        float occupied=step(tenantGate.x,floorState)*max(tenantOn*step(.095,roomId),step(.976,roomId));
+        float broadTenant=step(tenantGate.z+.024*hotel,floorState)*step(.075,roomId);
         float mechanical=1.0-step(1.0,mod(roomCell.y+floor(salt),mechanicalPitch));
         float podium=(1.0-smoothstep(.56,.74,wallUnit.y));
         float accentRun=stripFloors*podium*step(.79,stack)*step(.28,suite);
@@ -193,24 +203,36 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         vec2 screenUV=vec2(dot(screenHit,screenAxis),screenHit.y)/screenSize;
         float screenMirror=step(2.0,screenT)*step(planeCos,-.02)*
           (1.0-smoothstep(.29,.91,max(abs(screenUV.x),abs(screenUV.y))));
-        vec3 screenGlass=mix(vec3(.39,.031,.128),vec3(.064,.027,.32),smoothstep(-.41,.47,screenUV.x));
+        vec3 screenGlass=muralPicture(screenInk,clamp(screenUV+.5,0.0,1.0),screenFlow,screenTravel)*screenGain*.078;
         vec3 signGlow=vec3(0.0);
         for (int signIndex=0;signIndex<2;signIndex++) {
           vec3 signDelta=wallPoint-spillPoint[signIndex];
-          vec2 signRadius=spillSize[signIndex]*vec2(.48,.65)+vec2(3.6,5.2);
+          vec2 signRadius=spillSize[signIndex]*vec2(.52,.68)+vec2(9.5+spillSize[signIndex].y*.11,11.6);
           float dy=signDelta.y/signRadius.y;
           float colorWash=1.0/(1.0+dot(signDelta.xz,signDelta.xz)/(signRadius.x*signRadius.x)+dy*dy);
-          signGlow+=spillTint[signIndex]*colorWash*colorWash;
+          float facing=.34+.66*max(0.0,-dot(wallNormal,signDelta)/max(2.0,length(signDelta)));
+          signGlow+=spillTint[signIndex]*colorWash*colorWash*facing;
         }
         float envelope=.18+.13*distanceLayer+.31*shellLuma;
         float skyStain=smoothstep(.25,.91,wallUnit.y);
         vec3 farVeil=reflectedVeil*(distanceLayer*.5)*(.78+.22*skyStain);
         float panelReflectance=max(.12,.47+.25*panelPatina+.13*panelGrain-.22*spandrel-.33*mechanical-.32*rib-.22*glass);
-        totalEmissiveRadiance+=wallSide*(claddingShade*envelope*skyGlass*panelReflectance+farVeil+signGlow*(.048+.11*glass));
+        vec3 toScreen=screenPoint-wallPoint;
+        float screenReach=sqrt(screenSize.x*screenSize.y)*1.36;
+        vec3 muralDistance=toScreen*vec3(1.0,.71,1.0)/screenReach;
+        float muralBounce=1.0/(1.0+dot(muralDistance,muralDistance));
+        float muralFacing=.37+.63*max(0.0,dot(wallNormal,toScreen)/max(3.0,length(toScreen)));
+        vec3 districtBounce=mix(vec3(.28,.26,.33),screenSpill,.46)*muralBounce*muralBounce*muralFacing*.24;
+        float rank=distanceLayer*.5;
+        vec3 cityBounce=mix(vec3(.058,.064,.077)*facadeTint,vec3(.041,.040,.066),rank);
+        cityBounce*=claddingShade*(.64+.45*panelReflectance+.22*sqrt(faceOn))*(.84+.16*skyStain);
+        vec3 spill=signGlow*(.19+.12*glass)+districtBounce*(.72+.52*panelReflectance);
+        totalEmissiveRadiance+=wallSide*(claddingShade*envelope*skyGlass*panelReflectance+farVeil+cityBounce+spill);
         totalEmissiveRadiance+=(sill+pilaster*.32+corner*.44)*skyGlass*(.33+.16*floorState)*(.52+.59*curtain+.35*banded);
-        float lampRadiance=.13+1.35*exposure*exposure+13.4*pow(exposure,11.0)+.51*windowTail*pow(exposure,17.0);
+        float lampRadiance=.19+1.49*exposure*exposure+mix(12.3,5.4,rank)*pow(exposure,11.0)+.48*windowTail*pow(exposure,17.0);
+        roomTint=mix(roomTint,vec3(.66,.65,.83),rank*.48);
         vec3 litRoom=roomTint*lamp*lampRadiance*roomLight;
-        vec3 subpixelRooms=mix(vec3(.165,.104,.075),vec3(.125,.132,.190),distanceLayer*.5)*(1.0-mechanical);
+        vec3 subpixelRooms=mix(vec3(.179,.121,.087),vec3(.101,.103,.152),rank)*(1.0-mechanical);
         totalEmissiveRadiance+=glass*(.28+.75*curtain+.28*banded)*
           (claddingShade*skyGlass*(.23+(1.0-faceOn)*.35)+screenGlass*screenMirror*.37)*(1.0-.59*mechanical);
         totalEmissiveRadiance+=aperture*mullion*mix(subpixelRooms,litRoom,surfaceDetail);
@@ -220,26 +242,32 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   return mat
 }
 
-type MuralProfile = { violet?: THREE.Color; offset?: number; banded?: number; travel?: number; laps?: number; relief?: number; picture?: boolean }
+type MuralProfile = { violet?: THREE.Color; offset?: number; banded?: number; travel?: number; laps?: number; relief?: number; picture?: boolean; artworkGain?: number }
 
 export function billboardMural(width: number, height: number, magenta: THREE.Color, profile: MuralProfile = {}) {
-  const { violet = new THREE.Color(.165,.061,2.39), offset = 0, banded = 0, travel = .071, laps = 1, relief = 0, picture = false } = profile
+  const { violet = new THREE.Color(.165,.061,2.39), offset = 0, banded = 0, travel = .071, laps = 1, relief = 0, picture = false, artworkGain = 0 } = profile
   const shade = new THREE.Color()
+  const estimateFlow = new THREE.Vector2()
+  let estimateTime = NaN
+  let peak = 0
   const uniforms = {
     flow: { value: new THREE.Vector2(1,0) }, pixelCount: { value: new THREE.Vector2(width / .041, height / .041) },
     cabinetCount: { value: new THREE.Vector2(Math.round(width/3.12), Math.round(height/3.02)) },
     cabinetSalt: { value: stream('world/hero/mural modules').range(0,61) },
     magenta: { value: magenta }, violet: { value: violet }, banded: { value: banded },
     travel: { value: travel }, relief: { value: relief }, picture: { value: Number(picture) },
+    artwork: { value: artworkGain > 0 ? muralPainting(picture) : null }, artworkGain: { value: artworkGain },
   }
   const material = new THREE.ShaderMaterial({
     uniforms, toneMapped: false, vertexShader: opalVertex,
     fragmentShader: /* glsl */ `
       varying vec2 face;
       uniform vec2 flow, pixelCount, cabinetCount;
-      uniform float cabinetSalt, banded, travel, relief, picture;
+      uniform float cabinetSalt, banded, travel, relief, picture, artworkGain;
+      uniform sampler2D artwork;
       uniform vec3 magenta, violet;
       ${noise}
+      ${pictureLookup}
       void main() {
         vec2 p=face-.5+flow*travel;
         float billow=field(p*2.05+vec2(.73,1.48));
@@ -270,27 +298,15 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
         float cap=smoothstep(.0,.13,face.y)*(1.0-smoothstep(.91,.996,face.y));
         led=mix(led,led*.81+vec3(.83,.44,1.27),banded*lightwell*.66);
         level*=mix(1.0,.065+.935*lightwell*cap,banded);
-        if (picture>0.0) {
-          vec2 cloud=(face-.5)*vec2(1.0,.84)+flow*travel*.31;
-          vec2 warp=vec2(field(cloud*3.47+vec2(3.3,.8)),field(cloud*3.29+vec2(-.6,4.4)))-.5;
-          vec2 q=cloud+warp*.36;
-          float broad=field(q*3.17+vec2(.51,2.43));
-          float vapor=.54*broad+.29*field(q*7.6+broad)+.17*field(q*16.0-warp);
-          float plume=q.x-.53*q.y+.31*(broad-.5)+.036*sin(q.y*13.0+warp.x*2.0);
-          float pink=1.0-smoothstep(-.18,.30,plume);
-          vec2 hotspot=(q-vec2(-.216,.093))*vec2(3.65,2.11);
-          float core=exp(-dot(hotspot,hotspot))*(.41+.59*smoothstep(.23,.71,vapor));
-          float cloudFoot=plume+.14-.12*field(q*5.8+vec2(1.9,.2));
-          float billowing=1.0-smoothstep(.05,.23,abs(cloudFoot));
-          float cloudTop=smoothstep(.34,.68,vapor)*billowing;
-          float folds=field(vec2(cloudFoot*13.0,q.y*4.9)+warp*2.6);
-          float filaments=smoothstep(.38,.78,folds)*billowing*smoothstep(.29,.63,vapor);
-          float riftAxis=(plume-.17+.09*folds)*4.2;
-          float rift=exp(-riftAxis*riftAxis);
-          led=mix(violet*.96,magenta*.96,pink)*(.84+.25*broad-.29*rift);
-          led+=vec3(1.24,.245,.46)*core+vec3(1.08,.73,.67)*cloudTop*(.55+.45*core);
-          led+=vec3(.24,.35,1.26)*filaments+vec3(.07,.050,.098);
-          level=1.23*tile*mix(1.0,.68+.32*diode,pixelAA);
+        if (artworkGain>0.0) {
+          led=muralPicture(artwork,face,flow,travel)*artworkGain;
+          level=tile*mix(1.0,.68+.32*diode,pixelAA)*mix(1.0,.12+.88*lightwell*cap,banded);
+          if (picture>0.0) {
+            vec2 driver=cells/8.0;
+            vec2 footprint=fwidth(driver);
+            vec2 pass=1.0-smoothstep(vec2(.32),vec2(.96),footprint);
+            level*=1.0+dot(cos(driver*6.2831853),pass*vec2(.082,.061));
+          }
         } else if (relief>0.0) {
           float silk=field(vec2(curve*2.87,p.y*1.86)+vec2(.78,2.08)+flow*.12);
           float sheen=ribbon*(.26+.74*smoothstep(.25,.76,silk));
@@ -304,18 +320,36 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
   const phase = (time: number) => time * 2 * Math.PI / config.film.durationSeconds
   const pinned = phase(config.film.heroFrameSeconds)*(1-laps)+offset
   const pinX = Math.cos(pinned), pinY = Math.sin(pinned)
+  const flowAt = (time: number, out: THREE.Vector2) => {
+    const a = laps*phase(time), x = Math.cos(a), y = Math.sin(a)
+    const c = Math.abs(x) < 1e-14 ? 0 : x, s = Math.abs(y) < 1e-14 ? 0 : y
+    out.set(c*pinX-s*pinY,s*pinX+c*pinY)
+  }
+  const estimate = (time: number) => {
+    if (time === estimateTime) return
+    estimateTime = time
+    flowAt(time,estimateFlow)
+    muralMean(estimateFlow.x,estimateFlow.y,travel,shade)
+    peak = Math.max(shade.r,shade.g,shade.b)
+  }
   return {
-    material,
-    set(time: number) {
-      const a = laps*phase(time), x = Math.cos(a), y = Math.sin(a)
-      const c = Math.abs(x) < 1e-14 ? 0 : x, s = Math.abs(y) < 1e-14 ? 0 : y
-      uniforms.flow.value.set(c*pinX-s*pinY,s*pinX+c*pinY)
-    },
+    material, picture: uniforms,
+    set(time: number) { flowAt(time,uniforms.flow.value) },
     colorAt(time: number, color: THREE.Color) {
-      shade.copy(magenta).lerp(violet, .44 + .034 * Math.sin(phase(time)))
-      color.copy(shade).multiplyScalar(1 / shade.r)
+      if (picture) {
+        estimate(time)
+        color.copy(shade).multiplyScalar(1 / peak)
+      } else {
+        shade.copy(magenta).lerp(violet, .44 + .034 * Math.sin(phase(time)))
+        color.copy(shade).multiplyScalar(1 / shade.r)
+      }
     },
-    level(time: number) { return .86 + .12 * Math.cos(phase(time)) },
+    level(time: number) {
+      const envelope = .86 + .12 * Math.cos(phase(time))
+      if (!picture) return envelope
+      estimate(time)
+      return envelope*peak*artworkGain*.206
+    },
   }
 }
 

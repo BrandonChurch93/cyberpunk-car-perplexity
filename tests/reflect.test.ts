@@ -7,7 +7,7 @@ import type { FrameEngine, Stage } from '../src/core/engine'
 import { createHaze, createHazeCapture } from '../src/core/haze'
 import type { applyLens } from '../src/core/lens'
 import { LightRig, patchFilmLighting } from '../src/core/lights'
-import { createReflections, planarTuning, quality } from '../src/core/reflect'
+import { createReflections, planarTuning, quality, reflectionCaptureSize } from '../src/core/reflect'
 import { lampSources, probeLamps } from '../src/core/reflect/lamps'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
 import { Probe } from '../src/core/reflect/probe'
@@ -107,6 +107,17 @@ describe('quality', () => {
     expect(quality.draft.planarScale).toBe(quality.review.planarScale)
     expect(quality.review.planarScale).toBe(quality.final.planarScale)
     for (const q of Object.values(quality)) expect(Math.log2(q.captureSize) % 1).toBe(0)
+  })
+
+  it('keeps the paint beat at least at review cube resolution without raising the hero or later beats', () => {
+    const paint = config.beats.find(({ id }) => id === 'paint')!
+    const macro = config.film.macroFrameSeconds
+    expect(reflectionCaptureSize('draft', config.film.heroFrameSeconds)).toBe(quality.draft.captureSize)
+    expect(reflectionCaptureSize('draft', paint.start)).toBe(quality.review.captureSize)
+    expect(reflectionCaptureSize('draft', macro)).toBe(quality.review.captureSize)
+    expect(reflectionCaptureSize('draft', paint.end)).toBe(quality.draft.captureSize)
+    expect(reflectionCaptureSize('review', macro)).toBe(quality.review.captureSize)
+    expect(reflectionCaptureSize('final', macro)).toBe(quality.final.captureSize)
   })
 })
 
@@ -476,7 +487,7 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
   const plate = new three.Mesh(new three.PlaneGeometry(1, 1), new three.MeshBasicMaterial({ color: 0 }))
   scene.add(anchor, rig.group, plate)
   const eye = new three.PerspectiveCamera(40, 1, .05, 60)
-  const receiver = new three.Vector3(0, .4, -.2)
+  const receiver = new three.Vector3(0, .4, .95)
   eye.position.set(1, .76, 5.5)
   eye.lookAt(receiver)
   eye.updateMatrixWorld(true)
@@ -512,12 +523,17 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
   const nose = at(receiver.clone().setZ(.18), 6)
   const closed = at(receiver.clone().lerp(eye.position, .74), 6)
   const macro = at(receiver, .8)
+  const beamReceiver = new three.Vector3(.10, .39, 1.25)
+  eye.position.set(.10, .46, 5.5)
+  eye.lookAt(beamReceiver)
+  eye.updateMatrixWorld(true)
+  const suspended = at(beamReceiver, 6)
+  const suspendedBlocked = at(beamReceiver.clone().lerp(eye.position, .80), 6)
   const lowReceiver = new three.Vector3(.1, .02, 1.8)
   eye.position.set(.1, .19, 5.5)
   eye.lookAt(lowReceiver)
   eye.updateMatrixWorld(true)
   const low = at(lowReceiver, 6)
-  const lowBlocked = at(lowReceiver.clone().lerp(eye.position, .97), 6)
   const point = new three.Vector3()
   const sampler = new three.Mesh(new three.PlaneGeometry(2, 2), new three.ShaderMaterial({
     glslVersion: three.GLSL3,
@@ -556,7 +572,7 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
   output.dispose()
   renderer.dispose()
   return { open: open[1] - open[0], nose: nose[1] - nose[0], closed: closed[1] - closed[0], macro: macro[1] - macro[0],
-    mist: low[1] - low[0], mistBlocked: lowBlocked[1] - lowBlocked[0], footprint }
+    suspended: suspended[1] - suspended[0], suspendedBlocked: suspendedBlocked[1] - suspendedBlocked[0], nearDeck: low[1] - low[0], footprint }
 }
 
 function captureWetDeck(three: typeof THREE, reflections: typeof createReflections, porous: typeof applyPorous,
@@ -979,8 +995,9 @@ it('matches camera and probe reflections, bounds planar taps, and resumes review
       expect(projector.nose).toBeLessThan(projector.open)
       expect(projector.closed).toBeLessThan(projector.open * .1)
       expect(projector.macro).toBe(0)
-      expect(projector.mist).toBeGreaterThan(.002)
-      expect(projector.mistBlocked).toBeLessThan(projector.mist * .1)
+      expect(projector.suspended).toBeGreaterThan(.002)
+      expect(projector.suspendedBlocked).toBeLessThan(projector.suspended * .1)
+      expect(projector.nearDeck).toBeLessThan(projector.suspended * .1)
       expect(projector.footprint[0]).toEqual({ air: 0, deck: 0 })
       for (const { air, deck } of projector.footprint.slice(1)) {
         expect(air).toBeGreaterThan(1)

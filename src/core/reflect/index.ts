@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import type { FormatSpec, TierId } from '../../config'
 import { config } from '../../config'
-import { patchMaterial } from '../../materials/patch'
+import { patchMaterial, patchesOf } from '../../materials/patch'
 import { layers, type FrameContext, type SampleContext } from '../contract'
 import { createEmitterTable, type EmitterTable } from '../emitters'
 import { createHazeCapture } from '../haze'
@@ -31,6 +31,14 @@ export const quality: Record<TierId, Quality> = {
   review: { captureSize: 512, bounce: false, planarScale: 0.5, planarEverySample: false },
   final: { captureSize: 1024, bounce: true, planarScale: 0.5, planarEverySample: true },
 }
+const paintBeat = config.beats.find(({ id }) => id === 'paint')!
+const isPaintBeat = (time: number): boolean => time >= paintBeat.start && time < paintBeat.end
+
+export function reflectionCaptureSize(tier: TierId, time: number): number {
+  const captureSize = quality[tier].captureSize
+  return isPaintBeat(time) ? Math.max(captureSize, quality.review.captureSize) : captureSize
+}
+
 /** The first bounce that lights the deck inside the capture only needs the broad shapes of the sky and signs. */
 const bounceSize = 128
 const probeHeight = 0.6
@@ -55,6 +63,7 @@ interface ReflectionDeps extends Pick<StageDeps, 'renderer' | 'scene'> {
   rig?: StageDeps['rig']
   world: Pick<StageDeps['world'], 'root' | 'reflectionBox'> & {
     lights?: StageDeps['world']['lights']
+    optics?: StageDeps['world']['optics']
     deck: Pick<StageDeps['world']['deck'], 'material' | 'meshes'> & Partial<Pick<StageDeps['world']['deck'], 'bounds'>>
   }
   vehicle: Pick<StageDeps['vehicle'], 'root' | 'lamps'>
@@ -163,8 +172,13 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     reflectBoxOn: { value: 1 },
   }
   const boxed = boxPatch(box)
+  const paintCoatDetail = { value: 0 }
+  const boxedPaint = boxPatch(box, paintCoatDetail)
   const patchAll = (): void => {
-    for (const m of [world.deck.material, ...materialsOf(world.root), ...materialsOf(vehicle.root)]) patchMaterial(m, boxed)
+    for (const m of [world.deck.material, ...materialsOf(world.root)]) patchMaterial(m, boxed)
+    for (const m of materialsOf(vehicle.root)) {
+      patchMaterial(m, patchesOf(m).includes('vehicle paint stack') ? boxedPaint : boxed)
+    }
   }
   patchAll()
   patchMaterial(world.deck.material, planarPatch(planar, planarTuning))
@@ -305,7 +319,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       scene.environment = null
       if (quality[tier].bounce) scene.environment = bounce.capture(scene, probePosition)
       showDeck()
-      const probe = probeOf(quality[tier].captureSize)
+      const probe = probeOf(reflectionCaptureSize(tier, captureTime))
       if (lamps.root.children.some((emitter) => emitter.visible)) {
         const { full, background } = probe.capture(scene, probePosition, lamps.root)
         setEnvironment(full, background)
@@ -351,6 +365,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     beginFrame({ frame, camera }: FrameContext) {
       tier = frame.tier
       captureTime = frame.timeSeconds
+      paintCoatDetail.value = Number(isPaintBeat(captureTime))
       cacheCameraPlanar = frame.samples > 1 && !quality[tier].planarEverySample
       fitTarget()
       patchAll()

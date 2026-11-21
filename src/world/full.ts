@@ -9,6 +9,7 @@ import { addSky, loadLabels, roofFixtures } from './fixtures'
 import { Forms, group } from './forms'
 import { addApprovedHeroLayout, approvedHeroSourceSurvey } from './hero-layout'
 import { addReflectionFrontages } from './reflection-practicals'
+import { addNorthSkyline } from './north'
 import { finishRoof } from './roof-look'
 
 const wake = config.beats.find(beat => beat.id === 'wake')!
@@ -46,8 +47,10 @@ export async function createFullWorld(): Promise<WorldModule> {
     const { at: [x,,z] } = survey.find(source=>source.id===id)!
     return new THREE.Vector2(x,z)
   }
-  addSky(root,[district('magenta violet tower screen'),district('left cyan facade sail')])
+  const northSkyline = addNorthSkyline(root,labels)
+  addSky(root,[district('magenta violet tower screen'),district('left cyan facade sail')],hero.muralCloud,northSkyline.district)
   const reflections = addReflectionFrontages(root,labels)
+  const optics = [...fixtures.lights, ...fixtures.wideLights].filter(light => light.kind === 'spot').map(light => ({ ...light }))
   const wideLights = new Map([...hero.lights,...fixtures.wideLights.map(light=>[light.id,light] as const)])
   const slots = fixtures.lights.map(original => {
     const wide = wideLights.get(original.id)
@@ -59,6 +62,7 @@ export async function createFullWorld(): Promise<WorldModule> {
     updateCity(timeSeconds)
     hero.set(timeSeconds)
     reflections.update(timeSeconds)
+    northSkyline.set(timeSeconds)
     for (const slot of slots) {
       if (!slot.wide) continue
       const source = wide ? slot.wide : slot.original
@@ -70,11 +74,12 @@ export async function createFullWorld(): Promise<WorldModule> {
   return {
     root,
     lights: slots.map(slot => slot.output),
-    signs: [...new Set([...fixtures.signs, ...hero.signs, ...reflections.signs])],
+    signs: [...new Set([...fixtures.signs, ...hero.signs, ...reflections.signs, ...northSkyline.signs])],
     deck,
     reflectionBox: new THREE.Box3(new THREE.Vector3(min.x, 0, min.y), new THREE.Vector3(max.x, 81, max.y)),
     surfaces,
     steamSources: fixtures.steamSources,
+    optics,
     beginFrame: ({ frame }) => set(frame.timeSeconds),
     beginSample: ({ timeSeconds, sample }) => set(timeSeconds, sample?.frame.timeSeconds),
   }
