@@ -3,9 +3,12 @@ import type { FormatSpec, TierId } from '../../config'
 import { config } from '../../config'
 import { patchMaterial } from '../../materials/patch'
 import { layers, type FrameContext, type SampleContext } from '../contract'
+import { createEmitterTable, type EmitterTable } from '../emitters'
 import { createHazeCapture } from '../haze'
+import { applyLens } from '../lens'
 import type { StageDeps, StagePart } from '../parts'
 import { hash01, streamSeed } from '../random'
+import { mirrorEmitters } from './emitters'
 import { probeLamps } from './lamps'
 import { mirrorCamera } from './mirror'
 import { Probe } from './probe'
@@ -19,12 +22,12 @@ export interface Quality {
   bounce: boolean
   /** Fraction of the frame the planar target is drawn at. Sub-render jitter fills in the detail over the samples. */
   planarScale: number
-  /** Redraw the planar reflection for every sub-render, or only for the first of the frame. */
+  /** Redraw for every sample instead of caching a single frame-center mirror. */
   planarEverySample: boolean
 }
 
 export const quality: Record<TierId, Quality> = {
-  draft: { captureSize: 256, bounce: false, planarScale: 0.25, planarEverySample: false },
+  draft: { captureSize: 256, bounce: false, planarScale: 0.5, planarEverySample: false },
   review: { captureSize: 512, bounce: false, planarScale: 0.5, planarEverySample: false },
   final: { captureSize: 1024, bounce: true, planarScale: 0.5, planarEverySample: true },
 }
@@ -34,8 +37,9 @@ const probeHeight = 0.6
 const captureNear = 0.05
 const captureFar = 1500
 const cubePlanarGuard = 1.18
-const planarTuning = {
+export const planarTuning = {
   taps: 4, filter: 0.7, roughStart: 0.55, roughEnd: 0.9, far: 4000, tail: 0.2,
+  filmStart: 0.06, filmEnd: 0.13, mipStart: 0.075, mipEnd: 0.20,
   fireflyStart: 0.12, fireflyEnd: 0.18, fireflyRatio: 4, fireflyFloor: 0.35,
 }
 
@@ -43,6 +47,8 @@ export interface ReflectionsPart extends StagePart {
   /** For other parts: the planar reflection of the deck and how to look it up. See `src/core/reflect/README.md`. */
   planar: PlanarUniforms
   box: BoxUniforms
+  /** The glint emitter table behind `emitterUniforms`. See `src/core/emitters.ts`. */
+  glints: EmitterTable
 }
 
 interface ReflectionDeps extends Pick<StageDeps, 'renderer' | 'scene'> {
@@ -58,20 +64,30 @@ function planarSize(format: FormatSpec, planarScale: number): THREE.Vector2 {
   return new THREE.Vector2(Math.round(format.width * planarScale), Math.round(format.height * planarScale))
 }
 
-function planarTarget(size: THREE.Vector2): THREE.WebGLRenderTarget {
-  const target = new THREE.WebGLRenderTarget(size.x, size.y, {
+interface PlanarCapture {
+  raw: THREE.WebGLRenderTarget
+  color: THREE.WebGLRenderTarget
+}
+
+function planarTarget(size: THREE.Vector2, atmosphere: boolean): PlanarCapture {
+  const color = new THREE.WebGLRenderTarget(size.x, size.y, {
     type: THREE.HalfFloatType,
     format: THREE.RGBAFormat,
     colorSpace: THREE.NoColorSpace,
     minFilter: THREE.LinearMipmapLinearFilter,
     magFilter: THREE.LinearFilter,
     generateMipmaps: true,
-    depthBuffer: true,
+    depthBuffer: !atmosphere,
   })
-  target.depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.FloatType)
-  target.depthTexture.minFilter = THREE.NearestFilter
-  target.depthTexture.magFilter = THREE.NearestFilter
-  return target
+  const raw = atmosphere ? new THREE.WebGLRenderTarget(size.x, size.y, {
+    type: THREE.HalfFloatType,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+  }) : color
+  raw.depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.FloatType)
+  raw.depthTexture.minFilter = THREE.NearestFilter
+  raw.depthTexture.magFilter = THREE.NearestFilter
+  return { raw, color }
 }
 
 function lodMax(size: THREE.Vector2): number {
@@ -110,28 +126,35 @@ function deckDetails(root: THREE.Object3D) {
 
 export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const { renderer, scene, world, vehicle } = deps
-  const billboardSpot = deps.rig?.group.children.find((object): object is THREE.SpotLight =>
-    object instanceof THREE.SpotLight && object.name === 'magenta violet tower screen')
-  const billboardPosition = new THREE.Vector3()
+  const lamps = probeLamps(vehicle)
+  const emitters = mirrorEmitters(world.lights ?? [], deps.rig, lamps.mirrorApertures)
+  const hazeCapture = deps.rig && world.lights && world.deck.bounds
+    ? createHazeCapture({ rig: deps.rig, world: { lights: world.lights, deck: { bounds: world.deck.bounds } } })
+    : undefined
   const seed = streamSeed('reflect')
   let format = config.formats.master
   let tier: TierId = 'final'
   let size = planarSize(format, quality[tier].planarScale)
-  let target = planarTarget(size)
+  let target = planarTarget(size, !!hazeCapture)
   let diagnostic = 'beauty'
+  let captureTime = 0
+  let cacheCameraPlanar = false
+  const frameEye = new THREE.PerspectiveCamera()
   const mirror = new THREE.PerspectiveCamera()
   mirror.layers.set(layers.scene)
 
   const planar: PlanarUniforms = {
-    reflectMap: { value: target.texture },
-    reflectDepth: { value: target.depthTexture },
+    reflectMap: { value: target.color.texture },
+    reflectDepth: { value: target.raw.depthTexture },
     reflectViewProjection: { value: new THREE.Matrix4() },
     reflectInverseViewProjection: { value: new THREE.Matrix4() },
     reflectSize: { value: size.clone() },
     reflectLodMax: { value: lodMax(size) },
     reflectSeed: { value: 0 },
     reflectOn: { value: 0 },
-    reflectBillboard: { value: new THREE.Vector4() },
+    reflectEmitters: emitters.positions,
+    reflectEmitterBounds: emitters.bounds,
+    reflectEmitterPeaks: emitters.peaks,
   }
   const box: BoxUniforms = {
     reflectBoxMin: { value: world.reflectionBox.min.clone() },
@@ -153,25 +176,23 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const planarMeshes = [...world.deck.meshes, ...details.meshes]
 
   const probes = new Map<number, Probe>()
-  const hazeCapture = deps.rig && world.lights && world.deck.bounds
-    ? createHazeCapture({ rig: deps.rig, world: { lights: world.lights, deck: { bounds: world.deck.bounds } } })
-    : undefined
-  const bindPlanar = (destination: THREE.WebGLRenderTarget): void => {
-    planar.reflectMap.value = destination.texture
-    planar.reflectDepth.value = destination.depthTexture
-    planar.reflectSize.value.set(destination.width, destination.height)
+  const bindPlanar = (destination: PlanarCapture): void => {
+    planar.reflectMap.value = destination.color.texture
+    planar.reflectDepth.value = destination.raw.depthTexture
+    planar.reflectSize.value.set(destination.color.width, destination.color.height)
     planar.reflectLodMax.value = lodMax(planar.reflectSize.value)
   }
   const fitTarget = (): void => {
     const next = planarSize(format, quality[tier].planarScale)
     if (next.equals(size)) return
     size = next
-    target.dispose()
-    target = planarTarget(size)
+    if (target.raw !== target.color) target.raw.dispose()
+    target.color.dispose()
+    target = planarTarget(size, !!hazeCapture)
     bindPlanar(target)
   }
   const bounce = new Probe(renderer, bounceSize, captureNear, captureFar)
-  const lamps = probeLamps(vehicle)
+  const glints = createEmitterTable({ renderer, world, vehicle })
   scene.add(lamps.root)
   const probePosition = new THREE.Vector3()
   const cameraPlanarVP = new THREE.Matrix4()
@@ -188,13 +209,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     return () => objects.forEach((o, i) => (o.visible = was[i]))
   }
 
-  const updateBillboard = (): void => {
-    if (!billboardSpot) return
-    billboardSpot.getWorldPosition(billboardPosition)
-    planar.reflectBillboard.value.set(billboardPosition.x, billboardPosition.y, billboardPosition.z, 1)
-  }
-
-  const renderPlanar = (eye: THREE.PerspectiveCamera, destination: THREE.WebGLRenderTarget, guard = 1): void => {
+  const renderPlanar = (eye: THREE.PerspectiveCamera, destination: PlanarCapture, time: number, guard = 1): void => {
     planar.reflectOn.value = 0
     planar.reflectMap.value = null
     planar.reflectDepth.value = null
@@ -208,27 +223,29 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     const alpha = renderer.getClearAlpha()
     const showDeck = hide(planarMeshes)
     try {
-      renderer.setRenderTarget(destination)
+      renderer.setRenderTarget(destination.raw)
       renderer.setClearColor(0x000000, 1)
       renderer.clear(true, true, false)
-      renderer.render(scene, mirror)
+      emitters.withRadiance(time, () => lamps.withDeckRadiance(() => renderer.render(scene, mirror)))
+      hazeCapture?.renderFarAir(renderer, destination.raw, destination.color, mirror)
     } finally {
       showDeck()
       renderer.setClearColor(color, alpha)
       renderer.setRenderTarget(previous, face, mip)
     }
     bindPlanar(destination)
+    emitters.update(planar.reflectViewProjection.value, mirror.layers, planar.reflectSize.value)
     planar.reflectOn.value = 1
   }
 
   const probeOf = (edge: number): Probe => {
     let probe = probes.get(edge)
     if (!probe) {
-      const deckMirror = planarMeshes.length ? planarTarget(new THREE.Vector2(edge, edge)) : null
+      const deckMirror = planarMeshes.length ? planarTarget(new THREE.Vector2(edge, edge), !!hazeCapture) : null
       probe = new Probe(renderer, edge, captureNear, captureFar, hazeCapture, deckMirror
         ? (eye, face) => {
             if (face === 2) planar.reflectOn.value = 0
-            else renderPlanar(eye, deckMirror, cubePlanarGuard)
+            else renderPlanar(eye, deckMirror, captureTime, cubePlanarGuard)
           }
         : undefined)
       probes.set(edge, probe)
@@ -280,7 +297,6 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     cameraPlanarInverseVP.copy(planar.reflectInverseViewProjection.value)
     planar.reflectOn.value = 0
     planar.reflectSeed.value = hash01(seed, frameKey, 0)
-    updateBillboard()
     clearBackground()
     lamps.sync()
     const showVehicle = hide([vehicle.root])
@@ -322,6 +338,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   return {
     planar,
     box,
+    glints,
     resize(next) {
       format = next
       fitTarget()
@@ -331,10 +348,14 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       diagnostic = view
       setZebra(view === 'zebra')
     },
-    beginFrame(frame: FrameContext) {
-      tier = frame.frame.tier
+    beginFrame({ frame, camera }: FrameContext) {
+      tier = frame.tier
+      captureTime = frame.timeSeconds
+      cacheCameraPlanar = frame.samples > 1 && !quality[tier].planarEverySample
       fitTarget()
       patchAll()
+      if (diagnostic === 'normals' || diagnostic === 'zebra') glints.clear()
+      else glints.update()
       if (diagnostic === 'normals') return
       if (diagnostic === 'zebra') {
         box.reflectBoxOn.value = 0
@@ -342,18 +363,21 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
         scene.environment = stripes
         return
       }
-      capture(frame.frame.frameKey)
+      capture(frame.frameKey)
+      if (cacheCameraPlanar && (diagnostic === 'beauty' || diagnostic === 'wetness')) {
+        applyLens(frameEye, camera, format.width, format.height, { pixel: [0, 0], aperture: [0, 0] }, 1)
+        renderPlanar(frameEye, target, frame.timeSeconds)
+      }
     },
     beforeSample(sample: SampleContext) {
       planar.reflectOn.value = 0
+      glints.setPixelAngle(sample.camera, format.height)
       if (diagnostic !== 'beauty' && diagnostic !== 'wetness') return
-      updateBillboard()
       planar.reflectSeed.value = hash01(seed, sample.sample.frame.frameKey, sample.sample.sampleIndex)
-      if (sample.sample.sampleIndex > 0 && !quality[tier].planarEverySample) {
+      if (cacheCameraPlanar) {
+        emitters.update(planar.reflectViewProjection.value, mirror.layers, planar.reflectSize.value)
         planar.reflectOn.value = 1
-        return
-      }
-      renderPlanar(sample.camera, target)
+      } else renderPlanar(sample.camera, target, sample.timeSeconds)
     },
   }
 }

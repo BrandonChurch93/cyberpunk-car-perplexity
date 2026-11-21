@@ -71,10 +71,13 @@ export function labelFace(parent: THREE.Object3D, name: string, at: Tuple, size:
   plate(parent, `lettering ${name}`, new THREE.MeshBasicMaterial({ color, map: tx, toneMapped: false, alphaTest: .22 }), at, ...size).rotation.z = rotation
 }
 
-export function addSky(root: THREE.Group): void {
+export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector2,THREE.Vector2]): void {
   const sky = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, toneMapped: false,
-    uniforms: { cloudSeed: { value: streamSeed('world/city/cloud-base') / 4294967296 * 37 } },
+    uniforms: {
+      cloudSeed: { value: streamSeed('world/city/cloud-base') / 4294967296 * 37 },
+      cloudDistricts: { value: cloudDistricts },
+    },
     vertexShader: /* glsl */ `
       varying vec3 skyDirection;
       void main() {
@@ -86,6 +89,7 @@ export function addSky(root: THREE.Group): void {
     fragmentShader: /* glsl */ `
       varying vec3 skyDirection;
       uniform float cloudSeed;
+      uniform vec2 cloudDistricts[2];
       float cloudHash(vec2 p) {
         vec3 q = fract(vec3(p.xyx+cloudSeed)*.1031);
         q += dot(q,q.yzx+33.33);
@@ -119,7 +123,60 @@ export function addSky(root: THREE.Group): void {
         float cover = smoothstep(.26,.83,.58*banks+.39*layers+.16*cloudNoise(low*5.04));
         float pink = cloudNoise(low*.36+vec2(9.5,3.1));
         vec3 reflectedCity = mix(vec3(.28,.101,.39),vec3(.62,.186,.34),pink);
-        c += wash*cloudAngle*reflectedCity*(.24+.76*cover);
+        float upper = smoothstep(.185,.448,d.y);
+        float bankEdge = smoothstep(.23,.76,banks*.64+layers*.36);
+        float lowSpill = mix(.24+.76*cover, cover*bankEdge, upper);
+        c += wash*cloudAngle*reflectedCity*lowSpill;
+        float mass = smoothstep(.26,.78, coarse*.62+cloudNoise(bank*1.73+vec2(coarse,2.4))*.38);
+        float underside = max(0.0,cloudNoise(bank-vec2(0.0,.38))-coarse);
+        vec3 upperBase = mix(vec3(.0038,.0035,.0047),vec3(.0087,.0079,.0100),mass);
+        upperBase += vec3(.010,.007,.014)*smoothstep(.11,.42,underside)*(.24+.76*wash);
+        c = mix(c,upperBase,upper);
+        float azimuth = atan(d.x/max(-d.z,.001));
+        float southClouds = smoothstep(.04,.31,-d.z)*smoothstep(-.93,-.76,azimuth)*(1.0-smoothstep(-.22,-.04,azimuth));
+        float lowerSky = smoothstep(.024,.078,d.y)*(1.0-smoothstep(.192,.240,d.y));
+        vec2 bankPoint = vec2((azimuth+.48)*21.4,(d.y-.158)*57.1);
+        float baseRoll = cloudNoise(bankPoint*.72+vec2(6.2,1.9));
+        float drift = cloudNoise(bankPoint*.93+vec2(9.7,-5.3));
+        vec2 advected = bankPoint + vec2(1.70*(baseRoll-.5),.29*bankPoint.x+2.33*(drift-.5));
+        float rolls = cloudNoise(advected*1.47+vec2(3.8,-1.1));
+        float pockets = cloudNoise(advected*3.31 + vec2(rolls*1.70,-baseRoll));
+        float wisps = cloudNoise(advected*7.13-pockets*.84);
+        float cloudBody = .50*baseRoll+.30*rolls+.15*pockets+.05*wisps;
+        float clouds = smoothstep(.31,.73,cloudBody);
+        float darkFolds = smoothstep(.29,.80,.53*rolls+.34*baseRoll+.13*pockets);
+        float breaks = smoothstep(.25,.70,.52*rolls+.36*pockets+.12*wisps);
+        float illuminatedEdge = smoothstep(.025,.30,
+          cloudNoise(advected*1.47+vec2(3.90,-1.58))-rolls)*(.31+.69*breaks);
+        float arc = (azimuth+.441)*6.25;
+        float loft = (d.y-.156-.039*(drift-.5)-.027*(baseRoll-.5))*20.0;
+        float field = exp(-arc*arc-loft*loft);
+        vec3 dusk = mix(vec3(.076,.077,.105),vec3(.138,.132,.167),clouds);
+        vec3 litCloud = mix(vec3(1.73,.62,.55),vec3(2.93,1.39,1.14),smoothstep(.25,.76,pockets));
+        float underlit = (.25+.56*clouds+1.02*illuminatedEdge)*(1.0-.37*darkFolds);
+        float underSky = smoothstep(.020,.067,d.y)*(1.0-smoothstep(.165,.201,d.y));
+        c = mix(c,dusk,southClouds*lowerSky*.71) + litCloud*field*underlit*southClouds*underSky*.53;
+        float highBand = smoothstep(.275,.457,d.y)*(1.0-smoothstep(.68,.84,d.y))*smoothstep(.07,.36,-d.z);
+        if (highBand > .0) {
+          vec2 cloudFoot = d.xz*(382.0/d.y);
+          vec2 southOffset = (cloudFoot-cloudDistricts[0])/vec2(178.0,235.0);
+          vec2 westOffset = (cloudFoot-cloudDistricts[1])/vec2(96.0,162.0);
+          float mainUpglow = pow(1.0+dot(southOffset,southOffset),-1.56);
+          float cyanUpglow = pow(1.0+dot(westOffset,westOffset),-1.72);
+          vec2 wind = mat2(.88,.47,-.47,.88)*(cloudFoot/132.0);
+          vec2 curl = vec2(cloudNoise(wind*.67+vec2(13.6,-4.2)),cloudNoise(wind*.83+vec2(-6.1,11.3)));
+          vec2 fold = wind+1.38*(curl-.5);
+          float lobe = cloudNoise(fold*vec2(.91,1.22)+vec2(6.2,3.3));
+          float billows = cloudNoise(fold*2.35+vec2(3.3,lobe*.91));
+          float thread = cloudNoise(fold*5.72-vec2(billows,-lobe));
+          float density = .54*lobe+.34*billows+.12*thread;
+          float canopyBelly = smoothstep(.29,.70,density);
+          float slots = smoothstep(.34,.61,cloudNoise(fold*1.65+vec2(-4.8,8.6)));
+          float rim = smoothstep(.018,.26,cloudNoise(fold*2.35+vec2(3.55,lobe*.91-.29))-billows);
+          float radiance = (.043+.41*canopyBelly)*(.31+.69*slots)+.88*pow(rim,1.6)*(.32+.68*slots);
+          vec3 magentaCloud = mix(vec3(1.43,.36,.72),vec3(.68,.34,1.40),smoothstep(.23,.73,curl.y));
+          c += highBand*radiance*(mainUpglow*magentaCloud+cyanUpglow*vec3(.013,.046,.105));
+        }
         gl_FragColor = vec4(c, 1.0);
       }
     `,
@@ -320,7 +377,8 @@ function panelPractical(
   return { id: name, kind: 'area', object: anchor, color, intensity: width*height*radiance*.78*delivery, size, range, shadow, beam: false, level: () => 1 }
 }
 
-function frontageRibbon(parent: THREE.Object3D, shell: THREE.Material, name: string, at: Tuple, yaw: number, size: [number, number], gain: number, inset = false): THREE.Group {
+function frontageRibbon(parent: THREE.Object3D, shell: THREE.Material, name: string, at: Tuple, yaw: number, size: [number, number], gain: number,
+  profile: 'soft' | 'flush' | 'glazed' = 'soft'): THREE.Group {
   const housing = new THREE.Group()
   housing.name = name
   housing.position.set(...at)
@@ -329,7 +387,8 @@ function frontageRibbon(parent: THREE.Object3D, shell: THREE.Material, name: str
   const [width,height] = size
   block(housing, 'ribbon casing', shell, [0,0,-.18], [width+.16,height+.14,.35]).castShadow = false
   plate(housing, 'feathered LED ribbon', new THREE.ShaderMaterial({
-    uniforms: { gain: { value: gain } }, defines: inset ? { WORLD_INSET_LOUVRE: 1 } : {}, toneMapped: false,
+    uniforms: { gain: { value: gain } },
+    defines: profile === 'flush' ? { WORLD_INSET_LOUVRE: 1 } : profile === 'glazed' ? { WORLD_GLAZED_RIBBON: 1 } : {}, toneMapped: false,
     vertexShader: 'varying vec2 faceUV; varying vec3 faceWorld; void main(){faceUV=uv;faceWorld=(modelMatrix*vec4(position,1.)).xyz;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
     fragmentShader: /* glsl */ `
       varying vec2 faceUV;
@@ -350,7 +409,16 @@ function frontageRibbon(parent: THREE.Object3D, shell: THREE.Material, name: str
           beam=smoothstep(.136,.204,normalize(cameraPosition-faceWorld).y);
           if (abs(p.y-.5)>mix(.08,.5,beam)) discard;
         #endif
-        gl_FragColor=vec4(vec3(.014,.021,.028)+beam*gain*lengthMask*joins*(cool*cyan+red*vec3(1.03,.045,.087)),1.);
+        vec3 source=lengthMask*joins*(cool*cyan+red*vec3(1.03,.045,.087));
+        #ifdef WORLD_GLAZED_RIBBON
+          float bay=floor(p.x*7.);
+          vec2 pane=vec2(fract(p.x*7.),p.y);
+          vec2 gasket=smoothstep(vec2(.014,.025),vec2(.065,.105),min(pane,1.-pane));
+          float occupancy=.14+.52*step(.39,fract(bay*.71+.21))+.25*step(.48,fract(bay*.42+.47));
+          vec3 glass=mix(vec3(.76,.91,1.03),vec3(.38,.85,1.12),step(.42,fract(bay*.622+.13)));
+          source=glass*gasket.x*gasket.y*occupancy*(.30+.70*smoothstep(.08,.69,p.y));
+        #endif
+        gl_FragColor=vec4(vec3(.014,.021,.028)+beam*gain*source,1.);
       }`,
   }), [0,0,.003], width,height)
   return housing
@@ -359,17 +427,23 @@ function frontageRibbon(parent: THREE.Object3D, shell: THREE.Material, name: str
 function rampRibbon(roof: THREE.Group, shell: THREE.Material, metal: THREE.Material): void {
   const housing = new THREE.Group()
   housing.name = 'west ramp luminous barrier'
-  housing.position.set(-20.08, 1.94, 14.56)
+  housing.position.set(-20.08, 1.38, 14.56)
   housing.rotation.y = Math.PI / 2
   roof.getObjectByName('drive-down ramp and control island')!.add(housing)
-  const width = 7.35, height = 2.48
-  block(housing, 'weatherproof barrier enclosure', shell, [0, 0, .016], [width + .13, height + .16, .195])
+  const width = 7.08, height = .205
+  const concrete = new THREE.MeshStandardMaterial({
+    color: new THREE.Color(.115,.118,.113), roughness: .85,
+    emissive: new THREE.Color(.023,.033,.041), emissiveIntensity: .46,
+  })
+  block(housing,'precast ramp barrier extension',concrete,[0,-.053,-.025],[width+.43,1.33,.285])
+  block(housing,'sealed barrier coping',metal,[0,.626,-.024],[width+.53,.103,.355])
+  block(housing,'recessed barrier lighting channel',shell,[0,.148,.106],[width+.148,height+.144,.107])
   for (const x of [-2.61, -.91, 1.51, 3.13]) {
-    block(housing, 'ramp guard upright', metal, [x, -.99, -.14], [.108, 1.13, .17])
-    block(housing, 'ramp guard anchoring cleat', metal, [x, -1.245, -.095], [.25, .083, .27])
+    block(housing, 'ramp guard upright', metal, [x, -.457, .117], [.108, .51, .17])
+    block(housing, 'ramp guard anchoring cleat', metal, [x, -.672, -.095], [.25, .123, .27])
   }
-  for (const y of [-height / 2, height / 2]) {
-    block(housing, 'barrier glazing gasket', shell, [0, y, .128], [width + .08, .069, .087])
+  for (const y of [.148-height*.69,.148+height*.69]) {
+    block(housing, 'barrier glazing gasket', metal, [0,y,.158], [width + .08,.040,.055])
   }
   plate(housing, 'graded ramp opal strip', new THREE.ShaderMaterial({
     toneMapped: false,
@@ -378,21 +452,14 @@ function rampRibbon(roof: THREE.Group, shell: THREE.Material, metal: THREE.Mater
       varying vec2 faceUV;
       void main() {
         vec2 p=faceUV;
-        float rise=(p.x-.39)/.20;
-        float shoulder=exp(-rise*rise);
-        float rail=.305+.137*shoulder+.02*sin(p.x*5.8);
-        float d=(p.y-rail)/(.092+.071*shoulder);
-        float beam=exp(-d*d);
-        float lift=(p.y-.645)/.215;
-        float spill=.20*shoulder*exp(-lift*lift);
-        float feather=smoothstep(.016,.19,p.x)*(1.-smoothstep(.76,.995,p.x));
-        float edge=smoothstep(.008,.055,p.y)*(1.-smoothstep(.88,.997,p.y));
-        vec3 tint=mix(vec3(.42,2.2,3.28),vec3(4.,6.5,8.),smoothstep(.32,1.,beam));
-        float joint=mix(.86,1.,1.-smoothstep(.46,.496,abs(fract(p.x*8.)-.5)));
-        gl_FragColor=vec4(vec3(.009,.016,.023)+feather*edge*joint*(beam*tint+spill*vec3(.46,1.47,2.17)),1.);
+        vec2 cell=fract(p*vec2(8.,1.));
+        vec2 lens=smoothstep(vec2(.016,.028),vec2(.049,.15),min(cell,1.-cell));
+        float center=1.-smoothstep(.11,.48,abs(p.y-.52));
+        float level=.73+.25*fract(floor(p.x*8.)*.667+.21);
+        gl_FragColor=vec4(vec3(.009,.016,.026)+lens.x*lens.y*level*mix(vec3(.25,1.55,2.16),vec3(2.46,4.92,6.28),center),1.);
       }
     `,
-  }), [0, 0, .123], width, height)
+  }), [0,.148,.169], width, height)
 }
 
 function westFacadePractical(parent: THREE.Object3D, shell: THREE.Material, metal: THREE.Material, name: string, at: Tuple, size: [number, number], neon: boolean): void {
@@ -452,22 +519,29 @@ function paintPracticals(roof: THREE.Group, city: THREE.Group, shell: THREE.Mate
     block(east,'traffic ribbon frame',metal,[x,-.35,-.2],[.093,.55,.28])
     block(east,'traffic ribbon bolted shoe',shell,[x,-.556,-.2],[.34,.124,.47])
   }
-  frontageRibbon(roof,shell,'flush bay approach guide',[1.64,.004,2.27],-.26,[.91,.18],3.5,true).rotateX(-Math.PI/2)
+  frontageRibbon(roof,shell,'flush bay approach guide',[1.64,.004,2.27],-.26,[.91,.18],3.5,'flush').rotateX(-Math.PI/2)
   const west = city.getObjectByName('west low block')!
-  const fascia = frontageRibbon(west,shell,'west parking fascia return',[-51.43,10.8,24.85],Math.PI/2,[12.5,2.35],9.25)
-  for (const x of [-5.55,0,5.55]) block(fascia,'weatherproof fascia bracket',metal,[x,-.04,-.80],[.22,2.15,1.36])
-  const westRibbon = frontageRibbon(west,shell,'west roof wayfinding crown',[-51.55,23.0,23.1],Math.PI/2,[17.4,3.55],8.2)
-  for (const x of [-6,0,6]) {
-    block(westRibbon,'crown lattice column',metal,[x,-4.4,-1.07],[.32,7.3,.45])
-    block(westRibbon,'crown cross member',metal,[x,-.86,-.67],[.31,.26,1.25])
-  }
-  westFacadePractical(west,shell,metal,'west upper service LED cabinet',[-51.96,12.61,34.92],[5.73,2.84],false)
+  const fascia = frontageRibbon(west,shell,'west parking fascia return',[-52.63,10.8,24.85],Math.PI/2,[12.5,1.41],3.9,'glazed')
+  block(fascia,'parking floor edge and fascia backing',metal,[0,-.74,-.265],[12.87,.45,.59])
+  for (const x of [-5.55,0,5.55]) block(fascia,'weatherproof fascia bracket',metal,[x,-.04,-.30],[.22,1.35,.46])
+  const plant = group(west,'west rooftop service penthouse',[-56.1,19.15,24.3])
+  block(plant,'roof plant and duct enclosure',shell,[0,0,0],[7.1,8.56,15.32])
+  block(plant,'folded roof plant coping',metal,[0,4.22,0],[7.23,.26,15.52])
+  const westRibbon = frontageRibbon(plant,shell,'west roof wayfinding crown',[3.64,3.08,0],Math.PI/2,[13.8,1.44],3.6,'glazed')
+  block(westRibbon,'roof plant glazing sill',metal,[0,-.80,-.10],[14.08,.26,.36])
+  westFacadePractical(west,shell,metal,'west upper service LED cabinet',[-52.65,12.61,34.92],[4.66,1.45],false)
   westFacadePractical(west,shell,metal,'west south frontage neon badge',[-51.61,8.02,18.42],[2.82,1.31],true)
   const north = city.getObjectByName('northwest tower')!
-  const eastReturn = frontageRibbon(north,shell,'east glazed concourse return',[-40.98,22.48,51.04],Math.PI/2,[11.75,3.18],4.25)
-  for (const x of [-4.61,0,4.61]) block(eastReturn,'concourse return standoff',metal,[x,0,-.67],[.23,2.4,1.12])
-  const concourse = frontageRibbon(north,shell,'northwest concourse ribbon',[-48.7,11.15,43.49],Math.PI,[16.1,4.4],7)
-  for (const x of [-6.2,0,6.2]) block(concourse,'concourse fascia standoff',metal,[x,0,-.43],[.25,3.5,.64])
+  const eastReturn = frontageRibbon(north,shell,'east glazed concourse return',[-41.57,22.48,51.04],Math.PI/2,[10.85,1.52],3.95,'glazed')
+  block(eastReturn,'concourse return slab',metal,[0,-.88,-.31],[11.25,.37,.56])
+  for (const x of [-4.61,0,4.61]) block(eastReturn,'concourse return standoff',metal,[x,0,-.39],[.23,1.67,.56])
+  const concourse = frontageRibbon(north,shell,'northwest concourse ribbon',[-49.45,11.10,43.92],Math.PI,[13.35,1.88],4.85,'glazed')
+  block(concourse,'concourse slab return',metal,[0,-1.03,-.34],[13.83,.43,.91])
+  for (const x of [-6.25,0,6.25]) {
+    block(concourse,'concourse fascia standoff',metal,[x,0,-.39],[.25,2.13,.69])
+    block(concourse,'concourse fascia wall plate',metal,[x,.03,-.58],[.42,2.27,.23])
+  }
+  for (const y of [-1.00,1.00]) block(concourse,'concourse folded fascia flange',metal,[0,y,-.12],[13.74,.18,.36])
   const ice = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5,3.9,6.1), toneMapped: false })
   const ruby = new THREE.MeshBasicMaterial({ color: new THREE.Color(4.9,.23,.42), toneMapped: false })
   const pearl = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6,3.8,4.2), toneMapped: false })
@@ -476,7 +550,7 @@ function paintPracticals(roof: THREE.Group, city: THREE.Group, shell: THREE.Mate
     [22.03,2.59,.74,.49,pearl],[23.5,1.75,.4,.82,ice],
   ] as const) {
     const mount = new THREE.Group()
-    mount.position.set(-51.51,y,z)
+    mount.position.set(-52.67,y,z)
     mount.rotation.y = Math.PI/2
     west.add(mount)
     block(mount,'recessed frontage beacon mount',shell,[0,0,-.25],[width+.12,height+.12,.49]).castShadow = false
@@ -529,6 +603,7 @@ function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE
   mast.position.y = 4.18
   pole.position.set(-3.9,0,12.3)
   for (const child of [...pole.children]) if (/opaque lamp head|unlit lamp diffuser|luminaire cross arm/.test(child.name)) child.removeFromParent()
+  block(pole, 'worklight bolted base collar', metal, [0,.211,0], [.26,.108,.26])
   block(pole, 'worklight mast socket', metal, [0,8.08,0], [.24,.41,.26])
   const rack = new THREE.Group()
   rack.name = 'rear service flood bank'
@@ -666,7 +741,7 @@ function rearRoofAccess(parent: THREE.Group, pole: THREE.Object3D, labels: Label
   }
 }
 
-export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.Group, labels: Label, surfaces: WetSurface[]): RoofFixtures {
+export function roofFixtures(roof: THREE.Group, city: THREE.Group, labels: Label, surfaces: WetSurface[]): RoofFixtures {
   const metal = new THREE.MeshStandardMaterial({ color: new THREE.Color(.12, .135, .16), metalness: .73, roughness: .39 })
   const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.023, .031, .047), metalness: .6, roughness: .56 })
   surfaces.push({ material: metal, wetness: 'sheet' })
@@ -809,7 +884,6 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   const grate = roof.children.find(o => o.name === 'drain grate' && o.position.x === -1.7)!
   const drain = new THREE.Object3D()
   drain.position.y = .012; grate.add(drain)
-  addSky(root)
   return {
     lights, wideLights: luminaires.map(l=>l.film), signs,
     steamSources: [{ object: vent, kind: 'vent', strength: .7 }, { object: drain, kind: 'drain', strength: .38 }],

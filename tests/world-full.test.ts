@@ -4,16 +4,18 @@ import { config, frameCount } from '../src/config'
 import { candelaPerUnit, type FrameContext, type SampleContext } from '../src/core/contract'
 import { apertureRadius, applyLens } from '../src/core/lens'
 import { LightRig } from '../src/core/lights'
+import { quality } from '../src/core/reflect'
 import { cameraAt } from '../src/director/shots'
 import { patchesOf } from '../src/materials/patch'
 import { createVehicle } from '../src/vehicle'
 import { createWorld } from '../src/world'
 import { heroDrain } from '../src/world/deck'
 import { billboardState } from '../src/world/fixtures'
-import { approvedHeroSourceSurvey } from '../src/world/hero-layout'
+import { approvedHeroSourceSurvey, heroScreenMount } from '../src/world/hero-layout'
 import { heroLayoutEye, heroPoint, heroScale } from '../src/world/hero-scale'
 import { heroCityYaw, streetY } from '../src/world/forms'
 import { deckHeight } from '../src/world/roof-look'
+import { judgedFrames } from '../tools/lib/judged'
 
 const [world, { anchors, root: vehicle }] = await Promise.all([
   createWorld({ detail: 'full' }),
@@ -27,6 +29,19 @@ function radiance(t: number): { position: number; color: THREE.Color } {
 }
 
 describe('full roof world', () => {
+  it('centres the high cloud spill over the mounted city emitters without adding rig lights', () => {
+    const sky = world.root.getObjectByName('city-lit cloud base') as THREE.Mesh<THREE.SphereGeometry,THREE.ShaderMaterial>
+    const districts = sky.material.uniforms.cloudDistricts!.value as THREE.Vector2[]
+    const survey = approvedHeroSourceSurvey()
+    expect(districts.map(point=>point.toArray())).toEqual(['magenta violet tower screen','left cyan facade sail'].map(id=>{
+      const { at: [x,,z] } = survey.find(source=>source.id===id)!
+      return [x,z]
+    }))
+    expect(sky.material.side).toBe(THREE.BackSide)
+    expect(sky.material.depthWrite).toBe(false)
+    expect(world.lights).toHaveLength(8)
+  })
+
   it('publishes the mounted hero sources and preserves camera clearance', () => {
     world.root.updateMatrixWorld(true)
     const hero = world.root.getObjectByName('approved hero layout')!
@@ -75,11 +90,11 @@ describe('full roof world', () => {
   it('grounds non-overlapping real-scale towers and preserves the design rays and emitter falloff', () => {
     const axis = new THREE.Vector3(0,1,0)
     const eye = new THREE.Vector3(...heroLayoutEye)
-    const at = new THREE.Vector3(2.94,5.61,-29.80).applyAxisAngle(axis,heroCityYaw)
+    const at = new THREE.Vector3(...heroScreenMount.at).applyAxisAngle(axis,heroCityYaw)
     const id = 'magenta violet tower screen'
     const emitter = world.lights.find(l => l.id === id)!
-    const k = heroScale.screen
-    const screen = new THREE.Vector3(...heroPoint([2.94,5.61,-29.80],k)).applyAxisAngle(axis,heroCityYaw)
+    const k = heroScreenMount.scale
+    const screen = new THREE.Vector3(...heroPoint(heroScreenMount.at,k)).applyAxisAngle(axis,heroCityYaw)
     const survey = approvedHeroSourceSurvey().find(s => s.id === id)!
     expect(new THREE.Vector3(...survey.at).distanceTo(screen)).toBeLessThan(1e-10)
     expect(screen.sub(eye).distanceTo(at.sub(eye).multiplyScalar(k))).toBeLessThan(1e-10)
@@ -88,22 +103,44 @@ describe('full roof world', () => {
     expect(emitter.range/k).toBeCloseTo(75,12)
     const city = world.root.getObjectByName('hero tower layout')!
     const footprints: { id: string; box: THREE.Box3 }[] = []
+    const { master } = config.formats
+    const lens = new THREE.PerspectiveCamera()
+    applyLens(lens,cameraAt(config.film.heroFrameSeconds,master,anchors),master.width,master.height,{pixel:[0,0],aperture:[0,0]},1)
+    world.root.updateMatrixWorld(true)
+    const ranks = new Map<string, number>()
     for (const volume of city.children.filter(o => o.name.endsWith(' volume'))) {
-      const shell = volume.children[0] as THREE.Mesh
+      const shell = volume.children[0] as THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial>
       shell.geometry.computeBoundingBox()
       const box = shell.geometry.boundingBox!.clone().translate(shell.position)
       expect(box.min.y).toBeCloseTo(streetY,4)
       for (const other of footprints) expect(box.intersectsBox(other.box),shell.name+' / '+other.id).toBe(false)
       footprints.push({ id: shell.name, box })
+      const rank = shell.material.userData.distanceLayer as string
+      ranks.set(rank, (ranks.get(rank) ?? 0)+1)
+      const { width, height, depth } = shell.geometry.parameters
+      const pane = shell.material.userData.clearPaneWidth as number
+      expect(pane).toBeGreaterThan(.90)
+      expect(pane).toBeLessThan(1.55)
+      expect(width).toBeGreaterThan(pane)
+      if (rank !== 'near') continue
+      const front = shell.localToWorld(new THREE.Vector3(0,height*.25,depth*.5))
+      expect(Math.hypot(front.x-eye.x,front.z-eye.z)).toBeGreaterThan(460)
+      const edge = shell.localToWorld(new THREE.Vector3(pane,height*.25,depth*.5)).project(lens)
+      expect(Math.abs(edge.x-front.project(lens).x)*master.width*.5,shell.name).toBeLessThan(8.6)
     }
-    expect(footprints).toHaveLength(30)
+    expect(footprints).toHaveLength(44)
+    expect([...ranks.keys()].sort()).toEqual(['far','middle','near'])
+    expect(Math.min(...ranks.values())).toBeGreaterThan(5)
   })
 
   it('builds real-meter facade grids with distinct families and uses practical mesh donors in the cube', () => {
     world.root.updateMatrixWorld(true)
     const city = world.root.getObjectByName('hero tower layout')!
     const facadeFamilies = new Set<string>()
+    const claddingRoughness = new Map<string,number>()
     let rooms = 0
+    let finRows = 0
+    let roofShafts = 0
     for (const volume of city.children.filter(o => o.name.endsWith(' volume'))) {
       const shell = volume.children[0] as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
       const [w,h] = shell.material.userData.moduleMeters as [number,number]
@@ -114,11 +151,29 @@ describe('full roof world', () => {
       expect(h).toBeLessThanOrEqual(3.6)
       expect(shell.material.userData.mechanicalFloorPitch).toBeGreaterThanOrEqual(15)
       expect(shell.material.userData.mechanicalFloorPitch).toBeLessThanOrEqual(25)
+      expect(shell.material.userData.roomDepthMeters).toEqual([4,8])
+      const [openingWidth,openingHeight] = shell.material.userData.litOpeningMeters as [number,number]
+      expect(openingWidth).toBeGreaterThanOrEqual(.90)
+      expect(openingWidth).toBeLessThanOrEqual(shell.material.userData.clearPaneWidth)
+      expect(openingHeight).toBeGreaterThanOrEqual(1.08)
+      expect(openingHeight).toBeLessThanOrEqual(1.88)
       facadeFamilies.add(shell.material.userData.facade)
+      claddingRoughness.set(shell.material.userData.facade,shell.material.roughness)
+      const fins = volume.getObjectByName('extruded curtain wall fins') as THREE.InstancedMesh | undefined
+      if (fins) {
+        const front = shell.position.z+shell.geometry.parameters.depth*.5
+        expect(fins.boundingBox!.min.z).toBeLessThan(front)
+        expect(fins.boundingBox!.max.z).toBeGreaterThan(front)
+        finRows++
+      }
+      if (volume.getObjectByName('offset concrete roof shaft')) roofShafts++
       rooms += Math.floor(width/w)*Math.floor(height/h)
     }
     expect(rooms).toBeGreaterThan(10_000)
     expect(facadeFamilies).toEqual(new Set(['curtain','concrete','banded','hotel']))
+    expect(claddingRoughness.get('concrete')!).toBeGreaterThan(claddingRoughness.get('curtain')!)
+    expect(finRows).toBeGreaterThan(30)
+    expect(roofShafts).toBeGreaterThan(5)
     const probe = new THREE.Vector3(0,.6,0)
     const cornices = city.getObjectByName('hero left edge tower volume')!.children.filter(o=>o.name === 'full height cyan cornice')
     expect(cornices).toHaveLength(2)
@@ -174,9 +229,11 @@ describe('full roof world', () => {
     rig.group.updateMatrixWorld(true)
     source.shadow.updateMatrices(source)
     const c = source.shadow.camera
-    expect(c.near).toBeGreaterThan(270)
-    expect(c.far).toBeLessThan(430)
-    const center = new THREE.Box3().setFromObject(vehicle).getCenter(new THREE.Vector3()).project(c)
+    const center = new THREE.Box3().setFromObject(vehicle).getCenter(new THREE.Vector3())
+    const depth = -center.clone().applyMatrix4(c.matrixWorldInverse).z
+    expect(c.near).toBeGreaterThan(depth-105)
+    expect(c.far).toBeLessThan(depth+35)
+    center.project(c)
     expect(Math.max(Math.abs(center.x),Math.abs(center.y),Math.abs(center.z))).toBeLessThan(1)
     world.beginFrame({ frame: { timeSeconds: config.film.macroFrameSeconds } } as FrameContext)
     rig.update(config.film.macroFrameSeconds,[.5,.5])
@@ -234,23 +291,59 @@ describe('full roof world', () => {
     }
     expect(min).toBeGreaterThan(.10)
     const probe = new THREE.Vector3(0,.6,0)
-    const visible = (name: string, aperture: string) => {
-      const fixture = required(name)
+    const visible = (fixture: THREE.Object3D, aperture: string) => {
       const face = fixture.getObjectByName(aperture)!
       const ray = face.getWorldPosition(new THREE.Vector3()).sub(probe)
       const caster = new THREE.Raycaster(probe,ray.clone().normalize(),0,ray.length()+.02)
-      expect(caster.intersectObject(world.root,true)[0]?.object,name).toBe(face)
+      expect(caster.intersectObject(world.root,true)[0]?.object,fixture.name).toBe(face)
       return ray.normalize()
     }
-    for (let i=1;i<=3;i++) {
-      const ray = visible('upper magenta violet screen '+i,'animated magenta violet tiles')
-      expect(ray.y).toBeGreaterThan(.40)
-      expect(ray.z).toBeLessThan(0)
+    const media = required('upper reflection accents')
+    const apertures = media.children.filter(o=>o instanceof THREE.Group)
+    expect(apertures).toHaveLength(9)
+    let mediaArea = 0
+    for (const fixture of apertures) {
+      const aperture = fixture.name.includes('blade') ? 'diffusing cabinet face' : 'sealed opal aperture'
+      const ray = visible(fixture,aperture)
+      const azimuth = THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))
+      expect(azimuth).toBeGreaterThan(-159)
+      expect(azimuth).toBeLessThan(-149)
+      expect(ray.y).toBeGreaterThan(.57)
+      expect(ray.y).toBeLessThan(.76)
+      const face = fixture.getObjectByName(aperture) as THREE.Mesh<THREE.PlaneGeometry>
+      const { width,height } = face.geometry.parameters
+      const area = width*height
+      expect(area).toBeLessThan(65)
+      mediaArea += area
     }
-    const macro = visible('northwest animated LED wall','animated magenta violet tiles')
+    expect(mediaArea).toBeLessThan(350)
+    expect(riser.getObjectByName('animated magenta violet tiles')).toBeUndefined()
+    const bridge = required('screen tower upper service skybridge')
+    const bridgeEmitters = bridge.children.filter(o => o.name === 'high bridge window bay' || o.name === 'high bridge service sign')
+    expect(bridgeEmitters).toHaveLength(7)
+    for (const fixture of bridgeEmitters) {
+      const aperture = fixture.name === 'high bridge service sign' ? 'diffusing cabinet face' : 'sealed opal aperture'
+      const ray = visible(fixture,aperture)
+      const azimuth = THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))
+      expect(azimuth).toBeGreaterThan(-153)
+      expect(azimuth).toBeLessThan(-147)
+      expect(ray.y).toBeGreaterThan(.54)
+      expect(ray.y).toBeLessThan(.62)
+      const face = fixture.getObjectByName(aperture) as THREE.Mesh
+      face.geometry.computeBoundingBox()
+      const { min, max } = face.geometry.boundingBox!
+      const slope = (x: number,y: number,axis: 'x' | 'y') => {
+        const corner = face.localToWorld(new THREE.Vector3(x,y,0)).sub(probe)
+        return corner[axis]/corner.z
+      }
+      const edge = quality.review.captureSize*.5
+      expect(Math.abs(slope(min.x,0,'x')-slope(max.x,0,'x'))*edge).toBeGreaterThan(2)
+      expect(Math.abs(slope(0,min.y,'y')-slope(0,max.y,'y'))*edge).toBeGreaterThan(1.8)
+    }
+    const macro = visible(required('northwest animated LED wall'),'animated magenta violet tiles')
     expect(THREE.MathUtils.radToDeg(Math.atan2(macro.x,macro.z))).toBeCloseTo(-49,0)
-    expect(visible('recessed amber service sign','diffusing cabinet face').z).toBeLessThan(0)
-    const tiles = riser.getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    expect(visible(required('recessed amber service sign'),'diffusing cabinet face').z).toBeLessThan(0)
+    const tiles = required('northwest animated LED wall').getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
     const getFlow = (timeSeconds: number) => {
       world.beginFrame({ frame: { timeSeconds } } as FrameContext)
       return (tiles.material.uniforms.flow.value as THREE.Vector2).clone()
@@ -321,6 +414,14 @@ describe('full roof world', () => {
     expect(drain.children.filter(o=>o.name==='iron drainage bar')).toHaveLength(21)
     const bayLine = world.root.getObjectByName('hero near bay line') as THREE.Mesh
     expect(world.surfaces.find(s=>s.material===bayLine.material)?.wetness).toBe('porous')
+    for (const name of ['hero near bay line','west bay edge marking','west bay edge continuation']) {
+      const marking = world.root.getObjectByName(name) as THREE.Mesh
+      const vertices = marking.geometry.getAttribute('position')
+      for (let i=0;i<vertices.count;i++) {
+        const p = marking.localToWorld(new THREE.Vector3().fromBufferAttribute(vertices,i))
+        expect(p.y-deckHeight(p.x,p.z)).toBeCloseTo(.003,6)
+      }
+    }
     const lens = new THREE.PerspectiveCamera()
     const { master } = config.formats
     applyLens(lens,cameraAt(config.film.heroFrameSeconds,master,anchors),master.width,master.height,{ pixel:[0,0],aperture:[0,0] },1)
@@ -328,6 +429,88 @@ describe('full roof world', () => {
       const ray = new THREE.Raycaster(lens.position,new THREE.Vector3(2*u-1,-.82,.5).unproject(lens).sub(lens.position).normalize())
       expect(world.deck.meshes).toContain(ray.intersectObject(world.root,true)[0]?.object)
     }
+  })
+
+  it('exposes mounted reflection openings to the outer deck bands across the wide loop', () => {
+    world.root.updateMatrixWorld(true)
+    vehicle.updateMatrixWorld(true)
+    const openings: { mesh: THREE.InstancedMesh; center: THREE.Vector3 }[] = []
+    const matrix = new THREE.Matrix4()
+    world.root.traverse(mesh => {
+      if (!(mesh instanceof THREE.InstancedMesh) ||
+        !['parapet warm strip lenses','recessed lit window apertures'].includes(mesh.name)) return
+      expect(mesh.parent?.getObjectByName('sealed metal housings')).toBeInstanceOf(THREE.InstancedMesh)
+      for (let i=0;i<mesh.count;i++) {
+        mesh.getMatrixAt(i,matrix)
+        openings.push({ mesh, center: mesh.localToWorld(new THREE.Vector3().setFromMatrixPosition(matrix)) })
+      }
+    })
+    expect(openings.length).toBeGreaterThan(85)
+    const candidates: { mesh: THREE.Mesh; box: THREE.Box3 }[] = []
+    for (const root of [world.root,vehicle]) root.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return
+      if (object instanceof THREE.InstancedMesh && !object.boundingBox) object.computeBoundingBox()
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox()
+      const bounds = object instanceof THREE.InstancedMesh ? object.boundingBox! : object.geometry.boundingBox!
+      candidates.push({mesh: object, box: bounds.clone().applyMatrix4(object.matrixWorld)})
+    })
+    const ray = new THREE.Raycaster(), direction = new THREE.Vector3(), entry = new THREE.Vector3()
+    const hits: THREE.Mesh[] = []
+    const firstHit = (a: THREE.Vector3,b: THREE.Vector3,slack = 0) => {
+      direction.subVectors(b,a)
+      ray.far = direction.length()+slack
+      ray.near = .001
+      ray.set(a,direction.normalize())
+      hits.length = 0
+      for (const { mesh,box } of candidates) {
+        if (box.containsPoint(a) || (ray.ray.intersectBox(box,entry) && entry.distanceToSquared(a)<=ray.far**2)) hits.push(mesh)
+      }
+      return ray.intersectObjects(hits,false)[0]
+    }
+    const { master } = config.formats
+    const lens = new THREE.PerspectiveCamera()
+    for (const frame of [0,60,150,195,240,1170,1215,1340]) {
+      const wanted = [7,frame===0 || frame===1340 ? 2 : 0,13]
+      const t = frame/config.film.fps
+      applyLens(lens,cameraAt(t,master,anchors),master.width,master.height,{pixel:[0,0],aperture:[0,0]},1)
+      for (const { mesh,center } of openings) {
+        const mirrored = center.clone()
+        mirrored.y *= -1
+        const ndc = mirrored.clone().project(lens)
+        if (Math.abs(ndc.x)>.98 || ndc.y>-.18 || ndc.y<-.98) continue
+        const band = ndc.x<-.40 ? 0 : ndc.x<.30 ? 1 : 2
+        if (!wanted[band]) continue
+        const contact = lens.position.clone().lerp(mirrored,lens.position.y/(lens.position.y+center.y))
+        if (firstHit(lens.position,contact,-.10)) continue
+        const lift = Math.max(.006,deckHeight(contact.x,contact.z)+.006)
+        const fixture = firstHit(contact.lerp(center,lift/center.y),center,.02)
+        if (fixture?.object===mesh) wanted[band]!--
+      }
+      expect(wanted,'frame '+frame).toEqual([0,0,0])
+    }
+  })
+
+  it('keeps parapet trim warm white and authors HDR on faces rather than duplicating lights', () => {
+    const trim = world.root.getObjectByName('parapet warm strip lenses') as THREE.InstancedMesh
+    const color = new THREE.Color()
+    expect(world.root.getObjectByName('parapet marker lenses')).toBeUndefined()
+    expect(trim.count).toBeGreaterThan(2)
+    for (let i=0;i<trim.count;i++) {
+      trim.getColorAt(i,color)
+      expect(color.g/color.r).toBeGreaterThan(.76)
+      expect(color.b/color.r).toBeGreaterThan(.55)
+      expect(color.r).toBeGreaterThan(4)
+    }
+    const arrow = world.root.getObjectByName('wayfinding arrow stem') as THREE.Mesh<THREE.BoxGeometry,THREE.MeshBasicMaterial>
+    expect(arrow.material.toneMapped).toBe(false)
+    expect(arrow.material.color.r).toBeGreaterThan(10)
+    const blade = world.root.getObjectByName('violet mid distance blade')
+      ?.getObjectByName('weather-sealed opal face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    expect((blade.material.uniforms.tint!.value as THREE.Color).b).toBeGreaterThan(10)
+    const arcade = world.root.getObjectByName('stacked amber arcade cabinet')!
+    const face = arcade.getObjectByName('diffusing cabinet face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    expect((face.material.uniforms.tint!.value as THREE.Color).r).toBeGreaterThan(4)
+    expect(world.lights.some(light => light.object.parent===arcade)).toBe(false)
   })
 
   it('retains the lit sign mount and distinguishes city cladding from wet parapet', () => {
@@ -340,6 +523,93 @@ describe('full roof world', () => {
     expect(hotel.getObjectByName('steel sign frame brace')).toBeDefined()
     expect(hotel.getObjectByName('cabinet back')).toBeDefined()
     expect(world.signs).toContain('HOTEL')
+  })
+
+  it('mounts the left shopfront signs and narrows the cyan optics without changing the rig footprint', () => {
+    const format = config.formats.master
+    const t = config.film.heroFrameSeconds
+    const lens = new THREE.PerspectiveCamera()
+    const center = new THREE.Vector3()
+    world.root.updateMatrixWorld(true)
+    applyLens(lens,cameraAt(t,format,anchors),format.width,format.height,{pixel:[0,0],aperture:[0,0]},1)
+    for (const [id,parent,low] of [
+      ['west vertical tailor blade','hero left edge tower volume',false],
+      ['west cyan arcade shopfront','hero near west garage bay volume',true],
+      ['middle cyan noodle shopfront','hero middle west distance volume',true],
+      ['low magenta bar shopfront','hero bar tower volume',true],
+    ] as const) {
+      const fixture = world.root.getObjectByName(id)!
+      expect(fixture.parent?.name).toBe(parent)
+      const face = fixture.getObjectByName('diffusing cabinet face')!
+      const ndc = face.getWorldPosition(center).project(lens)
+      const y = (1-ndc.y)*.5
+      expect(y).toBeGreaterThan(low ? .39 : 0)
+      expect(y).toBeLessThan(low ? .44 : .10)
+      const ray = new THREE.Raycaster()
+      ray.setFromCamera(new THREE.Vector2(ndc.x,ndc.y),lens)
+      expect(ray.intersectObject(world.root,true)[0]?.object.parent?.name).toBe(id)
+    }
+    const rise = approvedHeroSourceSurvey().find(source=>source.id==='cyan garage rise')!
+    const optic = world.root.getObjectByName(rise.id)?.getObjectByName('weather-sealed opal face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    expect(optic.geometry.parameters.width*rise.scale).toBeLessThan(rise.size[0]*.72)
+    expect(optic.material.uniforms.shaped?.value).toBe(1)
+    world.beginFrame({ frame: { timeSeconds: t } } as FrameContext)
+    const wideFootprint = world.lights.find(light=>light.id===rise.id)?.size
+    world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
+    expect(wideFootprint).toEqual(rise.size)
+  })
+
+  it('shows metric warm office floors and mounted right facade markers at the hero', () => {
+    const tower = world.root.getObjectByName('hero amber tower volume')!
+    const shell = tower.getObjectByName('hero amber tower') as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
+    const panes = tower.getObjectByName('warm office window panes') as THREE.InstancedMesh
+    const frame = tower.getObjectByName('east office curtain wall bays')!
+    const housings = frame.getObjectByName('sealed metal housings') as THREE.InstancedMesh<THREE.BoxGeometry>
+    const front = (wall: THREE.Mesh<THREE.BoxGeometry>)=>wall.position.z+wall.geometry.parameters.depth*.5
+    expect(frame.parent).toBe(tower)
+    expect(frame.getObjectByName('folded sill mounts')).toBeDefined()
+    expect(housings.count).toBe(panes.count)
+    expect(shell.material.color.r).toBeLessThan(.016)
+    const eye = cameraAt(config.film.heroFrameSeconds,config.formats.master,anchors).position
+    const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), size = new THREE.Vector3(), color = new THREE.Color()
+    const hits = (p: THREE.Vector3) => {
+      const delta = p.clone().sub(eye)
+      return new THREE.Raycaster(eye,delta.clone().normalize(),.01,delta.length()+.017).intersectObject(world.root,true)[0]
+    }
+    world.root.updateMatrixWorld(true)
+    let bright = 0, dark = 0, visible = 0
+    for (let i=0;i<panes.count;i++) {
+      housings.getMatrixAt(i,matrix)
+      const back = position.setFromMatrixPosition(matrix).z-size.setFromMatrixScale(matrix).z*.5
+      expect(back).toBeLessThan(front(shell))
+      panes.getMatrixAt(i,matrix)
+      size.setFromMatrixScale(matrix)
+      expect(size.x).toBeGreaterThan(1.25)
+      expect(size.x).toBeLessThan(1.50)
+      expect(size.y).toBeLessThan(1.65)
+      panes.getColorAt(i,color)
+      if (color.r===0) dark++
+      else if (color.r>4) {
+        bright++
+        const hit = hits(panes.localToWorld(position.setFromMatrixPosition(matrix)))
+        if (hit?.object===panes && hit.instanceId===i) visible++
+      }
+    }
+    expect(dark).toBeGreaterThan(5)
+    expect(bright).toBeGreaterThan(18)
+    expect(visible).toBeGreaterThan(15)
+    const markers = world.root.getObjectsByProperty('name','east facade service marker')
+    expect(markers).toHaveLength(13)
+    expect(new Set(markers.map(marker=>marker.parent?.name)).size).toBe(3)
+    for (const marker of markers) {
+      const tower = marker.parent!
+      const wall = tower.getObjectByName(tower.name.replace(' volume','')) as THREE.Mesh<THREE.BoxGeometry>
+      const cleats = marker.getObjectsByProperty('name','fixture mounting cleat') as THREE.Mesh<THREE.BoxGeometry>[]
+      expect(cleats).toHaveLength(2)
+      for (const cleat of cleats) expect(marker.position.z+cleat.position.z-cleat.geometry.parameters.depth*.5).toBeLessThan(front(wall))
+    }
+    expect(markers.filter(marker=>hits(marker.getWorldPosition(position))?.object.parent===marker).length).toBeGreaterThan(6)
+    expect(markers.every(marker=>!world.lights.some(light=>light.object.parent===marker))).toBe(true)
   })
 
   it('shows the stacked accent cabinets from both hero cameras', () => {
@@ -370,6 +640,91 @@ describe('full roof world', () => {
     expect(strip.material).toBeInstanceOf(THREE.ShaderMaterial)
     expect(strip.getWorldPosition(new THREE.Vector3()).x).toBeLessThan(-9)
     expect(new THREE.Vector3(0, 0, 1).applyQuaternion(strip.getWorldQuaternion(new THREE.Quaternion())).x).toBeCloseTo(1, 10)
+    expect(world.lights).toHaveLength(8)
+  })
+
+  it('backs the rear reflection optics at every judged camera in both formats', () => {
+    world.root.updateMatrixWorld(true)
+    const required = (id: string, parent: THREE.Object3D = world.root) => parent.getObjectByName(id)!
+    const bounds = (object: THREE.Object3D) => new THREE.Box3().setFromObject(object)
+    const floodBank = required('rear service flood bank')
+    const floodPole = floodBank.parent!
+    const collar = bounds(required('worklight bolted base collar',floodPole))
+    expect(collar.intersectsBox(bounds(required('pole base plate',floodPole)))).toBe(true)
+    expect(collar.intersectsBox(bounds(required('tapered steel post',floodPole)))).toBe(true)
+    expect(bounds(required('worklight bracket plate',floodBank)).intersectsBox(bounds(required('worklight mast socket',floodPole)))).toBe(true)
+    const ramp = required('west ramp luminous barrier')
+    const extension = required('precast ramp barrier extension',ramp)
+    const channel = required('recessed barrier lighting channel',ramp)
+    expect(bounds(extension).intersectsBox(bounds(channel))).toBe(true)
+    expect(ramp.parent!.getObjectsByProperty('name','ramp guard wall').some(wall=>bounds(wall).intersectsBox(bounds(extension)))).toBe(true)
+    const north = required('north deck cyan guidance')
+    const parapet = required('solid concrete',north.parent!)
+    const footings = north.getObjectsByProperty('name','guardwall saddle footing')
+    expect(footings).toHaveLength(8)
+    expect(footings.every(foot=>bounds(parapet).intersectsBox(bounds(foot)))).toBe(true)
+    const west = required('west low block')
+    const penthouse = required('roof plant and duct enclosure',west)
+    const westWalls = west.children.filter(o=>o.name==='building mass').map(bounds)
+    expect(westWalls.some(wall=>wall.intersectsBox(bounds(penthouse)))).toBe(true)
+    const westMarkerBacks = west.getObjectsByProperty('name','recessed frontage beacon mount')
+    expect(westMarkerBacks).toHaveLength(4)
+    expect(westMarkerBacks.every(back=>westWalls.some(wall=>wall.intersectsBox(bounds(back))))).toBe(true)
+    for (const [elevationId,wallId,fixtureId,receiverId] of [
+      ['northwest market media elevation','market media podium','northwest animated LED wall','market media podium'],
+      ['northwest market media elevation','market media podium','recessed market window bay','market media podium'],
+      ['northwest market media elevation','market media podium','horizontal cyan market fascia','recessed market fascia spandrel'],
+      ['northwest market media elevation','market media podium','market blade wayfinding','market blade receiver plate'],
+      ['east quarter street frontage','brick retail and office wing','stacked east retail box sign','retail sign receiver plate'],
+    ]) {
+      const elevation = required(elevationId!)
+      const localBounds = (object: THREE.Object3D) => {
+        const mesh = object as THREE.Mesh<THREE.BoxGeometry>
+        mesh.geometry.computeBoundingBox()
+        return mesh.geometry.boundingBox!.clone().applyMatrix4(new THREE.Matrix4().copy(elevation.matrixWorld).invert().multiply(mesh.matrixWorld))
+      }
+      const wall = localBounds(required(wallId!,elevation))
+      const receivers = elevation.getObjectsByProperty('name',receiverId!).map(localBounds)
+      expect(receivers.every(receiver=>receiver.intersectsBox(wall))).toBe(true)
+      for (const fixture of elevation.getObjectsByProperty('name',fixtureId!)) {
+        const cleats = fixture.getObjectsByProperty('name','fixture mounting cleat').map(localBounds)
+        expect(cleats).toHaveLength(2)
+        expect(cleats.every(cleat=>receivers.some(receiver=>receiver.intersectsBox(cleat))),fixtureId).toBe(true)
+      }
+    }
+    const supported: [THREE.Mesh<THREE.PlaneGeometry>,THREE.Box3][] = [
+      ['west ramp luminous barrier','graded ramp opal strip','recessed barrier lighting channel'],
+      ['west parking fascia return','feathered LED ribbon','ribbon casing'],
+      ['west roof wayfinding crown','feathered LED ribbon','ribbon casing'],
+      ['northwest concourse ribbon','feathered LED ribbon','ribbon casing'],
+      ['east glazed concourse return','feathered LED ribbon','ribbon casing'],
+      ['west upper service LED cabinet','segmented cool white LED face','sealed practical casing'],
+    ].map(([id,optic,back])=>[required(optic!,required(id!)) as THREE.Mesh<THREE.PlaneGeometry>,bounds(required(back!,required(id!)))])
+    for (const fixture of north.getObjectsByProperty('name','reflected cyan north guardwall lamp')) {
+      supported.push([required('sealed opal aperture',fixture) as THREE.Mesh<THREE.PlaneGeometry>,bounds(required('sealed metal housing',fixture))])
+    }
+    const camera = new THREE.PerspectiveCamera()
+    const point = new THREE.Vector3(), projected = new THREE.Vector3(), direction = new THREE.Vector3()
+    const ray = new THREE.Ray()
+    const seen = new Set<THREE.Mesh>()
+    for (const format of [config.formats.master,config.formats.vertical]) for (const { frame } of judgedFrames()) {
+      const state = cameraAt(frame/config.film.fps,format,anchors)
+      applyLens(camera,state,format.width,format.height,{pixel:[0,0],aperture:[0,0]},1)
+      camera.updateMatrixWorld(true)
+      for (const [face,backing] of supported) {
+        if (direction.set(0,0,1).transformDirection(face.matrixWorld).dot(point.setFromMatrixPosition(face.matrixWorld).sub(state.position))>=0) continue
+        const { width,height } = face.geometry.parameters
+        for (const [u,v] of [[0,0],[-.35,-.30],[.35,-.30],[-.35,.30],[.35,.30]] as const) {
+          face.localToWorld(point.set(u*width,v*height,0))
+          projected.copy(point).project(camera)
+          if (Math.max(Math.abs(projected.x),Math.abs(projected.y),Math.abs(projected.z))>1) continue
+          ray.set(state.position,direction.copy(point).sub(state.position).normalize())
+          expect(ray.intersectsBox(backing),format.id+' '+frame+' '+face.parent?.name).toBe(true)
+          seen.add(face)
+        }
+      }
+    }
+    expect(seen.size).toBeGreaterThanOrEqual(6)
     expect(world.lights).toHaveLength(8)
   })
 
@@ -430,6 +785,12 @@ describe('full roof world', () => {
     const wall = world.root.getObjectByName(id)
     const rate = emitter.level(0)
     expect(emitter.object.parent).toBe(wall)
+    expect(face.material.uniforms.picture.value).toBe(1)
+    const tower = world.root.getObjectByName('hero screen tower volume')!.children[0]
+    const supportPlane = new THREE.Box3().setFromObject(tower)
+    const ties = wall!.children.filter(node => node.name === 'billboard facade tie plate')
+    expect(ties).toHaveLength(12)
+    for (const tie of ties) expect(supportPlane.intersectsBox(new THREE.Box3().setFromObject(tie))).toBe(true)
     expect(emitter.intensity).toBe(Math.max(...world.lights.filter(light=>!light.shadow).map(light=>light.intensity)))
     const travel = face.material.uniforms.travel.value as number
     firstFrame(.08*config.film.durationSeconds)
@@ -488,17 +849,23 @@ describe('full roof world', () => {
       expect(toScreen(position('hero full span steel top rail')).y).toBeLessThan(.20)
     }
     cameraAtTime(master, heroFrameSeconds)
+    const wall = world.root.getObjectByName(billboard)!
+    const face = wall.getObjectByName('animated magenta violet mural') as THREE.Mesh<THREE.PlaneGeometry>
+    const { width,height } = face.geometry.parameters
+    const left = toScreen(face.localToWorld(new THREE.Vector3(-width*.5,height*.5,0)))
+    const right = toScreen(face.localToWorld(new THREE.Vector3(width*.5,height*.5,0)))
+    expect(left.y).toBeLessThan(1)
+    expect(right.y-left.y).toBeGreaterThan(.02)
     const skyRay = (x: number, y: number) => new THREE.Raycaster(camera.position,
       new THREE.Vector3(x, y, .5).unproject(camera).sub(camera.position).normalize(), 0, camera.far+150)
     for (const x of [-.50, -.40, -.32, -.24, -.16]) {
       expect(skyRay(x,.92).intersectObject(world.root, true)[0]?.object.name).toBe('city-lit cloud base')
     }
-    expect(skyRay(-.16,.75).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
     const centerTowers = [
       [.291,.175,'hero middle west distance',650,720],
-      [.327,.200,'far west narrow crown',980,1_025],
+      [.327,.200,'c9 center kiln tower',680,730],
       [.363,.150,'hero far west distance',790,830],
-      [.402,.200,'far inner west glass crown',965,1_015],
+      [.402,.200,'c9 center fluted offices',805,850],
       [.440,.175,'hero far center distance',845,900],
       [.478,.120,'hero violet tower',630,690],
     ] as const
@@ -509,13 +876,52 @@ describe('full roof world', () => {
       expect(hit?.distance).toBeLessThan(far)
       expect(patchesOf((hit?.object as THREE.Mesh).material as THREE.Material)).toContain('hero tower cladding and window rooms')
     }
-    expect(skyRay(.402*2-1,1-.175*2).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
-    expect(skyRay(.421*2-1,1-.175*2).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
+    for (const [u,v] of [[.366,.105],[.405,.083],[.456,.095]]) {
+      expect(skyRay(2*u-1,1-2*v).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
+    }
+    for (const name of ['small cyan center lift sign','thin magenta tenant mast','amber clock floor slot',
+      'small cyan mechanical floor datum','east violet vertical sauna blade','east amber upper office cabinet']) {
+      const ndc = toScreen(position(name))
+      expect(Math.abs(ndc.x)).toBeLessThan(1)
+      expect(Math.abs(ndc.y)).toBeLessThan(1)
+      expect(skyRay(ndc.x,ndc.y).intersectObject(world.root,true)[0]?.object.parent?.name).toBe(name)
+    }
     cameraAtTime(vertical, heroFrameSeconds)
     const tallScreen = toScreen(position(billboard))
     expect(Math.abs(tallScreen.x)).toBeLessThan(.7)
     expect(tallScreen.y).toBeGreaterThan(0)
     expect(tallScreen.y).toBeLessThan(1)
+  })
+
+  it('opens the hero skyline on both sides of the screen and separates the east ranks', () => {
+    const { master } = config.formats
+    const camera = new THREE.PerspectiveCamera()
+    applyLens(camera,cameraAt(config.film.heroFrameSeconds,master,anchors),master.width,master.height,{pixel:[0,0],aperture:[0,0]},1)
+    world.root.updateMatrixWorld(true)
+    const ray = new THREE.Raycaster()
+    const hit = (x: number, y: number) => {
+      ray.setFromCamera(new THREE.Vector2(2*x-1,1-2*y),camera)
+      return ray.intersectObject(world.root,true)[0]!
+    }
+    for (const x of [.494,.738,.864,.879]) for (const y of [.095,.140,.190,.240]) {
+      expect(hit(x,y).object.name,`${x}, ${y}`).toBe('city-lit cloud base')
+    }
+    const near = hit(.805,.091)
+    const far = hit(.924,.025)
+    expect(near.object.name).toBe('hero amber tower')
+    expect(far.object.name).toBe('far east financial tower')
+    expect(far.distance-near.distance).toBeGreaterThan(350)
+    const amber = world.root.getObjectByName('hero amber tower volume')!
+    const bounds = new THREE.Box3().setFromObject(near.object)
+    for (const id of ['west jamb pink opal','east jamb amber opal']) {
+      const carriers = amber.getObjectsByProperty('name',`${id} carrier`)
+      expect(carriers).toHaveLength(5)
+      expect(carriers.every(carrier=>bounds.intersectsBox(new THREE.Box3().setFromObject(carrier)))).toBe(true)
+    }
+    for (const id of ['amber upper tower cabinet','amber lower tower cabinet']) {
+      const back = world.root.getObjectByName(id)!.getObjectByName('cabinet anchor channel')!
+      expect(bounds.intersectsBox(new THREE.Box3().setFromObject(back))).toBe(true)
+    }
   })
 
   it('uses batched geometry for room depths and utility silhouettes within the city budget', () => {
@@ -642,7 +1048,7 @@ describe('full roof world', () => {
         const bounds = new THREE.Box3().setFromObject(bracket)
         expect(walls.some(wall=>wall.intersectsBox(bounds)),name).toBe(true)
       }
-      const panes = facade.children.filter(o=>o.name==='ceiling reflected through tenant glass')
+      const panes = facade.getObjectsByProperty('name','ceiling reflected through tenant glass')
       expect(panes).toHaveLength(14)
       const visible = panes.reduce((count,pane) => {
         const target = pane.getWorldPosition(new THREE.Vector3()).sub(eye)
@@ -652,6 +1058,109 @@ describe('full roof world', () => {
       },0)
       expect(visible,name).toBeGreaterThanOrEqual(4)
     }
+  })
+
+  it('gives the north concourse occupied depth, partial blinds and an anchored plant level', () => {
+    world.root.updateMatrixWorld(true)
+    const tower = world.root.getObjectByName('north central tower')!
+    const facade = tower.getObjectByName('lit concourse and tenant bays')!
+    const rooms = facade.getObjectsByProperty('name','tenant room')
+    const shadeHeights = new Set<number>()
+    expect(rooms).toHaveLength(14)
+    let occupied = 0
+    for (const room of rooms) {
+      const pane = room.getObjectByName('ceiling reflected through tenant glass')!
+      const back = room.getObjectByName('recessed tenant wall')!
+      const mullion = room.getObjectByName('extruded external mullion')!
+      const blind = room.getObjectByName('partly lowered roller blind')!
+      expect(pane.position.z-back.position.z).toBeGreaterThan(.6)
+      expect(mullion.position.z).toBeGreaterThan(pane.position.z)
+      expect(blind.position.z).toBeLessThan(pane.position.z)
+      shadeHeights.add(blind.position.y)
+      if (!room.getObjectByName('interior suspended task light')) continue
+      expect(room.getObjectByName('tenant tabletop')).toBeDefined()
+      expect(room.getObjectByName('tenant booth seat')).toBeDefined()
+      occupied++
+    }
+    expect(occupied).toBe(5)
+    expect(shadeHeights.size).toBeGreaterThan(8)
+    const balcony = facade.getObjectByName('tenant balcony and plant level')!
+    expect(balcony.getObjectsByProperty('name','balcony planter trough')).toHaveLength(2)
+    const beam = new THREE.Box3().setFromObject(balcony.getObjectByName('balcony anchoring beam')!)
+    expect(tower.children.some(o=>o.name==='building mass' && beam.intersectsBox(new THREE.Box3().setFromObject(o)))).toBe(true)
+    const master = config.formats.master
+    const camera = new THREE.PerspectiveCamera()
+    const rear = cameraAt(1060/config.film.fps,master,anchors)
+    applyLens(camera,rear,master.width,master.height,{ pixel:[0,0],aperture:[0,0] },1)
+    camera.updateMatrixWorld(true)
+    const balconyScreen = balcony.getWorldPosition(new THREE.Vector3()).project(camera)
+    expect(balconyScreen.x).toBeGreaterThan(-.94)
+    expect(balconyScreen.x).toBeLessThan(-.62)
+    const sign = world.root.getObjectByName('KARAOKE')!
+    expect(sign.getObjectsByProperty('name','inclined box bracket')).toHaveLength(2)
+    expect(sign.getObjectsByProperty('name','sign box end cap')).toHaveLength(2)
+  })
+
+  it('bolts the rear cyan panels and lightwells into occupied buildings', () => {
+    world.root.updateMatrixWorld(true)
+    const bounds = (o: THREE.Object3D) => new THREE.Box3().setFromObject(o)
+    const overlapsWall = (piece: THREE.Object3D, plot: THREE.Object3D) =>
+      plot.children.filter(o=>o.name==='building mass').some(o=>bounds(o).intersectsBox(bounds(piece)))
+    for (const [name,carrier] of [
+      ['wide cool panel','north sign terrace'],['vertical cool panel','north sign terrace'],
+      ['small cool panel','northwest tower'],['corner cool panel','northwest tower'],
+    ]) {
+      const panel = world.root.getObjectByName(name)!
+      expect(panel.parent?.name).toBe(carrier)
+      const brackets = panel.getObjectsByProperty('name','cool cabinet steel outrigger')
+      expect(brackets).toHaveLength(4)
+      expect(brackets.every(bracket=>overlapsWall(bracket,panel.parent!)),name).toBe(true)
+    }
+    const northwest = world.root.getObjectByName('northwest tower')!
+    for (const [name,mount] of [['northwest concourse ribbon','concourse fascia wall plate'],['east glazed concourse return','concourse return standoff']]) {
+      const straps = northwest.getObjectByName(name)!.getObjectsByProperty('name',mount)
+      expect(straps).toHaveLength(3)
+      expect(straps.every(strap=>overlapsWall(strap,northwest)),name).toBe(true)
+    }
+    for (const id of ['north relay tower','northern court tower']) {
+      const tower = world.root.getObjectByName(id)!
+      const lightwell = tower.getObjectByName('mounted cyan service lightwell')!
+      expect(overlapsWall(lightwell.getObjectByName('lightwell backing fixed into core')!,tower),id).toBe(true)
+      const camera = new THREE.PerspectiveCamera()
+      const format = config.formats.master
+      const point = lightwell.getWorldPosition(new THREE.Vector3())
+      for (const frame of [990,1060]) {
+        const t = frame/config.film.fps
+        const pose = cameraAt(t,format,anchors)
+        applyLens(camera,pose,format.width,format.height,{ pixel:[0,0], aperture:[0,0] },1)
+        camera.updateMatrixWorld(true)
+        const uv = point.clone().project(camera)
+        expect(uv.x,id).toBeGreaterThan(-.75)
+        expect(uv.x,id).toBeLessThan(.33)
+        expect(Math.abs(uv.y),id).toBeLessThan(.90)
+        expect(uv.z,id).toBeLessThan(1)
+      }
+    }
+  })
+
+  it('keeps the rear city additions clear of both camera sweeps', () => {
+    world.root.updateMatrixWorld(true)
+    const names = ['north relay tower','KARAOKE','lit concourse and tenant bays','northwest concourse ribbon',
+      'wide cool panel','vertical cool panel','small cool panel','corner cool panel','mounted cyan service lightwell']
+    const bounds = names.flatMap(name=>world.root.getObjectsByProperty('name',name)).map(o=>new THREE.Box3().setFromObject(o))
+    const shutterHalf = config.film.shutterDegrees/(720*config.film.fps)
+    let minimum = Infinity
+    for (const format of [config.formats.master,config.formats.vertical]) {
+      for (let frame=0;frame<=frameCount;frame++) {
+        const t = frame/config.film.fps
+        for (const offset of [-shutterHalf,0,shutterHalf]) {
+          const pose = cameraAt(t+offset,format,anchors,t)
+          const clearance = Math.min(...bounds.map(box=>box.distanceToPoint(pose.position)))-apertureRadius(pose)
+          minimum = Math.min(minimum,clearance)
+        }
+      }
+    }
+    expect(minimum).toBeGreaterThan(.10)
   })
 
   it('keeps supported traffic, navigation lights and roof beacons periodic in both hooks', () => {

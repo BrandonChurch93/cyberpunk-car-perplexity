@@ -1,5 +1,7 @@
 import * as THREE from 'three'
+import { config } from '../../config'
 import { insertAfter, insertBefore, patchMaterial } from '../../materials/patch'
+import { prevailingWind } from '../air/motion'
 import { surfaceCommonGlsl, surfaceVaryingsGlsl, surfaceVertexGlsl } from './glsl'
 import { ripplesGlsl } from './ripples'
 
@@ -14,7 +16,7 @@ export type Uniforms = Record<string, THREE.IUniform>
  * The rain sheet on the deck: mean depth over the slab's resting level near the car and away from it, the spread of its broad and
  * small dry crowns, and the low fall around the car that holds it, in world X and Z meters with its falloff.
  */
-const sheet = { baseMm: 11.5, farMm: 8, broadMm: 16, patchMm: 5, low: [-2.6, -0.5, 3.0, 5.4], fallMeters: 2.5 }
+const sheet = { baseMm: 7, farMm: 4.5, broadMm: 16, patchMm: 7, low: [-2.6, -0.5, 3.0, 5.4], fallMeters: 2.5 }
 /** Undulation of the slab below a puddle's scale: wavelengths in meters and slope amplitude of each. */
 const undulation = [
   [0.045, 0.045],
@@ -22,6 +24,18 @@ const undulation = [
   [0.27, 0.02],
   [0.62, 0.012],
 ]
+
+/**
+ * Wind ripples on standing water under the gusting wind: wavelength in meters, slope, and how many wavelengths each octave
+ * travels downwind over the film, so the pattern returns to its start. They break each mirrored source into a long broken streak.
+ */
+const windSpeed = 0.25
+const windRipples = [
+  [0.12, 0.035],
+  [0.32, 0.03],
+  [0.9, 0.02],
+].map(([w, a]) => [w, a, Math.max(1, Math.round((windSpeed * config.film.durationSeconds) / w))])
+const windAcross = 2.2
 
 const porousGlsl = /* glsl */ `
 uniform float surfDiag;
@@ -32,6 +46,7 @@ uniform float surfReliefScale;
 uniform float surfReliefOffset;
 uniform vec4 surfShelter;
 uniform float surfPorosity;
+uniform float surfTime;
 
 float surfFineRelief(vec2 p, float detail) {
   float h = 1.2 * (surfNoise2(p / 0.55, 11u) - 0.5) + 0.5 * (surfNoise2(p / 0.17 + 3.1, 12u) - 0.5);
@@ -74,7 +89,43 @@ vec2 surfUndulation(vec2 p, float foot) {
     vec3 n = surfNoiseGrad(p / ${w.toFixed(3)} + ${(3.7 * i).toFixed(1)}, ${51 + i}u);
     float filt = exp(-2.0 * pow(foot / ${w.toFixed(3)}, 2.0));
     slope += ${a.toFixed(3)} * filt * n.yz;
-    surfUndulationVar += ${(a * a * 0.4).toFixed(6)} * (1.0 - filt * filt);
+    surfUndulationVar += ${(a * a * 0.15).toFixed(6)} * (1.0 - filt * filt);
+  }`).join('\n  ')}
+  return slope;
+}
+
+vec3 surfNoiseGradWrap(vec2 p, int period, uint salt) {
+  vec2 i = floor(p);
+  vec2 f = p - i;
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  vec2 du = 6.0 * f * (1.0 - f);
+  ivec2 c = ivec2(i);
+  int x0 = ((c.x % period) + period) % period;
+  int x1 = (x0 + 1) % period;
+  float a = surfHash2(ivec2(x0, c.y), salt).x;
+  float b = surfHash2(ivec2(x1, c.y), salt).x;
+  float d = surfHash2(ivec2(x0, c.y + 1), salt).x;
+  float e = surfHash2(ivec2(x1, c.y + 1), salt).x;
+  return vec3(mix(mix(a, b, u.x), mix(d, e, u.x), u.y), du.x * mix(b - a, e - d, u.y), du.y * mix(d - a, e - b, u.x));
+}
+
+float surfWindVar;
+
+/** Slope of the wind ripples on open water at time t. Octaves finer than the footprint add their variance to surfWindVar. */
+vec2 surfWind(vec2 p, float foot, float t) {
+  vec2 along = vec2(${prevailingWind[0].toFixed(3)}, ${prevailingWind[1].toFixed(3)});
+  along = normalize(along);
+  vec2 across = vec2(-along.y, along.x);
+  vec2 q = vec2(dot(p, along), dot(p, across));
+  float phase = t / ${config.film.durationSeconds.toFixed(3)};
+  vec2 slope = vec2(0.0);
+  surfWindVar = 0.0;
+  ${windRipples.map(([w, a, c], i) => `{
+    vec3 n = surfNoiseGradWrap(vec2(q.x / ${w.toFixed(3)} - phase * ${c.toFixed(1)}, q.y / ${(w * windAcross).toFixed(4)}), ${c}, ${61 + i}u);
+    float filt = exp(-2.0 * pow(foot / ${w.toFixed(3)}, 2.0));
+    vec2 g = vec2(n.y, n.z / ${windAcross.toFixed(2)});
+    slope += ${a.toFixed(3)} * filt * (along * g.x + across * g.y);
+    surfWindVar += ${(a * a * 0.15).toFixed(6)} * (1.0 - filt * filt);
   }`).join('\n  ')}
   return slope;
 }
@@ -135,18 +186,23 @@ const porousFragment = /* glsl */ `
   surfSlope += surfRipples(surfXZ, min(surfDeep, 1.0), surfWet * surfUp * (1.0 - surfWater) * 0.6, 0.0, surfFoot);
   float surfSlab = surfUp * (1.0 - surfWater * smoothstep(0.5, 4.0, surfDepth));
   surfSlope += surfSlab * surfUndulation(surfXZ, surfFoot);
-  float surfSlopeVar = surfRingVar + surfSlab * surfSlab * surfUndulationVar;
+  float surfOpen = surfDeep * surfCover;
+  surfSlope += surfOpen * surfWind(surfXZ, surfFoot, surfTime);
+  float surfSlopeVar = surfRingVar + surfSlab * surfSlab * surfUndulationVar + surfOpen * surfOpen * surfWindVar;
 
   float surfDamp = clamp(surfWet + surfFringe * 0.6, 0.0, 1.0);
   float surfStain = 0.6 * surfNoise2(surfXZ / 0.35 + 9.0, 41u) + 0.4 * surfNoise2(surfXZ / 0.09 + 2.0, 42u);
-  float surfDark = mix(1.0, mix(0.9, mix(0.46, 0.74, surfStain) * mix(0.92, 1.08, surfAgg), surfPorosity), surfDamp);
+  float surfDark = mix(1.0, mix(0.9, mix(0.3, 0.7, surfStain) * mix(0.92, 1.08, surfAgg), surfPorosity), surfDamp);
   surfDark *= mix(1.0, 0.82, surfFringe);
   surfDark *= mix(1.0, mix(0.85, 0.65, smoothstep(0.0, 3.0, surfDepth)), surfWater * mix(0.3, 1.0, surfPorosity));
+  float surfNv = clamp(dot(surfToView(vec3(0.0, 1.0, 0.0)), normalize(vViewPosition)), 0.0, 1.0);
+  float surfExit = 1.0 - (0.02 + 0.98 * pow(1.0 - surfNv, 5.0));
+  surfDark *= mix(1.0, surfExit * surfExit, max(surfWater, 0.7 * surfDamp));
   float surfL = surfLuma(diffuseColor.rgb);
   diffuseColor.rgb = max(mix(vec3(surfL), diffuseColor.rgb, 1.0 + 0.15 * surfDamp), 0.0) * surfDark;
   float surfRoughWet = mix(0.18, 0.32, smoothstep(0.35, 0.75, surfAgg));
   roughnessFactor = mix(roughnessFactor, min(roughnessFactor, surfRoughWet), surfDamp);
-  roughnessFactor = mix(roughnessFactor, mix(0.26, 0.08, smoothstep(3.0, 10.0, surfDepth)), surfWater);
+  roughnessFactor = mix(roughnessFactor, mix(0.22, 0.05, smoothstep(2.0, 8.0, surfDepth)), surfWater);
   roughnessFactor = sqrt(sqrt(pow(roughnessFactor, 4.0) + 2.0 * surfSlopeVar));
   vec3 surfFlat = mix(surfN, vec3(0.0, 1.0, 0.0), surfWater);
   vec3 surfWorldN = normalize(surfFlat + vec3(-surfSlope.x, 0.0, -surfSlope.y));
@@ -160,6 +216,7 @@ const porousFragment = /* glsl */ `
 /** Water F0 0.02 over standing water, set after the material's own specular so the surface reads as water and not as a varnish. */
 const waterSpecular = /* glsl */ `
 material.specularColor = mix(material.specularColor, vec3(0.02), surfWaterOut);
+material.specularColorBlended = mix(material.specularColorBlended, vec3(0.02), surfWaterOut);
 material.specularF90 = mix(material.specularF90, 1.0, surfWaterOut);
 `
 

@@ -13,10 +13,11 @@ import type { FrameInfo, SampleInfo, Stage } from './engine'
 import { applyLens, type CameraState } from './lens'
 import { FullscreenPass, passMaterial } from './fullscreen'
 import { createHaze } from './haze'
-import { LightRig } from './lights'
+import { LightRig, projectorHalfAngle } from './lights'
 import type { StagePart } from './parts'
 import { createReflections } from './reflect'
 import { createShade } from './shade'
+import { visibilityOf, type Visibility } from './visibility'
 
 const shadowMapSize = 2048
 const lensSqueeze = config.lens.anamorphic ? 1.5 : 1
@@ -56,8 +57,6 @@ function floatTarget(format: FormatSpec, depth: boolean): THREE.WebGLRenderTarge
   if (depth) target.depthTexture = new THREE.DepthTexture(format.width, format.height, THREE.UnsignedIntType)
   return target
 }
-const beamHalfAngle = THREE.MathUtils.degToRad(17)
-
 type Lamp = VehicleModule['lamps'][number]
 
 const maxWorldLights = 8
@@ -72,7 +71,7 @@ function beamLight(lamp: Lamp, i: number): FilmLight {
     color: lamp.color ?? new THREE.Color(1, 1, 1),
     intensity: lamp.intensity ?? 250,
     size: [0.04, 0.04],
-    angle: beamHalfAngle,
+    angle: projectorHalfAngle,
     penumbra: 0.6,
     range: 120,
     shadow: true,
@@ -151,6 +150,7 @@ export class FilmStage implements Stage {
   private readonly bokeh = createBokeh(lensSqueeze)
   private readonly sceneTarget = floatTarget(config.formats.master, true)
   private readonly swap = [floatTarget(config.formats.master, false), floatTarget(config.formats.master, false)]
+  readonly visibility: Visibility
   private readonly copy = new FullscreenPass(passMaterial(copyFragment, { source: { value: null } }, { blending: THREE.NoBlending }))
 
   static async create(renderer: THREE.WebGLRenderer, paint: string, detail: StageDetail = stageDetail): Promise<FilmStage> {
@@ -170,6 +170,7 @@ export class FilmStage implements Stage {
     rig: LightRig,
   ) {
     this.rig = rig
+    this.visibility = visibilityOf(renderer)
     this.camera.layers.enable(layers.cameraOnly)
     renderer.shadowMap.enabled = true
     renderer.shadowMap.type = THREE.PCFShadowMap
@@ -337,7 +338,8 @@ export class FilmStage implements Stage {
     this.renderer.setRenderTarget(first)
     this.renderer.setClearColor(0x000000, 1)
     this.renderer.clear(true, true, false)
-    this.renderer.render(this.scene, this.camera)
+    if (this.detail === 'full' && this.diagnostic === 'beauty') this.visibility.render(this.scene, this.camera)
+    else this.renderer.render(this.scene, this.camera)
     let input = first.texture
     if (passes.length === 0 && !direct) {
       this.copy.material.uniforms.source.value = input

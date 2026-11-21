@@ -3,7 +3,7 @@ import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
 import { lines } from '../body/tail'
 import { MeshBuilder } from '../geom/mesh'
 import { add, cross, norm, scale, type V2, type V3 } from '../geom/vec'
-import { merge, pocket, solid } from './solid'
+import { finish, merge, pocket, solid } from './solid'
 
 /** Hex outlet from the patent rear view and photos: aperture, lip, pipes, depths into the body. */
 export const outletSpec = {
@@ -17,7 +17,7 @@ export const outletSpec = {
   recess: 0.02,
   floor: 0.03,
   depth: 0.2,
-  pipe: { r: 0.042, dx: 0.064, wall: 0.003, front: 0.012, back: 0.194, soot: 0.12 },
+  pipe: { r: 0.042, dx: 0.064, wall: 0.003, front: 0.012, back: 0.194, soot: 0.12, bead: 0.0035 },
 } as const
 
 const arcSteps = 16
@@ -124,7 +124,7 @@ function sweepLoop(f: Frame, loop: Array<{ c: V2; n: V2 }>, base: number, prof: 
 function disk(f: Frame, loop: Array<{ c: V2; n: V2 }>, base: number, d: number, s0: number, s1: number, cx: number): MeshBuilder {
   const centre = (s: number): V3[] => loop.map(() => at(f, cx, 0, s))
   const ring = (s: number): V3[] => loop.map((e) => at(f, e.c[0] + e.n[0] * (base + d), e.c[1] + e.n[1] * (base + d), s))
-  return solid([centre(s0), ring(s0), ring(s1), centre(s1)], [true, true, true, true])
+  return solid([centre(s0), ring(s0), ring(s1), centre(s1)], [true, true, true, true], false)
 }
 
 /**
@@ -166,17 +166,27 @@ export function outlets(rm: SurfaceMap, surround: SurfaceCurve): Outlets {
   const pr2 = pr.wall / 2
   for (const dx of [-pr.dx, pr.dx]) {
     const loop = circleLoop(dx, 64)
+    const tube = pr.front + pr.bead
     const prof: Prof = [
       [-pr.wall, pr.back, true],
-      ...roll(-pr2, pr.front + pr2, pr2, Math.PI, Math.PI * 2),
+      ...roll(-pr2, tube + pr2, pr2, Math.PI, Math.PI * 2),
       [0, pr.back, true],
     ]
     merge(pipes, sweepLoop(f, loop, pr.r, prof))
+    const bead: Prof = [
+      [-pr2 - pr.bead, tube + 0.004, true],
+      ...Array.from({ length: 2 * quarter + 1 }, (_, i): [number, number, boolean] => {
+        const a = Math.PI + (Math.PI * i) / (2 * quarter)
+        return [-pr2 + pr.bead * Math.cos(a), tube + pr.bead * Math.sin(a), false]
+      }),
+      [-pr2 + pr.bead, tube + 0.004, true],
+    ]
+    merge(lip, sweepLoop(f, loop, pr.r, bead))
     merge(soot, disk(f, loop, pr.r, -pr.wall - 0.0005, pr.soot, pr.soot + 0.004, dx))
   }
 
   const mouth = hex.map((e): V2 => [e.c[0] + e.n[0] * (rc + sp.wall + 0.001), e.c[1] + e.n[1] * (rc + sp.wall + 0.001)])
   const housing = pocket(rm, surround, { o: f.o, ex, ey, ez }, sp.floor, [mouth], 0.004)
 
-  return { lip: lip.geometry(), pipes: pipes.geometry(), soot: soot.geometry(), housing: housing.geometry(), center: f.o, normal: scale(ez, -1) }
+  return { lip: finish(lip), pipes: finish(pipes), soot: finish(soot), housing: finish(housing), center: f.o, normal: scale(ez, -1) }
 }
