@@ -49,25 +49,46 @@ function merged(parts: T.BufferGeometry[]): T.BufferGeometry {
   return b.geometry()
 }
 
-function cleanTriangles(g: T.BufferGeometry): T.BufferGeometry {
-  const p = g.getAttribute('position'), n = g.getAttribute('normal'), idx = g.index
+function compactSurface(g: T.BufferGeometry): T.BufferGeometry {
+  const p = g.getAttribute('position'), idx = g.index
   const count = idx?.count ?? p.count
+  const remap = new Int32Array(p.count).fill(-1)
+  const vertices: number[] = []
   const valid: number[] = []
-  const a = new T.Vector3(), b = new T.Vector3(), c = new T.Vector3(), faceNormal = new T.Vector3()
+  const groups = g.groups.map(({ start, count, materialIndex }) => ({ start, end: start + count, materialIndex }))
+  let group = 0, groupStart = 0
+  g.clearGroups()
+  const a = new T.Vector3(), b = new T.Vector3(), c = new T.Vector3()
   for (let i = 0; i < count; i += 3) {
+    if (i === groups[group]?.end) {
+      g.addGroup(groupStart, valid.length - groupStart, groups[group].materialIndex)
+      groupStart = valid.length
+      group++
+    }
     const j = idx?.getX(i) ?? i, k = idx?.getX(i + 1) ?? i + 1, l = idx?.getX(i + 2) ?? i + 2
     a.fromBufferAttribute(p, j)
     b.fromBufferAttribute(p, k).sub(a)
     c.fromBufferAttribute(p, l).sub(a)
-    faceNormal.crossVectors(b, c)
-    if (!(faceNormal.lengthSq() > 1e-20)) continue
-    valid.push(j, k, l)
-    faceNormal.normalize()
+    if (!(b.cross(c).lengthSq() > 1e-20)) continue
     for (const v of [j, k, l]) {
-      if (!(n.getX(v) ** 2 + n.getY(v) ** 2 + n.getZ(v) ** 2 > .01)) n.setXYZ(v, faceNormal.x, faceNormal.y, faceNormal.z)
+      if (remap[v] < 0) {
+        remap[v] = vertices.length
+        vertices.push(v)
+      }
+      valid.push(remap[v])
     }
   }
-  if (valid.length !== count) g.setIndex(valid)
+  if (groups[group]) g.addGroup(groupStart, valid.length - groupStart, groups[group].materialIndex)
+  if (valid.length === count && vertices.length === p.count) return g
+  for (const [name, attr] of Object.entries(g.attributes)) {
+    const data = attr.array.slice(0, vertices.length * attr.itemSize)
+    for (const [i, v] of vertices.entries()) {
+      const start = v * attr.itemSize
+      data.set(attr.array.subarray(start, start + attr.itemSize), i * attr.itemSize)
+    }
+    g.setAttribute(name, new T.BufferAttribute(data, attr.itemSize, attr.normalized))
+  }
+  g.setIndex(valid)
   return g
 }
 
@@ -89,7 +110,8 @@ function face(outer: T.Vector3[], depth = 0): T.BufferGeometry {
   const b = new MeshBuilder()
   for (const p of outer) b.vertex([p.x, p.y, p.z - depth], [0, 0, 1])
   for (const [a, c, d] of T.ShapeUtils.triangulateShape(contour, [])) b.tri(a, c, d)
-  const g = b.geometry()
+  // Earcut can omit collinear contour stations that the adjoining strip still needs.
+  const g = compactSurface(b.geometry())
   g.computeVertexNormals()
   return g
 }
@@ -150,7 +172,7 @@ function grille(throat: T.Vector3[], frontZ: number, full: boolean): T.BufferGeo
   }
   outlineShape.holes = holes.map(h => new T.Path(h))
   const g = new T.ExtrudeGeometry(outlineShape, { steps: 1, depth: .008, bevelEnabled: false, curveSegments: 1 })
-  return g.translate(0, 0, frontZ - .008)
+  return compactSurface(g.translate(0, 0, frontZ - .008))
 }
 
 function radiator(throat: T.Vector3[], full: boolean): T.BufferGeometry {
@@ -265,7 +287,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
       mesh.name = name
       parent.add(mesh)
     }
-    install(name, cleanTriangles(g))
+    install(name, compactSurface(g))
     if (pair) install(name + ' right', mirrorGeometry(g))
   }
   const tag = <M extends T.Material>(material: M, wetness: WetnessKind): M => {
