@@ -56,6 +56,12 @@ export const atmosphere = {
   projectorOpeningHeight: [-0.12, -0.045],
   projectorOpeningReach: [0.14, 0.32, 0.97, 1.40],
   projectorOpeningClearance: [0.10, 0.29],
+  projectorDeckHitHeight: [0.022, 0.095],
+  projectorDeckRaySlope: [0.119, 0.161],
+  projectorDeckFacing: [0.22, 0.65],
+  projectorDeckScatterHeight: [0.30, 0.57],
+  projectorDeckScatterLoss: 0.75,
+  projectorDeckExtinctionLoss: 0.55,
 } as const
 
 const cloudSeed = (streamSeed('haze/cloud-underlight') / 4294967296 * 64).toFixed(8)
@@ -69,6 +75,7 @@ uniform mat4 inverseProjection;
 uniform mat4 cameraWorld;
 uniform vec4 deckBounds;
 uniform int cloudLightIndex;
+uniform int frontProjectorIndex;
 uniform int hazeLightLimit;
 uniform vec2 sampleJitter;
 uniform float focusDistance;
@@ -326,6 +333,15 @@ vec2 clipCone(vec2 segment, vec3 eyeFromLight, vec3 ray, vec3 axis, float cutoff
   return segment;
 }
 
+float frontDeckWeight(vec3 hit, vec3 ray, float wakeGain) {
+  if (wakeGain <= 0.0 || frontProjectorIndex < 0 || frontProjectorIndex >= filmLightCount) return 0.0;
+  if (filmLightShape[frontProjectorIndex].w < 0.5) return 0.0;
+  if (any(lessThan(hit.xz, deckBounds.xy)) || any(greaterThan(hit.xz, deckBounds.zw))) return 0.0;
+  float frontView = smoothstep(${atmosphere.projectorDeckFacing.join(', ')}, dot(-ray, filmLightAxis[frontProjectorIndex].xyz));
+  return (1.0 - smoothstep(${atmosphere.projectorDeckHitHeight.join(', ')}, abs(hit.y)))
+    * smoothstep(${atmosphere.projectorDeckRaySlope.join(', ')}, -ray.y) * frontView * wakeGain;
+}
+
 vec4 scatterToDepth(vec2 uv, float depth) {
   vec4 eye = inverseProjection * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
   vec3 eyePoint = eye.xyz / eye.w;
@@ -333,9 +349,12 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   vec3 ray = mat3(cameraWorld) * (eyePoint / far);
   vec3 origin = cameraWorld[3].xyz;
   vec3 hit = origin + far * ray;
+  float wakeGain = cameraWake ? smoothstep(${atmosphere.projectorWakeFocus.join(', ')}, focusDistance) : 0.0;
+  float frontDeck = frontDeckWeight(hit, ray, wakeGain);
+  float deckAir = 1.0 - ${atmosphere.projectorDeckExtinctionLoss} * frontDeck;
   vec2 footprint = deckInterval(origin, ray);
   vec2 layer = layerInterval(origin, ray, footprint);
-  float layerDepth = layerOpticalDepth(origin.y, ray.y, layer, far);
+  float layerDepth = deckAir * layerOpticalDepth(origin.y, ray.y, layer, far);
   float cityStart = footprint.y >= footprint.x ? max(localAirRange, footprint.y) : localAirRange;
   float airDepth = heightOpticalDepth(origin.y, ray.y, min(far, localAirRange), airDensity, airHeight);
   vec2 cityLayers = cityOpticalLayers(origin, ray, cityStart, far);
@@ -346,8 +365,6 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   vec3 radiance = airlight * foregroundScatter(far * 0.5);
   vec2 pixel = floor(uv * vec2(textureSize(sceneDepth, 0)));
   float pixelNoise = fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
-  float wakeGain = cameraWake ? smoothstep(${atmosphere.projectorWakeFocus.join(', ')}, focusDistance) : 0.0;
-
   for (int i = 0; i < MAX_FILM_LIGHTS; i++) {
     if (i >= filmLightCount || (hazeLightLimit >= 0 && i >= hazeLightLimit)) break;
     vec4 color = filmLightColor[i];
@@ -397,7 +414,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
         : heightOpticalDepth(glowPoint.y, glowRay.y, glowDistance, airDensity, airHeight);
       float glowDepth = heightOpticalDepth(origin.y, ray.y, min(tGlow, localAirRange), airDensity, airHeight)
         + sourceDepth
-        + layerOpticalDepth(origin.y, ray.y, layer, tGlow) + cityOpticalDepth(origin, ray, cityStart, tGlow);
+        + deckAir * layerOpticalDepth(origin.y, ray.y, layer, tGlow) + cityOpticalDepth(origin, ray, cityStart, tGlow);
       float angular = spot ? filmAngularFalloff(i, glowRay) * filmLightVisibility(i, glowPoint)
         : (axis.w < -0.5 ? 1.0 : 0.28 + 0.72 * max(0.0, dot(-glowDirection / glowDistance, axis.xyz)));
       float glow = haloEnvelope * (glowEnd - glowStart) / glowRadius;
@@ -442,7 +459,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
       float distanceToLight = length(filmLightPosition[i] - p);
       float opticalDepth = heightOpticalDepth(origin.y, ray.y, min(t, localAirRange), airDensity, airHeight)
         + heightOpticalDepth(p.y, toLight.y, distanceToLight, airDensity, airHeight)
-        + layerOpticalDepth(origin.y, ray.y, layer, t) + cityOpticalDepth(origin, ray, cityStart, t);
+        + deckAir * layerOpticalDepth(origin.y, ray.y, layer, t) + cityOpticalDepth(origin, ray, cityStart, t);
       float cosine = dot(ray, toLight);
       float inScatter;
       float receive = receiver;
@@ -460,6 +477,8 @@ vec4 scatterToDepth(vec2 uv, float depth) {
           projectorPhase(cosine) * ${atmosphere.projectorScatterFraction},
           projectorSuspendedPhase(cosine) * wing
         ) * onset + body);
+        inScatter *= 1.0 - ${atmosphere.projectorDeckScatterLoss} * frontDeck
+          * (1.0 - smoothstep(${atmosphere.projectorDeckScatterHeight.join(', ')}, p.y));
         if (opening > 0.0) {
           float span = smoothstep(${atmosphere.projectorOpeningReach.slice(0, 2).join(', ')}, distanceToLight)
             * (1.0 - smoothstep(${atmosphere.projectorOpeningReach.slice(2).join(', ')}, distanceToLight));
@@ -536,6 +555,7 @@ function hazeUniforms({ rig, world }: HazeDomain, texture: THREE.Texture | null)
     cameraWorld: { value: new THREE.Matrix4() },
     deckBounds: { value: new THREE.Vector4(min.x, min.y, max.x, max.y) },
     cloudLightIndex: { value: world.lights?.findIndex((light) => light.id === 'magenta violet tower screen') ?? -1 },
+    frontProjectorIndex: { value: -1 },
     hazeLightLimit: { value: -1 },
     sampleJitter: { value: new THREE.Vector2() },
     focusDistance: { value: 1 },
@@ -640,6 +660,8 @@ export function createHaze({ rig, world }: HazeDomain): StagePart {
   })
   const uniforms = hazeUniforms({ rig, world }, coarse.texture)
   uniforms.cameraWake.value = true
+  // The rig places the vehicle projectors directly after the world lights.
+  uniforms.frontProjectorIndex.value = world.lights?.length ?? -1
   const integratePass = new FullscreenPass(passMaterial(integrate, uniforms, { blending: THREE.NoBlending }))
   const compositePass = new FullscreenPass(passMaterial(composite, uniforms, { blending: THREE.NoBlending }))
   return {
