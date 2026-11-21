@@ -29,13 +29,13 @@ export function reflectionPracticalBuilder(labels: Label, metal: THREE.Material,
     plate(fixture,'sealed opal aperture',fixtureOpal(new THREE.Color(...rgb),segments),[0,0,.004],w,h)
     return fixture
   }
-  const cabinet = (parent: THREE.Object3D,name: string,at: Tuple,[w,h]: Size,rgb: Tuple,text: string) => {
+  const cabinet = (parent: THREE.Object3D,name: string,at: Tuple,[w,h]: Size,rgb: Tuple,text: string, vertical = false) => {
     const allowed = config.signage.generic.find(s=>s===text)
     if (!allowed) throw new Error(`Unapproved reflection practical sign: ${text}`)
     const color = new THREE.Color(...rgb)
     const fixture = mount(parent,name,at,[w,h],Math.min(.56,h*.29))
     const face = plate(fixture,'diffusing cabinet face',fixtureOpal(color.clone().multiplyScalar(.40),1),[0,0,.006],w,h)
-    const letters = labels(allowed,'World Condensed',[allowed],w/h)
+    const letters = labels(allowed,'World Condensed',vertical ? [...allowed] : [allowed],w/h)
     if (letters) {
       const material = signGlass(letters,color,w,h,true)
       material.transparent = true
