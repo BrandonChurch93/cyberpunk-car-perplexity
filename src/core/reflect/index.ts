@@ -61,20 +61,30 @@ function planarSize(format: FormatSpec, planarScale: number): THREE.Vector2 {
   return new THREE.Vector2(Math.round(format.width * planarScale), Math.round(format.height * planarScale))
 }
 
-function planarTarget(size: THREE.Vector2): THREE.WebGLRenderTarget {
-  const target = new THREE.WebGLRenderTarget(size.x, size.y, {
+interface PlanarCapture {
+  raw: THREE.WebGLRenderTarget
+  color: THREE.WebGLRenderTarget
+}
+
+function planarTarget(size: THREE.Vector2, atmosphere: boolean): PlanarCapture {
+  const color = new THREE.WebGLRenderTarget(size.x, size.y, {
     type: THREE.HalfFloatType,
     format: THREE.RGBAFormat,
     colorSpace: THREE.NoColorSpace,
     minFilter: THREE.LinearMipmapLinearFilter,
     magFilter: THREE.LinearFilter,
     generateMipmaps: true,
-    depthBuffer: true,
+    depthBuffer: !atmosphere,
   })
-  target.depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.FloatType)
-  target.depthTexture.minFilter = THREE.NearestFilter
-  target.depthTexture.magFilter = THREE.NearestFilter
-  return target
+  const raw = atmosphere ? new THREE.WebGLRenderTarget(size.x, size.y, {
+    type: THREE.HalfFloatType,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+  }) : color
+  raw.depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.FloatType)
+  raw.depthTexture.minFilter = THREE.NearestFilter
+  raw.depthTexture.magFilter = THREE.NearestFilter
+  return { raw, color }
 }
 
 function lodMax(size: THREE.Vector2): number {
@@ -114,11 +124,14 @@ function deckDetails(root: THREE.Object3D) {
 export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const { renderer, scene, world, vehicle } = deps
   const emitters = mirrorEmitters(world.lights ?? [], deps.rig)
+  const hazeCapture = deps.rig && world.lights && world.deck.bounds
+    ? createHazeCapture({ rig: deps.rig, world: { lights: world.lights, deck: { bounds: world.deck.bounds } } })
+    : undefined
   const seed = streamSeed('reflect')
   let format = config.formats.master
   let tier: TierId = 'final'
   let size = planarSize(format, quality[tier].planarScale)
-  let target = planarTarget(size)
+  let target = planarTarget(size, !!hazeCapture)
   let diagnostic = 'beauty'
   let captureTime = 0
   let cacheCameraPlanar = false
@@ -127,8 +140,8 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   mirror.layers.set(layers.scene)
 
   const planar: PlanarUniforms = {
-    reflectMap: { value: target.texture },
-    reflectDepth: { value: target.depthTexture },
+    reflectMap: { value: target.color.texture },
+    reflectDepth: { value: target.raw.depthTexture },
     reflectViewProjection: { value: new THREE.Matrix4() },
     reflectInverseViewProjection: { value: new THREE.Matrix4() },
     reflectSize: { value: size.clone() },
@@ -159,21 +172,19 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const planarMeshes = [...world.deck.meshes, ...details.meshes]
 
   const probes = new Map<number, Probe>()
-  const hazeCapture = deps.rig && world.lights && world.deck.bounds
-    ? createHazeCapture({ rig: deps.rig, world: { lights: world.lights, deck: { bounds: world.deck.bounds } } })
-    : undefined
-  const bindPlanar = (destination: THREE.WebGLRenderTarget): void => {
-    planar.reflectMap.value = destination.texture
-    planar.reflectDepth.value = destination.depthTexture
-    planar.reflectSize.value.set(destination.width, destination.height)
+  const bindPlanar = (destination: PlanarCapture): void => {
+    planar.reflectMap.value = destination.color.texture
+    planar.reflectDepth.value = destination.raw.depthTexture
+    planar.reflectSize.value.set(destination.color.width, destination.color.height)
     planar.reflectLodMax.value = lodMax(planar.reflectSize.value)
   }
   const fitTarget = (): void => {
     const next = planarSize(format, quality[tier].planarScale)
     if (next.equals(size)) return
     size = next
-    target.dispose()
-    target = planarTarget(size)
+    if (target.raw !== target.color) target.raw.dispose()
+    target.color.dispose()
+    target = planarTarget(size, !!hazeCapture)
     bindPlanar(target)
   }
   const bounce = new Probe(renderer, bounceSize, captureNear, captureFar)
@@ -194,7 +205,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     return () => objects.forEach((o, i) => (o.visible = was[i]))
   }
 
-  const renderPlanar = (eye: THREE.PerspectiveCamera, destination: THREE.WebGLRenderTarget, time: number, guard = 1): void => {
+  const renderPlanar = (eye: THREE.PerspectiveCamera, destination: PlanarCapture, time: number, guard = 1): void => {
     planar.reflectOn.value = 0
     planar.reflectMap.value = null
     planar.reflectDepth.value = null
@@ -208,10 +219,11 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     const alpha = renderer.getClearAlpha()
     const showDeck = hide(planarMeshes)
     try {
-      renderer.setRenderTarget(destination)
+      renderer.setRenderTarget(destination.raw)
       renderer.setClearColor(0x000000, 1)
       renderer.clear(true, true, false)
       emitters.withRadiance(time, () => renderer.render(scene, mirror))
+      hazeCapture?.renderFarAir(renderer, destination.raw, destination.color, mirror)
     } finally {
       showDeck()
       renderer.setClearColor(color, alpha)
@@ -225,7 +237,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const probeOf = (edge: number): Probe => {
     let probe = probes.get(edge)
     if (!probe) {
-      const deckMirror = planarMeshes.length ? planarTarget(new THREE.Vector2(edge, edge)) : null
+      const deckMirror = planarMeshes.length ? planarTarget(new THREE.Vector2(edge, edge), !!hazeCapture) : null
       probe = new Probe(renderer, edge, captureNear, captureFar, hazeCapture, deckMirror
         ? (eye, face) => {
             if (face === 2) planar.reflectOn.value = 0

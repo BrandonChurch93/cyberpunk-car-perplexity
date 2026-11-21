@@ -18,8 +18,8 @@ function exercise(
   const light = new three.Object3D()
   light.position.set(0, 0.5, -1.4)
   const rig = new Rig([{
-    id: 'warm deck spot', kind: 'spot', object: light, angle: 0.23, color: new three.Color(1, 0.87, 0.8),
-    intensity: 3, size: [0.34, 0.21], range: 12, shadow: false, beam: false, level: () => 1,
+    id: 'compact projector', kind: 'spot', object: light, angle: 0.36, color: new three.Color(1, 0.87, 0.8),
+    intensity: 3, size: [0.04, 0.04], range: 12, shadow: false, beam: true, level: () => 1,
   }], 1)
   rig.update(0, [0.5, 0.5])
   const view = new View()
@@ -61,12 +61,17 @@ function exercise(
   }
   const positive = capture(90)
   const negative = capture(-90)
+  rig.uniforms.filmLightShape.value[0].w = 0
+  const ordinary = capture(90).ribbons
+  rig.uniforms.filmLightShape.value[0].w = 1
+  rig.uniforms.filmLightAxis.value[0].set(1, 0, 0, rig.uniforms.filmLightAxis.value[0].w)
+  const outside = capture(90).ribbons
   target.dispose()
   renderer.dispose()
-  return { positive, negative }
+  return { positive, negative, ordinary, outside }
 }
 
-it('keeps nonnegative HDR from rain, crowns and spray when a cube mirror flips both projection axes', async () => {
+it('keeps the local rain inside the projector cone and ribbon HDR nonnegative across mirror flips', async () => {
   const id = '/air-mirror-entry.js'
   const app = await createServer({
     configFile: false,
@@ -97,7 +102,7 @@ it('keeps nonnegative HDR from rain, crowns and spray when a cube mirror flips b
       const errors: string[] = []
       page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
       await page.goto(new URL('air-mirror-test', app.resolvedUrls!.local[0]).href)
-      const { positive, negative }: ReturnType<typeof exercise> = await page.evaluate(`import("${id}").then(module => module.run())`)
+      const { positive, negative, ordinary, outside }: ReturnType<typeof exercise> = await page.evaluate(`import("${id}").then(module => module.run())`)
       expect(errors).toEqual([])
       expect(positive.focalY).toBeGreaterThan(0)
       expect(negative.focalY).toBeLessThan(0)
@@ -108,6 +113,9 @@ it('keeps nonnegative HDR from rain, crowns and spray when a cube mirror flips b
         expect(row.min).toBeGreaterThanOrEqual(0)
         expect(Math.abs(row.energy / upright.energy - 1)).toBeLessThan(0.01)
       }
+      expect(ordinary[0].energy).toBe(0)
+      expect(ordinary[1].energy).toBeGreaterThan(0.001)
+      expect(outside[0].energy).toBe(0)
     } finally {
       await browser.close()
     }

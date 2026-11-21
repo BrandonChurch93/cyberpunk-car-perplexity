@@ -1,19 +1,22 @@
 import * as THREE from 'three'
 import { createServer } from 'vite'
 import { describe, expect, it } from 'vitest'
-import { config } from '../src/config'
+import { config, defaultPaint, paintById } from '../src/config'
 import type { FilmLight, SampleContext } from '../src/core/contract'
 import type { FrameEngine, Stage } from '../src/core/engine'
 import { createHaze, createHazeCapture } from '../src/core/haze'
 import type { applyLens } from '../src/core/lens'
 import { LightRig, patchFilmLighting } from '../src/core/lights'
 import { createReflections, planarTuning, quality } from '../src/core/reflect'
+import { probeLamps } from '../src/core/reflect/lamps'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
 import { Probe } from '../src/core/reflect/probe'
 import { boxPatch, planarPatch } from '../src/core/reflect/shaders'
 import { hash01, streamSeed } from '../src/core/random'
+import { events, stateAt } from '../src/director/timeline'
 import { patchMaterial, patchesOf } from '../src/materials/patch'
 import { applyPorous } from '../src/weather/surface/porous'
+import { createVehicle } from '../src/vehicle'
 import { launchBrowser } from '../tools/lib/browser'
 
 function camera(): THREE.PerspectiveCamera {
@@ -107,6 +110,40 @@ describe('quality', () => {
   })
 })
 
+it('tracks the ported guides, projector dies and tail through real lamp stages and body transforms', async () => {
+  const vehicle = await createVehicle({ paint: paintById(defaultPaint), detail: 'blockout' })
+  const probe = probeLamps(vehicle)
+  const emitters = probe.root.children as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[]
+  const active = () => emitters.filter((emitter) => emitter.visible)
+  expect(emitters).toHaveLength(8)
+  expect(probe.root.visible).toBe(false)
+  probe.sync()
+  expect(active()).toHaveLength(0)
+
+  vehicle.update(stateAt((events.lampStageOne + events.lampStageTwo) * .5))
+  probe.sync()
+  expect(active().map((emitter) => emitter.name).sort()).toEqual([
+    'front Y running guide', 'front Y running guide right', 'tail-guide-left', 'tail-guide-right',
+  ])
+
+  vehicle.root.position.set(-1, .02, 3)
+  vehicle.root.rotation.y = .25
+  vehicle.update(stateAt(events.lampStageThree))
+  probe.sync()
+  expect(active()).toHaveLength(emitters.length)
+  for (const emitter of emitters) {
+    const source = vehicle.root.getObjectByName(emitter.name) as typeof emitter
+    expect(emitter.geometry).toBe(source.geometry)
+    expect(emitter.matrixWorld.equals(source.matrixWorld)).toBe(true)
+    expect(emitter.material.emissive.equals(source.material.emissive)).toBe(true)
+    expect(emitter.material.emissiveIntensity).toBe(source.material.emissiveIntensity)
+    expect(emitter.material.side).toBe(THREE.DoubleSide)
+  }
+  vehicle.update(stateAt(events.lampsOffEnd))
+  probe.sync()
+  expect(active()).toHaveLength(0)
+}, 120_000)
+
 it('uses the deck mirror on bay paint and grate metal without rendering them into their own mirror', () => {
   const scene = new THREE.Scene()
   const world = new THREE.Group()
@@ -142,17 +179,21 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   scene.add(world, body, rig.group)
   const visibility: boolean[][] = []
   const radiance: number[][] = []
+  const targets: THREE.WebGLRenderTarget[] = []
+  let activeTarget: THREE.WebGLRenderTarget | null = null
   const renderer = {
     coordinateSystem: THREE.WebGLCoordinateSystem,
-    getRenderTarget: () => null,
+    getRenderTarget: () => activeTarget,
     getActiveCubeFace: () => 0,
     getActiveMipmapLevel: () => 0,
     getClearColor: (color: THREE.Color) => color,
     getClearAlpha: () => 1,
-    setRenderTarget: () => undefined,
+    setRenderTarget: (target: THREE.WebGLRenderTarget | null) => { activeTarget = target },
     setClearColor: () => undefined,
     clear: () => undefined,
-    render: () => {
+    render: (object: THREE.Object3D) => {
+      targets.push(activeTarget!)
+      if (object !== scene) return
       visibility.push([floor.visible, stripe.visible, rim.visible, slot.visible, rail.visible])
       radiance.push(tint.toArray())
     },
@@ -160,7 +201,11 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   const part = createReflections({
     renderer, scene, rig,
     vehicle: { root: body, lamps: [] },
-    world: { root: world, lights: [practical], deck: { material: floor.material, meshes: [floor] }, reflectionBox: new THREE.Box3() },
+    world: {
+      root: world, lights: [practical],
+      deck: { material: floor.material, meshes: [floor], bounds: new THREE.Box2(new THREE.Vector2(-10, -10), new THREE.Vector2(10, 10)) },
+      reflectionBox: new THREE.Box3(),
+    },
   })
   const fmt = config.formats.preview
   const eye = camera()
@@ -174,6 +219,15 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
     },
   }
   part.beforeSample!(sample)
+  expect(targets).toHaveLength(2)
+  const [raw, finished] = targets
+  expect(raw).not.toBe(finished)
+  expect(raw!.depthTexture).not.toBeNull()
+  expect(raw!.texture.generateMipmaps).toBe(false)
+  expect(finished!.texture.generateMipmaps).toBe(true)
+  expect(part.planar.reflectDepth.value).toBe(raw!.depthTexture)
+  expect(part.planar.reflectMap.value).toBe(finished!.texture)
+  expect(activeTarget).toBeNull()
   expect(visibility).toEqual([[false, false, false, false, true]])
   expect(radiance).toEqual([[2, 0, 2]])
   expect(tint.toArray()).toEqual([.15, .03, .23])
@@ -429,6 +483,7 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
     })
   }
   const open = at(receiver, 6)
+  const nose = at(receiver.clone().setZ(.18), 6)
   const closed = at(receiver.clone().lerp(eye.position, .74), 6)
   const macro = at(receiver, .8)
   const point = new three.Vector3()
@@ -468,7 +523,7 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
   input.dispose()
   output.dispose()
   renderer.dispose()
-  return { open: open[1] - open[0], closed: closed[1] - closed[0], macro: macro[1] - macro[0], footprint }
+  return { open: open[1] - open[0], nose: nose[1] - nose[0], closed: closed[1] - closed[0], macro: macro[1] - macro[0], footprint }
 }
 
 function captureWetDeck(three: typeof THREE, reflections: typeof createReflections, porous: typeof applyPorous,
@@ -880,6 +935,7 @@ it('matches camera and probe reflections, bounds planar taps, and resumes review
       const projector: ReturnType<typeof captureProjector> = await page.evaluate(`import("${id}").then(module => module.projector())`)
       expect(errors).toEqual([])
       expect(projector.open).toBeGreaterThan(.002)
+      expect(projector.nose).toBeLessThan(projector.open)
       expect(projector.closed).toBeLessThan(projector.open * .1)
       expect(projector.macro).toBe(0)
       expect(projector.footprint[0]).toEqual({ air: 0, deck: 0 })

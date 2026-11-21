@@ -33,7 +33,7 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
     if (distance2 > source.a * source.a * 1.000001) continue;
     bool compact = filmLightShape[i].w > 0.5;
     bool sharpSpot = compact || (filmLightShape[i].x > 0.0 && filmLightAxis[i].w > 0.94);
-    if (local && !compact && distance2 > 900.0) continue;
+    if (local && (!compact || distance2 > 42.25)) continue;
     vec3 toSource;
     vec3 incident = filmLightAt(i, p, toSource);
     if (sharpSpot && field >= 0.0 && distance2 < (compact ? 81.0 : 324.0) && dot(-offset, filmLightAxis[i].xyz) > 0.0) {
@@ -44,6 +44,13 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
     }
     if (all(equal(incident, vec3(0.0)))) continue;
     float mu = clamp(-dot(toEye, toSource), -1.0, 1.0);
+    if (local) {
+      float forward = 2.4 * exp(-(1.0 - mu) / 0.23);
+      float rim = 0.32 * exp2(-24.0 * abs(mu - 0.774));
+      float reach = smoothstep(0.015, 0.16, distance2) * (1.0 - smoothstep(16.0, 42.25, distance2));
+      flash += incident * (forward + rim) * reach;
+      continue;
+    }
     if (mist) {
       const float g = 0.68;
       float q = 1.0 + g * g - 2.0 * g * mu;
@@ -52,13 +59,14 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
       continue;
     }
     bool area = filmLightShape[i].x < 0.0;
-    float width = area ? 0.067 : compact ? 0.078 : 0.043;
+    bool splash = field < 0.0;
+    float width = area ? 0.067 : compact ? (splash ? 0.15 : 0.078) : 0.043;
     float extent = filmLightShape[i].y;
     float spread = area ? min(0.045, extent * extent * 0.38 / max(0.01, distance2)) : 0.0;
     float forward = exp(-(1.0 - mu) / (width + spread)) * width / (width + spread);
     float rim = exp2(-(compact ? 26.0 : 55.0) * abs(mu - 0.774));
     float distantPanel = area ? smoothstep(8100.0, 40000.0, distance2) * smoothstep(0.7, 2.6, field) : 0.0;
-    float forwardGain = area ? 2.55 : compact ? 3.45 : 2.16;
+    float forwardGain = area ? 2.55 : compact ? (splash ? 2.0 : 3.45) : 2.16;
     vec3 scattered = incident * (0.002 + (forwardGain + 4.85 * distantPanel) * forward + (area ? 0.17 : compact ? 0.16 : 0.095) * rim);
     if (sharpSpot && field >= 0.0) flash += scattered;
     else light += scattered;
@@ -202,9 +210,8 @@ void main() {
   vTail = bp;
   vSigma = vec2(sigmaSide, sigmaEnd);
   vec3 peak = radiance * (amount * gain * coverage);
-  if (uLocalFine > 0.5) peak /= 1.0 + 25.0 * max(peak.r, max(peak.g, peak.b));
   flash *= amount * gain * coverage;
-  peak += flash / (1.0 + 20.0 * max(flash.r, max(flash.g, flash.b)));
+  peak += flash / (1.0 + (uLocalFine > 0.5 ? 5.5 : 20.0) * max(flash.r, max(flash.g, flash.b)));
   if (mist) peak /= 1.0 + 76.0 * max(peak.r, max(peak.g, peak.b));
   if (uLayer < 0.0 && !mist) peak /= 1.0 + 32.0 * max(peak.r, max(peak.g, peak.b));
   vRadiance = veilHighlights(peak, veil);
@@ -350,7 +357,7 @@ export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLig
     { key: 'close', layer: 1, density: 5.4, fine: 2.2, size: new THREE.Vector3(21, 7.8, 21), fade: [2.25, 4.1, 7.6, 13.0], gain: 2.6 },
     { key: 'middle', layer: 2, density: 2.65, fine: 1.75, size: new THREE.Vector3(Math.min(deckSpan.x, 41), 11.6, Math.min(deckSpan.y, 40)), fade: [7.2, 11.25, 20, 29], gain: 5.15 },
     { key: 'distance', layer: 3, density: 0.17, fine: 1.6, size: new THREE.Vector3(Math.max(deckSpan.x, 66), 16.5, Math.max(deckSpan.y, 66)), fade: [17.4, 24, 28, 38], gain: 2.05 },
-    { key: 'beam', layer: 1, density: 27.0, fine: 4.4, size: new THREE.Vector3(12, 3.2, 14), fade: [1.05, 2.15, 9, 13], gain: 1.38, local: true },
+    { key: 'beam', layer: 1, density: 76, fine: 7.0, size: new THREE.Vector3(12, 3.2, 14), fade: [1.05, 2.15, 9, 13], gain: 2.45, local: true },
   ]
   return specs.map(({ key, layer, density, fine, size, fade, gain, local }) => {
     const rng = stream(`air-streaks-${key}`)

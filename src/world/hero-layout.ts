@@ -31,6 +31,10 @@ const opalRadiance: Readonly<Record<string,number>> = {
   'right amber facade sail': 2.8, 'amber garage rise': 2.65, 'amber garage return': 4.15,
   'left warm parapet strip': 1.7, 'right warm parapet strip': 1.7,
 }
+const cyanApertures: Readonly<Partial<Record<string,readonly [width: number, gain: number]>>> = {
+  'left cyan facade sail': [.83,1.54], 'left cyan secondary strip': [.62,1.48],
+  'cyan garage rise': [.69,1.38], 'cyan garage return': [.43,1.60], 'cyan hotel facade strip': [.82,1.56],
+}
 
 export const approvedHeroSources = [
   { id: 'left cyan facade sail', at: [-11.76, 6.42, -29.40], size: [.139, 11.05], tint: 'cyan', scale: scale.leftBlade },
@@ -291,6 +295,9 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const base = 77, crownW = 9.4
       box(tower,'left upper service setback',[wx+w*.5+crownW*.19,(wy+base)*.5,wz-d*.04],[crownW,wy-base,d*.73],shell)
       box(tower,'left wing folded floor lip',[wx+w*.5+crownW*.19,base-.28,wz-d*.04],[crownW+.2,.56,d*.75],frame)
+      practical.cabinet(tower,'west vertical tailor blade',[wx+w*.5+crownW*.50,87.0,wz+d*.325+.64],
+        [2.76,14.6],[1.12,7.85,11.4],'TAILOR',true,2.85,.12)
+      signs.push('TAILOR')
       for (const [side, length, radiance] of [[-.35,147,24],[-.09,216,31],[.22,191,28]]) {
         const x = wx+side*w
         practical.opal(tower,'upper cyan facade lightwell',[x,156+length*.5,pz+.48],[2.16,length],[.06,radiance*.67,radiance],13)
@@ -368,6 +375,19 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
         plate(cabinet,'vertical magenta LED opal',glyphs ? signGlass(glyphs,centerAccent,signW,signH,true,3.4) : centerOpal,
           [0,0,.34],signW,signH)
         signs.push(word)
+      }
+    }
+    if (index === 3 || index === 4 || index === 11) {
+      const pz = wz+d*.50+.58
+      if (index === 3) {
+        practical.cabinet(tower,'west cyan arcade shopfront',[wx+w*.363,8.7,pz],[6.68,2.48],[.18,8.2,12.2],'ARCADE',false,3.1)
+        signs.push('ARCADE')
+      } else if (index === 11) {
+        practical.cabinet(tower,'middle cyan noodle shopfront',[wx-w*.031,12.6,pz],[7.62,3.12],[.25,8.6,13.9],'NOODLES',false,3.3)
+        signs.push('NOODLES')
+      } else {
+        practical.cabinet(tower,'low magenta bar shopfront',[wx-w*.322,10.7,pz],[4.88,2.27],[10.3,.35,4.84],'BAR',false,2.4)
+        signs.push('BAR')
       }
     }
     if (index === 8 || index === 9) {
@@ -484,8 +504,10 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       animation.push(mural.set)
     } else if (!source.text) {
       const segments = source.onWall ? 1 : Math.round(height / (source.tint === 'cyan' ? .34 : .50))
-      const opal = fixtureOpal(color.clone().multiplyScalar(opalRadiance[source.id] ?? 1), segments)
-      plate(housing, 'weather-sealed opal face', source.scale ? offset(opal,-4) : opal, [0,0,.002], width,height)
+      const shape = cyanApertures[source.id]
+      const gain = (opalRadiance[source.id] ?? 1)*(shape?.[1] ?? 1)
+      const opal = fixtureOpal(color.clone().multiplyScalar(gain),segments,shape!==undefined)
+      plate(housing, 'weather-sealed opal face', source.scale ? offset(opal,-4) : opal, [0,0,.002], width*(shape?.[0] ?? 1),height)
       if (!source.onWall) for (const fraction of [-.40,-.17,.17,.40]) {
         const horizontal = width > height
         box(housing, 'opal rail standoff', [horizontal ? fraction*width : 0,horizontal ? 0 : fraction*height,-.184],
