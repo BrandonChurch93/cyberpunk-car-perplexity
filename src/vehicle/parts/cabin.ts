@@ -1,6 +1,6 @@
 import type * as THREE from 'three'
 import { MeshBuilder } from '../geom/mesh'
-import { blob, extrude, roundRect, sweep } from '../geom/shapes'
+import { extrude, roundRect, sweep } from '../geom/shapes'
 import { add, cross, norm, scale, type V2, type V3 } from '../geom/vec'
 
 export interface Cabin {
@@ -69,6 +69,30 @@ function seat(leather: MeshBuilder, trim: MeshBuilder, x: number): void {
   slab(trim, [[-0.36, 0.15], [-0.36, 0.22], [0.2, 0.22], [0.2, 0.15]], x - 0.2, x + 0.2)
 }
 
+function hub(b: MeshBuilder, c: V3, r: V3, e: number, rows: number, cols: number): void {
+  const sp = (x: number): number => Math.sign(x) * Math.abs(x) ** e
+  const at = (v: number, u: number): number => {
+    const d: V3 = [sp(Math.cos(v)) * sp(Math.cos(u)), sp(Math.sin(v)), sp(Math.cos(v)) * sp(Math.sin(u))]
+    return b.vertex([c[0] + r[0] * d[0], c[1] + r[1] * d[1], c[2] + r[2] * d[2]], norm([d[0] / r[0], d[1] / r[1], d[2] / r[2]]))
+  }
+  const south = b.vertex([c[0], c[1] - r[1], c[2]], [0, -1, 0])
+  const north = b.vertex([c[0], c[1] + r[1], c[2]], [0, 1, 0])
+  const ring: number[][] = []
+  for (let i = 1; i < rows; i++) {
+    const v = -Math.PI / 2 + (Math.PI * i) / rows
+    ring.push(Array.from({ length: cols }, (_, j) => at(v, (2 * Math.PI * j) / cols)))
+  }
+  for (let j = 0; j < cols; j++) {
+    const k = (j + 1) % cols
+    b.tri(south, ring[0][k], ring[0][j])
+    b.tri(north, ring[ring.length - 1][j], ring[ring.length - 1][k])
+    for (let i = 0; i + 1 < ring.length; i++) {
+      b.tri(ring[i][j], ring[i][k], ring[i + 1][k])
+      b.tri(ring[i][j], ring[i + 1][k], ring[i + 1][j])
+    }
+  }
+}
+
 function steering(leather: MeshBuilder, carbon: MeshBuilder, c: V3, n: V3): void {
   const up = norm([0, 1, 0])
   const e1 = norm(cross(up, n))
@@ -87,7 +111,7 @@ function steering(leather: MeshBuilder, carbon: MeshBuilder, c: V3, n: V3): void
     ups.push(n)
   }
   sweep(leather, path, ups, roundRect(0.03, 0.026, 0.011, 3), true)
-  blob(carbon, c, [0.06, 0.05, 0.025], 0.4, 10, 20)
+  hub(carbon, c, [0.06, 0.05, 0.025], 0.4, 10, 20)
   for (const a of [0, Math.PI, -Math.PI / 2]) {
     const p: V3[] = [at(a, 0.04, 0.005), at(a, 0.17, 0.005)]
     sweep(carbon, p, [n, n], roundRect(0.045, 0.012, 0.005, 2))

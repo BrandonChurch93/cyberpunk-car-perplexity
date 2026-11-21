@@ -72,6 +72,7 @@ function solid(rings: V3[][], c: V3): THREE.BufferGeometry {
   const pos: number[] = []
   const tri = (a: V3, b: V3, d: V3): void => {
     const nrm = cross(sub(b, a), sub(d, a))
+    if (Math.hypot(nrm[0], nrm[1], nrm[2]) < 1e-12) return
     const mid: V3 = [(a[0] + b[0] + d[0]) / 3 - c[0], (a[1] + b[1] + d[1]) / 3 - c[1], (a[2] + b[2] + d[2]) / 3 - c[2]]
     pos.push(...(dot(nrm, mid) >= 0 ? [...a, ...b, ...d] : [...a, ...d, ...b]))
   }
@@ -154,6 +155,7 @@ export function mirror(S: Surface, map: SurfaceMap, spec: MirrorSpec = mirrorSpe
   const ids = gl.map((q) => glass.vertex(P(q, zb + 0.0024), [0, 0, -1]))
   for (const [x, y, z] of THREE.ShapeUtils.triangulateShape(gl.map((q) => new THREE.Vector2(q[0], q[1])), [])) {
     const e = cross(sub(P(gl[y], 0), P(gl[x], 0)), sub(P(gl[z], 0), P(gl[x], 0)))
+    if (Math.abs(e[2]) < 1e-12) continue
     if (e[2] < 0) glass.tri(ids[x], ids[y], ids[z])
     else glass.tri(ids[x], ids[z], ids[y])
   }
