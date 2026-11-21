@@ -369,7 +369,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
       const level = T.MathUtils.smoothstep(stage, lampThresholds.beamStart, lampThresholds.beamFull)
       for (const l of lamps) l.level = l.beam ? level : running
       drl.emissiveIntensity = 144 * running
-      beam.emissiveIntensity = 260 * (level + (1 - level) * .045 * running)
+      beam.emissiveIntensity = 260 * level
     },
   }
 }
