@@ -305,7 +305,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
         practical.opal(tower,'pale cyan lightwell core',[x+.69,156+length*.5,pz+.57],[.30,length*.97],[6.8,23,31],13)
       }
       animation.push(practical.screen(tower,'west violet media blade',[wx+.381*w,188,pz+.63],[5.45,60],
-        [10.2,.32,3.39],[1.91,.45,11.7],1.04,.78))
+        [10.2,.32,3.39],[1.91,.45,11.7],1.04,.78,.81))
     } else if (index === 6) {
       const pz = wz+d*.50
       const riser = group(tower,'billboard upper media riser')
@@ -322,15 +322,26 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       }
       practical.cabinet(bridge,'high bridge service sign',[-76,9.3,.78],[15.2,3.45],[7.3,3.15,.69],'24H')
       animation.push(practical.screen(bridge,'bridge violet media fascia',[-19,-6.0,.92],[111,9.6],
-        [6.1,.29,2.6],[1.85,.41,9.2],.54,.89))
+        [6.1,.29,2.6],[1.85,.41,9.2],.54,.89,.69))
       const west = group(bridge,'west media transfer gallery',[-137.5,0,0])
       box(west,'west transfer box girder',[6,0,-12.35],[82,43.2,24.7],shell)
       box(west,'west upper gallery shell',[1,85.5,-10.5],[69,128.4,20.8],shell)
       box(west,'west gallery top coping',[1,149.65,-10.5],[69.6,.42,21.2],oxidizedAluminum)
-      animation.push(practical.screen(west,'bonnet media bank',[0,-.15,.93],[67,40.6],
-        [3.8,.34,1.78],[1.24,.41,5.7],.24,.39))
-      animation.push(practical.screen(west,'windscreen media bank',[0,115.5,.91],[65,53.8],
-        [5.3,.42,2.6],[1.64,.47,7.35],.68,.53))
+      box(west,'transfer gallery dark soffit',[.3,-20.7,-7.4],[69.0,1.65,15.9],charcoalConcrete)
+      box(west,'lower media folded spandrel',[.1,-.12,.17],[66.2,38.8,.54],charcoalConcrete)
+      box(west,'upper media folded spandrel',[.6,115.5,.22],[64.2,51.5,.62],charcoalConcrete)
+      for (const [name,x,y,w,h,phase,gain] of [
+        ['bonnet media bank',-11.0,.8,24.6,18.4,.24,.88],
+        ['bonnet media inset',15.3,-7.3,16.3,17.0,1.92,.60],
+        ['windscreen media bank',-16.0,114.9,26.0,28.2,.68,.65],
+        ['windscreen media inset',17.0,124.5,17.7,22.0,2.88,.56],
+      ] as const) {
+        animation.push(practical.screen(west,name,[x,y,.94],[w,h],
+          [3.8,.34,1.78],[1.24,.41,5.7],phase,.27,gain))
+      }
+      for (const [x,y,h] of [[4.6,-.2,36.4],[2.7,115.5,48.2]]) {
+        box(west,'folded media divider',[x,y,.65],[1.7,h,.81],frame)
+      }
       box(west,'west media recessed cyan divider',[-27.5,.5,.76],[1.26,34.6,.53],frame)
       practical.opal(west,'gallery cyan strip',[-27.5,.5,1.075],[.64,33.3],[.18,7.1,10.6],7)
       box(riser,'skybridge east abutment',[148,332,pz+6.0],[15,25.6,20.3],shell)
@@ -343,9 +354,9 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
         box(media,'gallery vertical bearing',[x,420.3,-.17],[2.45,147,.74],charcoalConcrete)
       }
       animation.push(practical.screen(media,'lower violet media bank',[-3.5,379.4,.91],[117.0,47.0],
-        [8.4,.42,3.05],[1.9,.57,9.5],.32,.67))
+        [8.4,.42,3.05],[1.9,.57,9.5],.32,.67,.68))
       animation.push(practical.screen(media,'upper magenta media bank',[6.1,448.5,.91],[120.2,65.0],
-        [10.4,.56,3.74],[2.28,.49,11.2],.78,.66))
+        [10.4,.56,3.74],[2.28,.49,11.2],.78,.66,.56))
       for (const [i,[x,lo,hi]] of [[57.8,353.7,413.3],[68.25,422.8,486.5]].entries()) {
         const length = hi-lo
         box(media,'folded cyan strip channel',[x,(lo+hi)*.5,.04],[1.63,length+.55,.57],frame)
