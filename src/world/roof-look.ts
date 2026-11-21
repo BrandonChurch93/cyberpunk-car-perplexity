@@ -189,8 +189,10 @@ export function finishRoof(deck: DeckSurface, roof: THREE.Group) {
   const zinc = new THREE.MeshStandardMaterial({ color: new THREE.Color(.30, .33, .37), roughness: .49, metalness: .88 })
   const stripe = new THREE.MeshStandardMaterial({ color: new THREE.Color(.47, .46, .39), roughness: .69 })
   stripe.userData.wetPorosity = .23
+  const heroStripe = new THREE.MeshStandardMaterial({ color: new THREE.Color(.66,.664,.60), roughness: .72 })
+  heroStripe.userData.wetPorosity = .29
   const tar = new THREE.MeshStandardMaterial({ color: new THREE.Color(.021, .026, .032), roughness: .88 })
-  for (const [mat, type] of [[floor, 'deck'], [concrete, 'concrete'], [parapet, 'parapet'], [heroWall, 'hero_wall'], [zinc, 'zinc'], [stripe, 'stripe']] as const) textureMaterial(mat, type)
+  for (const [mat, type] of [[floor, 'deck'], [concrete, 'concrete'], [parapet, 'parapet'], [heroWall, 'hero_wall'], [zinc, 'zinc'], [stripe, 'stripe'], [heroStripe,'stripe']] as const) textureMaterial(mat, type)
   for (const mesh of deck.meshes) mesh.material = floor
   deck.material = floor
   deck.heightMap = relief(deck.bounds)
@@ -206,6 +208,7 @@ export function finishRoof(deck: DeckSurface, roof: THREE.Group) {
   })
   const surfaces: { material: THREE.MeshStandardMaterial; wetness: 'porous' | 'sheet' }[] =
     [{ material: floor, wetness: 'porous' }, { material: concrete, wetness: 'porous' }, { material: parapet, wetness: 'porous' },
-      { material: heroWall, wetness: 'porous' }, { material: zinc, wetness: 'sheet' }, { material: stripe, wetness: 'porous' }]
-  return { surfaces, materials: { heroWall, zinc, stripe, tar } }
+      { material: heroWall, wetness: 'porous' }, { material: zinc, wetness: 'sheet' }, { material: stripe, wetness: 'porous' },
+      { material: heroStripe, wetness: 'porous' }]
+  return { surfaces, materials: { heroWall, zinc, heroStripe, tar } }
 }

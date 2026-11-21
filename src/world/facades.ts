@@ -115,7 +115,13 @@ function wideFacade(tone: number, level: DetailLevel): THREE.Material {
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <color_fragment>', /* glsl */ `
         float facadeId = buildingHash(vTowerOrigin.xz + vec2(vTowerOrigin.y));
         float style = buildingHash(vTowerOrigin.zx * .37);
-        vec2 coord = vTowerGrid / vec2(mix(1.48, 2.38, style), mix(3.32, 4.44, facadeId)) + vec2(.5, .5);
+        float northern = 0.0;
+        #ifdef CITY_MIDDLE
+          northern = step(94.0,vTowerOrigin.z)*step(vTowerOrigin.z,255.0)
+                   * step(-95.0,vTowerOrigin.x)*step(vTowerOrigin.x,28.0);
+        #endif
+        vec2 baySize = vec2(mix(1.48, 2.38, style), mix(3.32, 4.44, facadeId));
+        vec2 coord = vTowerGrid / mix(baySize,vec2(mix(1.15,1.54,style),mix(2.84,3.38,facadeId)),northern) + vec2(.5, .5);
         vec2 cell = floor(coord);
         vec2 field = fract(coord);
         float district = buildingHash(floor(vTowerOrigin.xz/68.0));
@@ -123,6 +129,9 @@ function wideFacade(tone: number, level: DetailLevel): THREE.Material {
         float value = buildingHash(cell + vTowerOrigin.xz*2.38);
         float blockOut = buildingHash(vec2(floor(cell.x*.29), floor(cell.y*.25)) + vTowerOrigin.zx);
         float on = step(.28+.39*facadeId+.06*district, groupVal*.66+value*.34) * step(.13+style*.23, blockOut);
+        float service = step(.91,buildingHash(vec2(cell.y,facadeId*49.0)+vTowerOrigin.xz));
+        float occupied = step(.58,groupVal*.72+value*.28)*step(.31,blockOut)*(1.0-service);
+        on = mix(on,occupied,northern);
         float fit = buildingHash(cell.yx + vTowerOrigin.zx*1.33 + 17.0);
         float groupOffset = buildingHash(vec2(cell.y,floor(cell.x*.33)) + vTowerOrigin.zx*.71);
         vec2 offset = (vec2(fit, groupOffset)-.5)*vec2(.19,.115);
@@ -139,9 +148,12 @@ function wideFacade(tone: number, level: DetailLevel): THREE.Material {
         vec3 cool = mix(vec3(.28,.52,.78),vec3(.64,.82,1.0),blockOut);
         vec3 amber = mix(vec3(.72,.48,.29),vec3(1.0,.84,.61),groupVal);
         vec3 glass = mix(cool, amber, smoothstep(.36,.77,groupVal));
+        vec3 northernGlass = mix(vec3(.26,.64,.86),vec3(1.0,.60,.32),smoothstep(.46,.70,blockOut*.72+groupVal*.28));
+        glass = mix(glass,northernGlass,northern);
         float roomBounce = mix(.37,.96,smoothstep(-.01,.32, field.y-.5))*mix(.54,1.0,1.0-edge.x);
         float fixture = exp(-((field.x-.37-fit*.24)*(field.x-.37-fit*.24)*45.0 + (field.y-.66-offset.y)*(field.y-.66-offset.y)*760.0)) * step(.64,groupOffset);
         float bright = exp2(mix(-3.70, 1.48, value))*mix(.65,1.12,blockOut)*(roomBounce+fixture*1.4)*(1.0-blindBand*.71);
+        bright *= mix(1.0,mix(1.38,2.2,smoothstep(.69,.99,value)),northern);
         #ifdef CITY_NEAR
           bright *= 1.0 - smoothstep(-10.0, 1.0, vTowerOrigin.y + vTowerGrid.y);
         #endif
@@ -153,6 +165,7 @@ function wideFacade(tone: number, level: DetailLevel): THREE.Material {
         float spandrel = 1.0-smoothstep(.032,.075+footprint.y,abs(field.y-.09));
         float pilaster = 1.0-smoothstep(.045,.10+footprint.x,abs(fract(coord.x/3.0+.5)-.5));
         float skin = mix(.76,1.19,style)*mix(.90,1.07,belt) + spandrel*.14 - pilaster*.15;
+        skin *= 1.0-northern*service*.32;
         diffuseColor.rgb *= (.66 + .22*horizon + .37*facadeId) * mix(1.0,softStripes,vTowerWall*.64);
         diffuseColor.rgb *= mix(1.0,skin,vTowerWall*readable*(1.0-depthVeil));
         vec3 distantWash = mix(vec3(.015,.026,.044),vec3(.029,.041,.058),district);

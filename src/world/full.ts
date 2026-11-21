@@ -5,9 +5,9 @@ import { cityPracticals } from './city-practicals'
 import type { WorldModule } from './contract'
 import { buildDeck } from './deck'
 import { detailFacades } from './facades'
-import { loadLabels, roofFixtures } from './fixtures'
+import { addSky, loadLabels, roofFixtures } from './fixtures'
 import { Forms, group } from './forms'
-import { addApprovedHeroLayout } from './hero-layout'
+import { addApprovedHeroLayout, approvedHeroSourceSurvey } from './hero-layout'
 import { addReflectionFrontages } from './reflection-practicals'
 import { finishRoof } from './roof-look'
 
@@ -37,10 +37,16 @@ export async function createFullWorld(): Promise<WorldModule> {
     o.castShadow = false
     o.receiveShadow = false
   })
-  const fixtures = roofFixtures(root, roof, city, labels, surfaces)
+  const fixtures = roofFixtures(roof, city, labels, surfaces)
   const updateCity = cityPracticals(city, labels, fixtures.signs)
   detailFacades(city)
   const hero = addApprovedHeroLayout(root, labels, materials)
+  const survey = approvedHeroSourceSurvey()
+  const district = (id: string) => {
+    const { at: [x,,z] } = survey.find(source=>source.id===id)!
+    return new THREE.Vector2(x,z)
+  }
+  addSky(root,[district('magenta violet tower screen'),district('left cyan facade sail')])
   const reflections = addReflectionFrontages(root,labels)
   const wideLights = new Map([...hero.lights,...fixtures.wideLights.map(light=>[light.id,light] as const)])
   const slots = fixtures.lights.map(original => {

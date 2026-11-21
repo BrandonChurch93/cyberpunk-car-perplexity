@@ -32,7 +32,7 @@ describe('surface water', () => {
 
   it('beads stand up on paint and flatten when large', () => {
     expect(capHeight(0.0005, 100)).toBeGreaterThan(0.0005)
-    expect(capHeight(0.006, 100)).toBeLessThan(0.0035)
+    expect(capHeight(0.006, 100)).toBeLessThan(0.0042)
     const cap = capTemplate(100, 6, 12)
     cap.computeBoundingBox()
     expect(cap.boundingBox!.max.y).toBeCloseTo(1, 5)

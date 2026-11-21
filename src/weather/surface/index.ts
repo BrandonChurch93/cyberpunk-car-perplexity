@@ -7,6 +7,7 @@ import { beatById, events, stateAt } from '../../director/timeline'
 import type { WeatherDeps } from '../contract'
 import { applyBeads, type BeadClass, trackClear, trackPoints } from './beads'
 import { CellDrops } from './cells'
+import { addDripEdges } from './drip-edges'
 import { DropGeometry, geometryAngle, geometryRange } from './drop-geometry'
 import { applyPorous, type Uniforms } from './porous'
 import { heroBasin, SyntheticRelief, type Basin } from './relief'
@@ -218,7 +219,10 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
     }
   })
 
-  const drops = new DropGeometry(vehicleMeshes(vehicle.root, beadMaterials), uniforms)
+  const beaded = vehicleMeshes(vehicle.root, beadMaterials)
+  vehicle.root.updateMatrixWorld(true)
+  for (const { mesh } of beaded) addDripEdges(mesh)
+  const drops = new DropGeometry(beaded, uniforms)
   root.add(drops.group)
   const cells = new CellDrops(vehicle, drops.runner)
   // Each format frames its own macro and wheel inserts, so each places its own rivulet and arch drips for its lens.
