@@ -525,7 +525,7 @@ export async function makeMaterials(detail: VehicleDetail, paint: PaintSpec): Pr
     soot: std(0x1d1e20, .95),
     covers: p.bayCover,
     mesh: std(0x1d1e20, .7),
-    under: p.diffuser,
+    under: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x0d0e10 : 0x1b1c1f, roughness: .56, metalness: .06, clearcoat: .18, clearcoatRoughness: .5, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial,
     rim: p.forged,
     disc: p.brake,
     hat: p.brushed,

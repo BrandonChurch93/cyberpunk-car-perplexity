@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { surfaceNormal } from '../body/body'
+import { orient } from './cabin'
 import type { Surface, SurfaceMap } from '../geom/cuts'
 import { MeshBuilder } from '../geom/mesh'
 import { roundRect, sweep } from '../geom/shapes'
@@ -12,7 +13,7 @@ export interface MirrorSpec {
   root: [number, number]
 }
 
-export const mirrorSpec: MirrorSpec = { center: [1.025, 0.87, 0.93], width: 0.23, height: 0.105, root: [1.0, 0.745] }
+export const mirrorSpec: MirrorSpec = { center: [1.04, 0.875, 0.95], width: 0.22, height: 0.105, root: [1.0, 0.715] }
 
 function roundCorners(poly: V2[], r: number, k = 4): V2[] {
   const out: V2[] = []
@@ -98,20 +99,20 @@ export function mirror(S: Surface, map: SurfaceMap, spec: MirrorSpec = mirrorSpe
   const h = spec.height / 2
   const raw: V2[] = [[-w, h * 0.82], [-w * 0.92, -h], [w * 0.97, -h], [w, h * 0.35], [w * 0.8, h], [-w * 0.75, h]]
   const outline = roundCorners(raw, 0.014)
-  const r = 0.004
+  const r = 0.006
   const zb = cz - 0.035
   const zf = (q: V2): number => zb + 0.014 + 0.062 * ((q[1] + h) / (2 * h)) - 0.012 * ((q[0] + w) / (2 * w))
   const P = (q: V2, z: number): V3 => [cx + q[0], cy + q[1], z]
-  const o1 = inset(outline, r)
-  const o2 = inset(outline, 2 * r)
-  const hg = solid([
-    o2.map((q) => P(q, zb)),
-    o1.map((q) => P(q, zb)),
-    outline.map((q) => P(q, zb + r)),
-    outline.map((q) => P(q, zf(q) - r)),
-    o1.map((q) => P(q, zf(q))),
-    o2.map((q) => P(q, zf(q))),
-  ], [cx, cy, cz - 0.005])
+  const o2 = inset(outline, 1.6 * r)
+  const roll: V3[][] = []
+  const front: V3[][] = []
+  for (let k = 0; k <= 4; k++) {
+    const a = (k / 4) * (Math.PI / 2)
+    const o = inset(outline, r * (1 - Math.cos(a)))
+    roll.push(o.map((q) => P(q, zb + r * (1 - Math.sin(a)))))
+    front.push(o.map((q) => P(q, zf(q) - r * (1 - Math.sin(a)))))
+  }
+  const hg = solid([o2.map((q) => P(q, zb)), ...roll.reverse(), ...front, o2.map((q) => P(q, zf(q)))], [cx, cy, cz - 0.005])
 
   const glass = new MeshBuilder()
   const gl = inset(outline, 0.009)
@@ -128,10 +129,14 @@ export function mirror(S: Surface, map: SurfaceMap, spec: MirrorSpec = mirrorSpe
   const tip: V3 = [cx - w * 0.45, cy - h + 0.03, zb + 0.016]
   const start = addScaled(foot, n, -0.016)
   const path: V3[] = []
-  for (let i = 0; i <= 10; i++) path.push(lerp3(start, tip, i / 10))
+  const bow = addScaled(addScaled(foot, n, 0.07), [0, 1, 0], 0.03)
+  for (let i = 0; i <= 10; i++) {
+    const t = i / 10
+    path.push(lerp3(lerp3(start, bow, t), lerp3(bow, tip, t), t))
+  }
   const along = norm(sub(tip, start))
   const up = norm(cross(along, cross([0, 0, 1], along)))
   const stalk = new MeshBuilder()
   sweep(stalk, path, path.map(() => up), roundRect(0.012, 0.042, 0.005, 3), false, (t) => 1 - 0.25 * t)
-  return { head: hg, glass: glass.geometry(), stalk: stalk.geometry() }
+  return { head: hg, glass: glass.geometry(), stalk: orient(stalk.geometry()) }
 }
