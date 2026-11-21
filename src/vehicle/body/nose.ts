@@ -33,28 +33,53 @@ export function frontFace(loft: Loft): (a: number, b: number) => V3 {
     return smin(shield, smin(intake, smin(intake + top, intake + cheek, .0026), .0026), .0035)
   }
   const cheekResidual = cheek[2] - baseZ(cheek[0], cheek[1])
+  const railAt = (a: number) => loft.at(0, mix(1, split, a))
+  const count = 14
+  const residuals = Array.from({ length: count + 1 }, (_, i) => {
+    let lo = 0, hi = 1
+    const x = cheek[0] * i / count
+    for (let j = 0; j < 20; j++) {
+      const m = (lo + hi) / 2
+      if (railAt(m)[0] < x) lo = m
+      else hi = m
+    }
+    const [px, y, z] = railAt(i === 0 ? 0 : i === count ? 1 : (lo + hi) / 2)
+    return z - baseZ(px, y)
+  })
+  const residualAt = (i: number): number => i < 0 ? 2 * residuals[0] - residuals[1]
+    : i > count ? 2 * residuals[count] - residuals[count - 1] : residuals[i]
+  const sweep = (x: number) => {
+    const q = count * x / cheek[0], i = Math.min(count - 1, Math.floor(q)), t = q - i
+    const a = residualAt(i - 1), b = residualAt(i), c = residualAt(i + 1), d = residualAt(i + 2)
+    return ((1 - t) ** 3 * a + (4 - 6 * t * t + 3 * t ** 3) * b
+      + (1 + 3 * t + 3 * t * t - 3 * t ** 3) * c + t ** 3 * d) / 6
+  }
   return (a, b) => {
     if (a === 1) return loft.at(0, split * b)
-    const rail = loft.at(0, mix(1, split, a))
+    const rail = railAt(a)
     if (b === 1) return rail
     const side = loft.at(0, split * b)
-    const along = a * a
-    const x = mix(a * base[0], rail[0], b) + along * (side[0] - mix(base[0], cheek[0], b))
+    const station = rail[0] / cheek[0]
+    const along = station * station
+    const x = mix(station * base[0], rail[0], b) + along * (side[0] - mix(base[0], cheek[0], b))
     const y = mix(base[1], rail[1], b) + along * (side[1] - mix(base[1], cheek[1], b))
     const top = rail[2] - baseZ(rail[0], rail[1])
+    const broad = sweep(rail[0])
     const outer = side[2] - baseZ(side[0], side[1]) - cheekResidual * b
-    // Carry the loft correction down the straight generators instead of adding a rolled collar.
-    return [x, y, baseZ(x, y) + top * b + outer * a ** 4]
+    // The broad sweep carries the fit without dragging every bonnet crease across the fascia.
+    return [x, y, baseZ(x, y) + broad * b + (top - broad) * b ** 6 * (7 - 6 * b) + outer * along * along]
   }
 }
+
+const junction: [number, number] = [192, 445]
 
 export const lines = {
   eye: map(elev, [[193, 374], [254, 386], [318, 397], [328, 406], [320, 415], [254, 417], [205, 419], [189, 400]]),
   outerIntake: map(elev, [[218, 490], [318, 490], [424, 480], [481, 469], [461, 522], [416, 615], [329, 620], [235, 620], [208, 557]]),
   centerIntake: map(elev, [[575, 520], [745, 520], [745, 612], [600, 612], [570, 570]]),
-  drlUpper: map(elev, [[146, 328], [192, 445]]),
-  drlLower: map(elev, [[192, 445], [158, 608]]),
-  drlStem: map(elev, [[192, 445], [387, 461]]),
+  drlUpper: map(elev, [[172, 382], junction]),
+  drlLower: map(elev, [junction, [158, 608]]),
+  drlStem: map(elev, [junction, [387, 461]]),
 }
 
 export function noseCuts(fm: SurfaceMap): { cuts: Cuts; curves: Record<'eye' | 'outer' | 'center' | 'drlU' | 'drlL' | 'drlS', SurfaceCurve> } {
