@@ -27,6 +27,20 @@ interface ArchSample {
   readonly rCut: number
 }
 
+function vPeakOnFlank(main: Surface, u: number): number {
+  let bestV = 0.24
+  let bestY = -Infinity
+  for (let k = 0; k <= 12; k++) {
+    const v = 0.18 + (0.23 * k) / 12
+    const y = main(u, v)[1]
+    if (y > bestY) {
+      bestY = y
+      bestV = v
+    }
+  }
+  return bestV
+}
+
 function locateOnMain(main: Surface, zTarget: number, yTarget: number): { u: number; v: number; p: V3 } {
   let u = 0.5
   let v = 0.14
@@ -40,11 +54,15 @@ function locateOnMain(main: Surface, zTarget: number, yTarget: number): { u: num
     }
     u = (uLo + uHi) * 0.5
     const yBottom = main(u, 0)[1]
+    const vTop = vPeakOnFlank(main, u)
+    const yTop = main(u, vTop)[1]
     if (yTarget <= yBottom) {
       v = 0
+    } else if (yTarget >= yTop) {
+      v = vTop
     } else {
       let vLo = 0
-      let vHi = 0.48
+      let vHi = vTop
       for (let k = 0; k < 20; k++) {
         const mid = (vLo + vHi) * 0.5
         if (main(u, mid)[1] < yTarget) vLo = mid
@@ -268,53 +286,145 @@ function sampleRearShelfNodes(main: Surface, firstArch: ArchSample, count: numbe
   return out
 }
 
+function quinticStep(a: number, b: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - a) / (b - a)))
+  return t * t * t * (10 - 15 * t + 6 * t * t)
+}
+
+function sampleRockerRun(main: Surface, zCorner: number, dirZ: number, spanZ: number, count: number, reverse: boolean): Array<{ p: V3; n: V3 }> {
+  const out: Array<{ p: V3; n: V3 }> = []
+  for (let k = 1; k <= count; k++) {
+    const s = k / count
+    const z = zCorner + dirZ * spanZ * (s * 0.85 + 0.15 * s * s)
+    const u = uAtRockerZ(main, z)
+    out.push({ p: main(u, 0), n: surfaceNormal(main, u, 0.008) })
+  }
+  return reverse ? out.reverse() : out
+}
+
+function fairLipNodes(raw: ReadonlyArray<{ p: V3; n: V3 }>, front: boolean, startCornerIdx: number, rockerSegs: number): Array<{ p: V3; n: V3; tang: V3 }> {
+  const m = raw.length
+  let pts: V3[] = raw.map(({ p }) => [p[0], p[1], p[2]])
+  for (let pass = 0; pass < 16; pass++) {
+    const next: V3[] = pts.map((q) => [q[0], q[1], q[2]])
+    for (let i = 1; i < m - 1; i++) {
+      const a = pts[i - 1]
+      const b = pts[i]
+      const c = pts[i + 1]
+      const nearStartCorner = Math.abs(i - startCornerIdx) <= 8
+      const nearEndCorner = Math.abs(i - (m - 1 - rockerSegs)) <= 8
+      const wYZ = nearStartCorner || nearEndCorner ? 0.25 : pass < 6 ? 0.2 : 0.06
+      const xSmoothed = 0.25 * a[0] + 0.5 * b[0] + 0.25 * c[0]
+      next[i] = [
+        Math.min(raw[i].p[0], xSmoothed),
+        (1 - 2 * wYZ) * b[1] + wYZ * (a[1] + c[1]),
+        (1 - 2 * wYZ) * b[2] + wYZ * (a[2] + c[2]),
+      ]
+    }
+    pts = next
+  }
+
+  let nrms: V3[] = raw.map(({ n }) => norm([Math.max(0.68, n[0]), Math.max(-0.08, n[1]), n[2]]))
+  for (let pass = 0; pass < 18; pass++) {
+    const next: V3[] = nrms.map((q) => [q[0], q[1], q[2]])
+    for (let i = 1; i < m - 1; i++) {
+      const a = nrms[i - 1]
+      const b = nrms[i]
+      const c = nrms[i + 1]
+      next[i] = norm([0.25 * a[0] + 0.5 * b[0] + 0.25 * c[0], 0.25 * a[1] + 0.5 * b[1] + 0.25 * c[1], 0.25 * a[2] + 0.5 * b[2] + 0.25 * c[2]])
+    }
+    nrms = next
+  }
+
+  const zc = front ? dims.frontHubZ : dims.rearHubZ
+  const yc = front ? dims.frontTire.radius + 0.04 : dims.rearTire.radius + 0.04
+  const rawTang: V3[] = pts.map((p, i) => {
+    const prev = pts[Math.max(0, i - 1)]
+    const next = pts[Math.min(m - 1, i + 1)]
+    const tauArc = norm(sub(next, prev))
+    const n = nrms[i]
+    let tang = norm(cross(n, tauArc))
+    const towardHub: V3 = [0, yc - p[1], zc - p[2]]
+    const probe: V3 = [p[0] + tang[0] * 0.006, p[1] + tang[1] * 0.006, p[2] + tang[2] * 0.006]
+    const dCut = wheelOpenings(probe) - wheelOpenings(p)
+    const signCheck = Math.abs(dCut) > 1e-4 ? dCut : dot(tang, towardHub)
+    if (signCheck < 0) tang = [-tang[0], -tang[1], -tang[2]]
+    return tang
+  })
+
+  let tangs = rawTang
+  for (let pass = 0; pass < 8; pass++) {
+    const next: V3[] = tangs.map((q) => [q[0], q[1], q[2]])
+    for (let i = 1; i < m - 1; i++) {
+      const a = tangs[i - 1]
+      const b = tangs[i]
+      const c = tangs[i + 1]
+      next[i] = norm([0.25 * a[0] + 0.5 * b[0] + 0.25 * c[0], 0.25 * a[1] + 0.5 * b[1] + 0.25 * c[1], 0.25 * a[2] + 0.5 * b[2] + 0.25 * c[2]])
+    }
+    tangs = next
+  }
+
+  return pts.map((p, i) => ({ p, n: nrms[i], tang: tangs[i] }))
+}
+
 export function archLinerParts(
   main: Surface,
   front: boolean,
   full: boolean,
 ): { lip: THREE.BufferGeometry; liner: THREE.BufferGeometry } {
-  const arcSegs = full ? 64 : 36
-  const samples = sampleArchBoundary(main, front, arcSegs)
+  const lipSegs = full ? 96 : 48
+  const drumSegs = full ? 40 : 26
+  const rockerSegs = full ? 8 : 5
+  const shelfSegs = full ? 20 : 12
+  const lipSamples = sampleArchBoundary(main, front, lipSegs)
+  const samples = sampleArchBoundary(main, front, drumSegs)
   const zc = front ? dims.frontHubZ : dims.rearHubZ
   const yc = front ? dims.frontTire.radius : dims.rearTire.radius
 
+  const endRocker = sampleRockerRun(main, lipSamples[lipSamples.length - 1].p[2], 1, 0.105, rockerSegs, false)
+  const rearShelf = front ? [] : sampleRearShelfNodes(main, lipSamples[0], shelfSegs)
   const rawLipNodes: Array<{ p: V3; n: V3 }> = front
-    ? samples.map(({ p, n }) => ({ p, n }))
-    : [...sampleRearShelfNodes(main, samples[0], full ? 16 : 10), ...samples.map(({ p, n }) => ({ p, n }))]
+    ? [
+        ...sampleRockerRun(main, lipSamples[0].p[2], -1, 0.11, rockerSegs, true),
+        ...lipSamples.map(({ p, n }) => ({ p, n })),
+        ...endRocker,
+      ]
+    : [
+        ...rearShelf,
+        ...lipSamples.map(({ p, n }) => ({ p, n })),
+        ...endRocker,
+      ]
 
-  const lipNodes = rawLipNodes.map(({ p, n }, i) => {
-    const prev = rawLipNodes[Math.max(0, i - 1)].p
-    const next = rawLipNodes[Math.min(rawLipNodes.length - 1, i + 1)].p
-    const tauArc = norm(sub(next, prev))
-    let tang = norm(cross(n, tauArc))
-    const probe: V3 = [p[0] + tang[0] * 0.006, p[1] + tang[1] * 0.006, p[2] + tang[2] * 0.006]
-    if (wheelOpenings(probe) < wheelOpenings(p)) tang = [-tang[0], -tang[1], -tang[2]]
-    return { p, n, tang }
-  })
+  const startCornerIdx = front ? rockerSegs : rearShelf.length
+  const lipNodes = fairLipNodes(rawLipNodes, front, startCornerIdx, rockerSegs)
 
-  // Molded stone-guard arch flange seated behind the body's painted arch return, rolling 8.2 mm into the opening and 38.5 mm deep.
   const lipSection: ReadonlyArray<readonly [number, number]> = [
-    [-0.0032, -0.0132],
-    [0.0022, -0.0082],
-    [0.0068, -0.0096],
-    [0.0082, -0.0134],
-    [0.008, -0.0188],
-    [0.0062, -0.0265],
-    [0.003, -0.0355],
-    [-0.0032, -0.0385],
-    [-0.0032, -0.0132],
+    [-0.0045, -0.0138],
+    [0.0014, -0.0098],
+    [0.0046, -0.0106],
+    [0.0057, -0.0138],
+    [0.0054, -0.0184],
+    [0.0038, -0.0248],
+    [0.0008, -0.0325],
+    [-0.0045, -0.0365],
+    [-0.0045, -0.0138],
   ]
+  const totalNodes = lipNodes.length - 1
+  const startSpan = front ? (rockerSegs + (full ? 16 : 8)) / totalNodes : (full ? 8 : 4) / totalNodes
+  const endSpan = (rockerSegs + (full ? 16 : 8)) / totalNodes
   const lipRows: V3[][] = lipNodes.map(({ p, n, tang }, i) => {
-    const t = i / (lipNodes.length - 1)
-    const startTaper = front ? 0.4 + 0.6 * smoothstep(0, 0.06, t) : 0.78 + 0.22 * smoothstep(0, 0.05, t)
-    const endTaper = 0.4 + 0.6 * smoothstep(0, 0.06, 1 - t)
-    const taper = Math.min(startTaper, endTaper)
-    const nSafe: V3 = norm([Math.max(0.58, n[0]), Math.max(-0.12, n[1]), n[2]])
+    const t = i / totalNodes
+    const wStart = front ? quinticStep(0, startSpan, t) : 0.35 + 0.65 * quinticStep(0, startSpan, t)
+    const wEnd = quinticStep(0, endSpan, 1 - t)
+    const w = Math.min(wStart, wEnd)
+    const rockerRetract = -0.0038 * (1 - w)
+    const depthScale = 0.28 + 0.72 * w
     return lipSection.map(([dr, dn]): V3 => {
-      const drScaled = dr > 0 ? dr * taper : dr
-      const x = p[0] + tang[0] * drScaled + nSafe[0] * dn
-      const y = Math.max(0.125, p[1] + tang[1] * drScaled + nSafe[1] * dn)
-      const z = p[2] + tang[2] * drScaled + nSafe[2] * dn
+      const drEff = dr > 0 ? dr * w + rockerRetract : dr * (0.45 + 0.55 * w) + rockerRetract
+      const dnEff = -0.0145 + (dn + 0.0145) * depthScale
+      const x = p[0] + tang[0] * drEff + n[0] * dnEff
+      const y = p[1] + tang[1] * drEff + n[1] * dnEff
+      const z = p[2] + tang[2] * drEff + n[2] * dnEff
       return [x, y, z]
     })
   })
@@ -351,7 +461,7 @@ export function archLinerParts(
   const xInner = front ? 0.5 : 0.635
   const yFloor = Math.max(0.126, samples[samples.length - 1].p[1] + 0.002)
   const wallThick = 0.004
-  const drumCols = full ? 7 : 4
+  const drumCols = full ? 6 : 4
   const rTight = (front ? dims.frontTire.radius : dims.rearTire.radius) + 0.026
 
   const drumPoint = (i: number, t: number, backOffset: number): V3 => {
