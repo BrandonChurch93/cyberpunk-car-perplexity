@@ -30,7 +30,7 @@ const filmAnchors: Record<AnchorId, { p: V3; n: V3; r: number }> = {
   wheel: { p: [0.9563, 0.3405, 1.2852], n: [1, 0, 0], r: 0.36 },
   lamp: { p: [0.7508, 0.5352, 2.1672], n: [0.7111, 0, 0.7031], r: 0.2 },
   detail: { p: [-0.301, 1.008, -1.0389], n: [0.2285, 0.9725, 0.0438], r: 0.16 },
-  exhaust: { p: [0, 0.787, -2.4758], n: [0, 0, -1], r: 0.34 },
+  exhaust: { p: [0, 0.787, -2.4724], n: [0, 0, -1], r: 0.34 },
 }
 
 /**
@@ -108,9 +108,9 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
     for (const [i, x] of pair(g).entries()) add(sprung, x, mat, `${name}-${i ? 'right' : 'left'}`)
   }
 
-  const body = buildBody({ maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, edgeLength: 0.007 })
+  const body = buildBody({ maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, edgeLength: 0.012 })
   add(sprung, body.paint, m.paint, 'paint')
-  const tess = { ...body.grids.main, maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, minEdge: 0.0012, edgeLength: 0.007 }
+  const tess = { ...body.grids.main, maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, minEdge: 0.0012, edgeLength: 0.012 }
   const side = glazing(body.surfaces.main, [body.cuts.curves.dlo, body.cuts.curves.rearGlass], tess)
   const screen = glazing(body.surfaces.main, [body.cuts.curves.screen], tess)
   add(sprung, side.panes, m.glass, 'glass')

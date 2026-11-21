@@ -56,7 +56,7 @@ export function flange(parts: TessResult[], depth: number, roll?: (p: V3) => num
     out.uvs.push(0, 0)
     return out.positions.length / 3 - 1
   }
-  const steps = roll ? 4 : 0
+  const steps = roll ? 2 : 0
   for (const t of parts) {
     for (const b of t.boundaries) {
       const n = b.points.length
