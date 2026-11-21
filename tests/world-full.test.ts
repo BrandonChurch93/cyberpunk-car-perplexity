@@ -123,7 +123,10 @@ describe('full roof world', () => {
     world.root.updateMatrixWorld(true)
     const city = world.root.getObjectByName('hero tower layout')!
     const facadeFamilies = new Set<string>()
+    const claddingRoughness = new Map<string,number>()
     let rooms = 0
+    let finRows = 0
+    let roofShafts = 0
     for (const volume of city.children.filter(o => o.name.endsWith(' volume'))) {
       const shell = volume.children[0] as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
       const [w,h] = shell.material.userData.moduleMeters as [number,number]
@@ -135,10 +138,22 @@ describe('full roof world', () => {
       expect(shell.material.userData.mechanicalFloorPitch).toBeGreaterThanOrEqual(15)
       expect(shell.material.userData.mechanicalFloorPitch).toBeLessThanOrEqual(25)
       facadeFamilies.add(shell.material.userData.facade)
+      claddingRoughness.set(shell.material.userData.facade,shell.material.roughness)
+      const fins = volume.getObjectByName('extruded curtain wall fins') as THREE.InstancedMesh | undefined
+      if (fins) {
+        const front = shell.position.z+shell.geometry.parameters.depth*.5
+        expect(fins.boundingBox!.min.z).toBeLessThan(front)
+        expect(fins.boundingBox!.max.z).toBeGreaterThan(front)
+        finRows++
+      }
+      if (volume.getObjectByName('offset concrete roof shaft')) roofShafts++
       rooms += Math.floor(width/w)*Math.floor(height/h)
     }
     expect(rooms).toBeGreaterThan(10_000)
     expect(facadeFamilies).toEqual(new Set(['curtain','concrete','banded','hotel']))
+    expect(claddingRoughness.get('concrete')!).toBeGreaterThan(claddingRoughness.get('curtain')!)
+    expect(finRows).toBeGreaterThan(30)
+    expect(roofShafts).toBeGreaterThan(5)
     const probe = new THREE.Vector3(0,.6,0)
     const cornices = city.getObjectByName('hero left edge tower volume')!.children.filter(o=>o.name === 'full height cyan cornice')
     expect(cornices).toHaveLength(2)
