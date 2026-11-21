@@ -140,7 +140,15 @@ export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector
           float magenta = exp(-dot(spread,spread));
           float cyan = exp(-dot(cyanSpread,cyanSpread));
           vec3 spill = muralCloud*vec3(.193,.100,.086)*magenta*(.94+.09*hazeBank);
-          c = mix(c,base+spill+vec3(.0015,.008,.020)*cyan,southSky);
+          vec2 wind = vec2((az-bill)*15.5+3.3*d.y,d.y*25.5-(az-bill)*6.0);
+          float fold = cloudNoise(wind*.43+vec2(6.2,-4.8));
+          float sheet = cloudNoise(wind+vec2(fold*1.4,fold*1.7));
+          float lobes = smoothstep(.33,.78,.72*sheet+.28*cloudNoise(wind*1.63+fold*1.18));
+          float lane = (d.y-.168-(fold-.5)*.074)/.096;
+          float shoulder = (az-bill+.157)/.33;
+          float pinkCloud = exp(-lane*lane-shoulder*shoulder)*(lobes-.37);
+          vec3 cloudLight = mix(vec3(.133,.057,.096),muralCloud*vec3(.242,.134,.202),.47);
+          c = mix(c,base+spill+vec3(.0015,.008,.020)*cyan+cloudLight*pinkCloud,southSky);
         }
         float northBand = northGlow*smoothstep(.15,.36,d.y)*(1.0-smoothstep(.80,.96,d.y))*smoothstep(0.0,.32,d.z);
         if (northBand > .0) {

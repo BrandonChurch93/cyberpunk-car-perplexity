@@ -259,14 +259,15 @@ describe('full roof world', () => {
     expect(finRows).toBeGreaterThan(30)
     expect(roofShafts).toBeGreaterThan(5)
     const probe = new THREE.Vector3(0,.6,0)
-    const cornices = city.getObjectByName('hero left edge tower volume')!.children.filter(o=>o.name === 'full height cyan cornice')
-    expect(cornices).toHaveLength(2)
-    for (const cornice of cornices as THREE.Mesh<THREE.BoxGeometry,THREE.MeshBasicMaterial>[]) {
-      const top = cornice.localToWorld(new THREE.Vector3(0,cornice.geometry.parameters.height/2,0)).sub(probe)
-      expect(top.y).toBeGreaterThan(Math.hypot(top.x,top.z))
-      expect(top.x).toBeLessThan(0)
-      expect(top.z).toBeLessThan(0)
-    }
+    const cornice = city.getObjectByName('dashed cyan cornice') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    const top = cornice.localToWorld(new THREE.Vector3(0,cornice.geometry.parameters.height/2,0)).sub(probe)
+    expect(top.y).toBeGreaterThan(Math.hypot(top.x,top.z))
+    expect(top.x).toBeLessThan(0)
+    expect(top.z).toBeLessThan(0)
+    expect(cornice.material.uniforms.gap!.value).toBeGreaterThan(.2)
+    const sail = city.getObjectByName('left cyan facade sail')!.getObjectByName('weather-sealed opal face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    expect(sail.material.uniforms.gap!.value).toBeGreaterThan(.1)
+    expect(city.getObjectByName('left cyan secondary strip')).toBeUndefined()
     const access = world.root.getObjectByName('northeast roof access')!
     const fixtures = ['northeast stair and lift core','northeast pay station','northeast access light pole']
       .map(name=>world.root.getObjectByName(name)!)
@@ -1114,6 +1115,11 @@ describe('full roof world', () => {
       expect(toScreen(position('hero full span steel top rail')).y).toBeLessThan(.20)
     }
     cameraAtTime(master, heroFrameSeconds)
+    const hotel = world.root.getObjectByName('hotel rooftop cabinet')!.getObjectByName('folded weatherproof cabinet') as THREE.Mesh<THREE.BoxGeometry>
+    const hotelGeometry = hotel.geometry.parameters
+    const hotelTop = (1-toScreen(hotel.localToWorld(new THREE.Vector3(0,hotelGeometry.height*.5,hotelGeometry.depth*.5))).y)*.5
+    expect(hotelTop).toBeGreaterThan(.105)
+    expect(hotelTop).toBeLessThan(.110)
     const wall = world.root.getObjectByName(billboard)!
     const face = wall.getObjectByName('animated magenta violet mural') as THREE.Mesh<THREE.PlaneGeometry>
     const { width,height } = face.geometry.parameters
