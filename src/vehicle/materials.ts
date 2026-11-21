@@ -367,17 +367,16 @@ export function palette(spec: PaintSpec, full: boolean) {
   const repaint = full ? paintStack(paint, spec) : null
   repaint?.(spec)
   const glass = new T.MeshPhysicalMaterial({
-    color: full ? 0xb6c2c7 : 0x30383f, metalness: full ? 0 : .1, roughness: full ? .084 : .17,
-    ior: 1.51, clearcoat: .8, clearcoatRoughness: .07, transmission: full ? .92 : 0,
-    thickness: full ? .006 : 0, attenuationColor: new T.Color(0x7a9a9c), attenuationDistance: .009,
+    color: full ? 0xc9d2d6 : 0x30383f, metalness: full ? 0 : .1, roughness: full ? .03 : .17,
+    ior: 1.52, clearcoat: .6, clearcoatRoughness: .03, transmission: full ? .95 : 0,
+    thickness: full ? .005 : 0, attenuationColor: new T.Color(0x6f8a8e), attenuationDistance: .02,
     opacity: full ? 1 : .87, transparent: !full, depthWrite: full, side: T.FrontSide,
   })
   const windscreen = glass.clone()
-  windscreen.color.setHex(full ? 0xaabdc2 : 0x273038)
-  windscreen.attenuationColor.setHex(0x4f6d75)
-  windscreen.attenuationDistance = .016
-  windscreen.clearcoat = .47
-  windscreen.specularIntensity = .74
+  windscreen.color.setHex(full ? 0xd0d8db : 0x273038)
+  windscreen.attenuationColor.setHex(0x80989c)
+  windscreen.attenuationDistance = .03
+  windscreen.clearcoat = .5
   const rearOptics = new T.MeshPhysicalMaterial({
     color: full ? 0xedf0f3 : 0x858e99, metalness: full ? 0 : .1, roughness: full ? .071 : .105,
     opacity: full ? 1 : .36, transparent: !full, depthWrite: full, ior: 1.59, clearcoat: .95, clearcoatRoughness: .09,
@@ -420,6 +419,9 @@ export function palette(spec: PaintSpec, full: boolean) {
   const carbon = new T.MeshPhysicalMaterial({
     color: full ? 0x34383b : 0x363a3f, metalness: .17, roughness: .43, clearcoat: .45, clearcoatRoughness: .19, anisotropy: full ? .32 : 0,
   })
+  const braceCarbon = carbon.clone()
+  braceCarbon.clearcoat = 1
+  braceCarbon.clearcoatRoughness = .04
   const bayCover = carbon.clone()
   bayCover.color.setHex(full ? 0xa6aab1 : 0x55595f)
   bayCover.roughness = .58
@@ -477,6 +479,9 @@ export function palette(spec: PaintSpec, full: boolean) {
       float carGrainWeight = 1.0 - smoothstep(0.00035, 0.0022, length(fwidth(carFinishPoint)));
       diffuseColor.rgb *= 1.0 + (grain - 0.5) * 0.13 * carGrainWeight;
     `, 'roughnessFactor += (grain - 0.5) * 0.10 * carGrainWeight;')
+    grain(braceCarbon, 'twill tow contrast', `
+      diffuseColor.rgb *= clamp(pow(dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)) / 0.00113, 0.7), 0.4, 2.2);
+    `)
     grain(hot, 'heat tint and drawn alloy', `
       float shape = carFinishPoint.z + 2.40 + 0.006 * sin(carFinishPoint.x * 22.0);
       float oxide = smoothstep(0.011, 0.035, shape) - smoothstep(0.051, 0.08, shape);
@@ -487,13 +492,13 @@ export function palette(spec: PaintSpec, full: boolean) {
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.060, 0.071, 0.14), temper * 0.36);
     `, 'roughnessFactor += 0.12 * oxide;')
   }
-  for (const m of [brushed, forged, spoke, carbon, bayCover, ventCarbon, rearVent, hot]) if (m.anisotropy > 0) tangentFallback(m)
+  for (const m of [brushed, forged, spoke, carbon, braceCarbon, bayCover, ventCarbon, rearVent, hot]) if (m.anisotropy > 0) tangentFallback(m)
   const surfaces: VehicleModule['surfaces'] = []
   const tag = (material: Material, wetness: VehicleModule['surfaces'][number]['wetness']) => {
     surfaces.push({ material, wetness })
     return material
   }
-  for (const m of [paint, glass, windscreen, rearOptics, carbon, bayCover, ventCarbon, mirror]) tag(m, 'beads')
+  for (const m of [paint, glass, windscreen, rearOptics, carbon, braceCarbon, bayCover, ventCarbon, mirror]) tag(m, 'beads')
   for (const m of [rearVent, optics]) tag(m, 'none')
   for (const m of [matte, tire, diffuser]) tag(m, 'sheet')
   for (const m of [projector, reflector, brushed, forged, spoke, brake, caliper, dark, engine]) tag(m, 'none')
@@ -511,10 +516,12 @@ export function palette(spec: PaintSpec, full: boolean) {
       tex.repeat.set(31, 31)
       tex.anisotropy = 4
       tex.colorSpace = key === 'map' ? T.SRGBColorSpace : T.NoColorSpace
-      for (const finish of [carbon, bayCover, ventCarbon, rearVent]) finish[key as keyof typeof carbonPaths] = tex
+      for (const finish of [carbon, braceCarbon, bayCover, ventCarbon, rearVent]) finish[key as keyof typeof carbonPaths] = tex
     }))
     carbon.normalScale.setScalar(.2)
     carbon.needsUpdate = true
+    braceCarbon.normalScale.setScalar(.45)
+    braceCarbon.needsUpdate = true
     bayCover.normalScale.setScalar(.16)
     bayCover.needsUpdate = true
     ventCarbon.normalScale.setScalar(.16)
@@ -522,7 +529,7 @@ export function palette(spec: PaintSpec, full: boolean) {
     rearVent.normalScale.setScalar(.14)
     rearVent.needsUpdate = true
   }
-  return { paint, glass, windscreen, optics, rearOptics, projector, reflector, brushed, forged, spoke, brake, caliper, matte, dark, diffuser, tire, carbon, bayCover, ventCarbon, rearVent, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
+  return { paint, glass, windscreen, optics, rearOptics, projector, reflector, brushed, forged, spoke, brake, caliper, matte, dark, diffuser, tire, carbon, braceCarbon, bayCover, ventCarbon, rearVent, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
 }
 
 export type Palette = ReturnType<typeof palette>
@@ -555,6 +562,7 @@ export interface Materials extends Palette {
   exhaust: T.MeshPhysicalMaterial
   tailRecess: T.MeshPhysicalMaterial
   tailInner: T.MeshPhysicalMaterial
+  strake: T.MeshPhysicalMaterial
   setLevels(running: number, beam: number, tail: number): void
 }
 
@@ -566,7 +574,7 @@ export async function makeMaterials(detail: VehicleDetail, paint: PaintSpec): Pr
   const full = detail === 'full'
   const p = palette(paint, full)
   await p.load()
-  for (const x of [p.dark, p.matte, p.hot, p.bayCover, p.carbon, p.diffuser, p.tire, p.forged, p.brake, p.brushed, p.caliper]) x.side = T.DoubleSide
+  for (const x of [p.dark, p.matte, p.hot, p.bayCover, p.carbon, p.braceCarbon, p.diffuser, p.tire, p.forged, p.brake, p.brushed, p.caliper]) x.side = T.DoubleSide
   if (!p.surfaces.some((x) => x.material === p.cabin)) p.tag(p.cabin, 'none')
   const std = (color: number, roughness: number): T.MeshStandardMaterial =>
     p.tag(new T.MeshStandardMaterial({ color, roughness, metalness: 0, side: T.DoubleSide }), 'none') as T.MeshStandardMaterial
@@ -575,6 +583,8 @@ export async function makeMaterials(detail: VehicleDetail, paint: PaintSpec): Pr
   const drl = emitter(0xb9bcc0, .4, new T.Color(.86, .92, 1))
   const tail = emitter(0x3a3c40, .4, new T.Color(1, .02, .01))
   const beamLens = emitter(0x55585c, .2, new T.Color(1, .96, .9))
+  const darkCarbon = p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x0e0f11 : 0x1a1b1e, metalness: .15, roughness: .4, clearcoat: .7, clearcoatRoughness: .1, anisotropy: full ? .3 : 0, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial
+  if (darkCarbon.anisotropy > 0) tangentFallback(darkCarbon)
   const tailInner = emitter(0x3a3c40, .4, new T.Color(1, .02, .01))
   const wet = (color: number, metalness: number, roughness: number, clearcoat: number, clearcoatRoughness: number): T.MeshPhysicalMaterial =>
     p.tag(new T.MeshPhysicalMaterial({ color, metalness, roughness, clearcoat, clearcoatRoughness, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial
@@ -595,17 +605,18 @@ export async function makeMaterials(detail: VehicleDetail, paint: PaintSpec): Pr
     hat: p.brushed,
     seal: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x0d0e10 : 0x202226, roughness: .34, clearcoat: .6, clearcoatRoughness: .12, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial,
     glassEdge: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x1d2a2c : 0x273038, roughness: .1, ior: 1.51 }), 'none') as T.MeshPhysicalMaterial,
-    leather: p.cabin,
-    cabinTrim: std(0x1c1e21, .55),
+    leather: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x4a4441 : 0x3b3735, roughness: .42, clearcoat: full ? .25 : 0, clearcoatRoughness: .3 }), 'none') as T.MeshPhysicalMaterial,
+    cabinTrim: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x2a2c30 : 0x1c1e21, roughness: .38, clearcoat: full ? .35 : 0, clearcoatRoughness: .2, side: T.DoubleSide }), 'none') as T.MeshPhysicalMaterial,
     cabinCarbon: p.carbon,
-    screen: std(0x060708, .22),
-    darkCarbon: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x232629 : 0x2c2f33, metalness: .15, roughness: .4, clearcoat: .5, clearcoatRoughness: .2, anisotropy: full ? .3 : 0, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial,
+    screen: p.tag(new T.MeshPhysicalMaterial({ color: 0x060708, roughness: .22, clearcoat: full ? 1 : 0, clearcoatRoughness: .04, side: T.DoubleSide }), 'none') as T.MeshPhysicalMaterial,
+    darkCarbon,
     satin: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x1d1f22 : 0x2a2c30, metalness: .1, roughness: .45, clearcoat: .25, clearcoatRoughness: .35, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial,
     retro: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x7a0b08 : 0x6a1210, metalness: .1, roughness: .2, clearcoat: 1, clearcoatRoughness: .04, side: T.DoubleSide }), 'beads') as T.MeshPhysicalMaterial,
     diffuserMesh: wet(full ? 0x0f1012 : 0x1a1b1e, .25, .36, .6, .1),
     exhaust: wet(full ? 0x0d0e10 : 0x18191c, .15, .42, .65, .12),
     tailRecess: wet(full ? 0x2b0a09 : 0x34100e, .15, .22, .85, .06),
     tailInner,
+    strake: wet(full ? 0x101113 : 0x1c1d20, .1, .35, .7, .08),
     setLevels(running, beam, rear) {
       drl.emissiveIntensity = drlLuminance * running
       tail.emissiveIntensity = tailLuminance * rear
