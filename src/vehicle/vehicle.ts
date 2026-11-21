@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { config, type PaintSpec } from '../config'
 import { engine as engineCurve, lampThresholds } from '../director/timeline'
-import type { Anchor, AnchorId, VehicleModule, VehicleOptions, VehicleState, WetnessKind } from './contract'
+import type { Anchor, AnchorId, VehicleModule, VehicleOptions, VehicleState } from './contract'
 import { buildBody } from './body/body'
 import { lines as rearLines } from './body/tail'
 import { dims } from './body/shape'
@@ -115,14 +115,8 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   ] as const) addPair(guide(S.rear, c, 0.004, 0.012, 0.006), m.tail, name)
 
   // Front module: eyes, Y guides, projectors, ducts, grille and splitter (parts/front.ts).
-  const extraSurfaces: Array<{ material: THREE.Material; wetness: WetnessKind }> = []
-  const front = buildFront(sprung, cuts, {
-    ...m,
-    tag: (material, wetness) => {
-      if (!extraSurfaces.some((s) => s.material === material)) extraSurfaces.push({ material, wetness })
-      return material
-    },
-  }, full)
+  // The registry accepts any material; the front module tags its own lens, guide and die finishes.
+  const front = buildFront(sprung, cuts, { ...m, tag: (material, wetness) => m.tag(material as THREE.MeshStandardMaterial, wetness) }, full)
 
   const ex = exhaust(cuts.maps.rear, rearLines.exhaust)
   addPair(ex.lip, m.ceramic, 'outlet-lip')
@@ -248,33 +242,10 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   }
   update({ timeSeconds: 0, lampStage: 0, engine: 0, vibration: 0 })
 
-  const surfaces: Array<{ material: THREE.Material; wetness: WetnessKind }> = [
-    { material: m.paint, wetness: 'beads' },
-    { material: m.glass, wetness: 'beads' },
-    { material: m.carbon, wetness: 'beads' },
-    { material: m.beamLens, wetness: 'beads' },
-    { material: m.drl, wetness: 'beads' },
-    { material: m.tail, wetness: 'beads' },
-    { material: m.mirror, wetness: 'beads' },
-    { material: m.tire, wetness: 'sheet' },
-    { material: m.matte, wetness: 'sheet' },
-    { material: m.covers, wetness: 'sheet' },
-    { material: m.mesh, wetness: 'sheet' },
-    { material: m.rim, wetness: 'sheet' },
-    { material: m.ceramic, wetness: 'sheet' },
-    { material: m.shell, wetness: 'none' },
-    { material: m.under, wetness: 'none' },
-    { material: m.housing, wetness: 'none' },
-    { material: m.soot, wetness: 'none' },
-    { material: m.disc, wetness: 'none' },
-    { material: m.hat, wetness: 'none' },
-    { material: m.caliper, wetness: 'none' },
-    ...extraSurfaces,
-  ]
   return {
     root,
     anchors,
-    surfaces,
+    surfaces: m.surfaces,
     lamps,
     heatSources,
     update,
