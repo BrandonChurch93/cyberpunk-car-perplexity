@@ -1,5 +1,5 @@
 import { projectCurve, smax, SurfaceCurve, SurfaceMap, type Surface } from '../geom/cuts'
-import type { V2, V3 } from '../geom/vec'
+import { add, dot, scale, sub, type V2, type V3 } from '../geom/vec'
 import { gapCut } from './gaps'
 import { planLines, sideLines } from './lines'
 import { noseCuts } from './nose'
@@ -175,13 +175,32 @@ export interface BodyCuts {
 }
 
 /**
- * An open shut line drawn on past the edge of the skin, ended where it first leaves it. A projected point beyond the
- * front edge clamps onto that edge, and one past the side of the skin in plan falls through to the flank below, so
- * without this the line would run on along the edge, or jump down the flank, and its lips would stand up as spikes.
+ * An open shut line drawn on past the edge of the skin, ended cleanly on it. Plan points off the half body clamp onto
+ * the centerline and stack there; they are dropped, so the line leaves the center along its own direction. Toward the
+ * front the brow overhangs the main skin's front edge (u = 0), which sits under it where the fascia joins, so a line
+ * projected from above runs out on the brow crest and then jumps sideways along it, or down the flank past the side.
+ * The line is ended at the first such jump (a step over three sample spacings or a turn past 60 degrees) or where it
+ * reaches the edge, and from a stop on the brow it is carried down the roll to the edge along its own surface
+ * direction, so the gap keeps its course and width into the end instead of forking back.
  */
-function onSkin(S: Surface, c: SurfaceCurve, maxJump = 0.05): SurfaceCurve {
-  const uv = c.uv
-  const p = c.p
+function onSkin(S: Surface, c: SurfaceCurve, step: number): SurfaceCurve {
+  const uv: V2[] = []
+  const p: V3[] = []
+  for (let k = 0; k < c.uv.length; k++) {
+    const q = c.uv[k]
+    const last = uv[uv.length - 1]
+    if (last && Math.abs(q[0] - last[0]) < 1e-9 && Math.abs(q[1] - last[1]) < 1e-9) continue
+    uv.push(q)
+    p.push(c.p[k])
+  }
+  // A start clamped on the centerline is stood on it again along the first free segment.
+  if (uv.length > 2 && uv[0][1] >= 1 - 1e-9) {
+    const [a, b] = [uv[1], uv[2]]
+    const t = (1 - a[1]) / (b[1] - a[1] || 1e-9)
+    uv[0] = [a[0] + (b[0] - a[0]) * t, 1]
+  }
+  let end = uv.length
+  let edge = false
   for (let k = 1; k < uv.length; k++) {
     if (uv[k][0] < 5e-4) {
       const a = uv[k - 1]
@@ -189,10 +208,74 @@ function onSkin(S: Surface, c: SurfaceCurve, maxJump = 0.05): SurfaceCurve {
       const t = a[0] / Math.max(1e-9, a[0] - b[0])
       return new SurfaceCurve(S, [...uv.slice(0, k), [0, a[1] + (b[1] - a[1]) * t]], false)
     }
-    if (Math.hypot(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1], p[k][2] - p[k - 1][2]) > maxJump) return new SurfaceCurve(S, uv.slice(0, k), false)
+    const d = sub(p[k], p[k - 1])
+    const len = Math.hypot(d[0], d[1], d[2])
+    let turn = false
+    if (k > 1) {
+      const e = sub(p[k - 1], p[k - 2])
+      turn = d[0] * e[0] + d[1] * e[1] + d[2] * e[2] < 0.5 * len * Math.hypot(e[0], e[1], e[2])
+    }
+    if (len > 3 * step || (turn && uv[k][0] < 0.01)) {
+      end = k
+      edge = uv[k - 1][0] < 0.01
+      break
+    }
   }
-  return c
+  const out = uv.slice(0, end)
+  return new SurfaceCurve(S, edge && out.length > 1 ? [...out, ...downRoll(S, out, step / 4)] : out, false)
 }
+
+/** The surface point nearest q, from a start near it: Gauss-Newton on the surface's own chart, held to the domain. */
+function nearest(S: Surface, q: V3, start: V2): V2 {
+  let [u, v] = start
+  for (let it = 0; it < 12; it++) {
+    const p = S(u, v)
+    const hu = 1e-6
+    const hv = 1e-5
+    const su = scale(sub(S(u + hu, v), p), 1 / hu)
+    const sv = scale(sub(S(u, v + hv), p), 1 / hv)
+    const r = sub(q, p)
+    const a = dot(su, su)
+    const b = dot(su, sv)
+    const c = dot(sv, sv)
+    const ru = dot(su, r)
+    const rv = dot(sv, r)
+    const det = a * c - b * b
+    if (Math.abs(det) < 1e-18) break
+    const du = (c * ru - b * rv) / det
+    const dv = (a * rv - b * ru) / det
+    u = Math.min(1, Math.max(0, u + du))
+    v = Math.min(1, Math.max(0, v + dv))
+    if (Math.abs(du) < 1e-9 && Math.abs(dv) < 1e-9) break
+  }
+  return [u, v]
+}
+
+/**
+ * From a stop on the brow crest, on down the roll to the front edge: steps of h along the line's own direction,
+ * each set back on the skin and the direction taken again from the last step, so the line bends with the roll and
+ * not with the chart, whose v lines slide sideways through it.
+ */
+function downRoll(S: Surface, uv: V2[], h: number): V2[] {
+  const out: V2[] = []
+  let a = S(...uv[uv.length - 2])
+  let b = S(...uv[uv.length - 1])
+  let at = uv[uv.length - 1]
+  for (let i = 0; i < 64; i++) {
+    const d = sub(b, a)
+    const next = nearest(S, add(b, scale(d, h / Math.hypot(d[0], d[1], d[2]))), at)
+    if (next[0] <= 0) {
+      out.push([0, next[1]])
+      return out
+    }
+    out.push(next)
+    at = next
+    a = b
+    b = S(...next)
+  }
+  return out
+}
+
 
 /** The body's cuts. The front surface is made from the main cuts, because the fascia is fitted to the main skin's
  * tessellated front edge, and the main skin's trims never reach that edge. */
@@ -209,9 +292,9 @@ export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, re
   const screen = projectCurve(mm, 'y', screenPlan(main), true, 0.008, topWin, true, 0.03)
   const rearGlass = projectCurve(mm, 'y', planLines.rearGlass, true, 0.008, topWin, true, 0.03)
   const bay = projectCurve(mm, 'y', planLines.bay, true, 0.008, topWin, true, 0.06)
-  const bonnet = onSkin(main, projectCurve(mm, 'y', planLines.bonnet, false, 0.006, topWin, false, 0.08))
+  const bonnet = onSkin(main, projectCurve(mm, 'y', planLines.bonnet, false, 0.006, topWin, false, 0.08), 0.006)
   const lampWrapCut = lampWrapHole(main)
-  const wing = intoTip(main, onSkin(main, projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08)), lampWrapCut)
+  const wing = intoTip(main, onSkin(main, projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08), 0.006), lampWrapCut)
   const mainCuts: Cuts = {
     holes: [
       { c: dlo, inset: 0 },
