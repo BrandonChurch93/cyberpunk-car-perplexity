@@ -323,6 +323,16 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       practical.cabinet(bridge,'high bridge service sign',[-76,9.3,.78],[15.2,3.45],[7.3,3.15,.69],'24H')
       animation.push(practical.screen(bridge,'bridge violet media fascia',[-19,-6.0,.92],[111,9.6],
         [6.1,.29,2.6],[1.85,.41,9.2],.54,.89))
+      const west = group(bridge,'west media transfer gallery',[-137.5,0,0])
+      box(west,'west transfer box girder',[6,0,-12.35],[82,43.2,24.7],shell)
+      box(west,'west upper gallery shell',[1,85.5,-10.5],[69,128.4,20.8],shell)
+      box(west,'west gallery top coping',[1,149.65,-10.5],[69.6,.42,21.2],oxidizedAluminum)
+      animation.push(practical.screen(west,'bonnet media bank',[0,-.15,.93],[67,40.6],
+        [3.8,.34,1.78],[1.24,.41,5.7],.24,.39))
+      animation.push(practical.screen(west,'windscreen media bank',[0,115.5,.91],[65,53.8],
+        [5.3,.42,2.6],[1.64,.47,7.35],.68,.53))
+      box(west,'west media recessed cyan divider',[-27.5,.5,.76],[1.26,34.6,.53],frame)
+      practical.opal(west,'gallery cyan strip',[-27.5,.5,1.075],[.64,33.3],[.18,7.1,10.6],7)
       box(riser,'skybridge east abutment',[148,332,pz+6.0],[15,25.6,20.3],shell)
       box(riser,'upper advertising wing',[wingX,438,wingZ],[w*.82,214,14.4],shell)
       const media = group(riser,'screen tower occupied media gallery',[2.5,0,pz+.66])
@@ -336,10 +346,10 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
         [8.4,.42,3.05],[1.9,.57,9.5],.32,.67))
       animation.push(practical.screen(media,'upper magenta media bank',[6.1,448.5,.91],[120.2,65.0],
         [10.4,.56,3.74],[2.28,.49,11.2],.78,.66))
-      for (const [i,[x,lo,hi]] of [[-67.4,356,424],[57.8,353.7,413.3],[68.25,422.8,486.5]].entries()) {
+      for (const [i,[x,lo,hi]] of [[57.8,353.7,413.3],[68.25,422.8,486.5]].entries()) {
         const length = hi-lo
         box(media,'folded cyan strip channel',[x,(lo+hi)*.5,.04],[1.63,length+.55,.57],frame)
-        practical.opal(media,'gallery cyan strip',[x,(lo+hi)*.5,.48],[i===1 ? .84 : 1.15,length],[.19,8.6,13.2],11)
+        practical.opal(media,'gallery cyan strip',[x,(lo+hi)*.5,.48],[i===0 ? .84 : 1.15,length],[.19,8.6,13.2],11)
       }
       for (const [row,y] of [352.0,405.9,411.8,487.0,493.3].entries()) {
         box(media,'projecting gallery slab edge',[0,y-1.45,.10],[137,.56,.65],zinc)

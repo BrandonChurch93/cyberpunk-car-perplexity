@@ -80,6 +80,10 @@ export function addReflectionFrontages(root: THREE.Object3D, labels: Label) {
   for (const [x,w] of [[-.96,1.48],[.69,1.46],[2.35,1.51]]) {
     opal(stair,'violet stair dado lens',[x,1.77,2.56],[w,.29],[3.38,.30,8.90],3)
   }
+  block(stair,'violet stair entrance jamb rail',[-3.48,1.38,2.42],[.42,2.23,.22],spandrel)
+  opal(stair,'violet stair entrance jamb lens',[-3.48,1.38,2.59],[.29,2.03],[3.42,.27,8.50],5)
+  block(stair,'amber stair entrance jamb rail',[-1.93,1.21,2.42],[.41,1.82,.22],zinc)
+  opal(stair,'amber stair entrance jamb lens',[-1.93,1.21,2.59],[.26,1.58],[6.74,2.69,.71],5)
   opal(stair,'low warm stair threshold lens',[.84,.29,2.60],[3.62,.14],[6.3,2.85,.72],5)
   block(stair,'cyan service fascia wall rail',[.84,2.50,2.42],[4.33,.25,.23],zinc)
   opal(stair,'cyan service fascia strip',[.84,2.50,2.58],[4.14,.17],[.10,5.40,8.85],5)

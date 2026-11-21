@@ -313,7 +313,7 @@ describe('full roof world', () => {
     }
     expect(min).toBeGreaterThan(.10)
     const installed: [THREE.Mesh,THREE.Box3][] = []
-    for (const part of [required('screen tower occupied media gallery'),required('bridge violet media fascia'),stair]) {
+    for (const part of [required('screen tower occupied media gallery'),required('bridge violet media fascia'),required('west media transfer gallery'),stair]) {
       part.traverse(o => {
         if (o instanceof THREE.Mesh) installed.push([o,new THREE.Box3().setFromObject(o)])
       })
@@ -351,11 +351,16 @@ describe('full roof world', () => {
       return ray.normalize()
     }
     const media = required('screen tower occupied media gallery')
+    const westMedia = required('west media transfer gallery')
+    const skybridgeShell = new THREE.Box3().setFromObject(required('skybridge structural shell'))
     expect(media.parent).toBe(riser)
     const carrier = new THREE.Box3().setFromObject(required('gallery bearing and transfer beam'))
     const gallery = new THREE.Box3().setFromObject(required('occupied upper gallery shell'))
     expect(carrier.intersectsBox(gallery)).toBe(true)
-    expect(carrier.intersectsBox(new THREE.Box3().setFromObject(required('skybridge structural shell')))).toBe(true)
+    expect(carrier.intersectsBox(skybridgeShell)).toBe(true)
+    const westGirder = new THREE.Box3().setFromObject(required('west transfer box girder'))
+    expect(westGirder.intersectsBox(skybridgeShell)).toBe(true)
+    expect(westGirder.intersectsBox(new THREE.Box3().setFromObject(required('west upper gallery shell')))).toBe(true)
     for (const name of ['bridge violet media fascia','lower violet media bank','upper magenta media bank']) {
       const fixture = required(name)
       expect(fixture.parent).toBe(name.startsWith('bridge') ? required('screen tower upper service skybridge') : media)
@@ -371,8 +376,24 @@ describe('full roof world', () => {
       expect(width).toBeGreaterThan(85)
       expect(height).toBeGreaterThan(name.startsWith('bridge') ? 8 : 40)
     }
-    expect(media.getObjectsByProperty('name','gallery cyan strip')).toHaveLength(3)
+    expect(riser.getObjectsByProperty('name','gallery cyan strip')).toHaveLength(3)
     expect(media.getObjectsByProperty('name','occupied gallery window').length).toBeGreaterThan(30)
+    for (const [name,lo,hi] of [['bonnet media bank',32,36],['windscreen media bank',41,46]] as const) {
+      const fixture = required(name)
+      expect(fixture.parent).toBe(westMedia)
+      const ray = visible(fixture,'animated magenta violet tiles')
+      expect(THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))).toBeGreaterThan(-148)
+      expect(THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))).toBeLessThan(-141)
+      expect(THREE.MathUtils.radToDeg(Math.asin(ray.y))).toBeGreaterThan(lo)
+      expect(THREE.MathUtils.radToDeg(Math.asin(ray.y))).toBeLessThan(hi)
+    }
+    let bonnetRays = 0
+    for (const az of [-148,-146,-144]) for (const el of [33.5,34.5,35.5]) {
+      const a = THREE.MathUtils.degToRad(az), e = THREE.MathUtils.degToRad(el)
+      const ray = new THREE.Raycaster(probe,new THREE.Vector3(Math.sin(a)*Math.cos(e),Math.sin(e),Math.cos(a)*Math.cos(e)))
+      if (firstHit(ray)?.object.parent?.name === 'bonnet media bank') bonnetRays++
+    }
+    expect(bonnetRays).toBeGreaterThanOrEqual(6)
     const hits = new Set<string>()
     let mediaRays = 0
     for (const az of [-161,-158,-155,-152,-149]) for (const el of [35,37,38,39,42,44,45]) {
@@ -389,6 +410,8 @@ describe('full roof world', () => {
     for (const [fixtureName,railName] of [
       ['amber stair entrance sign','amber sign folded wall rail'],
       ['violet stair dado lens','violet lens recessed wall rail'],
+      ['violet stair entrance jamb lens','violet stair entrance jamb rail'],
+      ['amber stair entrance jamb lens','amber stair entrance jamb rail'],
       ['cyan service fascia strip','cyan service fascia wall rail'],
       ['cyan stair return tracer','tall cyan lens support jamb'],
     ] as const) {
@@ -399,7 +422,7 @@ describe('full roof world', () => {
         for (const cleat of fixture.getObjectsByProperty('name','fixture mounting cleat')) {
           expect(wall.intersectsBox(new THREE.Box3().setFromObject(cleat)),fixture.name).toBe(true)
         }
-        const ray = visible(fixture,fixtureName.startsWith('amber') ? 'diffusing cabinet face' : 'sealed opal aperture')
+        const ray = visible(fixture,fixtureName==='amber stair entrance sign' ? 'diffusing cabinet face' : 'sealed opal aperture')
         const azimuth = THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))
         const elevation = THREE.MathUtils.radToDeg(Math.asin(ray.y))
         expect(azimuth).toBeGreaterThan(140)
@@ -435,7 +458,7 @@ describe('full roof world', () => {
     expect(visible(required('recessed amber service sign'),'diffusing cabinet face').z).toBeLessThan(0)
     const getFlow = (timeSeconds: number) => {
       world.beginFrame({ frame: { timeSeconds } } as FrameContext)
-      return ['northwest animated LED wall','bridge violet media fascia','lower violet media bank','upper magenta media bank'].map(name => {
+      return ['northwest animated LED wall','bridge violet media fascia','lower violet media bank','upper magenta media bank','bonnet media bank','windscreen media bank'].map(name => {
         const tiles = required(name).getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
         return (tiles.material.uniforms.flow.value as THREE.Vector2).clone()
       })
