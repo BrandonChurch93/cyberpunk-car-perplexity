@@ -78,8 +78,9 @@ float scatterLobe(float mu) {
   return 0.51 * inversesqrt(pow(1.42 - 1.30 * mu, 3.0));
 }
 
-vec3 vaporLight(vec3 p, vec3 toEye, bool deck, bool exhaust) {
+vec3 vaporLight(vec3 p, vec3 toEye, bool deck, bool exhaust, out float projectorCore) {
   vec3 illumination = vec3(0.0);
+  projectorCore = 0.0;
   for (int i = 0; i < MAX_FILM_LIGHTS; ++i) {
     if (i >= filmLightCount) break;
     vec4 source = filmLightColor[i];
@@ -90,7 +91,13 @@ vec3 vaporLight(vec3 p, vec3 toEye, bool deck, bool exhaust) {
     vec3 incident = filmLightAt(i, p, toLight);
     float mu = -dot(toEye, toLight);
     float lobe = scatterLobe(mu);
-    float coupling = deck && filmLightShape[i].w > 0.5 ? 0.20 : 1.0;
+    bool deckProjector = deck && filmLightShape[i].w > 0.5;
+    if (deckProjector) {
+      float beam = max(max(incident.r, incident.g), incident.b);
+      float reach = 1.0 - smoothstep(2.5, 4.2, length(offset));
+      projectorCore = max(projectorCore, reach * smoothstep(0.65, 3.0, beam));
+    }
+    float coupling = deckProjector ? 0.20 : 1.0;
     float phase = exhaust ? 0.12 + lobe * 0.19 : (0.10 + lobe * 0.20) * coupling;
     illumination += incident * phase;
   }
@@ -109,14 +116,14 @@ vec3 vaporLight(vec3 p, vec3 toEye, bool deck, bool exhaust) {
   return illumination / (1.0 + max(max(illumination.r, illumination.g), illumination.b) * 0.38);
 }
 
-float deckSpray(vec3 p) {
+float deckSpray(vec3 p, float forward) {
   vec2 border = min(p.xz - uDeck.xy, uDeck.zw - p.xz);
   float edge = smoothstep(0.0, 1.5, min(border.x, border.y));
   float e = exp(-max(0.0, p.y - ${slabFloor}) * 20.0) * (1.0 - smoothstep(0.105, ${slabHeight}, p.y));
   float primary = sin(dot(p.xz, vec2(2.04, -2.14)) - TAU * 12.0 * uPhase + uNoise.x);
   float secondary = sin(dot(p.xz, vec2(3.89, 1.13)) - TAU * 15.0 * uPhase + uNoise.y);
   float pockets = 1.25 * smoothstep(-0.05, 0.74, primary * 0.68 + secondary * 0.32);
-  float lowFore = smoothstep(0.15, 0.82, dot(p, uNosePlane.xyz) - uNosePlane.w) * (1.0 - smoothstep(0.075, 0.15, p.y));
+  float lowFore = forward * (1.0 - smoothstep(0.075, 0.15, p.y));
   return 0.044 * edge * e * pockets * mix(1.0, 0.54, lowFore);
 }
 
@@ -177,13 +184,20 @@ void main() {
     float exit = min(scene, min(26.0 / rayLength, max(water.x, water.y)));
     if (exit > enter) {
       float dt = (exit - enter) / 7.0;
+      float hitHeight = abs(uEye.y + ray.y * scene);
+      float closeDeck = (1.0 - smoothstep(0.035, 0.12, hitHeight)) * (1.0 - smoothstep(6.0, 11.0, scene * rayLength));
       for (int j = 0; j < 7; ++j) {
         float t = enter + (float(j) + 0.5) * dt;
         vec3 p = uEye + ray * t;
-        float density = deckSpray(p) * dt * rayLength * (1.0 - smoothstep(18.0, 26.0, t * rayLength));
+        float forward = smoothstep(0.15, 0.82, dot(p, uNosePlane.xyz) - uNosePlane.w);
+        float density = deckSpray(p, forward) * dt * rayLength * (1.0 - smoothstep(18.0, 26.0, t * rayLength));
         if (density > 0.00002) {
+          float projectorCore;
+          vec3 light = vaporLight(p, toEye, true, false, projectorCore);
+          float coneBody = projectorCore * smoothstep(0.095, 0.205, p.y);
+          density *= 1.0 - 0.55 * closeDeck * forward * (1.0 - coneBody);
           optical += density;
-          scattered += vaporLight(p, toEye, true, false) * density;
+          scattered += light * density;
         }
       }
     }
@@ -213,7 +227,8 @@ void main() {
       float density = (exhaust ? exhaustDensity(p - source, axis, noiseIndex) : plumeDensity(p - source, axis, type, noiseIndex)) * emission * dt * rayLength;
       if (density > 0.00002) {
         optical += density;
-        scattered += vaporLight(p, toEye, false, exhaust) * density;
+        float projectorCore;
+        scattered += vaporLight(p, toEye, false, exhaust, projectorCore) * density;
       }
     }
   }
