@@ -466,6 +466,17 @@ const lensFragment = /* glsl */ `
     vec3 back = getTransmissionSample(clip.xy / clip.w * 0.5 + 0.5, 0.0, 1.333).rgb;
     // A highlight past half float range comes back infinite or NaN and would spread through the lens.
     back = any(isnan(back)) ? vec3(0.0) : min(back, vec3(${transmissionCeiling.toFixed(1)}));
+    // The screen behind holds the dry paint, coat mirror and all; under water that mirror is the weak interface above, so it comes out.
+    #ifdef USE_ENVMAP
+      vec3 fW = surfLin * f + surfLensT;
+      vec3 coatN = normalize(transpose(inverse(surfLin)) * vec3(0.0, 1.0, 0.0));
+      vec3 vf = normalize(fW - cameraPosition);
+      vec3 rm = reflect(vf, coatN);
+      vec3 rmV = normalize((viewMatrix * vec4(rm, 0.0)).xyz);
+      vec3 rmSide = normalize(abs(rmV.y) < 0.9 ? cross(rmV, vec3(0.0, 1.0, 0.0)) : cross(rmV, vec3(1.0, 0.0, 0.0)));
+      float dryCoat = 0.04 + 0.96 * pow(1.0 - clamp(-dot(vf, coatN), 0.0, 1.0), 5.0);
+      back = max(back - dryCoat * max(getIBLRadiance(-rmV, rmSide, 0.045), emitterGlintF0(fW, rm, rm, 0.045, -1.0, vec3(1.0))), vec3(0.0));
+    #endif
     seen = (1.0 - mirror) * back;
     through = mirror;
     e = vec3(t.x, -t.y, t.z);
@@ -509,6 +520,19 @@ const lensFragment = /* glsl */ `
     vec3 capNV = normalize((viewMatrix * vec4(capN, 0.0)).xyz);
     vec3 sharp = emitterGlint(capW, capN, capV, max(0.02, spark), capR);
     totalEmissiveRadiance += max(sharp - fresnel * getIBLRadiance(normalize(-vViewPosition), capNV, 0.02), vec3(0.0));
+    // Where the cap turns away it mirrors a ray down into the coat beside the drop, which sends it back up off its own mirror.
+    vec3 rc = reflect(-capV, capN);
+    float rn = dot(rc, baseN);
+    float below = smoothstep(0.0, 0.04, -rn);
+    if (below > 0.0) {
+      vec3 r2 = reflect(rc, baseN);
+      vec3 r2V = normalize((viewMatrix * vec4(r2, 0.0)).xyz);
+      vec3 r2Side = normalize(abs(r2V.y) < 0.9 ? cross(r2V, vec3(0.0, 1.0, 0.0)) : cross(r2V, vec3(1.0, 0.0, 0.0)));
+      float capRough = min(sqrt(0.5 * length(fwidth(r2)) / surfSampleRoot), 0.7);
+      float fc = 0.04 + 0.96 * pow(1.0 - min(-rn, 1.0), 5.0);
+      totalSpecular *= 1.0 - below;
+      totalEmissiveRadiance += below * fresnel * fc * max(getIBLRadiance(-r2V, r2Side, capRough), emitterGlintF0(capW, r2, r2, max(capRough, spark), -1.0, vec3(1.0)));
+    }
   #endif
   float meniscus = smoothstep(0.0, 0.08, surfLensPos.y / SURF_CAP_HS);
   totalDiffuse = seen * (1.0 - fresnel) * mix(0.6, 1.0, meniscus);

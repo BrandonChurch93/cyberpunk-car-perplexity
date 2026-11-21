@@ -112,18 +112,25 @@ float surfRing(float r, float age, float diameterMm, float deep, float foot, flo
   float width = mix(1.3, 4.0, deep * smoothstep(1.0, 4.0, diameterMm)) * lambda;
   float front = 0.002 + 0.0006 * diameterMm + SURF_RING_SPEED * age;
   float s = front - r;
-  if (s < -0.6 * lambda || s > width) return 0.0;
+  // A thin film damps the trailing crests before they form, so it carries one sharp leading crest; standing water keeps the train.
+  float train = smoothstep(0.3, 0.8, deep);
+  float cw = 0.3 * lambda;
+  if (s < -mix(3.0 * cw, 0.6 * lambda, train) || s > max(width, 3.0 * cw)) return 0.0;
   float envelope = smoothstep(-0.6 * lambda, 0.25 * lambda, s) * (1.0 - smoothstep(0.35 * width, width, s));
   float wave = lambda * (1.0 - 0.3 * clamp(s / width, 0.0, 1.0));
   // Bottom friction damps a wave on a film of depth h in about h * h / viscosity: a quarter second at the deck's 0.5 to 1 mm.
   float tau = 0.2;
-  float amp = mix(0.8, 1.0, deep) * 0.16 * (diameterMm / 2.0) * exp(-age / tau) * sqrt(0.02 / (front + 0.02));
-  amp *= smoothstep(life, life * 0.6, age);
+  float spread = exp(-age / tau) * sqrt(0.02 / (front + 0.02)) * smoothstep(life, life * 0.6, age);
+  float ampTrain = 0.16 * (diameterMm / 2.0) * spread;
+  float ampCrest = 0.2 * sqrt(diameterMm / 1.5) * spread;
   // A crest left with a third of its slope still aliases into sparkle through a sharp reflection, so the cut sits a little early.
-  float filt = exp(-4.5 * (radialFoot / wave) * (radialFoot / wave));
-  float osc = amp * envelope;
-  float slope = osc * filt * cos(6.2831853 * s / wave);
-  surfRingVar += 0.5 * osc * osc * (1.0 - filt * filt);
+  float filtTrain = exp(-4.5 * (radialFoot / wave) * (radialFoot / wave));
+  float filtCrest = exp(-4.5 * (radialFoot / (4.4 * cw)) * (radialFoot / (4.4 * cw)));
+  float x = s / cw;
+  float crest = ampCrest * x * exp(0.5 * (1.0 - x * x));
+  float osc = ampTrain * envelope;
+  float slope = mix(crest * filtCrest, osc * filtTrain * cos(6.2831853 * s / wave), train);
+  surfRingVar += mix(crest * crest * (1.0 - filtCrest * filtCrest), 0.5 * osc * osc * (1.0 - filtTrain * filtTrain), train);
   float rb = 0.0012 * diameterMm + 0.0015;
   float young = 1.0 - smoothstep(0.0, 0.07, age);
   float bump = young * 0.9 * (r / rb) * exp(-(r * r) / (rb * rb));

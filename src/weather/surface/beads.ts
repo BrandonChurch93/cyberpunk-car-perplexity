@@ -29,9 +29,9 @@ export interface BeadLayer {
 }
 
 export const beadLayers: BeadLayer[] = [
-  { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.15, steep: 0.35, lobes: 1, sparse: 0.6, dense: 1.3, hang: 0 },
-  { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.3, steep: 0.35, lobes: 1, sparse: 0.05, dense: 1.3, hang: 0 },
-  { cellMm: 6.4, minMm: 1.5, maxMm: 3.1, flat: 0.35, steep: 0.15, lobes: 1, sparse: 0.05, dense: 1.2, hang: 0.4 },
+  { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.15, steep: 0.35, lobes: 1, sparse: 0.5, dense: 0.9, hang: 0 },
+  { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.2, steep: 0.3, lobes: 1, sparse: 0.05, dense: 0.7, hang: 0 },
+  { cellMm: 6.4, minMm: 1.5, maxMm: 3.1, flat: 0.25, steep: 0.15, lobes: 1, sparse: 0.05, dense: 0.8, hang: 0.4 },
   { cellMm: 16, minMm: 2.4, maxMm: 5.5, flat: 0.4, steep: 0.05, lobes: 1, sparse: 0, dense: 1.3, hang: 0.3 },
   { cellMm: 36, minMm: 4, maxMm: 11, flat: 0.25, steep: 0.03, lobes: 2, sparse: 0, dense: 1.2, hang: 1.2 },
 ]
@@ -339,6 +339,7 @@ float surfPixA = 1.0;
 float surfLensW = 0.0;
 float surfSinE = 1.0;
 float surfLensOpen = 0.0;
+float surfCapBelow = 0.0;
 
 /** Slope of the water on the coat, in object space on the tangent plane. coverage: the drift field, 1 where drops pack densest. */
 vec3 surfCoatSlope(vec3 p, vec3 n, vec3 down, float slope, float pix, float coverage, uint salt) {
@@ -819,8 +820,7 @@ float surfGlint = 0.0;
           totalEmissiveRadiance += surfLensOpen * carry * max(getIBLRadiance(o, o, lensRough), emitterGlintF0(surfWorldPos, oW, oW, max(lensRough, 0.85 * smoothstep(0.15, 0.8, surfSpread)), R, vec3(1.0)));
         }
       } else {
-        // A ray that reaches the coat under the clear drop comes back off it and leaves through the cap, so the drop carries
-        // the color of the reflection it sits on, at the coat's own strength for this view.
+        // A ray that reaches the coat under the drop meets a weak water to coat interface and comes back off it through the cap.
         vec3 xb = x0 + sBase * t;
         vec3 tb = reflect(t, nV);
         vec3 xs2 = xb + nV * dot(xb, nV) * k;
@@ -832,11 +832,11 @@ float surfGlint = 0.0;
         vec3 ne = normalize((xe - nV * en) / (R * R) + nV * en / (h * h));
         vec3 o = refract(tb, -ne, 1.33);
         if (dot(o, o) > 0.0) {
-          float coatView = 0.04 + 0.96 * pow(1.0 - surfSinE, 5.0);
+          float waterCoat = 0.0036 + 0.9964 * pow(1.0 - clamp(-tn, 0.0, 1.0), 5.0);
           float lensRough = max(0.12, sqrt(min(0.8 * pix / (R * surfSampleRoot), 1.0)));
           surfLensOpen = shaded * smoothstep(0.0, 0.08, 1.0 - surfHit.r);
           vec3 oW = surfToWorld(o);
-          totalEmissiveRadiance += surfLensOpen * 0.9 * coatView * max(getIBLRadiance(o, o, lensRough), emitterGlintF0(surfWorldPos, oW, oW, max(lensRough, 0.85 * smoothstep(0.15, 0.8, surfSpread)), R, vec3(1.0)));
+          totalEmissiveRadiance += surfLensOpen * 0.9 * waterCoat * max(getIBLRadiance(o, o, lensRough), emitterGlintF0(surfWorldPos, oW, oW, max(lensRough, 0.85 * smoothstep(0.15, 0.8, surfSpread)), R, vec3(1.0)));
         }
       }
     }
@@ -858,6 +858,17 @@ float surfGlint = 0.0;
       float fw = ${waterF0} + ${(1 - waterF0).toFixed(2)} * pow(1.0 - clamp(dot(dropView, vV), 0.0, 1.0), 5.0);
       vec3 sharp = emitterGlint(surfWorldPos, surfToWorld(dropView), surfToWorld(vV), capRough, surfHit.radius);
       totalEmissiveRadiance += shaded * max(sharp - fw * getIBLRadiance(vV, dropView, capRough), vec3(0.0));
+      // Where the cap turns away it mirrors a ray down into the coat just beside it, which sends it back up through its own mirror.
+      vec3 nP = normalize(toView * n);
+      vec3 rc = reflect(-vV, dropView);
+      float rn = dot(rc, nP);
+      surfCapBelow = shaded * smoothstep(0.0, 0.04, -rn);
+      if (surfCapBelow > 0.0) {
+        vec3 r2 = reflect(rc, nP);
+        vec3 r2W = surfToWorld(r2);
+        float fc = 0.04 + 0.96 * pow(1.0 - min(-rn, 1.0), 5.0);
+        totalEmissiveRadiance += surfCapBelow * fw * fc * max(getIBLRadiance(r2, r2, capRough), emitterGlintF0(surfWorldPos, r2W, r2W, capRough, surfHit.radius, vec3(1.0)));
+      }
     #endif
   }
   if (w > 0.0 && surfHit.radius > 0.0007) {
@@ -918,7 +929,8 @@ surfBeadRough = min(max(surfBeadRough, 0.045), 1.0);
 material.specularColor *= 1.0 - surfLensOpen;
 #ifdef USE_CLEARCOAT
   material.clearcoat *= 1.0 - 0.35 * surfHalo * (1.0 - surfBeadOut);
-  material.clearcoat = mix(material.clearcoat, 1.0, surfBeadOut);
+  material.clearcoat = mix(material.clearcoat, 1.0, surfBeadOut) * (1.0 - surfCapBelow);
+  material.clearcoatF0 = mix(material.clearcoatF0, vec3(${waterF0}), surfBeadOut);
   material.clearcoatRoughness = mix(material.clearcoatRoughness, surfBeadRough, surfBeadOut);
   // Unresolved drops cover part of the pixel: the coat between them stays sharp, and their own light comes back as glint.
   material.clearcoat *= 1.0 - 0.5 * surfMist * (1.0 - surfBeadOut);

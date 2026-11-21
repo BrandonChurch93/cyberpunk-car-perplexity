@@ -1,14 +1,24 @@
-/** Natural cubic spline through (t, value) knots. Clamped to the end values outside the knot range. */
+/**
+ * Natural cubic spline through (t, value) knots. Clamped to the end values outside the knot range.
+ * A monotone spline may be faired over a range of t: the knots inside it take the natural slopes, so the curve bends
+ * evenly there instead of running flat between knots and turning at each one; every span outside it is unchanged.
+ */
 export class Spline {
   private readonly t: number[]
   private readonly y: number[]
   private readonly m: number[]
 
-  constructor(knots: ReadonlyArray<readonly [number, number]>, monotone = false) {
+  constructor(knots: ReadonlyArray<readonly [number, number]>, monotone = false, fair?: readonly [number, number]) {
     const sorted = [...knots].sort((a, b) => a[0] - b[0])
     this.t = sorted.map((k) => k[0])
     this.y = sorted.map((k) => k[1])
     this.m = monotone ? hermiteSlopes(this.t, this.y) : naturalSlopes(this.t, this.y)
+    if (monotone && fair) {
+      const natural = naturalSlopes(this.t, this.y)
+      this.t.forEach((t, i) => {
+        if (t >= fair[0] && t <= fair[1]) this.m[i] = natural[i]
+      })
+    }
   }
 
   at(x: number): number {
@@ -95,10 +105,10 @@ export class Track3 {
   readonly t0: number
   readonly t1: number
 
-  constructor(pts: ReadonlyArray<readonly [number, number, number, number]>, monotone = false) {
-    this.sx = new Spline(pts.map((p) => [p[0], p[1]] as const), monotone)
-    this.sy = new Spline(pts.map((p) => [p[0], p[2]] as const), monotone)
-    this.sz = new Spline(pts.map((p) => [p[0], p[3]] as const), monotone)
+  constructor(pts: ReadonlyArray<readonly [number, number, number, number]>, monotone = false, fair?: readonly [number, number]) {
+    this.sx = new Spline(pts.map((p) => [p[0], p[1]] as const), monotone, fair)
+    this.sy = new Spline(pts.map((p) => [p[0], p[2]] as const), monotone, fair)
+    this.sz = new Spline(pts.map((p) => [p[0], p[3]] as const), monotone, fair)
     this.t0 = Math.min(...pts.map((p) => p[0]))
     this.t1 = Math.max(...pts.map((p) => p[0]))
   }

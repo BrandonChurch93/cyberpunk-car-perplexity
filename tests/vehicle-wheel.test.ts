@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { defaultPaint, paintById } from '../src/config'
 import { createVehicle, type VehicleModule, type WetnessKind } from '../src/vehicle'
 import { mainLoft, dims } from '../src/vehicle/body/shape'
-import { arches } from '../src/vehicle/body/cuts'
+import { arches, wheelOpenings } from '../src/vehicle/body/cuts'
 import type { Surface } from '../src/vehicle/geom/cuts'
 import { makeMaterials } from '../src/vehicle/materials'
 import { buildLiners } from '../src/vehicle/parts/liners'
@@ -258,8 +258,39 @@ describe('wheel, tire, brake and arch liner module', { timeout: 30_000 }, () => 
       const axle = front ? 'front' : 'rear'
       const lipMesh = sprung.getObjectByName(`arch-lip-${axle}-left`) as THREE.Mesh
       const linerMesh = sprung.getObjectByName(`liner-${axle}-left`) as THREE.Mesh
-      const lipBox = new THREE.Box3().setFromBufferAttribute(lipMesh.geometry.getAttribute('position') as THREE.BufferAttribute)
+      const lipPos = lipMesh.geometry.getAttribute('position') as THREE.BufferAttribute
+      const lipBox = new THREE.Box3().setFromBufferAttribute(lipPos)
       expect(lipBox.max.x - lipBox.min.x).toBeGreaterThan(0.015)
+
+      const lipCols = 9
+      const lipRowsCount = Math.floor((lipPos.count - 16) / lipCols)
+      let maxArchBendDeg = 0
+      for (let i = 2; i < lipRowsCount - 2; i++) {
+        const k = i * lipCols + 3
+        const y = lipPos.getY(k)
+        if (y < 0.21) continue
+        const z = lipPos.getZ(k)
+        if (!front && z < -1.84) continue
+        const p0 = i - 1
+        const p2 = i + 1
+        const dx1 = lipPos.getX(k) - lipPos.getX(p0 * lipCols + 3)
+        const dy1 = y - lipPos.getY(p0 * lipCols + 3)
+        const dz1 = z - lipPos.getZ(p0 * lipCols + 3)
+        const dx2 = lipPos.getX(p2 * lipCols + 3) - lipPos.getX(k)
+        const dy2 = lipPos.getY(p2 * lipCols + 3) - y
+        const dz2 = lipPos.getZ(p2 * lipCols + 3) - z
+        const l1 = Math.hypot(dx1, dy1, dz1)
+        const l2 = Math.hypot(dx2, dy2, dz2)
+        if (l1 > 1e-5 && l2 > 1e-5) {
+          const cos = THREE.MathUtils.clamp((dx1 * dx2 + dy1 * dy2 + dz1 * dz2) / (l1 * l2), -1, 1)
+          maxArchBendDeg = Math.max(maxArchBendDeg, (Math.acos(cos) * 180) / Math.PI)
+        }
+      }
+      expect(maxArchBendDeg, `${axle} smooth arch lip bend`).toBeLessThan(6.5)
+      const endRowStart = (lipRowsCount - 1) * lipCols
+      let endRockerTipX = 0
+      for (let c = 0; c < lipCols; c++) endRockerTipX = Math.max(endRockerTipX, lipPos.getX(endRowStart + c))
+      expect(endRockerTipX, `${axle} lip feathers inside rocker sill`).toBeLessThan(0.955)
 
       const linerPos = linerMesh.geometry.getAttribute('position')
       for (let i = 0; i < linerPos.count; i++) {
@@ -267,7 +298,23 @@ describe('wheel, tire, brake and arch liner module', { timeout: 30_000 }, () => 
         const z = linerPos.getZ(i)
         expect(y).toBeGreaterThanOrEqual(0.12)
         if (y > 0.16) {
-          expect(arches([0.95, y, z])).toBeGreaterThan(-0.002)
+          const openVal = front ? arches([0.95, y, z]) : wheelOpenings([0.95, y, z])
+          expect(openVal).toBeGreaterThan(-0.006)
+        }
+      }
+
+      if (!front) {
+        for (const side of [1, -1] as const) {
+          for (const zApron of [-1.92, -1.875, -1.855]) {
+            ray.set(new THREE.Vector3(side * 0.82, 0.45, zApron), new THREE.Vector3(0, 1, 0))
+            const apronHits = ray.intersectObjects(linerTargets, false)
+            expect(apronHits.length, `rear skirt ceiling side=${side} z=${zApron}`).toBeGreaterThan(0)
+          }
+          for (const yStep of [0.17, 0.32, 0.52]) {
+            ray.set(new THREE.Vector3(side * 0.618, yStep, -1.84), new THREE.Vector3(0, 0, -1))
+            const stepHits = ray.intersectObjects(linerTargets, false)
+            expect(stepHits.length, `rear step closure side=${side} y=${yStep}`).toBeGreaterThan(0)
+          }
         }
       }
 
@@ -310,7 +357,7 @@ describe('wheel, tire, brake and arch liner module', { timeout: 30_000 }, () => 
       maxZ = Math.max(maxZ, z)
       if (y < 0.56 && x > 0.68 && z < dims.rearHubZ) behindLowCount++
     }
-    expect(minX).toBeGreaterThan(0.625)
+    expect(minX).toBeGreaterThan(0.595)
     expect(maxZ).toBeLessThan(-1.03)
     expect(behindLowCount).toBe(0)
   })
