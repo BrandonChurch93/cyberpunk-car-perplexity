@@ -20,7 +20,9 @@
     "proof": "tsx tools/proof.ts",
     "determinism": "tsx tools/determinism.ts",
     "gate": "tsx tools/gate.ts",
-    "profile": "tsx tools/profile.ts"
+    "profile": "tsx tools/profile.ts",
+    "scan": "tsx tools/scan.ts",
+    "farm": "tsx tools/farm.ts"
   },
   "dependencies": {
     "gsap": "3.15.1",
