@@ -243,7 +243,7 @@ function strake(b: MeshBuilder, s: (typeof strakes)[number]): void {
   const m = 12
   if (s.rise) {
     const top = ceilingY + wallT / 2 - br + 0.001
-    const zf = Math.max(meshZ - br - 0.002, back + riseChord)
+    const zf = Math.min(meshZ - br - 0.002, back + riseChord)
     poly.push([zf, top], [back, top], [bottom, s.exit + br])
     radii.push(0.004, 0.005, 0.008)
     for (let i = 1; i < m; i++) {
