@@ -451,6 +451,7 @@ void surfCap(inout SurfHit hit, vec3 d3, float radius, float height, vec3 n, vec
 const beadsFragment = /* glsl */ `
 SurfHit surfHit = SurfHit(0.0, 0.0, vec3(0.0), vec3(0.0), 0.0, 0.0, 0.0, 0.0);
 float surfMist = 0.0;
+float surfOcc = 0.0;
 float surfLane = 0.0;
 float surfGlint = 0.0;
 {
@@ -531,7 +532,6 @@ float surfGlint = 0.0;
     float perCell = smoothstep(${splatBand[0].toFixed(2)}, ${splatBand[1].toFixed(2)}, cell / pixA);
     if (perCell < 1.0) {
       float fill = (1.0 - perCell) * density * mix(sparseD, denseD, surfCoverage(uv, axis, salt)) * (1.0 - laneCover);
-      surfMist += fill * 0.6 * (maxMm / cellMm) * (maxMm / cellMm);
       float meanR = 0.25 * (minMm + maxMm) / cellMm;
       float meanA = surfCapHeight(meanR * cell) / (meanR * cell);
       float side = 1.0 + 0.5 * meanA * cotE;
@@ -548,6 +548,7 @@ float surfGlint = 0.0;
         count += (k == 0 ? 1.0 - (lod - l0) : lod - l0) * max(0.0, expect + sqrt(expect) * z) / expect;
       }
       float pointsHere = fill * 0.25 * meanR * meanR * side * count;
+      surfMist += fill * 0.6 * (maxMm / cellMm) * (maxMm / cellMm) * count;
       surfGlint += pointsHere;
       surfLensW += pointsHere * 12.566371 * surfLensExit(meanA, surfSinE);
     }
@@ -601,7 +602,7 @@ float surfGlint = 0.0;
     // Drops under two pixels across alias into glitter: they join the mist sheen instead of drawing a sharp lens.
     float resolved = smoothstep(0.6 * pixA, 1.4 * pixA, radius);
     if (resolved < 1.0) {
-      if (own) surfMist += perCell * densityC * (1.0 - resolved) * 0.6 * (dMm / cellMm) * (dMm / cellMm);
+      surfOcc += perCell * (1.0 - resolved) * surfSplatCover(dW, radius, side * proj);
       // No two drops share a shape: the contact angle and the lean of each one decide which lights its cap can show.
       vec3 jh = surfHash3(ivec3(c, 151 + i), salt);
       float capCos = cos(radians(surfBeadContact + ${beadJitter.contact.toFixed(1)} * (jh.x - 0.5)));
@@ -663,6 +664,7 @@ float surfGlint = 0.0;
     }
   }
   surfMist = clamp(surfMist, 0.0, 1.0) * (1.0 - surfLane);
+  surfOcc = min(surfOcc, 0.9) * (1.0 - surfLane);
   // Beads in front hide beads behind once their silhouettes fill the view.
   float hidden = screenCover > 1e-4 ? (1.0 - exp(-screenCover)) / screenCover : 1.0;
   surfGlint *= hidden;
@@ -834,6 +836,8 @@ material.specularColor *= 1.0 - surfLensOpen;
   material.clearcoatRoughness = mix(material.clearcoatRoughness, surfBeadRough, surfBeadOut);
   // Unresolved drops cover part of the pixel: the coat between them stays sharp, and their own light comes back as glint.
   material.clearcoat *= 1.0 - 0.5 * surfMist * (1.0 - surfBeadOut);
+  // A drop under a pixel covers its share of it, and over that share the coat's mirror is replaced by the drop's own spot.
+  material.clearcoat *= 1.0 - surfOcc * (1.0 - surfBeadOut);
   material.clearcoatRoughness = mix(material.clearcoatRoughness, min(material.clearcoatRoughness, 0.03), surfLane);
   material.clearcoatRoughness = sqrt(sqrt(pow(material.clearcoatRoughness, 4.0) + 2.0 * surfCoatVar * (1.0 - surfBeadOut)));
 #else
@@ -857,6 +861,13 @@ vec3 surfSplatSum = vec3(0.0);
 
 vec3 surfSplatProj(vec3 v) {
   return (v - surfSplatV * dot(v, surfSplatV)) / surfSplatPix;
+}
+
+// The share of this pixel a drop's projected area covers, spread with the same spot as its light.
+float surfSplatCover(vec3 dW, float r, float projected) {
+  vec3 c0 = surfSplatProj(dW);
+  float inv = 1.0 / (surfSplatSigma * surfSplatSigma);
+  return projected * r * r / (surfSplatPix * surfSplatPix) * inv * exp(-dot(c0, c0) * inv);
 }
 
 /**
