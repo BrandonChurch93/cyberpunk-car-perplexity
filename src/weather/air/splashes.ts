@@ -6,7 +6,7 @@ import type { WeatherDeps } from '../contract'
 import { ImpactSurfaces, type ImpactSurfacePoint } from './impact-surfaces'
 import { impactCellMeters, impactForCell, impactPeriodSeconds, impactsPerCellPeriod, type RainImpact } from './impacts'
 import { prevailingWind } from './motion'
-import { makeRibbonGeometry, type RibbonView } from './ribbons'
+import { deckGlintLayer, makeRibbonGeometry, type RibbonView } from './ribbons'
 
 const airSplashRange = 20.5
 const satelliteRange = 12.8
@@ -14,6 +14,7 @@ const crownDuration = 0.031
 const flightDuration = 0.112
 const bufferCapacity = 14_000
 const sprayCapacity = 1600
+const deckSprayCapacity = 2300
 const tau = Math.PI * 2
 const gravity = 9.81
 
@@ -23,12 +24,13 @@ interface Splash extends RainImpact {
   power: number
   priority: number
   vehicle: boolean
+  deck: number
   satellite: number
 }
 
 type SplashDeps = {
   lights: WeatherDeps['lights']
-  world: Pick<WeatherDeps['world'], 'root' | 'surfaces'>
+  world: Pick<WeatherDeps['world'], 'root' | 'surfaces'> & { deck: Pick<WeatherDeps['world']['deck'], 'meshes'> }
   vehicle: Pick<WeatherDeps['vehicle'], 'root' | 'surfaces'>
 }
 
@@ -57,12 +59,17 @@ function upload(geometry: THREE.InstancedBufferGeometry, count: number): void {
 export class Splashes {
   readonly mesh: THREE.Mesh
   readonly spray: THREE.Mesh
+  readonly deckSpray: THREE.Mesh
   private readonly drops = new Float32Array(bufferCapacity * 4)
   private readonly velocities = new Float32Array(bufferCapacity * 4)
   private readonly geometry = makeRibbonGeometry(this.drops, this.velocities, true)
   private readonly sprayDrops = new Float32Array(sprayCapacity * 4)
   private readonly sprayMotion = new Float32Array(sprayCapacity * 4)
   private readonly sprayGeometry = makeRibbonGeometry(this.sprayDrops, this.sprayMotion, true)
+  private readonly deckDrops = new Float32Array(deckSprayCapacity * 4)
+  private readonly deckMotion = new Float32Array(deckSprayCapacity * 4)
+  private readonly deckGeometry = makeRibbonGeometry(this.deckDrops, this.deckMotion, true)
+  private readonly deck: ReadonlySet<THREE.Mesh>
   private readonly solid: ImpactSurfaces
   private readonly vehicle: ImpactSurfaces
   private readonly hits: Splash[] = []
@@ -76,12 +83,18 @@ export class Splashes {
   private readonly end = new THREE.Vector3()
   private frameTime = 0
   private ribbons = 0
+  private deckRibbons = 0
 
   constructor(deps: SplashDeps, view: RibbonView) {
     this.mesh = view.makeMesh(deps.lights, this.geometry, -1)
     this.mesh.name = 'rain-splash'
     this.spray = view.makeMesh(deps.lights, this.sprayGeometry, -2)
     this.spray.name = 'rain-body-spray'
+    this.deckSpray = view.makeMesh(deps.lights, this.deckGeometry, deckGlintLayer, {
+      local: true, fade: [0, 0, 0, 0], gain: 1, center: new THREE.Vector3(), size: new THREE.Vector3(),
+    })
+    this.deckSpray.name = 'rain-deck-spray'
+    this.deck = new Set(deps.world.deck.meshes)
     this.solid = new ImpactSurfaces(deps.world.root, deps.world.surfaces, 1.7)
     this.vehicle = new ImpactSurfaces(deps.vehicle.root, deps.vehicle.surfaces, 0.32)
   }
@@ -115,12 +128,16 @@ export class Splashes {
           const hit = impactForCell(x, z, period, slot - period * impactsPerCellPeriod)
           if (hit.timeSeconds < lowTime || hit.timeSeconds > highTime) continue
           const strikeVehicle = this.vehicle.at(hit.x, hit.z, vehicle)
-          if (!strikeVehicle && (hit.timeSeconds < recentTime || hit.diameter < THREE.MathUtils.lerp(0.0022, 0.00252, THREE.MathUtils.smoothstep(d, 9, airSplashRange)))) continue
+          const minimum = THREE.MathUtils.lerp(0.00178, 0.00252, THREE.MathUtils.smoothstep(d, 6.4, airSplashRange))
+          if (!strikeVehicle && (hit.timeSeconds < recentTime || hit.diameter < minimum)) continue
           const strikeWorld = this.solid.at(hit.x, hit.z, surface)
           if (!strikeWorld && !strikeVehicle) continue
           const onVehicle = strikeVehicle && (!strikeWorld || vehicle.y > surface.y)
           const selected = onVehicle ? vehicle : surface
           const distance = Math.hypot(hit.x - cx, selected.y - camera.position.y, hit.z - cz)
+          const deck = !onVehicle && this.deck.has(selected.face.mesh) ? 1 - THREE.MathUtils.smoothstep(distance, 5.2, 13.4) : 0
+          const oldMinimum = THREE.MathUtils.lerp(0.0022, 0.00252, THREE.MathUtils.smoothstep(d, 9, airSplashRange))
+          if (!onVehicle && hit.diameter < THREE.MathUtils.lerp(oldMinimum, minimum, deck)) continue
           const strength = onVehicle ? 1 - THREE.MathUtils.smoothstep(distance, 8.5, 16) : 1 - THREE.MathUtils.smoothstep(distance, 8, airSplashRange)
           if (strength < 0.005) continue
           const base = new THREE.Vector3(hit.x, selected.y, hit.z)
@@ -131,7 +148,7 @@ export class Splashes {
           if (onVehicle) base.applyMatrix4(selected.face.inverse)
           const satellite = onVehicle ? 1 : 1 - THREE.MathUtils.smoothstep(distance, 7, satelliteRange)
           const priority = strength + (onVehicle ? 2 : inView ? 1 : 0)
-          this.hits.push({ ...hit, base, surface: selected.face, power: strength, priority, vehicle: onVehicle, satellite })
+          this.hits.push({ ...hit, base, surface: selected.face, power: strength, priority, vehicle: onVehicle, deck, satellite })
         }
       }
     }
@@ -140,22 +157,25 @@ export class Splashes {
     this.updateSpray()
   }
 
-  private write(width: number, gain: number): void {
-    if (this.ribbons >= bufferCapacity || gain < 0.002) return
-    const n = this.ribbons++ * 4
+  private write(width: number, gain: number, deck = false): void {
+    if ((deck ? this.deckRibbons >= deckSprayCapacity : this.ribbons >= bufferCapacity) || gain < 0.002) return
+    const n = (deck ? this.deckRibbons++ : this.ribbons++) * 4
+    const drops = deck ? this.deckDrops : this.drops
+    const motion = deck ? this.deckMotion : this.velocities
     this.delta.subVectors(this.end, this.start)
-    this.drops[n] = (this.start.x + this.end.x) * 0.5
-    this.drops[n + 1] = (this.start.y + this.end.y) * 0.5
-    this.drops[n + 2] = (this.start.z + this.end.z) * 0.5
-    this.drops[n + 3] = width
-    this.velocities[n] = this.delta.x
-    this.velocities[n + 1] = this.delta.y
-    this.velocities[n + 2] = this.delta.z
-    this.velocities[n + 3] = gain
+    drops[n] = (this.start.x + this.end.x) * 0.5
+    drops[n + 1] = (this.start.y + this.end.y) * 0.5
+    drops[n + 2] = (this.start.z + this.end.z) * 0.5
+    drops[n + 3] = width
+    motion[n] = this.delta.x
+    motion[n + 1] = this.delta.y
+    motion[n + 2] = this.delta.z
+    motion[n + 3] = gain
   }
 
   private update(): void {
     this.ribbons = 0
+    this.deckRibbons = 0
     for (const mesh of this.vehicle.meshes) mesh.updateWorldMatrix(true, false)
     for (const hit of this.hits) {
       const age = this.frameTime - hit.timeSeconds
@@ -174,21 +194,29 @@ export class Splashes {
       const crown = sprayExposure(age, shutterSeconds, crownDuration)
       if (crown.weight > 0.002) {
         const u = crown.age / crownDuration
-        const edge = 0.0048 + (0.004 + size * 0.007) * u * sizeVariation
-        const height = (0.007 + 0.014 * size) * Math.sin(u * Math.PI * 0.82) * sizeVariation
-        const deckContrast = hit.vehicle ? 1 : 1.25 + size * 0.45
+        const scale = 1 + hit.deck * (0.18 + 0.51 * hash01(hit.seed, 16))
+        const edge = (0.0048 + (0.004 + size * 0.007) * u * sizeVariation) * scale
+        const height = (0.007 + 0.014 * size) * Math.sin(u * Math.PI * 0.82) * sizeVariation * scale
+        const deckContrast = hit.vehicle ? 1 : 1.25 + size * 0.45 + hit.deck * (0.37 + size * 0.65)
         const gain = hit.power * (0.48 + 0.52 * size) * crown.weight * deckContrast
-        const cusps = hit.power < 0.65 ? 3 : size > 0.75 ? 7 : 5
+        const cusps = hit.deck > 0.35 ? 4 + Math.floor(size * 3.2 + hash01(hit.seed, 17)) : hit.power < 0.65 ? 3 : size > 0.75 ? 7 : 5
         for (let i = 0; i < cusps; i++) {
-          const angle = spin + (i / cusps) * tau
+          const angle = spin + (i / cusps) * tau + hit.deck * 0.24 * (hash01(hit.seed, 18, i) - 0.5)
           const irregularity = 0.7 + 0.42 * hash01(hit.seed, 6, i)
           this.direction.copy(this.side).multiplyScalar(Math.cos(angle)).addScaledVector(this.across, Math.sin(angle))
           this.start.copy(this.origin).addScaledVector(this.direction, edge * 0.55).addScaledVector(this.yUp, height * 0.1)
           this.end.copy(this.origin).addScaledVector(this.direction, edge * irregularity).addScaledVector(this.yUp, height * irregularity)
-          this.write(0.0007 + size * 0.00045, gain * irregularity)
+          this.write(0.0007 + size * (0.00045 + 0.00036 * hit.deck), gain * irregularity)
+          if (hit.deck > 0.35 && size > 0.38 && i % 2 === 0) {
+            const rimAngle = angle + tau / (cusps * 2.1)
+            this.start.copy(this.end).addScaledVector(this.yUp, -height * 0.31)
+            this.end.copy(this.origin).addScaledVector(this.side, edge * 0.84 * Math.cos(rimAngle))
+              .addScaledVector(this.across, edge * 0.84 * Math.sin(rimAngle)).addScaledVector(this.yUp, height * 0.44)
+            this.write(0.00065 + size * 0.00042, gain * hit.deck * 0.52)
+          }
         }
       }
-      const satellites = hit.satellite < 0.005 ? 0 : size > 0.79 ? 3 : 2
+      const satellites = hit.satellite < 0.005 ? 0 : (size > 0.79 ? 3 : 2) + Number(hit.deck > 0.42 && size > 0.52)
       for (let i = 0; i < satellites; i++) {
         const delay = 0.006 + 0.008 * hash01(hit.seed, 7, i)
         const flight = age - delay
@@ -207,10 +235,29 @@ export class Splashes {
         this.end.addScaledVector(this.yUp, (launch - 0.5 * gravity * close) * close)
         const fade = (1 - THREE.MathUtils.smoothstep(mid, 0.031, flightDuration - 0.009))
           * THREE.MathUtils.smoothstep(y, 0, 0.007) * ((close - open) / shutterSeconds)
-        this.write(0.0007 + size * 0.00064, hit.power * hit.satellite * size * fade * 0.83)
+        this.write(0.0007 + size * (0.00064 + 0.00023 * hit.deck), hit.power * hit.satellite * size * fade * (0.83 + 0.53 * hit.deck))
       }
+      if (hit.deck > 0.005) this.deckGlint(hit, age, size, spin)
     }
     upload(this.geometry, this.ribbons)
+    upload(this.deckGeometry, this.deckRibbons)
+  }
+
+  private deckGlint(hit: Splash, age: number, size: number, spin: number): void {
+    const rise = 0.36 + size * 0.31 + hash01(hit.seed, 19) * 0.13
+    const delay = 0.004 + hash01(hit.seed, 20) * 0.016
+    const life = Math.min(2 * rise / gravity, 0.079 + hash01(hit.seed, 21) * 0.03)
+    const exposure = sprayExposure(age - delay, shutterSeconds, life)
+    if (exposure.weight < 0.009) return
+    const speed = 0.19 + 0.46 * hash01(hit.seed, 22)
+    const angle = spin + 1.1 + hash01(hit.seed, 23) * 2.4
+    const open = Math.max(0, age - delay - shutterSeconds / 2)
+    const close = Math.min(life, age - delay + shutterSeconds / 2)
+    this.direction.copy(this.side).multiplyScalar(Math.cos(angle)).addScaledVector(this.across, Math.sin(angle))
+    this.start.copy(this.origin).addScaledVector(this.direction, speed * open).addScaledVector(this.yUp, (rise - 0.5 * gravity * open) * open)
+    this.end.copy(this.origin).addScaledVector(this.direction, speed * close).addScaledVector(this.yUp, (rise - 0.5 * gravity * close) * close)
+    const gain = hit.power * hit.deck * exposure.weight * (0.23 + size * 1.08)
+    this.write(0.00059 + size * 0.00082, gain, true)
   }
 
   private updateSpray(): void {
