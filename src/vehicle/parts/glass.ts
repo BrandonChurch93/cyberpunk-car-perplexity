@@ -110,28 +110,6 @@ function smooth(a: number, b: number, x: number): number {
   return t * t * (3 - 2 * t)
 }
 
-/** The (u, v) near `uv` whose point on `S` is nearest `q`, by a few Gauss-Newton steps. */
-function project(S: Surface, uv: [number, number], q: V3): [number, number] {
-  let [u, v] = uv
-  const h = 1e-4
-  for (let k = 0; k < 4; k++) {
-    const p = S(u, v)
-    const su = scale(sub(S(Math.min(1, u + h), v), S(Math.max(0, u - h), v)), 1 / (Math.min(1, u + h) - Math.max(0, u - h)))
-    const sv = scale(sub(S(u, Math.min(1, v + h)), S(u, Math.max(0, v - h))), 1 / (Math.min(1, v + h) - Math.max(0, v - h)))
-    const r = sub(q, p)
-    const a = dot(su, su)
-    const b = dot(su, sv)
-    const c = dot(sv, sv)
-    const det = a * c - b * b
-    if (!(Math.abs(det) > 1e-20)) break
-    const x = dot(su, r)
-    const y = dot(sv, r)
-    u = Math.min(1, Math.max(0, u + (c * x - b * y) / det))
-    v = Math.min(1, Math.max(0, v + (a * y - b * x) / det))
-  }
-  return [u, v]
-}
-
 /** The frit behind the outer face, `depth` under the skin: a solid band from the pane edge in, trimmed by the distance to
  * the glass line leaving out its run along the centerline, then rows of dots that get smaller inboard. */
 function frit(S: Surface, c: SurfaceCurve, spec: GlazingSpec, depth: number, tess: TessOptions): TessResult[] {
@@ -144,19 +122,28 @@ function frit(S: Surface, c: SurfaceCurve, spec: GlazingSpec, depth: number, tes
     const j = (i + 1) % n
     if (!(center(i) && center(j))) segs.push([C[i], C[j]])
   }
-  const lo = C.reduce<V3>((a, p) => [Math.min(a[0], p[0]), Math.min(a[1], p[1]), Math.min(a[2], p[2])], [Infinity, Infinity, Infinity])
-  const hi = C.reduce<V3>((a, p) => [Math.max(a[0], p[0]), Math.max(a[1], p[1]), Math.max(a[2], p[2])], [-Infinity, -Infinity, -Infinity])
-  const reach = 0.2
+  const reach = 0.11
+  const key = (x: number, y: number, z: number): string => `${Math.floor(x / reach)},${Math.floor(y / reach)},${Math.floor(z / reach)}`
+  const cells = new Map<string, Array<[V3, V3]>>()
+  for (const sg of segs) {
+    const m: V3 = scale(add(sg[0], sg[1]), 0.5)
+    const k = key(m[0], m[1], m[2])
+    let l = cells.get(k)
+    if (!l) cells.set(k, (l = []))
+    l.push(sg)
+  }
   const edge = (q: V3): number => {
-    if (q[0] < lo[0] - reach || q[0] > hi[0] + reach || q[1] < lo[1] - reach || q[1] > hi[1] + reach || q[2] < lo[2] - reach || q[2] > hi[2] + reach) return reach
     let best = reach
-    for (const [a, b] of segs) {
-      const ab = sub(b, a)
-      const l2 = dot(ab, ab)
-      const t = l2 > 0 ? Math.min(1, Math.max(0, dot(sub(q, a), ab) / l2)) : 0
-      const e = sub(q, add(a, scale(ab, t)))
-      const d = Math.hypot(e[0], e[1], e[2])
-      if (d < best) best = d
+    const [cx, cy, cz] = [Math.floor(q[0] / reach), Math.floor(q[1] / reach), Math.floor(q[2] / reach)]
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) {
+      for (const [a, b] of cells.get(`${cx + i},${cy + j},${cz + k}`) ?? []) {
+        const ab = sub(b, a)
+        const l2 = dot(ab, ab)
+        const t = l2 > 0 ? Math.min(1, Math.max(0, dot(sub(q, a), ab) / l2)) : 0
+        const e = sub(q, add(a, scale(ab, t)))
+        const d = Math.hypot(e[0], e[1], e[2])
+        if (d < best) best = d
+      }
     }
     return best
   }
@@ -165,7 +152,16 @@ function frit(S: Surface, c: SurfaceCurve, spec: GlazingSpec, depth: number, tes
     const d = edge(p)
     return Math.max(spec.inset - 0.001 - d, d - spec.inset - fritWidth(p))
   }
-  const solid = tessellate(offsetSurface(S, -depth), { ...tess, trim: band })
+  const span = (k: number[], lo: number, hi: number): number[] => {
+    let i0 = 0
+    while (i0 + 1 < k.length && k[i0 + 1] <= lo) i0++
+    let i1 = k.length - 1
+    while (i1 - 1 > i0 && k[i1 - 1] >= hi) i1--
+    return k.slice(i0, i1 + 1)
+  }
+  const us = UV.map((q) => q[0])
+  const vs = UV.map((q) => q[1])
+  const solid = tessellate(offsetSurface(S, -depth), { ...tess, us: span(tess.us, Math.min(...us), Math.max(...us)), vs: span(tess.vs, Math.min(...vs), Math.max(...vs)), trim: band })
   const out: TessResult = { positions: [], normals: [], uvs: [], indices: [], boundaries: [] }
   const radii = [0.0021, 0.0015, 0.0009]
   const sides = 8
@@ -177,12 +173,29 @@ function frit(S: Surface, c: SurfaceCurve, spec: GlazingSpec, depth: number, tes
     const nn0 = surfaceNormal(S, UV[i][0], UV[i][1])
     const s0 = norm(cross(nn0, t))
     const w = spec.inset + fritWidth(C[i])
+    const [u0, v0] = UV[i]
+    const h = 1e-4
+    const su = scale(sub(S(Math.min(1, u0 + h), v0), C[i]), 1 / h)
+    const sv = scale(sub(S(u0, Math.min(1, v0 + h)), C[i]), 1 / h)
+    const ga = dot(su, su)
+    const gb = dot(su, sv)
+    const gc = dot(sv, sv)
+    const det = ga * gc - gb * gb
+    if (!(Math.abs(det) > 1e-20)) continue
+    const toUv = (d: V3): [number, number] => {
+      const x = dot(su, d)
+      const y = dot(sv, d)
+      return [(gc * x - gb * y) / det, (ga * y - gb * x) / det]
+    }
+    let sign = 0
     for (const [k, r] of radii.entries()) {
       const want = w + (k + 0.75) * pitch
-      for (const sg of [1, -1]) {
-        const uv = project(S, UV[i], add(add(C[i], scale(s0, sg * want)), scale(t, k % 2 ? 0.5 * pitch : 0)))
+      for (const sg of sign ? [sign] : [1, -1]) {
+        const [du, dv] = toUv(add(scale(s0, sg * want), scale(t, k % 2 ? 0.5 * pitch : 0)))
+        const uv: [number, number] = [Math.min(1, Math.max(0, u0 + du)), Math.min(1, Math.max(0, v0 + dv))]
         const on = S(uv[0], uv[1])
-        if (!c.inside(uv[0], uv[1]) || Math.abs(edge(on) - want) > 0.003) continue
+        if (!c.inside(uv[0], uv[1]) || Math.abs(edge(on) - want) > 0.004) continue
+        sign = sg
         const nn = surfaceNormal(S, uv[0], uv[1])
         const o = add(on, scale(nn, -depth))
         const e1 = norm(sub(t, scale(nn, dot(t, nn))))
