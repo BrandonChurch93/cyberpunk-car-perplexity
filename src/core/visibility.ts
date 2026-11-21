@@ -1,5 +1,4 @@
 import * as THREE from 'three'
-import { transmissionSamples } from './renderer'
 
 const prepassSamples = 4
 const idBits = 6
@@ -132,13 +131,15 @@ export class Visibility {
     try {
       const main = this.winners(scene, camera, target.samples === 0 ? this.single : this.multi, width, height, target.samples)
       for (const mesh of plan.candidates) if (!main.has(mesh)) this.skipMain.add(mesh)
-      const scale = renderer.transmissionResolutionScale
-      const w = Math.floor(width * scale)
-      const h = Math.floor(height * scale)
-      if (plan.prepass && target.samples === transmissionSamples && w === width && h === height) this.skipPrepass = this.skipMain
-      else if (plan.prepass && transmissionSamples === prepassSamples && renderer.capabilities.samples <= prepassSamples && this.coverageNested()) {
-        const prepass = this.winners(scene, camera, this.multi, w, h, prepassSamples)
-        for (const mesh of plan.candidates) if (!prepass.has(mesh)) this.skipPrepass.add(mesh)
+      if (plan.prepass && renderer.capabilities.samples <= prepassSamples && this.coverageNested()) {
+        const scale = renderer.transmissionResolutionScale
+        const w = Math.floor(width * scale)
+        const h = Math.floor(height * scale)
+        if (target.samples === prepassSamples && w === width && h === height) this.skipPrepass = this.skipMain
+        else {
+          const prepass = this.winners(scene, camera, this.multi, w, h, prepassSamples)
+          for (const mesh of plan.candidates) if (!prepass.has(mesh)) this.skipPrepass.add(mesh)
+        }
       }
     } finally {
       restore()
@@ -181,11 +182,7 @@ export class Visibility {
       const d = o as Drawable & { isLine?: boolean; isPoints?: boolean; isSprite?: boolean }
       if (!(d as THREE.Mesh).isMesh && !d.isLine && !d.isPoints && !d.isSprite) return
       if (chosen.has(d)) return
-      for (const m of Array.isArray(d.material) ? d.material : [d.material]) {
-        if (!m.visible || !transmissive(m)) continue
-        prepass = true
-        if (transmissionSamples === 0 && m.side !== THREE.FrontSide) throw new Error(`${d.name || d.type} draws transmissive back faces, which read the single sampled transmission target they write.`)
-      }
+      for (const m of Array.isArray(d.material) ? d.material : [d.material]) if (m.visible && transmissive(m)) prepass = true
       if (!reason && unsafe(d)) reason = `${d.name || d.type}`
     })
     return { candidates, omitted, prepass, unsafe: reason }

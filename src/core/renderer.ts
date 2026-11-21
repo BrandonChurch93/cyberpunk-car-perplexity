@@ -25,28 +25,7 @@ export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
   renderer.toneMapping = THREE.NoToneMapping
   renderer.autoClear = false
   renderer.info.autoReset = false
-  singleSampleTransmission(renderer)
   return renderer
-}
-
-export const transmissionSamples: number = 0
-
-/**
- * Three makes its transmission target multisampled so that a back face pass cannot read the texture it writes. No
- * transmissive material here draws back faces, and the film accumulates jittered samples, so the target is made
- * single sampled before its first use.
- */
-export function singleSampleTransmission(renderer: THREE.WebGLRenderer): void {
-  const seen = new WeakSet<object>()
-  const set = renderer.setRenderTarget.bind(renderer)
-  renderer.setRenderTarget = (target, face, level) => {
-    if (target && !seen.has(target)) {
-      seen.add(target)
-      const t = target as unknown as THREE.WebGLRenderTarget
-      if (t.samples === 4 && !t.resolveDepthBuffer && t.texture.generateMipmaps && t.texture.minFilter === THREE.LinearMipmapLinearFilter) t.samples = transmissionSamples
-    }
-    set(target, face, level)
-  }
 }
 
 export function sizeRenderer(renderer: THREE.WebGLRenderer, format: FormatSpec): void {
