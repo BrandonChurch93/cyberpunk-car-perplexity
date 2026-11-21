@@ -141,8 +141,8 @@ export const keyLines = {
     [0.0, 0.59, 1.13],
     [-0.25, 0.57, 1.13],
     [-0.5, 0.54, 1.12],
-    [-0.75, 0.5, 1.11],
-    [-1.0, 0.49, 1.075],
+    [-0.75, 0.515, 1.103],
+    [-1.0, 0.495, 1.078],
     [-1.5, 0.47, 1.012],
     [-2.0, 0.44, 0.95],
     [-2.3, 0.42, 0.912],
@@ -167,8 +167,8 @@ export const keyLines = {
     [0.0, 0.339, 1.16],
     [-0.25, 0.339, 1.158],
     [-0.5, 0.341, 1.146],
-    [-0.75, 0.34, 1.123],
-    [-1.0, 0.32, 1.072],
+    [-0.75, 0.336, 1.118],
+    [-1.0, 0.325, 1.078],
     [-1.5, 0.3, 1.0],
     [-2.1, 0.3, 0.935],
     [-2.44, 0.3, 0.895],
@@ -408,8 +408,10 @@ const old = {
   sill: new Track3(keyLines.sill),
   crease: new Track3(keyLines.crease),
   shoulder: new Track3(keyLines.shoulder),
-  rail: new Track3(keyLines.rail, true),
-  inner: new Track3(keyLines.inner, true),
+  // Over the roof the rail and the inner line are faired: a monotone fit flattens every span between its knots and bends
+  // at the knot, which reads as straight segments with corners along the roofline. The nose and tail spans are kept.
+  rail: new Track3(keyLines.rail, true, [uz(keyLines.rail, 0.45), uz(keyLines.rail, -1.5)]),
+  inner: new Track3(keyLines.inner, true, [uz(keyLines.inner, 0.45), uz(keyLines.inner, -1.0)]),
   center: new Track3(keyLines.center),
 }
 
