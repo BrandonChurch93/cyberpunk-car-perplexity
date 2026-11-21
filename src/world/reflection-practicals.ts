@@ -66,6 +66,50 @@ export function addReflectionFrontages(root: THREE.Object3D, labels: Label) {
   const masonry = new THREE.MeshStandardMaterial({ color: new THREE.Color(.091,.088,.086), roughness: .91 })
   const spandrel = new THREE.MeshStandardMaterial({ color: new THREE.Color(.044,.060,.068), roughness: .49, metalness: .23 })
   const { block, cabinet, opal, screen } = reflectionPracticalBuilder(labels,metal,zinc)
+  const deckCore = root.getObjectByName('stair and lift core')!
+  const stair = group(deckCore,'southeast stair and lift reflection frontage')
+  const wetStone = new THREE.MeshStandardMaterial({ color: new THREE.Color(.118,.074,.044),
+    emissive: new THREE.Color(.12,.044,.018), emissiveIntensity: .33, roughness: .28, metalness: .23 })
+  const landingCeiling = new THREE.MeshBasicMaterial({ color: new THREE.Color(6.35,4.59,2.76), toneMapped: false })
+  const stairGlass = new THREE.MeshBasicMaterial({ color: new THREE.Color(.068,.089,.096),
+    transparent: true, opacity: .23, depthWrite: false })
+  block(stair,'wet stair frontage plinth',[.82,.21,2.43],[5.16,.42,.28],wetStone)
+  block(stair,'amber sign folded wall rail',[.83,1.14,2.44],[4.64,.55,.23],zinc)
+  cabinet(stair,'amber stair entrance sign',[.83,1.14,2.68],[4.31,.44],[7.9,2.80,.41],'STAIRS',false,2.3,.38)
+  block(stair,'violet lens recessed wall rail',[.75,1.77,2.41],[5.11,.43,.20],spandrel)
+  for (const [x,w] of [[-.96,1.48],[.69,1.46],[2.35,1.51]]) {
+    opal(stair,'violet stair dado lens',[x,1.77,2.56],[w,.29],[3.38,.30,8.90],3)
+  }
+  block(stair,'violet stair entrance jamb rail',[-3.48,1.38,2.42],[.42,2.23,.22],spandrel)
+  opal(stair,'violet stair entrance jamb lens',[-3.48,1.38,2.59],[.29,2.03],[3.42,.27,8.50],5)
+  block(stair,'amber stair entrance jamb rail',[-1.93,1.21,2.42],[.41,1.82,.22],zinc)
+  opal(stair,'amber stair entrance jamb lens',[-1.93,1.21,2.59],[.26,1.58],[6.74,2.69,.71],5)
+  opal(stair,'low warm stair threshold lens',[.84,.29,2.60],[3.62,.14],[6.3,2.85,.72],5)
+  block(stair,'cyan service fascia wall rail',[.84,2.50,2.42],[4.33,.25,.23],zinc)
+  opal(stair,'cyan service fascia strip',[.84,2.50,2.58],[4.14,.17],[.10,5.40,8.85],5)
+  const tower = group(stair,'glazed upper stair landings',[0,3.54,0])
+  block(tower,'stair continuation back wall',[0,3.40,-2.05],[7.34,6.80,.24],masonry)
+  for (const x of [-3.53,3.53]) block(tower,'stair continuation concrete return',[x,3.40,.04],[.28,6.80,4.26],masonry)
+  for (const y of [.13,3.43,6.73]) block(tower,'stair landing bearing slab',[0,y,.05],[7.48,.26,4.60],wetStone)
+  block(tower,'lift drum with dark landing doors',[2.58,3.40,.42],[1.58,6.56,2.65],spandrel)
+  for (const [floor,y] of [1.76,5.06].entries()) {
+    block(tower,'warm landing light return',[-.65,y,.20],[4.10,2.34,.17],wetStone)
+    for (const x of [-2.49,-.55,1.37]) {
+      block(tower,'ceiling light spill on plaster',[x,y+.82,1.28],[1.43,.62,.10],landingCeiling)
+      const ceiling = plate(tower,'occupied stair ceiling optic',landingCeiling,[x,y+1.17,1.36],1.24,.86)
+      ceiling.rotation.x = Math.PI*.5
+    }
+    const treadGroup = group(tower,'visible stair flight',[-.77,y-.95,1.47])
+    for (let i=0;i<9;i++) block(treadGroup,'stair tread',[(-4+i)*.33,.15*i,0],[.345,.084,1.08],zinc)
+    block(treadGroup,'diagonal landing handrail',[0,1.05,.56],[3.18,.063,.063],zinc).rotation.z = .42
+    for (const x of [-3.34,-1.86,-.37,1.18,2.57,3.33]) {
+      block(tower,'stair glazing aluminum mullion',[x,y,2.287],[.075,2.88,.17],metal)
+    }
+    plate(tower,'stair landing tinted glazing',stairGlass,[-.34,y,2.355],6.02,2.80)
+    opal(tower,'warm glazing transom band',[-.70,y+.76,2.368],[4.73,.20],floor===0 ? [6.7,3.42,1.08] : [6.6,4.65,2.75],5)
+  }
+  block(tower,'tall cyan lens support jamb',[3.28,3.56,2.36],[.38,5.90,.28],zinc)
+  opal(tower,'cyan stair return tracer',[3.28,3.56,2.55],[.21,5.62],[.24,8.3,12.0],6)
   const frontage = group(root,'offscreen reflection frontages')
   const rear = group(frontage,'southeast parapet wayfinding')
   rear.rotation.y = heroCityYaw
@@ -124,5 +168,5 @@ export function addReflectionFrontages(root: THREE.Object3D, labels: Label) {
     block(north,'market blade receiver plate',[x,y,.15],[4.94,1.78,.36],zinc)
     cabinet(north,'market blade wayfinding',[x,y,.67],[4.66,1.53],[7.1,2.95,.63],['ARCADE','OPEN','24H'][i])
   }
-  return { update, signs: ['OPEN','24H','PARKING','ARCADE','NOODLES'] }
+  return { update, signs: ['OPEN','24H','PARKING','ARCADE','NOODLES','STAIRS'] }
 }

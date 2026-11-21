@@ -355,7 +355,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       fitTarget()
       patchAll()
       if (diagnostic === 'normals' || diagnostic === 'zebra') glints.clear()
-      else glints.update()
+      else glints.update(camera.position)
       if (diagnostic === 'normals') return
       if (diagnostic === 'zebra') {
         box.reflectBoxOn.value = 0
