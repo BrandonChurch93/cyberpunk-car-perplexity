@@ -907,9 +907,11 @@ describe('full roof world', () => {
 
   it('paints distinct hot, violet and indigo regions on the media', () => {
     const { data, width, height } = muralPainting().image
+    if (!(data instanceof Uint16Array)) throw new Error('Missing half float mural raster')
     const sample = (u: number, v: number) => {
       const i = (Math.floor(v*height)*width+Math.floor(u*width))*4
-      return new THREE.Color(...Array.from(data.subarray(i,i+3),THREE.DataUtils.fromHalfFloat) as [number,number,number])
+      const f = THREE.DataUtils.fromHalfFloat
+      return new THREE.Color(f(data[i]),f(data[i+1]),f(data[i+2]))
     }
     const hot = sample(.23,.55)
     const violet = sample(.71,.61)
