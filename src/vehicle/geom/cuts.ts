@@ -167,6 +167,7 @@ export class SurfaceCurve {
   private readonly boxes: Array<{ lo: V3; hi: V3; i0: number; i1: number }> = []
   private readonly uvBox: [number, number, number, number]
   private readonly skip: boolean[]
+  private readonly center: boolean
 
   constructor(S: Surface, uv: V2[], closed: boolean, skipCenter = false) {
     this.uv = uv
@@ -174,6 +175,7 @@ export class SurfaceCurve {
     this.p = uv.map(([u, v]) => S(u, v))
     const n = this.segCount()
     this.skip = Array.from({ length: n }, (_, i) => skipCenter && Math.abs(this.p[i][0]) < 2e-3 && Math.abs(this.p[(i + 1) % this.p.length][0]) < 2e-3)
+    this.center = this.skip.some(Boolean)
     for (let i0 = 0; i0 < n; i0 += 16) {
       const i1 = Math.min(n, i0 + 16)
       const lo: V3 = [Infinity, Infinity, Infinity]
@@ -224,6 +226,9 @@ export class SurfaceCurve {
   /** Whether (u, v) lies inside the closed curve. */
   inside(u: number, v: number): boolean {
     const [a, b, c, d] = this.uvBox
+    // A curve closed along the centerline has its center run on the domain edge itself; a point on that edge belongs
+    // to the region next to it, so it is tested a hair inboard instead of landing on the polygon edge.
+    if (this.center && v >= d) v = d - 1e-7
     if (u < a || u > b || v < c || v > d) return false
     let ins = false
     const n = this.uv.length
