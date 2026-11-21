@@ -78,10 +78,10 @@ export function deckReflectionTrim(frame: THREE.Material, zinc: THREE.Material) 
   const eastOffices = (parent: THREE.Group, x: number, z: number) => {
     const bank = group(parent,'east office curtain wall bays')
     const slots = eastOfficeFloors.flatMap(([offset,y,tint,gains],row) => gains.map((gain,i): Window => {
-      const height = [1.43,1.19,.82,1.57][(i+2*row)%4]!
+      const height = [1.24,1.08,.82,1.31][(i+2*row)%4]!
       return {
-        at: [x+offset+(i-(gains.length-1)*.5)*1.64,y+(height-1.57)*.5,z+.248],
-        size: [1.38,height], tint, gain,
+        at: [x+offset+(i-(gains.length-1)*.5)*1.64,y+(height-1.31)*.5,z+.248],
+        size: [1.28,height], tint, gain,
       }
     }))
     batch(bank,'warm office window panes',slots,false)

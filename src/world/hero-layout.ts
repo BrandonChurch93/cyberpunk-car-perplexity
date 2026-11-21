@@ -209,7 +209,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     const distance = heroFrontageDistance(wx,wz+d*.5)
     const layer: FacadeLayer = distance < 620 ? 'near' : distance < 840 ? 'middle' : 'far'
     const facade = facadeOf(name,index)
-    const shell = towerSurface(name, level, facade, screenReflection, spillAt(name),layer)
+    const shell = towerSurface(name, level, facade, screenReflection, spillAt(name),layer,distance)
     groundedBox(tower,name,x,top,z,width,depth,shell,k)
     deckTrim.tower(tower,name,wx,wz+d*.5,w)
     box(tower,'folded coping band',[wx,wy-.52,wz],[w+.28,1.5,d+.28],frame)
@@ -444,7 +444,9 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       }
     }
   }
-  const upper = towerSurface('hero tower setback roof bay', .094, 'curtain', screenReflection, spillAt('setback'))
+  const [upperX,,upperZ] = heroPoint([2.60,14.94,-32.38],scale.screen)
+  const upper = towerSurface('hero tower setback roof bay', .094, 'curtain', screenReflection, spillAt('setback'),
+    'middle',heroFrontageDistance(upperX,upperZ))
   scaledBox(city, 'screen tower setback service bay', [2.60,14.94,-32.38], [4.63,4.71,4.42], upper,scale.screen)
   scaledBox(city, 'service bay folded roof edge', [2.60,17.30,-32.38], [4.70,.11,4.49], frame,scale.screen)
   const railTop = 12.14
