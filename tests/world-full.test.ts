@@ -652,6 +652,24 @@ describe('full roof world', () => {
     expect(world.lights).toHaveLength(8)
   })
 
+  it('keeps distance haze on the southern tower walls rather than the deck or north district', () => {
+    const response = (name: string) => {
+      const tower = world.root.getObjectByName(name) as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
+      return tower.material.userData.skylineAir as [number,number,number]
+    }
+    const near = response('hero hotel tower')
+    const far = response('hero far center distance')
+    expect(near[0]).toBe(1)
+    expect(far[0]).toBe(1)
+    expect(far[1]).toBeGreaterThan(near[1])
+    expect(near[2]).toBeLessThan(.2)
+    const north = world.root.getObjectByName('north tower ranks')!
+    const shells = north.children.filter(shell=>shell.name.startsWith('north tower shells'))
+    expect(shells.length).toBeGreaterThan(0)
+    for (const shell of shells) expect(response(shell.name)).toEqual([0,0,0])
+    expect(world.deck.material.userData.skylineAir).toBeUndefined()
+  })
+
   it('exposes metric relief for the front puddle and an unchanged reflective plane', () => {
     const { deck } = world
     expect(deck.heightMap).toBeInstanceOf(THREE.DataTexture)

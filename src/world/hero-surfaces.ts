@@ -92,6 +92,9 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   const windowTail = layer === 'far' ? 0 : west ? 98+8*westOffices
     : /amber tower|right edge|east garage/.test(id) ? 29
     : /screen tower|bar tower|center exchange|center clock|center fluted/.test(id) ? 32 : 12
+  const skylineAir = north ? new THREE.Vector3() : new THREE.Vector3(
+    1, centerBank ? .84 : west ? .21 : .40, west ? .13 : .19,
+  )
   const spill = (i: number) => spills[i] ?? { point: new THREE.Vector3(), size: new THREE.Vector2(1,1), color: new THREE.Color(0,0,0) }
   const prefix = 'varying vec2 wallUv, wallUnit, wallFacing; varying vec3 wallPoint, wallNormal, wallTangent; varying float wallSide;'
   const mat = new THREE.MeshStandardMaterial({
@@ -111,6 +114,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   mat.userData.tenantGate = tenantGate.toArray()
   mat.userData.tenantFill = tenantFill.toArray()
   mat.userData.windowContrast = windowContrast
+  mat.userData.skylineAir = skylineAir.toArray()
   patchMaterial(mat, {
     id: 'hero tower cladding and window rooms',
     uniforms: {
@@ -121,6 +125,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
       facadeTint: { value: facadeTint }, reflectedVeil: { value: reflectedVeil }, windowTail: { value: windowTail }, claddingShade: { value: claddingShade },
       shadowWash: { value: shadowWash }, garageReturn: { value: garageReturn }, roomPhotometry: { value: roomPhotometry },
       windowContrast: { value: windowContrast }, amberRisers: { value: Number(amberRisers) }, westGlaze: { value: Number(west && layer === 'near') },
+      skylineAir: { value: skylineAir },
       mechanicalPitch: { value: mechanicalPitch }, distanceLayer: { value: layer === 'near' ? 0 : layer === 'middle' ? 1 : 2 },
       stripFloors: { value: stripFloors ? 1 : 0 }, tenantGate: { value: tenantGate }, tenantFill: { value: tenantFill },
       screenPoint: { value: screen.point }, screenNormal: { value: screen.normal }, screenSize: { value: screen.size },
@@ -147,6 +152,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         uniform vec3 crownMist;
         uniform float salt, facadeFamily, shellLuma, whiteBalance, mechanicalPitch, distanceLayer, stripFloors, windowTail, windowContrast, paneHalfWidth, claddingShade, amberRisers, westGlaze, garageReturn;
         uniform vec3 screenPoint,screenNormal,facadeTint,reflectedVeil,screenSpill,tenantGate,shadowWash,roomPhotometry;
+        uniform vec3 skylineAir;
         uniform vec3 spillPoint[2],spillTint[2];
         uniform vec2 screenSize,spillSize[2];
         uniform sampler2D screenInk;
@@ -307,7 +313,10 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         float receive=mix(1.0,max(wallFacing.x,wallFacing.y*smoothstep(.77,.99,wallUnit.x)),garageReturn);
         float spillCompression=mix(1.0,roomPhotometry.z,smoothstep(.105,.260,baseLuma));
         baseGlow=baseGlow*spillCompression+shadowWash*shadow*receive*(.75+.33*panelReflectance)*(1.0-.35*mechanical-.21*rib);
-        totalEmissiveRadiance+=wallSide*baseGlow;
+        float offsetDistance=length((wallPoint-cameraPosition).xz);
+        float nearTier=1.0-smoothstep(490.0,760.0,offsetDistance);
+        float claddingExposure=smoothstep(.028,.092,baseLuma)*(1.0-.79*lamp);
+        totalEmissiveRadiance+=wallSide*baseGlow*(1.0-skylineAir.x*skylineAir.z*nearTier*claddingExposure);
         totalEmissiveRadiance+=(sill+pilaster*.14+corner*.44)*skyGlass*(.53+.19*floorState)*(.52+.59*curtain+.35*banded);
         float lampRadiance=.46+1.64*exposure*exposure+mix(10.8,3.9,rank)*pow(exposure,10.0)+.39*windowTail*pow(exposure,17.0)+riserOpen*(.53+1.4*exposure);
         float roomCompression=mix(roomPhotometry.y,1.0,smoothstep(.86,.99,exposure));
@@ -348,6 +357,19 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
           float roofFade=crownMist.z*smoothstep(crownMist.x,crownMist.y,wallPoint.y+bankHeight);
           vec3 roofAir=mix(vec3(.084,.080,.118),vec3(.207,.102,.152),uplight);
           outgoingLight=mix(outgoingLight,roofAir,roofFade*(.76+.24*weather));
+        }
+        if (skylineAir.x>.0) {
+          vec3 ray=wallPoint-cameraPosition;
+          float lengthMeters=length(ray);
+          float mistPath=max(lengthMeters-681.0,0.0);
+          float strata=exp(-max(0.0,(wallPoint.y+cameraPosition.y)*.5-37.0)/144.0);
+          float t=exp(-min(.52,mistPath*.0010*strata));
+          vec3 heading=ray/max(1.0,lengthMeters);
+          float sector=atan(heading.x,-heading.z)-atan(screenPoint.x,-screenPoint.z)+.158;
+          float broad=exp(-sector*sector/.056);
+          float veil=mix(.24,.85,broad)*skylineAir.y;
+          vec3 filmAir=mix(vec3(.062,.078,.120),vec3(.179,.106,.156),veil);
+          outgoingLight=outgoingLight*t+filmAir*(1.0-t);
         }
       `)
     },
