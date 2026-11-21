@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { build } from 'vite'
 import { config, defaultPaint } from '../../src/config.ts'
-import { args, buildHash, ensureDir, repoRoot, workDir } from '../lib/env.ts'
+import { args, buildHash, ensureDir, repoRoot, workDir, writeJson } from '../lib/env.ts'
 import { RenderSession, runTool, specFromArgs, stillName } from '../lib/render.ts'
 
 void runTool(async () => {
@@ -12,8 +12,10 @@ void runTool(async () => {
   const diagnostics = (a.diags ?? 'beauty,clay').split(',')
   const studio = a.studio === 'true'
   const audit = a.audit === 'true'
-  const backfaces = JSON.stringify((a.backfaces ?? '').split(',').map((s) => s.trim()).filter(Boolean))
+  const backfaces = (a.backfaces ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+  const beautyGuard = a['beauty-guard'] === 'true'
   if (audit && !studio) throw new Error('--audit true requires --studio true')
+  if (beautyGuard && !audit) throw new Error('--beauty-guard true requires --audit true')
   const matched = a.match?.split(',').map(Number)
   if (matched && (!studio || matched.length !== 7 || matched.some((n) => !Number.isFinite(n)) || matched[6] <= 0 || matched[6] >= 180)) {
     throw new Error('Use --studio true --match with eye X,Y,Z, target X,Y,Z, vertical FOV.')
@@ -28,6 +30,11 @@ void runTool(async () => {
         name: 'vehicle-neutral-inspection',
         enforce: 'pre',
         transform(code, id) {
+          if (audit && id.endsWith('/src/post/resolve.ts')) {
+            const resolve = "this.treatment = view === 'beauty' ? 0 : view === 'normals' ? 2 : view === 'caps' ? 3 : 1"
+            if (!code.includes(resolve)) throw new Error('The post treatment changed. Update the audit inspection hook.')
+            return code.replace(resolve, "this.treatment = view === 'normals' ? 2 : view === 'caps' ? 3 : 1")
+          }
           if (!id.endsWith('/src/core/film-stage.ts')) return
           const key = 'this.scene.add(world.root, vehicle.root, rig.group)'
           const effects = "const weather = detail === 'full' ? await createWeather({ world, vehicle, lights: rig.uniforms }) : null"
@@ -61,7 +68,7 @@ void runTool(async () => {
             this.scene.environmentIntensity = 0.45;
             this.scene.userData.neutral = this.scene.environment;
             ${audit ? `
-              this.scene.userData.auditOverrides = auditOverrides(vehicle.root, new Set(${backfaces}));
+              this.scene.userData.auditOverrides = auditOverrides(vehicle.root, new Set(${JSON.stringify(backfaces)}), ${beautyGuard});
               if (${diagnostics.includes('zebra')}) this.scene.userData.stripes = stripeEnvironment(renderer);
             ` : `if (${diagnostics.includes('zebra')}) {
               const width = 2048, height = 1024;
@@ -113,14 +120,21 @@ void runTool(async () => {
   const session = await RenderSession.open(studio ? { build: false, root, budgetMinutes } : { budgetMinutes })
   if (audit) session.buildHash = buildHash()
   try {
+    let failed = false
     for (const diag of diagnostics) for (const frame of frames) {
       const spec = specFromArgs({ ...a, frame: String(frame), diag }, { paint: defaultPaint, format: config.formats.master })
       const file = join(dir, stillName(spec) + '.png')
       const { record, reused } = await session.renderTo(spec, file, { force: studio })
-      console.log(`${studio ? 'studio' : detail} ${diag} ${frame}: ${reused ? 'cached' : `${record.seconds} s`} ${record.check.ok ? 'PASS' : 'FAIL'}`)
-      if (!record.check.ok) return 2
+      if (audit) writeJson(file.replace(/\.png$/, '.json'), {
+        ...record, studioInspection: { beautyGuard: diag === 'beauty' && beautyGuard, diagnosticBackfaces: diag === 'clay' || diag === 'zebra' ? backfaces : [], filmOpticalPost: false },
+      })
+      console.log(`${studio ? 'studio' : detail} ${diag} ${frame}: ${reused ? 'cached' : `${record.seconds} s`} ${record.check.ok ? 'PASS' : `FAIL (${record.nonFinitePixels ?? 0} nonfinite HDR pixels)`}`)
+      if (!record.check.ok) {
+        failed = true
+        if (!audit) return 2
+      }
     }
-    return 0
+    return failed ? 2 : 0
   } finally {
     await session.close()
   }
