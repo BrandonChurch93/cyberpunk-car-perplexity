@@ -347,11 +347,10 @@ export function palette(spec: PaintSpec, full: boolean) {
   rearOptics.attenuationColor.setHex(0xad2828)
   rearOptics.attenuationDistance = .013
   const projector = new T.MeshPhysicalMaterial({
-    color: 0xe8ecee, roughness: .106, ior: 1.49, clearcoat: .11, clearcoatRoughness: .14,
-    transmission: full ? .97 : 0, thickness: full ? .0018 : 0,
-    attenuationColor: new T.Color(0xe2e8eb), attenuationDistance: .038,
-    opacity: full ? 1 : .11, transparent: !full, depthWrite: full,
+    color: full ? 0x000000 : 0xe8ecee, roughness: full ? .04 : .106, ior: 1.49,
+    opacity: full ? .04 : .11, transparent: true, depthWrite: false,
   })
+  if (full) Object.assign(projector, { blending: T.CustomBlending, blendSrc: T.OneFactor, blendDst: T.OneMinusSrcAlphaFactor, premultipliedAlpha: false })
   const brushed = new T.MeshPhysicalMaterial({
     color: full ? 0x899496 : 0x7f858c, metalness: full ? .79 : .45, roughness: .32, anisotropy: full ? .69 : .2,
   })
