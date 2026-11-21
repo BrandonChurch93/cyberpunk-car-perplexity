@@ -18,6 +18,7 @@ import { buildLiners } from './parts/liners'
 import { buildWheels } from './parts/wheel'
 import { glazing } from './parts/glass'
 import { cabin } from './parts/cabin'
+import { sideIntake, throat, upperIntake } from './parts/intake'
 import { makeMaterials, type Materials } from './materials'
 
 /**
@@ -117,6 +118,12 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   for (const [i, g] of [side, screen].entries()) {
     add(sprung, g.edges, m.glassEdge, `glass-edge-${i}`)
     add(sprung, g.seals, m.seal, `glass-seal-${i}`)
+  }
+  for (const [name, c, spec] of [['intake', body.cuts.curves.intake, sideIntake], ['upper-intake', body.cuts.curves.upper, upperIntake]] as const) {
+    const t = throat(body.surfaces.main, c, spec)
+    addPair(t.wall, m.housing, `${name}-throat`)
+    addPair(t.core, m.soot, `${name}-core`)
+    addPair(t.louvres, m.mesh, `${name}-louvres`)
   }
   const cab = cabin()
   add(sprung, cab.leather, m.leather, 'cabin-seats')

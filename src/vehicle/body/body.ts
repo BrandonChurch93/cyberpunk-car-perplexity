@@ -3,7 +3,8 @@ import type { Surface } from '../geom/cuts'
 import { toGeometry } from '../geom/mesh'
 import { tessellate, type TessOptions, type TessResult, type TrimFn } from '../geom/tessellate'
 import { cross, norm, sub, type V3 } from '../geom/vec'
-import { gapHalf, gapRoll, makeCuts, paintTrim, wheelOpenings, type BodyCuts } from './cuts'
+import { makeCuts, paintTrim, wheelOpenings, type BodyCuts } from './cuts'
+import { gapLips, onGapEdge, withoutGapEdges } from './gaps'
 import { frontFace } from './nose'
 import { rearFace } from './tail'
 import { mainLoft } from './shape'
@@ -117,9 +118,10 @@ export function buildBody(q: BodyQuality): BodyGeometry {
   ]
   // Openings roll over 4 mm. Shut gaps roll over 2 mm from paint edges cut 4 mm off the line, so the gap between the
   // two walls stays 4 mm.
-  const gapRoll = 0.002
-  const nearGap = (p: V3): boolean => [cuts.main, cuts.front, cuts.rear].some((c) => c.gaps.some((g) => g.distance(p, 0.02) < gapHalf + gapRoll + 0.001))
-  paint.push(flange(paint, 0.014, (p) => (nearGap(p) ? gapRoll : 0.004)))
+  const allGaps = [cuts.main, cuts.front, cuts.rear].flatMap((c) => c.gaps)
+  const lips = ([[main, cuts.main, wheelOpenings], [front, cuts.front, undefined], [rear, cuts.rear, undefined]] as const).map(([S, c, extra]) =>
+    gapLips(S, c.gaps, paintTrim({ ...c, gaps: [] }, extra)))
+  paint.push(flange(withoutGapEdges(paint, onGapEdge(allGaps)), 0.014, () => 0.004), ...lips)
   // The eye is a real opening for the front module's lens, not glass in the body.
   const inner = -0.014
   // The backing is open wherever the skin has an opening (glass, bay, intakes, eyes, ducts, outlets), so every opening
