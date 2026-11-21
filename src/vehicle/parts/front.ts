@@ -359,7 +359,6 @@ function collarPickup(material: T.Material): void {
   patchMaterial(material, {
     id: 'front-projector-collar-pickup',
     apply(shader) {
-      projectorFootprint(shader)
       shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec2 vCollarUV;')
       shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', 'vCollarUV = uv;')
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', `
@@ -370,6 +369,7 @@ function collarPickup(material: T.Material): void {
           return collarExtended() * (1.0 - compactProjector()) * (1.0 - smoothstep(0.28, 0.46, collarSection()));
         }
       `)
+      projectorFootprint(shader)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <color_fragment>', 'diffuseColor.rgb *= 1.0 - 0.87 * satinFlange();')
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <roughnessmap_fragment>', 'roughnessFactor = mix(roughnessFactor, 0.49, satinFlange());')
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
