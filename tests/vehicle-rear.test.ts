@@ -59,6 +59,12 @@ describe('rear underbody', () => {
     const slope = (centreY(-2.2) - centreY(-2.0)) / 0.2
     expect((Math.atan(slope) * 180) / Math.PI).toBeCloseTo(11, 1)
   })
+  it('leaves the corner open outboard of the outer strakes behind the rear tyre', () => {
+    const pos = u.floor.getAttribute('position')
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getZ(i) < cornerFront) expect(Math.abs(pos.getX(i))).toBeLessThan(strakes[1].x + 0.01)
+    }
+  })
 })
 
 describe('rear module', () => {

@@ -14,19 +14,14 @@ const r = sheet / 2
 /** Underside of the flat floor. */
 export const floorY = 0.115
 
-/** Diffuser angles from the factory release: 11 degrees in the centre, 15 at the sides. */
+/** Diffuser angle from the factory release: 11 degrees in the centre. Outboard of the outer strakes the corner is open. */
 const centre = { start: -1.15, slope: Math.tan((11 * Math.PI) / 180), blend: 0.3 }
-const side = { start: -1.6, slope: Math.tan((15 * Math.PI) / 180), blend: 0.12 }
 
 /** Strakes: two each side, 845 and 1300 apart, the outer ones leaning out at the foot. */
 export const strakes = [
   { x: 0.4225, lean: 0, lead: -1.78, foot: -1.92, low: 0.13 },
   { x: 0.65, lean: (6 * Math.PI) / 180, lead: -1.84, foot: -1.97, low: 0.135 },
 ] as const
-
-/** Outer channel behind the rear tyre, out to this half width. */
-const channelFront = dims.rearHubZ - dims.rearTire.radius - 0.037
-const channelOut = 0.9
 
 /** Rear lower edge of the body seen from behind, at the diffuser exit height (x, z), measured on build A's body. */
 const tailEdge: V2[] = [
@@ -72,16 +67,14 @@ function rise(z: number, law: { start: number; slope: number; blend: number }): 
   return [law.slope * law.blend * (t ** 6 - 3 * t ** 5 + 2.5 * t ** 4), law.slope * s]
 }
 
-/** Underside height of the centre plate and of the outer channels at z, with dy/d(-z). */
+/** Underside height of the centre plate at z. */
 export const centreY = (z: number): number => floorY + rise(z, centre)[0]
-export const sideY = (z: number): number => floorY + rise(z, side)[0]
 
 interface Face {
   y: (z: number) => number
   dy: (z: number) => number
 }
 const centreFace: Face = { y: centreY, dy: (z) => rise(z, centre)[1] }
-const sideFace: Face = { y: sideY, dy: (z) => rise(z, side)[1] }
 
 /** Up normal of a plate face y(z). */
 const upNormal = (f: Face, z: number): V3 => norm([0, 1, f.dy(z)])
@@ -325,21 +318,6 @@ export function underbody(): Underbody {
     return [x, z]
   }
   plate(fb, centreFace, centrePlan, fixed + tailRows, cols, true)
-  const sideRows = 24
-  const sideCols = 12
-  const sidePlan = (i: number, j: number): V2 => {
-    const u = j / sideCols
-    const v = i / sideRows
-    let z = channelFront
-    let x = 0
-    for (let k = 0; k < 3; k++) {
-      const inner = outerX(sideY(z) + r) + 0.002
-      x = inner + (channelOut - inner) * u
-      z = channelFront + (tailZ(x) - channelFront) * v
-    }
-    return [x, z]
-  }
-  plate(fb, sideFace, (i, j) => sidePlan(i, j), sideRows, sideCols, false)
   const sb = new MeshBuilder()
   for (const s of strakes) strake(sb, s)
   return { floor: fb.geometry(), strakes: sb.geometry() }
@@ -348,6 +326,9 @@ export function underbody(): Underbody {
 /** Front of the mesh across the back of the open lower tail, well inside the paint. */
 export const meshZ = -2.13
 const meshT = 0.004
+/** The mesh sits deep in the dark, so its cells are coarse. */
+const cell = 0.036
+const gauge = 0.005
 /** The dark plate behind the mesh. */
 const meshBack = 0.09
 /** The dark plate inboard of the side vent. */
@@ -436,9 +417,9 @@ export function valance(lower: SurfaceCurve, rm: SurfaceMap): { wall: THREE.Buff
   const ym = centreY(meshZ) + 0.004
   const ha = (innerX + wallT) / 2
   const hb = (yt - ym) / 2
-  const panel = honeycomb({ c: [ha, ym + hb, meshZ + meshT / 2], a: [1, 0, 0], b: [0, 1, 0], n: [0, 0, -1] }, ha, hb, 0.018, 0.003, meshT, 0.0006, 0.006)
+  const panel = honeycomb({ c: [ha, ym + hb, meshZ + meshT / 2], a: [1, 0, 0], b: [0, 1, 0], n: [0, 0, -1] }, ha, hb, cell, gauge, meshT, 0.0006, 0.006)
   const va = (cavityFront - meshZ) / 2
   const vb = (yt - ventLow) / 2
-  merge(panel, honeycomb({ c: [innerX + meshT / 2, ventLow + vb, meshZ + va], a: [0, 0, 1], b: [0, 1, 0], n: [1, 0, 0] }, va, vb, 0.018, 0.003, meshT, 0.0006, 0.006))
+  merge(panel, honeycomb({ c: [innerX + meshT / 2, ventLow + vb, meshZ + va], a: [0, 0, 1], b: [0, 1, 0], n: [1, 0, 0] }, va, vb, cell, gauge, meshT, 0.0006, 0.006))
   return { wall: wall.geometry(), panel: panel.geometry() }
 }
