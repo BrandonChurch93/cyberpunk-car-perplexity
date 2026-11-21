@@ -104,21 +104,3 @@ export function liner(z: number, y: number, r: number, x0: number, x1: number): 
   g.translate(0, y, z)
   return g
 }
-
-/** Mirror head on a thin blade stalk, left side. */
-export function mirror(): { head: THREE.BufferGeometry; glass: THREE.BufferGeometry; stalk: THREE.BufferGeometry } {
-  const head = new MeshBuilder()
-  const c: V3 = [1.03, 0.85, 0.93]
-  blob(head, c, [0.105, 0.055, 0.045], 0.45, 14, 28, (p) => {
-    const t = (p[1] - c[1]) / 0.055
-    const wedge = 0.015 * t
-    return [p[0], p[1], p[2] + wedge * (p[2] > c[2] ? 1 : 0)]
-  })
-  const glass = new MeshBuilder()
-  blob(glass, [c[0], c[1], c[2] - 0.038], [0.095, 0.046, 0.009], 0.35, 8, 24)
-  const stalk = new MeshBuilder()
-  const path: V3[] = []
-  for (let i = 0; i <= 8; i++) path.push(lerp3([0.86, 0.79, 1.02], [c[0] - 0.05, c[1] - 0.02, c[2] + 0.02], i / 8))
-  sweep(stalk, path, path.map((): V3 => norm([0, 0, 1])), roundRect(0.05, 0.012, 0.004, 2))
-  return { head: head.geometry(), glass: glass.geometry(), stalk: stalk.geometry() }
-}

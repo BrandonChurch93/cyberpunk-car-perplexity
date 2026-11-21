@@ -3,17 +3,17 @@ import type { Surface } from '../geom/cuts'
 import { toGeometry } from '../geom/mesh'
 import { tessellate, type TessOptions, type TessResult, type TrimFn } from '../geom/tessellate'
 import { cross, norm, sub, type V3 } from '../geom/vec'
-import { arches, glassTrim, makeCuts, paintTrim, type BodyCuts } from './cuts'
+import { arches, makeCuts, paintTrim, type BodyCuts } from './cuts'
 import { frontFace } from './nose'
 import { rearFace } from './tail'
 import { mainLoft } from './shape'
 
 export interface BodyGeometry {
   paint: THREE.BufferGeometry
-  glass: THREE.BufferGeometry
   shell: THREE.BufferGeometry
   cuts: BodyCuts
   surfaces: { main: Surface; front: Surface; rear: Surface }
+  grids: { main: Pick<TessOptions, 'us' | 'vs'> }
 }
 
 export interface BodyQuality {
@@ -97,8 +97,6 @@ export function buildBody(q: BodyQuality): BodyGeometry {
   ]
   paint.push(flange(paint, 0.014))
   // The eye is a real opening for the front module's lens, not glass in the body.
-  const glass = [run(main, mainGrid, glassTrim(cuts.main, 0.004))]
-  glass.push(flange(glass, 0.006))
   const inner = -0.014
   // The backing is open wherever the skin has an opening (glass, bay, intakes, eyes, ducts, outlets), so every opening
   // goes through the thick panel and its returned walls are the paint flange. Shut gaps stay closed behind.
@@ -112,5 +110,5 @@ export function buildBody(q: BodyQuality): BodyGeometry {
   const backing = (S: Surface, grid: Pick<TessOptions, 'us' | 'vs'>, trim?: TrimFn): TessResult =>
     run(offsetSurface(S, inner), grid, trim, 3, (u, v) => surfaceNormal(S, u, v))
   const shell = [backing(main, mainGrid, bayTrim), backing(front, faceGrid, openings(cuts.front)), backing(rear, faceGrid, openings(cuts.rear))]
-  return { paint: toGeometry(paint, true), glass: toGeometry(glass, true), shell: toGeometry(shell, true), cuts, surfaces: { main, front, rear } }
+  return { paint: toGeometry(paint, true), shell: toGeometry(shell, true), cuts, surfaces: { main, front, rear }, grids: { main: mainGrid } }
 }

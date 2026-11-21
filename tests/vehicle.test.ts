@@ -54,7 +54,7 @@ function surfaceDistance(root: THREE.Object3D, q: THREE.Vector3): number {
 describe('vehicle', () => {
   it('meets the factory size within 5 mm and keeps every part inside the shell and wheels', () => {
     const shell = new THREE.Group()
-    for (const name of ['paint', 'glass', 'inner']) {
+    for (const name of ['paint', 'inner']) {
       const mesh = a.root.getObjectByName(name) as THREE.Mesh
       const copy = new THREE.Mesh(mesh.geometry)
       copy.name = name
