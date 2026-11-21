@@ -50,11 +50,11 @@ export function makeCuts(main: Surface, front: Surface, rear: Surface): BodyCuts
   const rm = new SurfaceMap(rear, 0, 1, 0, 1, 160, 160)
   const nose = noseCuts(fm)
   const tail = tailCuts(rm)
-  const sideWin: [number, number, number, number] = [0, 1, 0, 0.62]
-  const topWin: [number, number, number, number] = [0, 1, 0.45, 1]
-  const dlo = projectCurve(mm, 'x', sideLines.glass, true, 0.008, [0, 1, 0.45, 0.75], false, 0.02)
+  const sideWin: [number, number, number, number] = [0, 1, 0, 0.52]
+  const topWin: [number, number, number, number] = [0, 1, 0.36, 1]
+  const dlo = projectCurve(mm, 'x', sideLines.glass, true, 0.008, [0, 1, 0.36, 0.64], false, 0.02)
   const intake = projectCurve(mm, 'x', sideLines.intake, true, 0.008, sideWin, false, 0.04)
-  const upper = projectCurve(mm, 'x', sideLines.upperIntake, true, 0.006, [0, 1, 0.4, 0.75], false, 0.015)
+  const upper = projectCurve(mm, 'x', sideLines.upperIntake, true, 0.006, [0, 1, 0.32, 0.645], false, 0.015)
   const door = projectCurve(mm, 'x', sideLines.door, false, 0.006, sideWin, false, 0.05)
   const screen = projectCurve(mm, 'y', planLines.windscreen, true, 0.008, topWin, true, 0.03)
   const rearGlass = projectCurve(mm, 'y', planLines.rearGlass, true, 0.008, topWin, true, 0.03)
