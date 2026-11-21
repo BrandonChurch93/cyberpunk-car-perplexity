@@ -34,8 +34,8 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   const family = ({ curtain: 0, concrete: 1, banded: 2, hotel: 3 })[facade]
   const paneHalfWidth = .416 - (facade === 'concrete' || facade === 'hotel' ? .061 : 0) + (facade === 'banded' ? .012 : 0)
   const facadeTint = /left edge|hotel tower|parking tower|west garage|west distance/.test(id)
-    ? new THREE.Color(.35,1.14,1.38) : /right edge|amber tower|east garage/.test(id) ? new THREE.Color(1.18,1.16,.96) :
-      new THREE.Color(.99,1.14,1.17)
+    ? new THREE.Color(.72,1.03,1.12) : /right edge|amber tower|east garage/.test(id) ? new THREE.Color(1.15,1.00,.87) :
+      new THREE.Color(.96,.98,1.08)
   const stripFloors = /left edge|west garage/.test(id)
   const horizontalFloors = /screen tower|amber tower|right edge|left edge|fluted offices|east narrow stair/.test(id)
   const windowTail = layer !== 'far' && /left edge|hotel tower|parking tower|west garage/.test(id) ? 94
@@ -44,8 +44,9 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   const spill = (i: number) => spills[i] ?? { point: new THREE.Vector3(), size: new THREE.Vector2(1,1), color: new THREE.Color(0,0,0) }
   const prefix = 'varying vec2 wallUv, wallUnit; varying vec3 wallPoint, wallNormal, wallTangent; varying float wallSide;'
   const mat = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(level * .26, level * .33, level * .42),
-    roughness: .44, metalness: .31,
+    color: new THREE.Color(level*.14,level*.16,level*.20),
+    roughness: facade === 'concrete' ? .79 : facade === 'hotel' ? .58 : .39,
+    metalness: facade === 'concrete' ? .08 : facade === 'hotel' ? .24 : .42,
   })
   mat.userData.moduleMeters = cell.toArray()
   mat.userData.facade = facade
@@ -135,11 +136,13 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         roomLight*=mix(.69,blind,surfaceDetail);
         float spandrel=1.0-smoothstep(.093,.117+aa.y,abs(pane.y-.105));
         float sill=wallSide*(1.0-smoothstep(.016,.026+aa.y,abs(pane.y-.216)));
-        float pilaster=windowMask(vec2(fract(pane.x+.5)-.5,pane.y-.5),vec2(.023+.033*concrete,.499),aa);
+        float pilaster=windowMask(vec2(fract(pane.x+.5)-.5,pane.y-.5),vec2(.025+.045*concrete,.499),aa);
+        float rib=wallSide*windowMask(vec2(fract((roomCell.x+pane.x)*.25+.5)-.58,pane.y-.5),vec2(.024+.012*curtain,.499),aa);
         float wallMeasure=min(wallUnit.x,1.0-wallUnit.x);
         float corner=wallSide*(1.0-smoothstep(.008,.022+fwidth(wallUnit.x),wallMeasure));
         float panelGrain=field(wallUv*vec2(.89,.61)+salt);
-        diffuseColor.rgb*=max(.15,.76+.27*panelGrain+(.31*banded-.27)*spandrel-.34*pilaster-.48*glass-.38*mechanical+.42*corner);
+        float panelPatina=field(wallUv*vec2(.21,.035)+salt*1.43);
+        diffuseColor.rgb*=max(.12,.68+.19*panelGrain+.22*panelPatina+(.29*banded-.26)*spandrel-.37*pilaster-.30*rib-.55*glass-.38*mechanical+.38*corner);
       `)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', /* glsl */ `
         vec3 tungsten=mix(vec3(1.29,.62,.263),vec3(1.11,.87,.61),roomTintId);
@@ -147,7 +150,10 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         roomTint=mix(roomTint,vec3(1.07,.23,.65),step(.989,suite));
         roomTint=mix(roomTint,vec3(.042,.69,1.16),accentRun*.68);
         vec3 reflected=reflect(-toEye,wallNormal);
-        vec3 skyGlass=mix(vec3(.022,.035,.057),vec3(.050,.049,.079),smoothstep(-.28,.17,reflected.y))*facadeTint;
+        float brightSky=smoothstep(.005,.235,reflected.y);
+        float citySheen=pow(max(0.0,dot(reflected,normalize(vec3(.27,.12,.95)))),3.0);
+        vec3 skyGlass=mix(vec3(.010,.015,.022),vec3(.074,.062,.088),brightSky)*facadeTint;
+        skyGlass*=.55+.45*citySheen;
         vec3 screenAxis=vec3(screenNormal.z,0.0,-screenNormal.x);
         float planeCos=dot(reflected,screenNormal);
         float screenT=dot(screenPoint-wallPoint,screenNormal)/(-max(-planeCos,.001));
@@ -164,17 +170,17 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
           float colorWash=1.0/(1.0+dot(signDelta.xz,signDelta.xz)/(signRadius.x*signRadius.x)+dy*dy);
           signGlow+=spillTint[signIndex]*colorWash*colorWash;
         }
-        float depthGlow=.121+.13*distanceLayer+.38*shellLuma;
-        float roofTint=smoothstep(.80,.98,wallUnit.y)*distanceLayer*.28;
-        totalEmissiveRadiance+=wallSide*((depthGlow+roofTint)*skyGlass*(.65+.30*panelGrain-.26*spandrel-.42*mechanical)*
-          mix(vec3(1.0),vec3(.86,1.21,1.41),1.0-smoothstep(-.61,.21,wallNormal.x))+
-          signGlow*(.092+.079*glass));
-        totalEmissiveRadiance+=(sill+pilaster*.29+corner*.42)*skyGlass*(.57+.15*floorState)*(.59+.69*curtain+.32*banded);
+        float envelope=.18+.13*distanceLayer+.31*shellLuma;
+        float skyStain=smoothstep(.25,.91,wallUnit.y);
+        vec3 farVeil=mix(vec3(.0),vec3(.014,.015,.024),distanceLayer*.5)*(.78+.22*skyStain);
+        float panelReflectance=max(.12,.47+.25*panelPatina+.13*panelGrain-.22*spandrel-.33*mechanical-.32*rib-.22*glass);
+        totalEmissiveRadiance+=wallSide*(envelope*skyGlass*panelReflectance+farVeil+signGlow*(.048+.11*glass));
+        totalEmissiveRadiance+=(sill+pilaster*.32+corner*.44)*skyGlass*(.33+.16*floorState)*(.52+.59*curtain+.35*banded);
         float lampRadiance=.14+1.91*exposure*exposure+23.0*pow(exposure,11.0)+windowTail*pow(exposure,16.0);
         vec3 litRoom=roomTint*lamp*lampRadiance*roomLight;
         vec3 subpixelRooms=mix(vec3(.165,.104,.075),vec3(.125,.132,.190),distanceLayer*.5)*(1.0-mechanical);
-        totalEmissiveRadiance+=glass*((.32+.68*curtain+.32*banded)*
-          (skyGlass*(.16+(1.0-faceOn)*.23)+screenGlass*screenMirror*.43)*(1.0-.59*mechanical)+
+        totalEmissiveRadiance+=glass*((.28+.75*curtain+.28*banded)*
+          (skyGlass*(.23+(1.0-faceOn)*.35)+screenGlass*screenMirror*.37)*(1.0-.59*mechanical)+
           mullion*mix(subpixelRooms,litRoom,surfaceDetail));
       `)
     },

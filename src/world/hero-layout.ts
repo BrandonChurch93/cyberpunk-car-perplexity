@@ -72,6 +72,8 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const roof = group(root, 'hero parapet and near deck layout')
   const { heroWall, zinc, heroStripe, tar } = materials
   const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.035,.039,.048), roughness: .54, metalness: .59 })
+  const oxidizedAluminum = new THREE.MeshStandardMaterial({ color: new THREE.Color(.033,.038,.041), roughness: .61, metalness: .38 })
+  const charcoalConcrete = new THREE.MeshStandardMaterial({ color: new THREE.Color(.054,.052,.049), roughness: .83, metalness: .06 })
   const glass = new THREE.MeshStandardMaterial({ color: new THREE.Color(.025,.027,.039), roughness: .33, metalness: .22 })
   const distantGlass = glass.clone()
   const offset = <T extends THREE.Material>(mat: T, units: number): T => {
@@ -200,10 +202,32 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     const w = width*k, d = depth*k
     const distance = heroFrontageDistance(wx,wz+d*.5)
     const layer: FacadeLayer = distance < 620 ? 'near' : distance < 840 ? 'middle' : 'far'
-    const shell = towerSurface(name, level, facadeOf(name,index), screenReflection, spillAt(name),layer)
+    const facade = facadeOf(name,index)
+    const shell = towerSurface(name, level, facade, screenReflection, spillAt(name),layer)
     groundedBox(tower,name,x,top,z,width,depth,shell,k)
     deckTrim.tower(tower,name,wx,wz+d*.5,w)
     box(tower,'folded coping band',[wx,wy-.52,wz],[w+.28,1.5,d+.28],frame)
+    if (w > 9 && index !== 6) {
+      const px = w*.5, pz = wz+d*.5
+      const sides = index % 3 === 0 ? [-1,1] : [index%2===0 ? 1 : -1]
+      const count = facade === 'concrete' ? 3 : 5
+      const depth = facade === 'concrete' ? .62 : .43
+      const material = facade === 'concrete' ? charcoalConcrete : oxidizedAluminum
+      const fins = new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),material,sides.length*count)
+      const transform = new THREE.Matrix4()
+      fins.name = 'extruded curtain wall fins'
+      let slot = 0
+      for (const side of sides) for (let i=0;i<count;i++) {
+        const length = (wy-streetY)*(.69+.071*((i+index)%4))
+        const width = facade === 'concrete' ? .72 : .34+.057*(i%3)
+        transform.makeScale(width,length,depth)
+        transform.setPosition(wx+side*(px-Math.min(w*.20,1.05+i*1.36)),wy-.81-length*.5,pz+depth*.22)
+        fins.setMatrixAt(slot++,transform)
+      }
+      fins.instanceMatrix.needsUpdate = true
+      fins.computeBoundingBox()
+      tower.add(fins)
+    }
     if (faceZ >= -50 && width >= 1) {
       for (const side of [-1,1]) groundedBox(tower,'rainwater jamb',x+side*(width/2-.068),top,faceZ+.021,.092,.092,frame,k)
     }
@@ -217,6 +241,15 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       if (stepped) {
         box(tower,'upper crown step',[wx-w*.02,wy+crownH+1.55,wz-d*.18],[w*.29,3.10,d*.29],shell)
         box(tower,'upper crown coping',[wx-w*.02,wy+crownH+3.1,wz-d*.18],[w*.30,.34,d*.30],frame)
+      }
+      if ([5,11,13,18,19,21,23,26].includes(index)) {
+        const px = wx-w*.27, pz = wz-d*.09
+        const hatch = index%2===0 ? 3.4 : 5.3
+        box(tower,'offset concrete roof shaft',[px,wy+hatch*.5,pz],[w*.195,hatch,d*.37],charcoalConcrete)
+        box(tower,'shaft angled overrun cap',[px,wy+hatch+.28,pz],[w*.206,.57,d*.39],oxidizedAluminum)
+        for (const dx of [-.27,0,.27]) {
+          box(tower,'shielded red crown lens',[px+w*.195*dx,wy+hatch*.74,pz+d*.188],[.49,.28,.16],safetyRed)
+        }
       }
       if ([5,12,13,14,18,19,20,22,23].includes(index)) {
         const crown = group(tower,'lit setback cornice',[wx+w*.08,wy+crownH*.74,wz+d*.104])
