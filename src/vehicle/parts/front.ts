@@ -318,6 +318,10 @@ function projectorFront(center: T.Vector3, axis: T.Vector3, radius: number, flan
   const rim = projectorTurn(center, axis, radius, full, [[1.006 + flange, .0011], [.991 + flange * .87, .00155],
     [.967 + flange * .63, .00155], [.943 + flange * .23, .0001], [.928, -.002], [.919, shoulder - .00055],
     [.900, shoulder - .0007], [.875, -.007]])
+  if (flange > 0) {
+    const uv = rim.getAttribute('uv')
+    for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) + 2)
+  }
   return { lens, shroud, rim }
 }
 
@@ -358,11 +362,20 @@ function collarPickup(material: T.Material): void {
       projectorFootprint(shader)
       shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec2 vCollarUV;')
       shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', 'vCollarUV = uv;')
-      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'varying vec2 vCollarUV;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', `
+        varying vec2 vCollarUV;
+        float collarExtended() { return step(1.5, vCollarUV.y); }
+        float collarSection() { return vCollarUV.y - 2.0 * collarExtended(); }
+        float satinFlange() {
+          return collarExtended() * (1.0 - compactProjector()) * (1.0 - smoothstep(0.28, 0.46, collarSection()));
+        }
+      `)
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <color_fragment>', 'diffuseColor.rgb *= 1.0 - 0.87 * satinFlange();')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <roughnessmap_fragment>', 'roughnessFactor = mix(roughnessFactor, 0.49, satinFlange());')
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
         float lowerArc = 0.15 + 0.85 * smoothstep(-0.55, 0.52, cos(PI2 * vCollarUV.x + 0.19));
-        float rimFace = smoothstep(0.02, 0.11, vCollarUV.y) * (1.0 - smoothstep(0.53, 0.76, vCollarUV.y));
-        totalEmissiveRadiance *= 1.0 + compactProjector() * 27.0 * lowerArc * rimFace;
+        float rimFace = smoothstep(0.02, 0.11, collarSection()) * (1.0 - smoothstep(0.53, 0.76, collarSection()));
+        totalEmissiveRadiance *= 1.0 - 0.91 * satinFlange() + compactProjector() * 27.0 * lowerArc * rimFace;
       `)
     },
   })
