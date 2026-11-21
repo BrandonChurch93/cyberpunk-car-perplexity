@@ -6,10 +6,12 @@ import type { FrameEngine, Stage } from '../src/core/engine'
 import { createHaze, createHazeCapture } from '../src/core/haze'
 import type { applyLens } from '../src/core/lens'
 import { LightRig } from '../src/core/lights'
-import { createReflections, quality } from '../src/core/reflect'
+import { createReflections, planarTuning, quality } from '../src/core/reflect'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
 import { Probe } from '../src/core/reflect/probe'
-import { patchesOf } from '../src/materials/patch'
+import { boxPatch, planarPatch } from '../src/core/reflect/shaders'
+import { hash01, streamSeed } from '../src/core/random'
+import { patchMaterial, patchesOf } from '../src/materials/patch'
 import { applyPorous } from '../src/weather/surface/porous'
 import { launchBrowser } from '../tools/lib/browser'
 
@@ -446,6 +448,93 @@ function captureWetDeck(three: typeof THREE, reflections: typeof createReflectio
   return { cube, direct, off, rebound, cameraRestored, deckVisible: deck.visible, parapetVisible: parapet.visible }
 }
 
+function sweepPlanarLimiter(three: typeof THREE, box: typeof boxPatch, planar: typeof planarPatch, patch: typeof patchMaterial,
+  mirrorOf: typeof mirrorCamera, tuning: typeof planarTuning, hash: typeof hash01, seed: number) {
+  const renderer = new three.WebGLRenderer()
+  const edge = 128
+  const target = new three.WebGLRenderTarget(edge, edge, { type: three.FloatType })
+  const scene = new three.Scene()
+  const eye = new three.PerspectiveCamera(-90, 1, .05, 1500)
+  eye.position.set(0, .6, 0)
+  eye.lookAt(.017, .6, 1)
+  eye.updateMatrixWorld(true)
+  const mirror = new three.PerspectiveCamera()
+  mirrorOf(eye, mirror, 1.18)
+  const projection = new three.Matrix4().multiplyMatrices(mirror.projectionMatrix, mirror.matrixWorldInverse)
+  const colors = new Uint16Array(edge * edge * 4)
+  const half = three.DataUtils.toHalfFloat
+  for (let y = 0; y < edge; y++) for (let x = 0; x < edge; x++) {
+    const dim = (Math.floor(x / 24) + Math.floor(y / 22)) % 2 ? -.7 : .001
+    const value = x % 19 < 3 && y % 13 < 2 ? 300 : dim + (x + y) % 5 * .00002
+    colors.set([half(value), half(value * .58), half(value * .23), half(1)], (y * edge + x) * 4)
+  }
+  const image = new three.DataTexture(colors, edge, edge, three.RGBAFormat, three.HalfFloatType)
+  image.generateMipmaps = true
+  image.minFilter = three.LinearMipmapLinearFilter
+  image.magFilter = three.LinearFilter
+  image.needsUpdate = true
+  const depths = new Float32Array(edge * edge).fill(.98)
+  const depth = new three.DataTexture(depths, edge, edge, three.RedFormat, three.FloatType)
+  depth.needsUpdate = true
+  const material = new three.MeshPhysicalMaterial({ roughness: .16 })
+  const slab = new three.Mesh(new three.PlaneGeometry(32, 28), material)
+  slab.rotation.x = -Math.PI / 2
+  slab.position.z = 9
+  scene.add(slab)
+  const noise = { value: 0 }
+  patch(material, box({
+    reflectBoxMin: { value: new three.Vector3() }, reflectBoxMax: { value: new three.Vector3() },
+    reflectProbe: { value: eye.position }, reflectBoxOn: { value: 0 },
+  }))
+  patch(material, planar({
+    reflectMap: { value: image }, reflectDepth: { value: depth },
+    reflectViewProjection: { value: projection }, reflectInverseViewProjection: { value: projection.clone().invert() },
+    reflectSize: { value: new three.Vector2(edge, edge) }, reflectLodMax: { value: Math.log2(edge) },
+    reflectSeed: noise, reflectOn: { value: 1 }, reflectBillboard: { value: new three.Vector4() },
+  }, tuning))
+  patch(material, {
+    id: 'measure planar limiter',
+    apply(shader) {
+      shader.fragmentShader = shader.fragmentShader
+        .replace('float count = 0.0;', 'vec3 measure = vec3(0.0);\nfloat count = 0.0;')
+        .replace(/(vec3 mirror = [^\n]+;)/, '$1\nvec3 rawMirror = mirror;')
+        .replace('sum += mix( env, mirror, inside );', `
+          vec3 delta = abs(mirror) - abs(rawMirror);
+          if (any(isnan(mirror)) || any(isinf(mirror)) || any(greaterThan(delta, vec3(.0002)))
+            || any(lessThan(mirror * rawMirror, vec3(-.0002)))) measure.r = 1.0;
+          if (any(lessThan(delta, vec3(-.0002)))) measure.g = 1.0;
+          if (any(lessThan(rawMirror, vec3(-.0002)))) measure.b = 1.0;
+        `)
+        .replace(/return mix\( fallback, planar,[^\n]+;/, 'return measure;')
+        .replace('#include <opaque_fragment>', 'outgoingLight = radiance;\n#include <opaque_fragment>')
+    },
+  })
+  const measures = new Float32Array(edge * edge * 4)
+  let darkened = 0
+  let signed = 0
+  const failures: number[] = []
+  for (let frame = 1100; frame <= 1150; frame++) {
+    noise.value = hash(seed, frame, 0)
+    renderer.setRenderTarget(target)
+    renderer.render(scene, eye)
+    renderer.readRenderTargetPixels(target, 0, 0, edge, edge, measures)
+    let passed = true
+    for (let p = 0; p < measures.length; p += 4) {
+      if (measures[p] !== 0) passed = false
+      if (measures[p + 1] > .5) darkened++
+      if (measures[p + 2] > .5) signed++
+    }
+    if (!passed) failures.push(frame)
+  }
+  target.dispose()
+  image.dispose()
+  depth.dispose()
+  slab.geometry.dispose()
+  material.dispose()
+  renderer.dispose()
+  return { failures, darkened, signed }
+}
+
 function resumeMirror(three: typeof THREE, reflections: typeof createReflections, Engine: typeof FrameEngine,
   lens: typeof applyLens, fmt: typeof config.formats.preview, frameIndex: number,
   take: number, saved: { sum: number[]; count: number } | null) {
@@ -494,7 +583,7 @@ function resumeMirror(three: typeof THREE, reflections: typeof createReflections
   return { sum, count }
 }
 
-it('captures emitters, matches camera air and wet deck radiance, and resumes review mirrors on fresh pages', async () => {
+it('matches camera and probe reflections, bounds planar taps, and resumes review mirrors on fresh pages', async () => {
   const id = '/reflect-test-entry.js'
   const app = await createServer({
     configFile: false,
@@ -506,8 +595,12 @@ it('captures emitters, matches camera air and wet deck radiance, and resumes rev
         import * as THREE from 'three'
         import { createHaze, createHazeCapture } from '/src/core/haze/index.ts'
         import { LightRig } from '/src/core/lights.ts'
-        import { createReflections } from '/src/core/reflect/index.ts'
+        import { createReflections, planarTuning } from '/src/core/reflect/index.ts'
         import { Probe } from '/src/core/reflect/probe.ts'
+        import { boxPatch, planarPatch } from '/src/core/reflect/shaders.ts'
+        import { mirrorCamera } from '/src/core/reflect/mirror.ts'
+        import { hash01, streamSeed } from '/src/core/random.ts'
+        import { patchMaterial } from '/src/materials/patch.ts'
         import { applyPorous } from '/src/weather/surface/porous.ts'
         import { config } from '/src/config.ts'
         import { FrameEngine } from '/src/core/engine.ts'
@@ -515,6 +608,7 @@ it('captures emitters, matches camera air and wet deck radiance, and resumes rev
         export const run = () => (${captureLamp.toString()})(THREE, createReflections, config.formats.preview)
         export const air = () => (${captureAir.toString()})(THREE, createHaze, createHazeCapture, LightRig, Probe, config.formats.preview)
         export const deck = () => (${captureWetDeck.toString()})(THREE, createReflections, applyPorous, config.formats.preview)
+        export const limiter = () => (${sweepPlanarLimiter.toString()})(THREE, boxPatch, planarPatch, patchMaterial, mirrorCamera, planarTuning, hash01, streamSeed('reflect'))
         export const review = (frameIndex, take, saved) =>
           (${resumeMirror.toString()})(THREE, createReflections, FrameEngine, applyLens, config.formats.preview, frameIndex, take, saved)
       ` : null,
@@ -575,6 +669,11 @@ it('captures emitters, matches camera air and wet deck radiance, and resumes rev
       }
       expect(wet.cube[0][0]).toBeGreaterThan(wet.cube[1][0])
       expect(wet.cube[2][0]).toBeGreaterThan(2 * wet.cube[2][2])
+      const limiter: ReturnType<typeof sweepPlanarLimiter> = await page.evaluate(`import("${id}").then(module => module.limiter())`)
+      expect(errors).toEqual([])
+      expect(limiter.darkened).toBeGreaterThan(0)
+      expect(limiter.signed).toBeGreaterThan(0)
+      expect(limiter.failures).toEqual([])
       await page.close()
       const total = config.tiers.review.samplesPerFrame
       const frameIndex = Math.round(config.film.heroFrameSeconds * config.film.fps)

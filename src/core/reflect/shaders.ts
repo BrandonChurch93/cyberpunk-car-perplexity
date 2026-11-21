@@ -134,13 +134,13 @@ vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
   vec2 centerEdge = min( uvCenter, 1.0 - uvCenter );
   float fireflyBlend = smoothstep( REFLECT_FIREFLY_START, REFLECT_FIREFLY_END, roughness )
     * smoothstep( 0.0, 0.02, min( centerEdge.x, centerEdge.y ) );
-  float tapLimit = 0.0;
+  float tapLimit = REFLECT_FIREFLY_FLOOR;
   if ( fireflyBlend > 0.0 ) {
     vec2 uvLong = reflectUv( p + planarRay( v, normalize( n + a * b ) ) * dist );
     float major = length( ( uvLong - uvCenter ) * reflectSize );
     float refLod = clamp( log2( max( max( minor, major ) * REFLECT_FILTER, 1.0 ) ), 0.0, reflectLodMax );
     vec3 center = textureLod( reflectMap, uvCenter, refLod ).rgb;
-    tapLimit = REFLECT_FIREFLY_FLOOR + REFLECT_FIREFLY_RATIO * planarLuma( center );
+    tapLimit += REFLECT_FIREFLY_RATIO * max( 0.0, planarLuma( center ) );
   }
   vec2 jitter = vec2( reflectHash( gl_FragCoord.xy ), reflectHash( gl_FragCoord.yx + 71.0 ) );
   vec3 sum = vec3( 0.0 );
@@ -160,7 +160,9 @@ vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
     float inside = smoothstep( 0.0, 0.02, min( edge.x, edge.y ) );
     vec3 env = inside < 1.0 ? reflectEnvironment( r, roughness * 0.5 ) : vec3( 0.0 );
     vec3 mirror = inside > 0.0 ? textureLod( reflectMap, clamp( uv, 0.0, 1.0 ), clamp( max( lod, log2( max( spread, 1.0 ) ) ), 0.0, reflectLodMax ) ).rgb : vec3( 0.0 );
-    if ( fireflyBlend > 0.0 ) mirror *= mix( 1.0, min( 1.0, tapLimit / max( 1e-5, planarLuma( mirror ) ) ), fireflyBlend );
+    float luma = planarLuma( mirror );
+    float excess = max( luma - tapLimit, 0.0 ) / max( REFLECT_FIREFLY_FLOOR, luma );
+    mirror *= 1.0 - fireflyBlend * excess;
     sum += mix( env, mirror, inside );
     count += 1.0;
   }
