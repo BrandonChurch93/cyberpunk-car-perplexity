@@ -1,0 +1,84 @@
+{
+ "critic": "C9",
+ "score": 4,
+ "pass": false,
+ "issues": [
+  {
+   "severity": "severe",
+   "file": "set-B-01.png",
+   "where": "whole frame",
+   "what": "The palette is washed out. The target is high contrast: near-black blues and deep violets with saturated neon. The current frame sits under an even, milky mauve haze that lifts the blacks and flattens the buildings, the wall and the deck to one mid-tone. The target's haze builds with depth; this haze does not",
+   "fix": "Bring the blacks and contrast back down to the target's level. Make the haze grow with distance instead of applying it evenly, so the foreground wall and the deck stay dark and the far towers fade into the mist"
+  },
+  {
+   "severity": "severe",
+   "file": "set-D-03.png",
+   "where": "sky, upper left to center",
+   "what": "The target's sky is a dark storm cover with magenta-lit clouds over the center skyline, fading to deep blue-violet. The current sky is a flat pink-mauve wash with no clouds and no gradient, and it is far brighter",
+   "fix": "Replace the sky with a dark overcast cloud layer. Light its underside magenta above the center towers, as in set-C-03, and darken it toward the frame edges"
+  },
+  {
+   "severity": "severe",
+   "file": "set-D-02.png",
+   "where": "towers in both sign groups and the skyline",
+   "what": "In the target the towers are covered in dense grids of warm and cool lit windows, and these are a main light source in the frame. In the current frame the facades are dark, with only sparse dashes of window light. Small window lights also drop out of the deck reflections",
+   "fix": "Give the tower facades dense lit-window grids that match the target's density and its warm/cool mix, especially the HOTEL tower, the 24H/OPEN tower and the center skyline"
+  },
+  {
+   "severity": "major",
+   "file": "set-D-01.png",
+   "where": "deck, left and center",
+   "what": "The target deck shows many sharp vertical reflection streaks in cyan, magenta, purple and warm yellow, broken up by rain impact rings. The current deck shows a few broad, soft, flood-like smears: cyan on the left, yellow on the right and a dark center. The magenta and purple streaks at left of center are missing, and the surface reads as smooth standing water, not wet concrete",
+   "fix": "Make the deck a rough, wet concrete with puddle patches rather than one continuous water plane. Tighten the reflection lobes so each sign produces its own vertical streak, and add rain ripples so the streaks break up"
+  },
+  {
+   "severity": "major",
+   "file": "set-D-01.png",
+   "where": "right deck",
+   "what": "The deck layout differs. The target has a bright white dashed lane line running diagonally from under the car to the lower right, and one drain grate. In the current frame the lane line is almost invisible, and a second grate appears near the right front wheel",
+   "fix": "Restore the bright diagonal lane marking along the target's path. Remove the extra grate and keep only the lower-right one"
+  },
+  {
+   "severity": "major",
+   "file": "set-D-02.png",
+   "where": "parapet wall and rail",
+   "what": "The target's wall has two lamps, at the far left and far right, with a metal railing and posts above it. The current wall has four lamps, adding two inboard at about x 350 and x 1160 in the full frame, and the railing is reduced to a thin line. The wall also sits higher and taller in frame",
+   "fix": "Match the target's two lamp positions and restore the post-and-rail barrier. Set the wall top to the target's height in frame"
+  },
+  {
+   "severity": "major",
+   "file": "set-D-02.png",
+   "where": "right group, beside EXIT",
+   "what": "The current frame adds a block of large amber vertical light bars on the tower to the right of the 24H building, plus extra cyan vertical strips on the HOTEL building. Neither appears in the target, and they change the color balance of the right side",
+   "fix": "Remove the extra amber bars and the extra cyan strips. Place light sources only where set-C-02 has them"
+  },
+  {
+   "severity": "major",
+   "file": "set-D-02.png",
+   "where": "left group, PARKING",
+   "what": "The PARKING sign is much taller than in the target, about 95 to 335 px against about 175 to 320 px, and it reads as a pale panel rather than a glowing blade sign. HOTEL also sits about 30 px higher",
+   "fix": "Resize and reposition PARKING and HOTEL to the target's footprints, and match the target's glow"
+  },
+  {
+   "severity": "major",
+   "file": "set-B-01.png",
+   "where": "framing",
+   "what": "The camera framing differs. The car is a little smaller and sits further right, and the horizon, the parapet and the signs all sit about 20 to 30 px higher. This may come from the arrival push being mid-move, but it does not match the target composition",
+   "fix": "Check camera height, focal length and position against the target. If the push is meant to pass through this composition, align that point of the path"
+  },
+  {
+   "severity": "minor",
+   "file": "set-D-03.png",
+   "where": "billboard",
+   "what": "In the target the billboard is built into a lit tower facade, with a fine pixel grid and a pink-to-blue swirl. In the current frame it is a freestanding framed square with a smooth pink-violet gradient and no surrounding facade lights",
+   "fix": "Set the screen into a lit building facade, add a fine pixel grid, and bring the color blend closer to the target's pink-magenta-blue range"
+  },
+  {
+   "severity": "minor",
+   "file": "set-D-01.png",
+   "where": "left headlamp, into the rain",
+   "what": "The target shows a strong visible beam with backlit rain spray from the left headlamp. In the current frame there is only a faint glow, and the rain is lighter",
+   "fix": "Raise the volumetric scattering and the backlit rain density in the headlamp cone"
+  }
+ ]
+}

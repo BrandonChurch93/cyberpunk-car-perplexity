@@ -1,0 +1,325 @@
+{
+ "critic": "C1",
+ "round": 8,
+ "jurorsPerImage": 3,
+ "controlMean": 87.2,
+ "renderMean": 21.6,
+ "gap": -65.7,
+ "valid": true,
+ "pass": false,
+ "lowestRenderMedian": 2,
+ "images": [
+  {
+   "file": "set-A-01.png",
+   "judged": true,
+   "what": "judged frame f00195-16x9-final-beauty-black-pearl-full",
+   "median": 2,
+   "jurors": [
+    {
+     "reviewer": "reviewer_2801",
+     "family": "claude_opus_5_5",
+     "likelihood": 3,
+     "why": "the city backdrop is generic 3D-render set dressing: simple placeholder sign labels in clean uniform fonts on blocky buildings with grid-pattern windows, and an unbranded concept car with perfect CG reflections"
+    },
+    {
+     "reviewer": "reviewer_2802",
+     "family": "gpt_6_2_sol",
+     "likelihood": 2,
+     "why": "the wet pavement has a nearly uniform, stylized ripple texture that gives the neon reflections the look of a rendered surface"
+    },
+    {
+     "reviewer": "reviewer_2803",
+     "family": "gemini_4_carbon",
+     "likelihood": 1,
+     "why": "3D-rendered geometry and procedural shaders: low-detail generic background city assets with placeholder neon signs, a synthetic 3D car model and procedural wet-ground normal-map puddles"
+    }
+   ]
+  },
+  {
+   "file": "set-A-02.png",
+   "judged": true,
+   "what": "judged frame f00360-16x9-final-beauty-black-pearl-full",
+   "median": 25,
+   "jurors": [
+    {
+     "reviewer": "reviewer_2804",
+     "family": "claude_opus_5_5",
+     "likelihood": 25,
+     "why": "the water droplets look procedurally scattered: very uniform size and shape distribution, evenly spaced coverage with clean identical refraction highlights, plus perfectly straight thin rain streak lines"
+    },
+    {
+     "reviewer": "reviewer_2805",
+     "family": "gpt_6_2_sol",
+     "likelihood": 25,
+     "why": "the droplets blanket the surface with unusually even spacing and near-identical rounded bead shapes, resembling a procedurally scattered render"
+    },
+    {
+     "reviewer": "reviewer_2806",
+     "family": "gemini_4_carbon",
+     "likelihood": 2,
+     "why": "unconverged path-tracing noise inside the out-of-focus foreground bokeh circles: sparse discrete single-pixel samples within circular aperture kernels; adjacent droplets clip into one another as rigid shapes without coalescing; foreground droplets repeat identical highlight patterns; sub-pixel droplet instances make isolated 1-pixel black dots across the neon reflection"
+    }
+   ]
+  },
+  {
+   "file": "set-A-03.png",
+   "judged": false,
+   "what": "control kc28ce3a0 (paint-water) for judged crop anchor-paint of f00195-16x9-final-beauty-black-pearl-full: pai",
+   "median": 78,
+   "jurors": [
+    {
+     "reviewer": "reviewer_2807",
+     "family": "claude_opus_5_5",
+     "likelihood": 15,
+     "why": "the car does not hold together structurally: no coherent panel lines, no headlights, grille or wheel; droplets spread unnaturally evenly; looks AI-generated"
+    },
+    {
+     "reviewer": "reviewer_2808",
+     "family": "gpt_6_2_sol",
+     "likelihood": 78,
+     "why": "the varied water droplets break up the bright strip-light reflections in a way that looks physically consistent with the curved hood"
+    },
+    {
+     "reviewer": "reviewer_2809",
+     "family": "gemini_4_carbon",
+     "likelihood": 92,
+     "why": "physically consistent optics across the wet spoiler surface; a runoff seam feeds a realistic pendant droplet"
+    }
+   ]
+  },
+  {
+   "file": "set-A-04.png",
+   "judged": false,
+   "what": "control k7bf51682 (neon-wet-street-night) for judged frame f00195-16x9-final-beauty-black-pearl-full",
+   "median": 96,
+   "jurors": [
+    {
+     "reviewer": "reviewer_2810",
+     "family": "claude_opus_5_5",
+     "likelihood": 88,
+     "why": "fine details hold together: plate reads clearly, bus stop sign legible, rain glare and sensor noise fit a high-ISO night shot"
+    },
+    {
+     "reviewer": "reviewer_2811",
+     "family": "gpt_6_2_sol",
+     "likelihood": 96,
+     "why": "the red taillight reflections line up with each lamp and break up irregularly across puddles and rough asphalt"
+    },
+    {
+     "reviewer": "reviewer_2812",
+     "family": "gemini_4_carbon",
+     "likelihood": 99,
+     "why": "geographically consistent legible micro-text across independent real-world elements"
+    }
+   ]
+  },
+  {
+   "file": "set-A-05.png",
+   "judged": false,
+   "what": "control kb91307ea (paint-water) for judged crop grid-r1c1 of f00360-16x9-final-beauty-black-pearl-full: Shows ",
+   "median": 96,
+   "jurors": [
+    {
+     "reviewer": "reviewer_2813",
+     "family": "claude_opus_5_5",
+     "likelihood": 88,
+     "why": "crisp correctly spelled lettering and emblem; raindrops vary naturally in size and shape; believable grime; real lens depth of field"
+    },
+    {
+     "reviewer": "reviewer_2814",
+     "family": "gpt_6_2_sol",
+     "likelihood": 96,
+     "why": "rain beading on the trunk: droplets have irregular sizes and coalesced shapes, with consistent highlights across the curved paint"
+    },
+    {
+     "reviewer": "reviewer_2815",
+     "family": "gemini_4_carbon",
+     "likelihood": 97,
+     "why": "the emblem and partially occluded plate preserve real-world typography and optical defocus in a tiny edge region"
+    }
+   ]
+  },
+  {
+   "file": "set-A-06.png",
+   "judged": true,
+   "what": "judged crop anchor-paint of f00360-16x9-final-beauty-black-pearl-full: paint anchor at 0.75 m, projected radiu",
+   "median": 30,
+   "jurors": [
+    {
+     "reviewer": "reviewer_2816",
+     "family": "claude_opus_5_5",
+     "likelihood": 30,
+     "why": "the water droplets look procedurally scattered: uniform shapes and highlights, evenly spread with no real clustering, streaking or smearing, over an unnaturally clean pink-to-purple gradient block; fine grain looks like render noise"
+    },
+    {
+     "reviewer": "reviewer_2817",
+     "family": "gpt_6_2_sol",
+     "likelihood": 75,
+     "why": "the tiny pink and purple highlights bend and shift naturally with the size and curvature of individual droplets; smooth depth-of-field transition plausible"
+    },
+    {
+     "reviewer": "reviewer_2818",
+     "family": "gemini_4_carbon",
+     "likelihood": 2,
+     "why": "unconverged path-tracing sample noise inside the out-of-focus bokeh droplets along the bottom foreground: sparse single-pixel bright speckles confined inside blur circles; uniform instanced spherical-cap droplets down to 1-pixel black specks, adjacent droplets rigidly overlapping instead of coalescing; an anomalous flat-scaled pink droplet near center"
+    }
+   ]
+  },
+  {
+   "file": "set-A-07.png",
+   "judged": false,
+   "what": "control kf37d995d (paint-water) for judged crop anchor-paint of f00360-16x9-final-beauty-black-pearl-full: pai",
+   "median": 90,
+   "jurors": [
+    {
+     "reviewer": "reviewer_2819",
+     "family": "claude_opus_5_5",
+     "likelihood": 85,
+     "why": "droplets vary irregularly in size and shape, beading follows the panel curvature and the shut line, defocus falls off consistently, metallic flake grain looks real"
+    },
+    {
+     "reviewer": "reviewer_2820",
+     "family": "gpt_6_2_sol",
+     "likelihood": 90,
+     "why": "coherent shallow depth of field: fine paint flecks and droplets resolve together along the focus plane near the seam"
+    },
+    {
+     "reviewer": "reviewer_2821",
+     "family": "gemini_4_carbon",
+     "likelihood": 97,
+     "why": "the visible edge of clear paint protection film set back from the panel edges with droplets catching along its micro-step; flake magnified inside droplets; lens chromatic aberration"
+    }
+   ]
+  },
+  {
+   "file": "set-A-08.png",
+   "judged": false,
+   "what": "control k794ff923 (front-wheel) for judged crop anchor-wheel of f00195-16x9-final-beauty-black-pearl-full: whe",
+   "median": 96,
+   "jurors": [
+    {
+     "reviewer": "reviewer_2822",
+     "family": "claude_opus_5_5",
+     "likelihood": 80,
+     "why": "fine details are coherent: badge text, caliper lettering, sidewall print, cross-drill holes, real dust and grime on the rotor"
+    },
+    {
+     "reviewer": "reviewer_2823",
+     "family": "gpt_6_2_sol",
+     "likelihood": 96,
+     "why": "fine irregular wear and grime on the glossy black wheel spokes"
+    },
+    {
+     "reviewer": "reviewer_2824",
+     "family": "gemini_4_carbon",
+     "likelihood": 97,
+     "why": "authentic OEM manufacturing details on partially occluded subcomponents: etched rotor part number, balance weight with sticker, dust and micro-scratches"
+    }
+   ]
+  },
+  {
+   "file": "set-A-09.png",
+   "judged": true,
+   "what": "judged crop anchor-paint of f00195-16x9-final-beauty-black-pearl-full: paint anchor at 10.26 m, projected radi",
+   "median": 4,
+   "jurors": [
+    {
+     "reviewer": "reviewer_2825",
+     "family": "claude_opus_5_5",
+     "likelihood": 5,
+     "why": "the car is a fictional concept design in a stylized synthwave scene with uniform CG rain and clean render-style reflections"
+    },
+    {
+     "reviewer": "reviewer_2826",
+     "family": "gpt_6_2_sol",
+     "likelihood": 4,
+     "why": "the neon reflections on the car body look like unusually clean, smooth bands of color, giving the paint a rendered-material appearance"
+    },
+    {
+     "reviewer": "reviewer_2827",
+     "family": "gemini_4_carbon",
+     "likelihood": 2,
+     "why": "procedural raindrop texture dots across the faceted car body panels, uniform 2D rain streaks and simplified CGI city and billboard textures"
+    }
+   ]
+  },
+  {
+   "file": "set-A-10.png",
+   "judged": true,
+   "what": "judged crop anchor-wheel of f00195-16x9-final-beauty-black-pearl-full: wheel anchor at 6.90 m, projected radiu",
+   "median": 8,
+   "jurors": [
+    {
+     "reviewer": "reviewer_2828",
+     "family": "claude_opus_5_5",
+     "likelihood": 8,
+     "why": "a non-existent concept design with an overly clean game-engine look: uniform rain-streak overlay, perfect neon reflections on the wet ground, smooth noise-free surfaces"
+    },
+    {
+     "reviewer": "reviewer_2829",
+     "family": "gpt_6_2_sol",
+     "likelihood": 8,
+     "why": "the car body reflections look like unnaturally smooth, stylized bands of color following the contours"
+    },
+    {
+     "reviewer": "reviewer_2830",
+     "family": "gemini_4_carbon",
+     "likelihood": 2,
+     "why": "where the tires meet the wet road: a bright dotted shader intersection line against a flat ground plane, next to a low-poly pasted-on storm drain grate prop and uniform procedural rain-streak shaders on the bodywork"
+    }
+   ]
+  },
+  {
+   "file": "set-A-11.png",
+   "judged": true,
+   "what": "judged crop grid-r1c1 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 56% at 0.8 to 1.1 m, w",
+   "median": 72,
+   "jurors": [
+    {
+     "reviewer": "reviewer_2831",
+     "family": "claude_opus_5_5",
+     "likelihood": 72,
+     "why": "droplets vary randomly in size and spacing, each refracts and shows highlights that match the neon behind it; real sensor-style noise and chromatic fringing; faint horizontal banding or grid texture keeps it from higher"
+    },
+    {
+     "reviewer": "reviewer_2832",
+     "family": "gpt_6_2_sol",
+     "likelihood": 30,
+     "why": "the midground droplets repeat a very similar soft pink ring and highlight pattern over a broad area, giving the surface a tiled or procedurally rendered look"
+    },
+    {
+     "reviewer": "reviewer_2833",
+     "family": "gemini_4_carbon",
+     "likelihood": 92,
+     "why": "authentic high-ISO sensor noise in the dark out-of-focus background: fine luminance grain over soft low-frequency chrominance blotches"
+    }
+   ]
+  },
+  {
+   "file": "set-A-12.png",
+   "judged": false,
+   "what": "control k844f420f (paint-water) for judged frame f00360-16x9-final-beauty-black-pearl-full",
+   "median": 95,
+   "jurors": [
+    {
+     "reviewer": "reviewer_2834",
+     "family": "claude_opus_5_5",
+     "likelihood": 85,
+     "why": "the bokeh looks optically real: out-of-focus droplets form circles whose size grows steadily with distance from the focal plane, natural haze and flare"
+    },
+    {
+     "reviewer": "reviewer_2835",
+     "family": "gpt_6_2_sol",
+     "likelihood": 95,
+     "why": "irregular water droplets resolve crisply in a narrow diagonal focus band and transition continuously into aperture-shaped, color-fringed bokeh"
+    },
+    {
+     "reviewer": "reviewer_2836",
+     "family": "gemini_4_carbon",
+     "likelihood": 96,
+     "why": "physically accurate longitudinal chromatic aberration across the plane of focus: magenta fringing in front, green behind; cat-eye vignetting in corner bokeh; fine vertical wear scratches on the window glass"
+    }
+   ]
+  }
+ ]
+}
