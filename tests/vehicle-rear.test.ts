@@ -110,7 +110,7 @@ describe('rear module', () => {
     ['outlet lip', ex.lip], ['outlet pipes', ex.pipes], ['outlet back', ex.soot], ['outlet housing', ex.housing],
     ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['lamp reflector', tl.reflector], ['lamp optic', tl.optic], ['valance wall', va.wall],
     ['bay covers', bay.covers], ['bay carbon', bay.carbon], ['plenum', bay.center], ['bay mesh', bay.mesh],
-    ['airbox grille', bay.grille], ['grille bezel', bay.bezel], ['grille duct', bay.duct], ['bay core', bay.core], ['grille ledge', bay.ledge],
+    ['airbox grille', bay.grille], ['grille bezel', bay.bezel], ['grille duct', bay.duct], ['bay core', bay.core], ['grille ledge', bay.ledge], ['bay shelf', bay.shelf],
     ['intake hose', bay.hose], ['hose clamp', bay.clamp],
   ]
 
@@ -201,7 +201,7 @@ describe('rear module', () => {
   })
 
   it('keeps every bay part under the deck and inside the opening', () => {
-    for (const g of [bay.covers, bay.carbon, bay.center, bay.mesh, bay.grille, bay.bezel, bay.duct, bay.core, bay.hose, bay.clamp]) {
+    for (const g of [bay.covers, bay.carbon, bay.center, bay.mesh, bay.grille, bay.bezel, bay.duct, bay.core, bay.ledge, bay.shelf, bay.hose, bay.clamp]) {
       const pos = g.getAttribute('position')
       for (let i = 0; i < pos.count; i += 7) {
         const [x, y, z] = [pos.getX(i), pos.getY(i), pos.getZ(i)]

@@ -17,6 +17,8 @@ export interface Bay {
   /** Louvred core inside the airbox well, dimly seen through the grille cells. */
   core: THREE.BufferGeometry
   ledge: THREE.BufferGeometry
+  /** Painted shelf that closes the bay aft of the grille, between the brace and the ledge. */
+  shelf: THREE.BufferGeometry
   /** Intake hose from the airbox well to the plenum, and its band clamp. */
   hose: THREE.BufferGeometry
   clamp: THREE.BufferGeometry
@@ -282,9 +284,10 @@ export function engineBay(edge: SurfaceCurve, cell: number): Bay {
     merge(core, solid(sec.map(([da, dd]) => [at(f, a0 + da, -cb, dd), at(f, a0 + da, cb, dd)]), sec.map(() => true), true, false))
   }
 
+  const aEnd = (zr + 0.006 - f.c[2]) / f.a[2]
   const ledgeRows: V3[][] = [[], [], [], []]
-  for (let i = 0; i <= 24; i++) {
-    const a = -ha - 0.03 + ((2 * ha + 0.06) * i) / 24
+  for (let i = 0; i <= 40; i++) {
+    const a = -ha - 0.03 + ((aEnd + ha + 0.03) * i) / 40
     const inner = at(f, a, hb - bz.inset + bz.wide - 0.006, -0.004)
     const w = widthAt(inner[2])
     const outer: V3 = [w.x + 0.012, w.y - 0.03, inner[2]]
@@ -295,6 +298,14 @@ export function engineBay(edge: SurfaceCurve, cell: number): Bay {
   }
   const ledge = solid(ledgeRows, [true, true, true, true], true, false)
   meterUV(ledge, ledgeRows[0], ledgeRows.map((row) => row[12]))
+
+  const shelfIn = -hb + bz.inset - 0.002
+  const shelfOut = hb - bz.inset + bz.wide - 0.006
+  const shelfStart = ha - bz.inset + bz.wide - 0.006
+  const shelfSec: V2[] = [[shelfIn, -0.004], [shelfOut, -0.004], [shelfOut, -0.008], [shelfIn, -0.008]]
+  const shelfRows = shelfSec.map(([b0, dd]) => Array.from({ length: 25 }, (_, i): V3 => at(f, shelfStart + ((aEnd - shelfStart) * i) / 24, b0, dd)))
+  const shelf = solid(shelfRows, [true, true, true, true], true, false)
+  meterUV(shelf, shelfRows[0], shelfRows.map((row) => row[12]))
 
   const carbon = new MeshBuilder()
   const br = baySpec.brace
@@ -393,6 +404,7 @@ export function engineBay(edge: SurfaceCurve, cell: number): Bay {
     duct: finish(duct),
     core: finish(core),
     ledge: finish(ledge),
+    shelf: finish(shelf),
     hose: finish(hose),
     clamp: finish(clamp),
     grilleCenter: f.c,
