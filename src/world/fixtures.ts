@@ -71,10 +71,13 @@ export function labelFace(parent: THREE.Object3D, name: string, at: Tuple, size:
   plate(parent, `lettering ${name}`, new THREE.MeshBasicMaterial({ color, map: tx, toneMapped: false, alphaTest: .22 }), at, ...size).rotation.z = rotation
 }
 
-export function addSky(root: THREE.Group): void {
+export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector2,THREE.Vector2]): void {
   const sky = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, toneMapped: false,
-    uniforms: { cloudSeed: { value: streamSeed('world/city/cloud-base') / 4294967296 * 37 } },
+    uniforms: {
+      cloudSeed: { value: streamSeed('world/city/cloud-base') / 4294967296 * 37 },
+      cloudDistricts: { value: cloudDistricts },
+    },
     vertexShader: /* glsl */ `
       varying vec3 skyDirection;
       void main() {
@@ -86,6 +89,7 @@ export function addSky(root: THREE.Group): void {
     fragmentShader: /* glsl */ `
       varying vec3 skyDirection;
       uniform float cloudSeed;
+      uniform vec2 cloudDistricts[2];
       float cloudHash(vec2 p) {
         vec3 q = fract(vec3(p.xyx+cloudSeed)*.1031);
         q += dot(q,q.yzx+33.33);
@@ -152,6 +156,27 @@ export function addSky(root: THREE.Group): void {
         float underlit = (.25+.56*clouds+1.02*illuminatedEdge)*(1.0-.37*darkFolds);
         float underSky = smoothstep(.020,.067,d.y)*(1.0-smoothstep(.165,.201,d.y));
         c = mix(c,dusk,southClouds*lowerSky*.71) + litCloud*field*underlit*southClouds*underSky*.53;
+        float highBand = smoothstep(.275,.457,d.y)*(1.0-smoothstep(.68,.84,d.y))*smoothstep(.07,.36,-d.z);
+        if (highBand > .0) {
+          vec2 cloudFoot = d.xz*(382.0/d.y);
+          vec2 southOffset = (cloudFoot-cloudDistricts[0])/vec2(178.0,235.0);
+          vec2 westOffset = (cloudFoot-cloudDistricts[1])/vec2(96.0,162.0);
+          float mainUpglow = pow(1.0+dot(southOffset,southOffset),-1.56);
+          float cyanUpglow = pow(1.0+dot(westOffset,westOffset),-1.72);
+          vec2 wind = mat2(.88,.47,-.47,.88)*(cloudFoot/132.0);
+          vec2 curl = vec2(cloudNoise(wind*.67+vec2(13.6,-4.2)),cloudNoise(wind*.83+vec2(-6.1,11.3)));
+          vec2 fold = wind+1.38*(curl-.5);
+          float lobe = cloudNoise(fold*vec2(.91,1.22)+vec2(6.2,3.3));
+          float billows = cloudNoise(fold*2.35+vec2(3.3,lobe*.91));
+          float thread = cloudNoise(fold*5.72-vec2(billows,-lobe));
+          float density = .54*lobe+.34*billows+.12*thread;
+          float canopyBelly = smoothstep(.29,.70,density);
+          float slots = smoothstep(.34,.61,cloudNoise(fold*1.65+vec2(-4.8,8.6)));
+          float rim = smoothstep(.018,.26,cloudNoise(fold*2.35+vec2(3.55,lobe*.91-.29))-billows);
+          float radiance = (.043+.41*canopyBelly)*(.31+.69*slots)+.88*pow(rim,1.6)*(.32+.68*slots);
+          vec3 magentaCloud = mix(vec3(1.43,.36,.72),vec3(.68,.34,1.40),smoothstep(.23,.73,curl.y));
+          c += highBand*radiance*(mainUpglow*magentaCloud+cyanUpglow*vec3(.013,.046,.105));
+        }
         gl_FragColor = vec4(c, 1.0);
       }
     `,
@@ -716,7 +741,7 @@ function rearRoofAccess(parent: THREE.Group, pole: THREE.Object3D, labels: Label
   }
 }
 
-export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.Group, labels: Label, surfaces: WetSurface[]): RoofFixtures {
+export function roofFixtures(roof: THREE.Group, city: THREE.Group, labels: Label, surfaces: WetSurface[]): RoofFixtures {
   const metal = new THREE.MeshStandardMaterial({ color: new THREE.Color(.12, .135, .16), metalness: .73, roughness: .39 })
   const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.023, .031, .047), metalness: .6, roughness: .56 })
   surfaces.push({ material: metal, wetness: 'sheet' })
@@ -859,7 +884,6 @@ export function roofFixtures(root: THREE.Group, roof: THREE.Group, city: THREE.G
   const grate = roof.children.find(o => o.name === 'drain grate' && o.position.x === -1.7)!
   const drain = new THREE.Object3D()
   drain.position.y = .012; grate.add(drain)
-  addSky(root)
   return {
     lights, wideLights: luminaires.map(l=>l.film), signs,
     steamSources: [{ object: vent, kind: 'vent', strength: .7 }, { object: drain, kind: 'drain', strength: .38 }],
