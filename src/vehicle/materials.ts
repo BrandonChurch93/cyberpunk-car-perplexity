@@ -333,12 +333,16 @@ export function palette(spec: PaintSpec, full: boolean) {
   windscreen.attenuationDistance = .016
   windscreen.clearcoat = .47
   windscreen.specularIntensity = .74
-  const optics = new T.MeshPhysicalMaterial({
+  const rearOptics = new T.MeshPhysicalMaterial({
     color: full ? 0xedf0f3 : 0x858e99, metalness: full ? 0 : .1, roughness: full ? .071 : .105,
     opacity: full ? 1 : .36, transparent: !full, depthWrite: full, ior: 1.59, clearcoat: .95, clearcoatRoughness: .09,
     transmission: full ? .93 : 0, thickness: full ? .0018 : 0, attenuationColor: new T.Color(0xaabcc7), attenuationDistance: .016,
   })
-  const rearOptics = optics.clone()
+  const optics = new T.MeshPhysicalMaterial({
+    color: full ? 0x000000 : 0x858e99, metalness: full ? 0 : .1, roughness: full ? .03 : .105, ior: 1.5,
+    opacity: full ? .04 : .36, transparent: true, depthWrite: false,
+  })
+  if (full) Object.assign(optics, { blending: T.CustomBlending, blendSrc: T.OneFactor, blendDst: T.OneMinusSrcAlphaFactor, premultipliedAlpha: false })
   rearOptics.color.setHex(full ? 0xe6a4a4 : 0x51373a)
   rearOptics.opacity = full ? 1 : .30
   rearOptics.thickness = full ? .0038 : 0
@@ -443,8 +447,8 @@ export function palette(spec: PaintSpec, full: boolean) {
     surfaces.push({ material, wetness })
     return material
   }
-  for (const m of [paint, glass, windscreen, optics, rearOptics, carbon, bayCover, ventCarbon, mirror]) tag(m, 'beads')
-  tag(rearVent, 'none')
+  for (const m of [paint, glass, windscreen, rearOptics, carbon, bayCover, ventCarbon, mirror]) tag(m, 'beads')
+  for (const m of [rearVent, optics]) tag(m, 'none')
   for (const m of [matte, tire, diffuser]) tag(m, 'sheet')
   for (const m of [projector, reflector, brushed, forged, spoke, brake, caliper, dark, hot, engine]) tag(m, 'none')
   if (full) tag(cabin, 'none')
