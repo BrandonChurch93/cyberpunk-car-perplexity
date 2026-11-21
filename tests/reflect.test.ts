@@ -116,6 +116,14 @@ it('tracks the ported guides, projector dies and tail through real lamp stages a
   const emitters = probe.root.children as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[]
   const active = () => emitters.filter((emitter) => emitter.visible)
   expect(emitters).toHaveLength(8)
+  expect([...probe.mirrorApertures].map(([id, mesh]) => [id, mesh.name]).sort()).toEqual([
+    ['vehicle-beam-0', 'front projector LED dies 0'],
+    ['vehicle-beam-1', 'front projector LED dies 0 right'],
+    ['vehicle-beam-2', 'front projector LED dies 1'],
+    ['vehicle-beam-3', 'front projector LED dies 1 right'],
+    ['vehicle-glow-front-left', 'front Y running guide'],
+    ['vehicle-glow-front-right', 'front Y running guide right'],
+  ])
   expect(probe.root.visible).toBe(false)
   probe.sync()
   expect(active()).toHaveLength(0)
@@ -139,6 +147,16 @@ it('tracks the ported guides, projector dies and tail through real lamp stages a
     expect(emitter.material.emissiveIntensity).toBe(source.material.emissiveIntensity)
     expect(emitter.material.side).toBe(THREE.DoubleSide)
   }
+  const guide = probe.mirrorApertures.get('vehicle-glow-front-left')!.material as THREE.MeshStandardMaterial
+  const die = probe.mirrorApertures.get('vehicle-beam-0')!.material as THREE.MeshStandardMaterial
+  const before = [guide.emissiveIntensity, die.emissiveIntensity]
+  probe.withDeckRadiance(() => {
+    expect(guide.emissiveIntensity).toBeGreaterThan(0)
+    expect(guide.emissiveIntensity).toBeLessThan(before[0])
+    expect(die.emissiveIntensity).toBe(before[1])
+    expect(emitters.find(({ name }) => name === 'front Y running guide')!.material.emissiveIntensity).toBe(before[0])
+  })
+  expect([guide.emissiveIntensity, die.emissiveIntensity]).toEqual(before)
   vehicle.update(stateAt(events.lampsOffEnd))
   probe.sync()
   expect(active()).toHaveLength(0)
@@ -779,22 +797,25 @@ function resumeMirror(three: typeof THREE, reflections: typeof createReflections
 }
 
 function verifyEmitterOwnership(three: typeof THREE, reflections: typeof createReflections, Rig: typeof LightRig,
-  patch: typeof patchMaterial, filmLighting: typeof patchFilmLighting) {
+  patch: typeof patchMaterial, filmLighting: typeof patchFilmLighting, lamp = false) {
   const renderer = new three.WebGLRenderer()
   const size = 64
   const target = new three.WebGLRenderTarget(size, size, { type: three.FloatType })
   const scene = new three.Scene()
   const world = new three.Group()
   const body = new three.Group()
-  const aperture = new three.Mesh(new three.PlaneGeometry(.9, 1.7), new three.MeshBasicMaterial({ color: new three.Color(8, 0, 0) }))
-  aperture.name = 'graded opal face'
+  const aperture = new three.Mesh(new three.PlaneGeometry(.9, 1.7), lamp
+    ? new three.MeshStandardMaterial({ emissive: new three.Color(8, 0, 0) })
+    : new three.MeshBasicMaterial({ color: new three.Color(8, 0, 0) }))
+  aperture.name = lamp ? 'front Y running guide' : 'graded opal face'
   aperture.position.set(0, 2, -4)
   const anchor = new three.Object3D()
+  if (lamp) anchor.name = 'front running guide left origin'
   anchor.position.copy(aperture.position)
   const housing = new three.Group()
   housing.add(aperture, anchor)
   const paired: FilmLight = {
-    id: 'paired aperture', kind: 'area', object: anchor, color: new three.Color(1, 0, 0),
+    id: lamp ? 'vehicle-glow-front-left' : 'paired aperture', kind: 'area', object: anchor, color: new three.Color(1, 0, 0),
     intensity: 25, range: 20, size: [.9, 1.7], shadow: false, beam: false, level: () => 1,
   }
   const secondAnchor = anchor.clone()
@@ -806,7 +827,9 @@ function verifyEmitterOwnership(three: typeof THREE, reflections: typeof createR
   const floor = new three.Mesh(new three.PlaneGeometry(10, 15), material)
   floor.rotation.x = -Math.PI / 2
   floor.position.z = -2
-  world.add(floor, housing, secondAnchor)
+  world.add(floor, secondAnchor)
+  const apertureRoot = lamp ? body : world
+  apertureRoot.add(housing)
   scene.add(world, body, rig.group)
   const format = { id: 'test', width: size, height: size }
   const eye = new three.PerspectiveCamera(47, 1, .05, 100)
@@ -814,8 +837,9 @@ function verifyEmitterOwnership(three: typeof THREE, reflections: typeof createR
   eye.lookAt(0, 0, 0)
   eye.updateMatrixWorld(true)
   const state = { position: eye.position, quaternion: eye.quaternion, focalMm: 35, sensorWidthMm: 36, focusDistance: 4, fNumber: 2, near: .05, far: 100 }
-  const part = reflections({ renderer, scene, rig, world: { root: world, lights: [paired, unpaired],
-    deck: { meshes: [floor], material }, reflectionBox: new three.Box3() }, vehicle: { root: body, lamps: [] } })
+  const part = reflections({ renderer, scene, rig, world: { root: world, lights: lamp ? [unpaired] : [paired, unpaired],
+    deck: { meshes: [floor], material }, reflectionBox: new three.Box3() },
+    vehicle: { root: body, lamps: lamp ? [{ object: anchor, stage: 0, beam: false }] : [] } })
   patch(material, {
     id: 'inspect deck light ownership',
     apply(shader) {
@@ -827,13 +851,14 @@ function verifyEmitterOwnership(three: typeof THREE, reflections: typeof createR
   })
   rig.update(0, [.5, .5])
   part.resize(format)
-  part.beforeSample!({
+  const sampleContext: SampleContext = {
     camera: eye, state, timeSeconds: 0,
     sample: {
       frame: { format, frameIndex: 195, frameKey: 195, tier: 'draft', samples: 1, timeSeconds: 0 },
       sampleIndex: 0, timeSeconds: 0, shutter: .5, aperture: [0, 0], misc: [0, 0], pixel: [0, 0], light: [.5, .5],
     },
-  })
+  }
+  part.beforeSample!(sampleContext)
   const values = new Float32Array(size * size * 4)
   function measure(): number[] {
     renderer.setRenderTarget(target)
@@ -848,7 +873,8 @@ function verifyEmitterOwnership(three: typeof THREE, reflections: typeof createR
     return peaks
   }
   const owned = measure()
-  part.planar.reflectEmitters.value[0]!.w = 0
+  aperture.visible = false
+  part.beforeSample!(sampleContext)
   const analytic = measure()
   target.dispose()
   renderer.dispose()
@@ -882,7 +908,7 @@ it('matches camera and probe reflections, bounds planar taps, and resumes review
         export const projector = () => (${captureProjector.toString()})(THREE, createHaze, LightRig, config.formats.preview, projectorHalfAngle, filmLightsGlsl, patchFilmLighting)
         export const deck = () => (${captureWetDeck.toString()})(THREE, createReflections, applyPorous, config.formats.preview, quality.draft)
         export const limiter = () => (${sweepPlanarLimiter.toString()})(THREE, boxPatch, planarPatch, patchMaterial, mirrorCamera, planarTuning, hash01, streamSeed('reflect'))
-        export const ownership = () => (${verifyEmitterOwnership.toString()})(THREE, createReflections, LightRig, patchMaterial, patchFilmLighting)
+        export const ownership = lamp => (${verifyEmitterOwnership.toString()})(THREE, createReflections, LightRig, patchMaterial, patchFilmLighting, lamp)
         export const review = (frameIndex, take, saved) =>
           (${resumeMirror.toString()})(THREE, createReflections, FrameEngine, applyLens, config.formats.preview, frameIndex, take, saved)
       ` : null,
@@ -946,15 +972,17 @@ it('matches camera and probe reflections, bounds planar taps, and resumes review
       const wet: ReturnType<typeof captureWetDeck> = await page.evaluate(`import("${id}").then(module => module.deck())`)
       expect(errors).toEqual([])
       expect(wet.rebound && wet.cameraRestored && wet.deckVisible && wet.parapetVisible).toBe(true)
-      const { owned, analytic }: ReturnType<typeof verifyEmitterOwnership> =
-        await page.evaluate(`import("${id}").then(module => module.ownership())`)
-      expect(errors).toEqual([])
-      expect(analytic[0]).toBeGreaterThan(.0001)
-      expect(analytic[1]).toBeGreaterThan(.0001)
-      expect(analytic[2]).toBeGreaterThan(.0001)
-      expect(owned[0]).toBeCloseTo(analytic[0], 6)
-      expect(owned[1]).toBeLessThan(analytic[1] * .01)
-      expect(owned[2]).toBeCloseTo(analytic[2], 6)
+      for (const lamp of [false, true]) {
+        const { owned, analytic }: ReturnType<typeof verifyEmitterOwnership> =
+          await page.evaluate(`import("${id}").then(module => module.ownership(${lamp}))`)
+        expect(errors).toEqual([])
+        expect(analytic[0]).toBeGreaterThan(.0001)
+        expect(analytic[1]).toBeGreaterThan(.0001)
+        expect(analytic[2]).toBeGreaterThan(.0001)
+        expect(owned[0]).toBeCloseTo(analytic[0], 6)
+        expect(owned[1]).toBeLessThan(analytic[1] * .01)
+        expect(owned[2]).toBeCloseTo(analytic[2], 6)
+      }
       for (const [i, direct] of wet.direct.entries()) {
         const cube = wet.cube[i]
         expect(direct[0], `wet deck ray ${i}`).toBeGreaterThan(.002)

@@ -123,7 +123,8 @@ function deckDetails(root: THREE.Object3D) {
 
 export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const { renderer, scene, world, vehicle } = deps
-  const emitters = mirrorEmitters(world.lights ?? [], deps.rig)
+  const lamps = probeLamps(vehicle)
+  const emitters = mirrorEmitters(world.lights ?? [], deps.rig, lamps.mirrorApertures)
   const hazeCapture = deps.rig && world.lights && world.deck.bounds
     ? createHazeCapture({ rig: deps.rig, world: { lights: world.lights, deck: { bounds: world.deck.bounds } } })
     : undefined
@@ -188,7 +189,6 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     bindPlanar(target)
   }
   const bounce = new Probe(renderer, bounceSize, captureNear, captureFar)
-  const lamps = probeLamps(vehicle)
   scene.add(lamps.root)
   const probePosition = new THREE.Vector3()
   const cameraPlanarVP = new THREE.Matrix4()
@@ -222,7 +222,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       renderer.setRenderTarget(destination.raw)
       renderer.setClearColor(0x000000, 1)
       renderer.clear(true, true, false)
-      emitters.withRadiance(time, () => renderer.render(scene, mirror))
+      emitters.withRadiance(time, () => lamps.withDeckRadiance(() => renderer.render(scene, mirror)))
       hazeCapture?.renderFarAir(renderer, destination.raw, destination.color, mirror)
     } finally {
       showDeck()
