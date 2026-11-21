@@ -482,11 +482,15 @@ const lensFragment = /* glsl */ `
     through *= 0.04 + 0.96 * pow(1.0 - min(-leave, 1.0), 5.0);
   }
   // The lens packs half the sky into the drop's disk: a pixel spans this much of it, so the image is filtered to that.
-  float lensRough = min(sqrt(0.5 * length(fwidth(dirW))), 0.7);
+  float lensRough = min(sqrt(0.5 * length(fwidth(dirW)) / surfSampleRoot), 0.7);
   vec3 capW = surfLin * o + surfLensT;
   vec3 capN = normalize(transpose(inverse(surfLin)) * (o - c));
   vec3 capV = normalize(cameraPosition - capW);
   float capR = SURF_CAP_R * length(surfLensM0);
+  // Out of focus the samples land a defocus cell apart; a glint tighter than that would sum to separate sparks.
+  float cocCell = surfPupil * surfCocScale * abs(1.0 / surfFocus - 1.0 / max(vViewPosition.z, 1e-3)) / surfSampleRoot;
+  float spark = 0.85 * smoothstep(0.15, 0.8, cocCell * length(vViewPosition) * emitterPixelAngle / max(capR, 1e-6));
+  lensRough = max(lensRough, spark);
   #ifdef USE_ENVMAP
     vec3 dirV = normalize((viewMatrix * vec4(dirW, 0.0)).xyz);
     vec3 side = normalize(abs(dirV.y) < 0.9 ? cross(dirV, vec3(0.0, 1.0, 0.0)) : cross(dirV, vec3(1.0, 0.0, 0.0)));
@@ -497,7 +501,7 @@ const lensFragment = /* glsl */ `
   #ifdef USE_ENVMAP
     // The cube holds the lights blurred; on the cap each face the drop mirrors is drawn sharp at its own place.
     vec3 capNV = normalize((viewMatrix * vec4(capN, 0.0)).xyz);
-    vec3 sharp = emitterGlint(capW, capN, capV, 0.02, capR);
+    vec3 sharp = emitterGlint(capW, capN, capV, max(0.02, spark), capR);
     totalEmissiveRadiance += max(sharp - fresnel * getIBLRadiance(normalize(-vViewPosition), capNV, 0.02), vec3(0.0));
   #endif
   float meniscus = smoothstep(0.0, 0.08, surfLensPos.y / SURF_CAP_HS);

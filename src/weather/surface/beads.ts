@@ -60,6 +60,8 @@ const runTrack = { spacing: 0.03, width: 0.004, length: 0.3, height: 0.00015, li
 const drip = { spacing: 0.009, live: 0.7, minMm: 2.0, maxMm: 4.8, lineWidth: 0.0012, lineHeight: 0.0005 }
 /** A bead under a pixel lands as a spot this many pixels wide (Gaussian sigma), each light at its own place on the cap. */
 export const splatSigma = 0.7
+/** With many jittered samples a frame filters its own pixels, so the spot narrows toward this. */
+const splatSigmaFine = 0.35
 /** Ratios of cell to footprint over which a layer hands over from its mean to single drops. */
 const splatBand = [0.7, 1.3]
 /** Spread of contact angle in degrees, random lean and downhill sag of the cap normal, from drop to drop. */
@@ -527,7 +529,7 @@ float surfGlint = 0.0;
   // Per unit glint weight a bead returns E F for each sign; the mean Fresnel share of the signs is already in the cube terms.
   vec3 signShare = emitterBeadF0(surfWorldPos, nW, vW, unit, eyeD, emitterPixelAngle, vec3(${sphereFresnel.toFixed(4)}), -1.0);
   float surfCell = surfPupil * surfCocScale * abs(1.0 / surfFocus - 1.0 / max(vViewPosition.z, 1e-3)) / surfSampleRoot;
-  surfSplatSetup(surfWorldPos, nW, vW, max(${splatSigma.toFixed(2)}, 0.5 * surfCell), max(surfSkyGlint - signShare, vec3(0.0)));
+  surfSplatSetup(surfWorldPos, nW, vW, max(max(${splatSigma.toFixed(2)} / sqrt(surfSampleRoot), ${splatSigmaFine.toFixed(2)}), 0.5 * surfCell), max(surfSkyGlint - signShare, vec3(0.0)));
   vec3 tW1 = normalize(cross(nW, abs(nW.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
   vec3 tW2 = cross(nW, tW1);
   vec3 downW = slope > 1e-4 ? surfToWorld(toView * down) : vec3(0.0);
@@ -763,7 +765,9 @@ float surfGlint = 0.0;
           }
           float lensRough = max(0.12, mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, R)));
           // Across the disk the exit ray sweeps about half the sky, some 1.6 radians, so one pixel holds 1.6 pix / R of it.
-          lensRough = max(lensRough, sqrt(min(0.8 * pix / R, 1.0)));
+          // The jittered samples of a frame resolve that much finer between them.
+          lensRough = max(lensRough, sqrt(min(0.8 * pix / (R * surfSampleRoot), 1.0)));
+          lensRough = max(lensRough, 0.85 * smoothstep(0.15, 0.8, surfSpread));
           surfLensOpen = shaded * smoothstep(0.0, 0.08, 1.0 - surfHit.r);
           vec3 oW = surfToWorld(o);
           // The cube holds the signs blurred; where one sits inside the exit cone its sharp face replaces it.
@@ -785,7 +789,7 @@ float surfGlint = 0.0;
     #endif
     #ifdef USE_ENVMAP
       vec3 vV = -normalize(vViewPosition);
-      float capRough = min(max(mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, surfHit.radius)), 0.045), 1.0);
+      float capRough = min(max(mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, surfHit.radius)), 0.85 * smoothstep(0.15, 0.8, surfSpread)), 1.0);
       float fw = ${waterF0} + ${(1 - waterF0).toFixed(2)} * pow(1.0 - clamp(dot(dropView, vV), 0.0, 1.0), 5.0);
       vec3 sharp = emitterGlint(surfWorldPos, surfToWorld(dropView), surfToWorld(vV), capRough, surfHit.radius);
       totalEmissiveRadiance += shaded * max(sharp - fw * getIBLRadiance(vV, dropView, capRough), vec3(0.0));
