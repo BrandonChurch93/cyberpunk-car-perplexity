@@ -4,8 +4,8 @@ import { add, clamp, cross, dot, norm, scale, sub, type V2, type V3 } from '../g
 import { dims, mainLoft } from '../body/shape'
 import { bumper } from '../body/tail'
 import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
-import { finish, flat, merge, zipCap } from './solid'
-import { honeycomb } from './enginebay'
+import { finish, flat, merge, solid, zipCap } from './solid'
+import { honeycomb, roundLoop, roundSection } from './enginebay'
 
 /** Plate and strake thickness. Every free edge is a full round of half this. */
 export const sheet = 0.01
@@ -386,8 +386,10 @@ const cell = 0.036
 const gauge = 0.005
 /** The dark plate behind the mesh. */
 const meshBack = 0.09
-/** The dark plate inboard of the side vent. */
-const ventBack = 0.08
+/** The satin frame round each half of the mesh: face width, how far it stands proud and sinks behind, edge round, corner radius. */
+const frameSpec = { wide: 0.018, rise: 0.008, drop: 0.006, round: 0.003, corner: 0.022, under: 0.006 } as const
+/** Where the liner's inboard wall stands behind the rear tyre. */
+const linerX = 0.636
 const wallT = 0.004
 const ceilingY = bumper + 0.002
 /** Inboard wall of the corner cavity behind the rear tyre, and how far forward it runs. */
@@ -430,10 +432,10 @@ function cornerAt(u: number, y: number): { p: V3; n: V2 } {
 
 /**
  * The open lower tail behind the bumper edge, left half: a ceiling that continues the paint flange back to a mesh set well
- * inside the body and out through the corner cut to the rear tyre, the mesh itself from the diffuser up, and an inboard
- * wall that closes the corner cavity off from the engine.
+ * inside the body and out through the corner cut to the rear tyre, a closed housing round the mesh, the mesh in a satin
+ * frame of its own, and a solid inboard wall that closes the corner cavity off from the engine and meets the liner.
  */
-export function valance(lower: SurfaceCurve, rm: SurfaceMap): { wall: THREE.BufferGeometry; panel: THREE.BufferGeometry } {
+export function valance(lower: SurfaceCurve, rm: SurfaceMap): { wall: THREE.BufferGeometry; panel: THREE.BufferGeometry; frame: THREE.BufferGeometry } {
   void lower
   const inset = 0.008
   const y = ceilingY + wallT / 2
@@ -459,22 +461,27 @@ export function valance(lower: SurfaceCurve, rm: SurfaceMap): { wall: THREE.Buff
     const z = meshZ + ((cavityFront - meshZ) * i) / 16
     sideLine.push([centreY(z) + 0.002, z])
   }
-  const ventLow = centreY(meshZ) + 0.012
-  merge(wall, flat(side, [...sideLine, [ventLow, cavityFront], [ventLow, meshZ]], [], 0, wallT))
-  const inside = { ...side, o: [innerX - ventBack, 0, 0] as V3 }
-  const zs = meshZ + meshBack + wallT
-  const inLine: V2[] = [[centreY(zs) + 0.002, zs], ...sideLine.filter(([, z]) => z > zs + 0.005)]
-  merge(wall, flat(inside, [...inLine, [ceilingY + wallT, cavityFront], [ceilingY + wallT, zs]], [], 0, wallT))
-  const yb = centreY(meshZ + meshBack) + 0.004
   const yt = ceilingY + wallT
+  merge(wall, flat(side, [...sideLine, [yt, cavityFront], [yt, meshZ]], [], 0, wallT))
+  const step = { o: [0, 0, cavityFront] as V3, ex: [1, 0, 0] as V3, ey: [0, 1, 0] as V3, ez: [0, 0, 1] as V3 }
+  const yf = centreY(cavityFront) + 0.002
+  merge(wall, flat(step, [[innerX, yf], [linerX, yf], [linerX, yt], [innerX, yt]], [], -wallT, 0))
+  const yb = centreY(meshZ + meshBack) + 0.004
   const back = { o: [0, 0, meshZ + meshBack] as V3, ex: [1, 0, 0] as V3, ey: [0, 1, 0] as V3, ez: [0, 0, 1] as V3 }
   merge(wall, flat(back, [[0, yb], [innerX + wallT, yb], [innerX + wallT, yt], [0, yt]], [], 0, wallT))
-  const ym = centreY(meshZ) + 0.004
-  const ha = (innerX + wallT) / 2
-  const hb = (yt - ym) / 2
-  const panel = honeycomb({ c: [ha, ym + hb, meshZ + meshT / 2], a: [1, 0, 0], b: [0, 1, 0], n: [0, 0, -1] }, ha, hb, cell, gauge, meshT, 0.0006, 0.006)
-  const va = (cavityFront - meshZ) / 2
-  const vb = (yt - ventLow) / 2
-  merge(panel, honeycomb({ c: [innerX + meshT / 2, ventLow + vb, meshZ + va], a: [0, 0, 1], b: [0, 1, 0], n: [1, 0, 0] }, va, vb, cell, gauge, meshT, 0.0006, 0.006))
-  return { wall: finish(wall), panel: finish(panel) }
+
+  const fs = frameSpec
+  const ym = centreY(meshZ) + sheet
+  const ha = innerX / 2
+  const hb = (ceilingY - ym) / 2
+  const f = { c: [ha, ym + hb, meshZ] as V3, a: [1, 0, 0] as V3, b: [0, 1, 0] as V3, n: [0, 0, -1] as V3 }
+  const at = (x: number, yy: number, d: number): V3 => [f.c[0] + x, f.c[1] + yy, f.c[2] - d]
+  const ia = ha - fs.wide
+  const ib = hb - fs.wide
+  const panel = honeycomb({ ...f, c: [f.c[0], f.c[1], meshZ - meshT / 2] }, ia + fs.under, ib + fs.under, cell, gauge, meshT, 0.0006, 0)
+  const loop = roundLoop(ia, ib, fs.corner - fs.wide > 0.004 ? fs.corner - fs.wide : 0.004)
+  const sec = roundSection(0, fs.wide, -fs.drop, fs.rise, fs.round)
+  const rows = sec.map(([s, d]) => loop.map((l) => at(l.p[0] + l.o[0] * s, l.p[1] + l.o[1] * s, d)))
+  const frame = solid(rows, sec.map(() => false), true, true)
+  return { wall: finish(wall), panel: finish(panel), frame: finish(frame) }
 }
