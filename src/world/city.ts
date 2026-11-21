@@ -55,7 +55,7 @@ const heroSkylinePlots = skylinePlots.map(plot => {
   if (plot.name === 'southwest signal tower') return { ...plot, x: -174, z: -112 }
   if (plot.name === 'south pinnacle') return { ...plot, x: 73, z: -107 }
   return plot
-})
+}).concat({ name: 'north relay tower', x: -31, z: 125, width: 12.6, depth: 14.2, roof: 58, tone: 'graphite', profile: 'terrace' })
 
 const track = { z: 84, y: 8.5, length: 650, width: 8.8 }
 

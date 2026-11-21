@@ -642,7 +642,7 @@ describe('full roof world', () => {
         const bounds = new THREE.Box3().setFromObject(bracket)
         expect(walls.some(wall=>wall.intersectsBox(bounds)),name).toBe(true)
       }
-      const panes = facade.children.filter(o=>o.name==='ceiling reflected through tenant glass')
+      const panes = facade.getObjectsByProperty('name','ceiling reflected through tenant glass')
       expect(panes).toHaveLength(14)
       const visible = panes.reduce((count,pane) => {
         const target = pane.getWorldPosition(new THREE.Vector3()).sub(eye)
@@ -652,6 +652,99 @@ describe('full roof world', () => {
       },0)
       expect(visible,name).toBeGreaterThanOrEqual(4)
     }
+  })
+
+  it('gives the north concourse occupied depth, partial blinds and an anchored plant level', () => {
+    world.root.updateMatrixWorld(true)
+    const tower = world.root.getObjectByName('north central tower')!
+    const facade = tower.getObjectByName('lit concourse and tenant bays')!
+    const rooms = facade.getObjectsByProperty('name','tenant room')
+    const shadeHeights = new Set<number>()
+    expect(rooms).toHaveLength(14)
+    let occupied = 0
+    for (const room of rooms) {
+      const pane = room.getObjectByName('ceiling reflected through tenant glass')!
+      const back = room.getObjectByName('recessed tenant wall')!
+      const mullion = room.getObjectByName('extruded external mullion')!
+      const blind = room.getObjectByName('partly lowered roller blind')!
+      expect(pane.position.z-back.position.z).toBeGreaterThan(.6)
+      expect(mullion.position.z).toBeGreaterThan(pane.position.z)
+      expect(blind.position.z).toBeLessThan(pane.position.z)
+      shadeHeights.add(blind.position.y)
+      if (!room.getObjectByName('interior suspended task light')) continue
+      expect(room.getObjectByName('tenant tabletop')).toBeDefined()
+      expect(room.getObjectByName('tenant booth seat')).toBeDefined()
+      occupied++
+    }
+    expect(occupied).toBe(5)
+    expect(shadeHeights.size).toBeGreaterThan(8)
+    const balcony = facade.getObjectByName('tenant balcony and plant level')!
+    expect(balcony.getObjectsByProperty('name','balcony planter trough')).toHaveLength(2)
+    const sign = world.root.getObjectByName('KARAOKE')!
+    expect(sign.getObjectsByProperty('name','inclined box bracket')).toHaveLength(2)
+    expect(sign.getObjectsByProperty('name','sign box end cap')).toHaveLength(2)
+  })
+
+  it('bolts the rear cyan panels and lightwells into occupied buildings', () => {
+    world.root.updateMatrixWorld(true)
+    const bounds = (o: THREE.Object3D) => new THREE.Box3().setFromObject(o)
+    const overlapsWall = (piece: THREE.Object3D, plot: THREE.Object3D) =>
+      plot.children.filter(o=>o.name==='building mass').some(o=>bounds(o).intersectsBox(bounds(piece)))
+    for (const [name,carrier] of [
+      ['wide cool panel','north sign terrace'],['vertical cool panel','north sign terrace'],
+      ['small cool panel','northwest tower'],['corner cool panel','northwest tower'],
+    ]) {
+      const panel = world.root.getObjectByName(name)!
+      expect(panel.parent?.name).toBe(carrier)
+      const brackets = panel.getObjectsByProperty('name','cool cabinet steel outrigger')
+      expect(brackets).toHaveLength(4)
+      expect(brackets.every(bracket=>overlapsWall(bracket,panel.parent!)),name).toBe(true)
+    }
+    const northwest = world.root.getObjectByName('northwest tower')!
+    for (const [name,mount] of [['northwest concourse ribbon','concourse fascia wall plate'],['east glazed concourse return','concourse return standoff']]) {
+      const straps = northwest.getObjectByName(name)!.getObjectsByProperty('name',mount)
+      expect(straps).toHaveLength(3)
+      expect(straps.every(strap=>overlapsWall(strap,northwest)),name).toBe(true)
+    }
+    for (const id of ['north relay tower','northern court tower']) {
+      const tower = world.root.getObjectByName(id)!
+      const lightwell = tower.getObjectByName('mounted cyan service lightwell')!
+      expect(overlapsWall(lightwell.getObjectByName('lightwell backing fixed into core')!,tower),id).toBe(true)
+      const camera = new THREE.PerspectiveCamera()
+      const format = config.formats.master
+      const point = lightwell.getWorldPosition(new THREE.Vector3())
+      for (const frame of [990,1060]) {
+        const t = frame/config.film.fps
+        const pose = cameraAt(t,format,anchors)
+        applyLens(camera,pose,format.width,format.height,{ pixel:[0,0], aperture:[0,0] },1)
+        camera.updateMatrixWorld(true)
+        const uv = point.clone().project(camera)
+        expect(uv.x,id).toBeGreaterThan(-.75)
+        expect(uv.x,id).toBeLessThan(.33)
+        expect(Math.abs(uv.y),id).toBeLessThan(.90)
+        expect(uv.z,id).toBeLessThan(1)
+      }
+    }
+  })
+
+  it('keeps the rear city additions clear of both camera sweeps', () => {
+    world.root.updateMatrixWorld(true)
+    const names = ['north relay tower','KARAOKE','lit concourse and tenant bays','northwest concourse ribbon',
+      'wide cool panel','vertical cool panel','small cool panel','corner cool panel','mounted cyan service lightwell']
+    const bounds = names.flatMap(name=>world.root.getObjectsByProperty('name',name)).map(o=>new THREE.Box3().setFromObject(o))
+    const shutterHalf = config.film.shutterDegrees/(720*config.film.fps)
+    let minimum = Infinity
+    for (const format of [config.formats.master,config.formats.vertical]) {
+      for (let frame=0;frame<=frameCount;frame++) {
+        const t = frame/config.film.fps
+        for (const offset of [-shutterHalf,0,shutterHalf]) {
+          const pose = cameraAt(t+offset,format,anchors,t)
+          const clearance = Math.min(...bounds.map(box=>box.distanceToPoint(pose.position)))-apertureRadius(pose)
+          minimum = Math.min(minimum,clearance)
+        }
+      }
+    }
+    expect(minimum).toBeGreaterThan(.10)
   })
 
   it('keeps supported traffic, navigation lights and roof beacons periodic in both hooks', () => {
