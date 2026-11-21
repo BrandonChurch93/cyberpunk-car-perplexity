@@ -2,7 +2,7 @@ import type * as THREE from 'three'
 import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
 import { MeshBuilder } from '../geom/mesh'
 import { add, cross, dist, dot, lerp3, norm, scale, sub, type V3 } from '../geom/vec'
-import { bar, barOn, holePlane, merge, pocket, solid, tailNormal } from './solid'
+import { bar, barOn, finish, holePlane, merge, pocket, solid, tailNormal } from './solid'
 
 /** Light guide section, the depth of the dark lens recess it sits in, and of the slot below. */
 export const lampSpec = { guide: 0.012, thick: 0.016, front: 0.005, corner: 0.003, lens: 0.022, slot: 0.05, inset: 0.015 } as const
@@ -203,7 +203,7 @@ export function taillamps(rm: SurfaceMap, strokes: SurfaceCurve[], lens: Surface
     merge(housing, pocket(rm, lens, holePlane(rm, lens), s.lens))
   }
   merge(housing, pocket(rm, slot, holePlane(rm, slot), s.slot))
-  return { guide: guide.geometry(), housing: housing.geometry(), reflector: reflector(rm, slot).geometry() }
+  return { guide: finish(guide), housing: finish(housing), reflector: finish(reflector(rm, slot)) }
 }
 
 /** A slim plate set into the slot, following the tail behind its outline, every edge rolled. */

@@ -94,6 +94,25 @@ describe('rear module', () => {
     expect(openEdges(g, 1e-6)).toBe(0)
   })
 
+  const ub = underbody()
+  const every: Array<[string, THREE.BufferGeometry]> = [...closed, ['diffuser floor', ub.floor], ['diffuser strakes', ub.strakes], ['valance panel', va.panel], ['bay tub', bay.tub]]
+  it.each(every)('leaves no triangle of the %s without area', (_, g) => {
+    const p = g.getAttribute('position')
+    const ix = g.getIndex()!
+    const a = new THREE.Vector3()
+    const b = new THREE.Vector3()
+    const c = new THREE.Vector3()
+    let zero = 0
+    for (let t = 0; t < ix.count; t += 3) {
+      const [i, j, k] = [ix.getX(t), ix.getX(t + 1), ix.getX(t + 2)]
+      a.fromBufferAttribute(p, i)
+      b.fromBufferAttribute(p, j).sub(a)
+      c.fromBufferAttribute(p, k).sub(a)
+      if (i === j || j === k || i === k || b.cross(c).length() / 2 < 1e-12) zero++
+    }
+    expect(zero).toBe(0)
+  })
+
   it.each(closed)('gives every vertex of the %s a unit normal', (_, g) => {
     const n = g.getAttribute('normal')
     for (let i = 0; i < n.count; i++) expect(Math.abs(Math.hypot(n.getX(i), n.getY(i), n.getZ(i)) - 1)).toBeLessThan(1e-4)

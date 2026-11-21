@@ -3,7 +3,7 @@ import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
 import { lines } from '../body/tail'
 import { MeshBuilder } from '../geom/mesh'
 import { add, cross, norm, scale, type V2, type V3 } from '../geom/vec'
-import { merge, pocket, solid } from './solid'
+import { finish, merge, pocket, solid } from './solid'
 
 /** Hex outlet from the patent rear view and photos: aperture, lip, pipes, depths into the body. */
 export const outletSpec = {
@@ -188,5 +188,5 @@ export function outlets(rm: SurfaceMap, surround: SurfaceCurve): Outlets {
   const mouth = hex.map((e): V2 => [e.c[0] + e.n[0] * (rc + sp.wall + 0.001), e.c[1] + e.n[1] * (rc + sp.wall + 0.001)])
   const housing = pocket(rm, surround, { o: f.o, ex, ey, ez }, sp.floor, [mouth], 0.004)
 
-  return { lip: lip.geometry(), pipes: pipes.geometry(), soot: soot.geometry(), housing: housing.geometry(), center: f.o, normal: scale(ez, -1) }
+  return { lip: finish(lip), pipes: finish(pipes), soot: finish(soot), housing: finish(housing), center: f.o, normal: scale(ez, -1) }
 }
