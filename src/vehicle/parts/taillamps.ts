@@ -1,14 +1,17 @@
 import type * as THREE from 'three'
 import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
 import { MeshBuilder } from '../geom/mesh'
-import { add, cross, dist, dot, lerp3, norm, scale, sub, type V3 } from '../geom/vec'
-import { bar, barOn, finish, holePlane, merge, pocket, solid, tailNormal } from './solid'
+import { add, cross, dist, dot, lerp3, norm, scale, sub, type V2, type V3 } from '../geom/vec'
+import { bar, barOn, finish, flat, holePlane, merge, pocket, solid, tailNormal, type Plane } from './solid'
 
 /** Light guide section, the depth of the dark lens recess it sits in, and of the slot below. */
 export const lampSpec = { guide: 0.012, thick: 0.016, front: 0.005, corner: 0.003, lens: 0.022, slot: 0.05, inset: 0.015 } as const
 
 /** The reflector in the slot: set back behind the paint flange, a slim plate with a rolled edge, a hair inside the slot wall. */
 const reflectorSpec = { front: 0.016, thick: 0.005, gap: 0.0015, roll: 0.0012 } as const
+
+/** The inner optic on the recess floor between the guide's runs: slanted cells at an even pitch, each a low rounded block. */
+const opticSpec = { every: 2, width: 0.0042, height: 0.004, skew: 0.45, clear: 0.0035, round: 0.0014 } as const
 
 /** The lamp's corner hole on the main skin and the map it lies on; its stretch along the skin's rear edge is open. */
 export interface LampWrap {
@@ -187,10 +190,11 @@ function wrapGuide(rm: SurfaceMap, upper: V3[], lower: V3[], top: Rim[], bottom:
  * With the corner hole given, the lens runs round the corner in one recess and the Y's arms join round its front tip;
  * strokes are then the stem, the upper and the lower arm.
  */
-export function taillamps(rm: SurfaceMap, strokes: SurfaceCurve[], lens: SurfaceCurve, slot: SurfaceCurve, wrap?: LampWrap): { guide: THREE.BufferGeometry; housing: THREE.BufferGeometry; reflector: THREE.BufferGeometry } {
+export function taillamps(rm: SurfaceMap, strokes: SurfaceCurve[], lens: SurfaceCurve, slot: SurfaceCurve, wrap?: LampWrap): { guide: THREE.BufferGeometry; housing: THREE.BufferGeometry; reflector: THREE.BufferGeometry; optic: THREE.BufferGeometry } {
   const s = lampSpec
   const guide = new MeshBuilder()
   const housing = new MeshBuilder()
+  const inner = new MeshBuilder()
   if (wrap) {
     const [stem, upper, lower] = strokes
     const { top, bottom } = stations(rm, lens, wrap)
@@ -198,12 +202,62 @@ export function taillamps(rm: SurfaceMap, strokes: SurfaceCurve[], lens: Surface
     const g = wrapGuide(rm, upper.p, lower.p, top, bottom)
     merge(guide, barOn(g.path, g.normals, s.guide, s.thick, s.front, s.corner))
     merge(housing, wrapHousing(top, bottom, s.lens))
+    merge(inner, optic(top, bottom, s.lens))
   } else {
     for (const c of strokes) merge(guide, bar(rm, c.p, s.guide, s.thick, s.front, s.corner))
     merge(housing, pocket(rm, lens, holePlane(rm, lens), s.lens))
   }
   merge(housing, pocket(rm, slot, holePlane(rm, slot), s.slot))
-  return { guide: finish(guide), housing: finish(housing), reflector: finish(reflector(rm, slot)) }
+  return { guide: finish(guide), housing: finish(housing), reflector: finish(reflector(rm, slot)), optic: finish(inner) }
+}
+
+function roundedRect(pts: V2[], rad: number): V2[] {
+  const out: V2[] = []
+  const n = pts.length
+  for (let i = 0; i < n; i++) {
+    const a = pts[(i - 1 + n) % n]
+    const p = pts[i]
+    const c = pts[(i + 1) % n]
+    const ia = norm([p[0] - a[0], p[1] - a[1], 0])
+    const oc = norm([c[0] - p[0], c[1] - p[1], 0])
+    const turn = Math.acos(Math.max(-1, Math.min(1, dot(ia, oc))))
+    const d = rad * Math.tan(turn / 2)
+    const t0: V2 = [p[0] - ia[0] * d, p[1] - ia[1] * d]
+    const t1: V2 = [p[0] + oc[0] * d, p[1] + oc[1] * d]
+    for (let k = 0; k <= 4; k++) {
+      const f = k / 4
+      const q0: V2 = [t0[0] + (p[0] - t0[0]) * f, t0[1] + (p[1] - t0[1]) * f]
+      const q1: V2 = [p[0] + (t1[0] - p[0]) * f, p[1] + (t1[1] - p[1]) * f]
+      out.push([q0[0] + (q1[0] - q0[0]) * f, q0[1] + (q1[1] - q0[1]) * f])
+    }
+  }
+  return out
+}
+
+/** Light cells on the recess floor between the guide's upper and lower runs, set back the full lens depth behind the guide face. */
+function optic(top: Rim[], bottom: Rim[], depth: number): MeshBuilder {
+  const o = opticSpec
+  const s = lampSpec
+  const b = new MeshBuilder()
+  const edge = s.inset + s.guide / 2 + o.clear
+  for (let j = 1; j < top.length - 1; j += o.every) {
+    const T = top[j]
+    const B = bottom[j]
+    const w = dist(T.p, B.p)
+    const half = w / 2 - edge
+    if (half < 0.004) continue
+    const n = norm(lerp3(T.n, B.n, 0.5))
+    const d0 = sub(B.p, T.p)
+    const across = norm(sub(d0, scale(n, dot(d0, n))))
+    const along = norm(cross(across, n))
+    const c = lerp3(T.p, B.p, 0.5)
+    const f: Plane = { o: add(c, scale(n, -depth - 0.0005)), ex: along, ey: across, ez: n }
+    const hw = o.width / 2
+    const k = -o.skew * half
+    const outline: V2[] = [[-hw - k, -half], [hw - k, -half], [hw + k, half], [-hw + k, half]]
+    merge(b, flat(f, roundedRect(outline, o.round), [], 0, o.height + 0.0005))
+  }
+  return b
 }
 
 /** A slim plate set into the slot, following the tail behind its outline, every edge rolled. */

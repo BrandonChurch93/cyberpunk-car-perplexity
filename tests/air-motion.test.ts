@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { config, shutterSeconds } from '../src/config'
+import { config, frameCount, shutterSeconds } from '../src/config'
+import { layers } from '../src/core/contract'
 import { LightRig } from '../src/core/lights'
 import { ImpactSurfaces, type ImpactSurfacePoint } from '../src/weather/air/impact-surfaces'
 import { fallCycle, terminalSpeed } from '../src/weather/air/motion'
@@ -24,7 +25,7 @@ describe('air rain motion', () => {
     }
   })
 
-  it('builds repeatable fine drops in four depth fields and a body-local beam field', () => {
+  it('builds repeatable drops and enables camera fields only on their shots', () => {
     const material = new THREE.MeshStandardMaterial()
     const world: WorldModule = {
       root: new THREE.Group(), lights: [], signs: [], surfaces: [], reflectionBox: new THREE.Box3(),
@@ -34,9 +35,10 @@ describe('air rain motion', () => {
     }
     const light = new LightRig([], 1).uniforms
     const body = new THREE.Vector3(2, 0, -1)
-    const meshes = rainMeshes(new RibbonView(), world, light, body)
-    expect(meshes.map((mesh) => mesh.name)).toEqual(['rain-near', 'rain-close', 'rain-middle', 'rain-distance', 'rain-beam'])
-    const [near, close, mid, far, beam] = meshes.map((mesh) => mesh.geometry)
+    const view = new RibbonView()
+    const meshes = rainMeshes(view, world, light, body)
+    expect(meshes.map((mesh) => mesh.name)).toEqual(['rain-near', 'rain-close', 'rain-middle', 'rain-distance', 'rain-beam', 'rain-paint', 'rain-beam-grain'])
+    const [near, close, mid, far, beam, paint, hero] = meshes.map((mesh) => mesh.geometry)
     const dropCount = (geometry: THREE.BufferGeometry): number =>
       geometry.getAttribute('aDrop').count / (geometry instanceof THREE.InstancedBufferGeometry ? 1 : 4)
     expect(dropCount(close)).toBeGreaterThan(dropCount(near) * 2)
@@ -48,14 +50,14 @@ describe('air rain motion', () => {
       const { array } = geometry.getAttribute(name)
       return Buffer.from(array.buffer, array.byteOffset, array.byteLength)
     }
-    for (const [index, field] of [[0, near], [1, close], [3, far], [4, beam]] as const) {
+    for (const [index, field] of [[0, near], [1, close], [3, far], [4, beam], [5, paint], [6, hero]] as const) {
       for (const name of ['aDrop', 'aMotion']) expect(bytes(resized[index], name).equals(bytes(field, name))).toBe(true)
     }
     const center = (mesh: THREE.Mesh): THREE.Vector3 =>
       (mesh.material as THREE.ShaderMaterial).uniforms.uVolumeCenter.value as THREE.Vector3
     expect(center(meshes[4]).toArray()).toEqual([2, 3.2 * 0.48, -1])
     expect(center(shifted[4]).toArray()).toEqual([-2, 3.2 * 0.48, 3])
-    for (const field of [near, close, mid, far, beam]) {
+    for (const field of [near, close, mid, far, beam, paint, hero]) {
       const drops = field.getAttribute('aDrop')
       const motion = field.getAttribute('aMotion')
       let fine = 0
@@ -72,6 +74,31 @@ describe('air rain motion', () => {
       expect(fine).toBeGreaterThan(dropCount(field) * 0.58)
       expect(worstSpeedError).toBeLessThan(1e-6)
     }
+    expect(meshes[5].layers.isEnabled(layers.cameraOnly)).toBe(true)
+    expect(meshes[5].layers.isEnabled(layers.scene)).toBe(false)
+    expect(meshes[6].layers.isEnabled(layers.cameraOnly)).toBe(true)
+    expect(meshes[6].layers.isEnabled(layers.scene)).toBe(false)
+    const paintGeometry = paint as THREE.InstancedBufferGeometry
+    const expose = (timeSeconds: number, format = config.formats.master) => {
+      const frameIndex = Math.round(timeSeconds * config.film.fps)
+      view.beginFrame({
+        format,
+        frame: { frameIndex, frameKey: frameIndex % frameCount, timeSeconds, tier: 'draft', format, samples: config.tiers.draft.samplesPerFrame },
+        camera: { position: new THREE.Vector3(), quaternion: new THREE.Quaternion(), focalMm: config.lens.focalLengthsMm[4],
+          sensorWidthMm: 36, focusDistance: 0.75, fNumber: 4, near: 0.02, far: 100 },
+      })
+      return paintGeometry.instanceCount
+    }
+    expect(expose(config.film.heroFrameSeconds)).toBe(0)
+    expect(meshes[6].visible).toBe(true)
+    expect(expose(config.film.macroFrameSeconds)).toBe(dropCount(paint))
+    expect(meshes[6].visible).toBe(false)
+    expect(expose(config.film.macroFrameSeconds, config.formats.vertical)).toBe(dropCount(paint))
+    const paintBeat = config.beats.find(beat => beat.id === 'paint')!
+    expect(expose(paintBeat.end)).toBe(0)
+    expect(meshes[6].visible).toBe(false)
+    expect(expose(config.film.durationSeconds)).toBe(0)
+    expect(meshes[6].visible).toBe(true)
   })
 
   it('finds the highest available wet, upward face in transformed world space', () => {

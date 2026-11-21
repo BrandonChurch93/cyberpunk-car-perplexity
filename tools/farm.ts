@@ -3,21 +3,24 @@ import { basename, join, relative } from 'node:path'
 import { defaultPaint, isTier, paintById, type TierId } from '../src/config.ts'
 import { planCrops } from './lib/crops.ts'
 import { args, buildHash, config, ensureBuild, readJson, repoRoot, writeJson } from './lib/env.ts'
-import { bundleStills, farmDir, farmJobs, jobSpec, missingStills, shardJobs, unbundleStills, type FarmPlan } from './lib/farm.ts'
+import { bundleStills, farmDir, farmJobs, jobSpec, missingStills, reviewJobs, shardJobs, unbundleStills, type FarmPlan } from './lib/farm.ts'
+import { eventRuns, hookFrames } from './lib/pack.ts'
+import { sheetFrames } from './lib/sheet.ts'
 import { PackContext, zebraAngleFrames } from './lib/pack-build.ts'
 import { detailFrom, RenderSession, runTool } from './lib/render.ts'
 import { cameraForFrame, extraCropPoints, sceneAnchors } from './lib/scene.ts'
 
-const help = `npm run farm -- --phase P --shard i/n [--tier final] [--paint id] [--detail full] [--budget minutes] [--list]
-  Renders shard i of n of the stills the phase packs need at the tier, then writes
+const help = `npm run farm -- --phase P --shard i/n [--review] [--tier final] [--paint id] [--detail full] [--budget minutes] [--list]
+  Renders shard i of n of the stills the phase packs need at the tier (with --review also the review
+  tier cells of the Phase 4 contact sheets, event runs and phone previews), then writes
   out/work/farm/farm-pP-<tier>-iofn-NN-of-MM.tar. Exit 75 with CONTINUE means the budget ran out:
   run the same command again, it keeps finished stills and continues a still from its saved samples.
 npm run farm -- --unbundle <folder or a.tar,b.tar>
   Unpacks into out/work/stills, compares any still already there byte for byte, refuses another build
   and lists what the plan still misses. Then npm run pack reuses every unpacked still.`
 
-async function makePlan(session: RenderSession, phase: number, tier: TierId, paint: string, detail: ReturnType<typeof detailFrom>): Promise<FarmPlan> {
-  const path = join(farmDir(), `plan-p${phase}-${tier}-${paint}-${detail}.json`)
+async function makePlan(session: RenderSession, phase: number, tier: TierId, paint: string, detail: ReturnType<typeof detailFrom>, review: boolean): Promise<FarmPlan> {
+  const path = join(farmDir(), `plan-p${phase}-${tier}-${paint}-${detail}${review ? '-review' : ''}.json`)
   const old = readJson<FarmPlan>(path)
   if (old && old.buildHash === session.buildHash) return old
   const master = config.formats.master
@@ -27,7 +30,12 @@ async function makePlan(session: RenderSession, phase: number, tier: TierId, pai
   const { anchors } = await sceneAnchors(page, paint)
   const extra = await extraCropPoints()
   const withVehicle = new Set(judged.filter((j) => planCrops(cameraForFrame(j.frame, master, anchors), master, anchors, extra).some((c) => c.kind === 'anchor')).map((j) => j.frame))
-  const plan: FarmPlan = { phase, tier, paint, detail, buildHash: session.buildHash, jobs: farmJobs(phase, judged, withVehicle, zebraAngleFrames, { tier, paint, detail }) }
+  const jobs = farmJobs(phase, judged, withVehicle, zebraAngleFrames, { tier, paint, detail })
+  if (review) {
+    const wide = [...[...config.beats.map((b) => b.id), 'seam'].flatMap((b) => sheetFrames(b)), ...eventRuns().flatMap((r) => r.frames)]
+    jobs.push(...reviewJobs({ wide, hook: hookFrames() }, { tier, paint, detail }, jobs))
+  }
+  const plan: FarmPlan = { phase, tier, paint, detail, buildHash: session.buildHash, jobs }
   writeJson(path, plan)
   return plan
 }
@@ -65,7 +73,8 @@ void runTool(async () => {
   const detail = detailFrom(a.detail)
   const session = await RenderSession.open({ budgetMinutes: a.budget !== undefined ? Number(a.budget) : undefined })
   try {
-    const plan = await makePlan(session, phase, tier, paint, detail)
+    if (a.review === 'true' && phase < 4) throw new Error('--review adds the contact sheet, run and phone stills, which only Phase 4 packs ask for')
+    const plan = await makePlan(session, phase, tier, paint, detail, a.review === 'true')
     if (a.list === 'true' || !a.shard) {
       const n = a.shard ? Number(a.shard.split('/')[1]) : 1
       plan.jobs.forEach((j, k) => console.log(`${String(k + 1).padStart(3)} shard ${(k % n) + 1}/${n}  ${j.name}  (${j.why})`))
@@ -73,7 +82,9 @@ void runTool(async () => {
       return 0
     }
     const pageKey = (j: { format: string; diag: string }): string => `${j.format}|${j.diag}`
-    const mine = shardJobs(plan.jobs, a.shard).sort((x, y) => pageKey(x).localeCompare(pageKey(y)) || x.frame - y.frame)
+    // Final stills first, so a shard that is stopped early has the judged set.
+    const rank = (j: { tier?: string }): number => (j.tier && j.tier !== tier ? 1 : 0)
+    const mine = shardJobs(plan.jobs, a.shard).sort((x, y) => rank(x) - rank(y) || pageKey(x).localeCompare(pageKey(y)) || x.frame - y.frame)
     console.log(`shard ${a.shard}: ${mine.length} of ${plan.jobs.length} stills at ${tier}, ${paint}, ${detail}, build ${plan.buildHash}`)
     for (const job of mine) {
       const { file, record, reused } = await session.still(jobSpec(job, plan))

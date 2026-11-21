@@ -7,7 +7,7 @@ import type { FrameEngine, Stage } from '../src/core/engine'
 import { createHaze, createHazeCapture } from '../src/core/haze'
 import type { applyLens } from '../src/core/lens'
 import { LightRig, patchFilmLighting } from '../src/core/lights'
-import { createReflections, planarTuning, quality } from '../src/core/reflect'
+import { createReflections, planarTuning, quality, reflectionCaptureSize } from '../src/core/reflect'
 import { lampSources, probeLamps } from '../src/core/reflect/lamps'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
 import { Probe } from '../src/core/reflect/probe'
@@ -107,6 +107,17 @@ describe('quality', () => {
     expect(quality.draft.planarScale).toBe(quality.review.planarScale)
     expect(quality.review.planarScale).toBe(quality.final.planarScale)
     for (const q of Object.values(quality)) expect(Math.log2(q.captureSize) % 1).toBe(0)
+  })
+
+  it('keeps the paint beat at least at review cube resolution without raising the hero or later beats', () => {
+    const paint = config.beats.find(({ id }) => id === 'paint')!
+    const macro = config.film.macroFrameSeconds
+    expect(reflectionCaptureSize('draft', config.film.heroFrameSeconds)).toBe(quality.draft.captureSize)
+    expect(reflectionCaptureSize('draft', paint.start)).toBe(quality.review.captureSize)
+    expect(reflectionCaptureSize('draft', macro)).toBe(quality.review.captureSize)
+    expect(reflectionCaptureSize('draft', paint.end)).toBe(quality.draft.captureSize)
+    expect(reflectionCaptureSize('review', macro)).toBe(quality.review.captureSize)
+    expect(reflectionCaptureSize('final', macro)).toBe(quality.final.captureSize)
   })
 })
 

@@ -45,14 +45,27 @@ describe('rear underbody', () => {
     }
   })
 
-  it('hangs each strake at least 125 mm off the ground, deepest at the tail', () => {
+  it('hangs each strake at least 125 mm off the ground, climbing to 150 to 160 mm at the exit, deepest at the tail', () => {
     const pos = u.strakes.getAttribute('position')
     let low = Infinity
-    for (let i = 0; i < pos.count; i++) low = Math.min(low, pos.getY(i))
+    let exitLow = Infinity
+    for (let i = 0; i < pos.count; i++) {
+      low = Math.min(low, pos.getY(i))
+      if (pos.getZ(i) < -2.3) exitLow = Math.min(exitLow, pos.getY(i))
+    }
     expect(low).toBeGreaterThan(0.125)
+    expect(exitLow).toBeGreaterThan(0.15)
     for (const s of strakes) {
-      const tail = tailZ(s.x)
-      expect(centreY(tail) + sheet - s.low).toBeGreaterThan(0.18)
+      expect(s.exit).toBeGreaterThan(s.toe)
+      expect(s.exit).toBeLessThanOrEqual(0.16)
+      expect(centreY(tailZ(s.x)) + sheet - s.exit).toBeGreaterThan(0.17)
+    }
+  })
+
+  it('keeps the inner strakes wedge shaped, shallow at the toe so the gaps between them stay open', () => {
+    for (const s of strakes.filter((k) => k.rise)) {
+      const foot = s.lead - s.rake
+      expect(centreY(foot) + sheet - s.toe).toBeLessThan(0.6 * (centreY(tailZ(s.x)) + sheet - s.exit))
     }
   })
 
@@ -60,11 +73,20 @@ describe('rear underbody', () => {
     const slope = (centreY(-2.2) - centreY(-2.0)) / 0.2
     expect((Math.atan(slope) * 180) / Math.PI).toBeCloseTo(11, 1)
   })
-  it('spaces the strakes evenly and keeps them below the plate', () => {
+  it('spaces the strakes evenly, below the plate except where they rise through the open tail in front of the mesh', () => {
     const gaps = strakes.slice(1).map((s, i) => s.x - strakes[i].x)
     for (const g of gaps) expect(g).toBeCloseTo(gaps[0], 6)
+    expect(strakes[0].x).toBeCloseTo(gaps[0], 6)
     const pos = u.strakes.getAttribute('position')
-    for (let i = 0; i < pos.count; i++) expect(pos.getY(i)).toBeLessThan(centreY(pos.getZ(i)) + sheet + 0.005)
+    let risen = 0
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getY(i) < centreY(pos.getZ(i)) + sheet + 0.006) continue
+      risen++
+      expect(pos.getZ(i)).toBeLessThan(meshZ)
+      expect(pos.getY(i)).toBeLessThan(bumper + 0.006)
+      expect(Math.abs(pos.getX(i))).toBeLessThan(0.6)
+    }
+    expect(risen).toBeGreaterThan(0)
   })
 
   it('leaves the corner open outboard of the outer strakes behind the rear tyre', () => {
@@ -84,9 +106,10 @@ describe('rear module', () => {
   const bay = engineBay(c.bay, 0.02)
   const closed: Array<[string, THREE.BufferGeometry]> = [
     ['outlet lip', ex.lip], ['outlet pipes', ex.pipes], ['outlet back', ex.soot], ['outlet housing', ex.housing],
-    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['lamp reflector', tl.reflector], ['valance wall', va.wall],
+    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['lamp reflector', tl.reflector], ['lamp optic', tl.optic], ['valance wall', va.wall],
     ['bay covers', bay.covers], ['bay carbon', bay.carbon], ['plenum', bay.center], ['bay mesh', bay.mesh],
     ['airbox grille', bay.grille], ['grille bezel', bay.bezel], ['grille duct', bay.duct], ['grille ledge', bay.ledge],
+    ['intake hose', bay.hose], ['hose clamp', bay.clamp],
   ]
 
   it.each(closed)('builds the %s as a closed solid wound outward', (_, g) => {
@@ -176,7 +199,7 @@ describe('rear module', () => {
   })
 
   it('keeps every bay part under the deck and inside the opening', () => {
-    for (const g of [bay.covers, bay.carbon, bay.center, bay.mesh, bay.grille, bay.bezel, bay.duct]) {
+    for (const g of [bay.covers, bay.carbon, bay.center, bay.mesh, bay.grille, bay.bezel, bay.duct, bay.hose, bay.clamp]) {
       const pos = g.getAttribute('position')
       for (let i = 0; i < pos.count; i += 7) {
         const [x, y, z] = [pos.getX(i), pos.getY(i), pos.getZ(i)]
@@ -185,6 +208,27 @@ describe('rear module', () => {
       }
     }
     expect(bay.grilleNormal[1]).toBeGreaterThan(0.9)
+  })
+
+  it('runs the carbon brace the length of the bay with its weave at 3.5 mm tows', () => {
+    const pos = bay.carbon.getAttribute('position')
+    const uv = bay.carbon.getAttribute('uv')
+    let zMin = Infinity
+    let zMax = -Infinity
+    let uMax = 0
+    for (let i = 0; i < pos.count; i++) {
+      zMin = Math.min(zMin, pos.getZ(i))
+      zMax = Math.max(zMax, pos.getZ(i))
+      uMax = Math.max(uMax, uv.getX(i))
+    }
+    expect(zMax - zMin).toBeGreaterThan(1.1)
+    expect(uMax).toBeCloseTo((zMax - zMin) / 0.995 / (620 * 0.0035), 1)
+  })
+
+  it('sinks the airbox well deep enough that the grille cells read open', () => {
+    bay.duct.computeBoundingBox()
+    bay.grille.computeBoundingBox()
+    expect(bay.grille.boundingBox!.min.y - bay.duct.boundingBox!.min.y).toBeGreaterThan(0.06)
   })
   it('opens the corners behind the rear wheels below the bumper and nowhere else', () => {
     expect(cornerCut([0.8, 0.3, -2.2])).toBeGreaterThan(0.02)
