@@ -307,15 +307,15 @@ function bladeOptics(material: T.MeshPhysicalMaterial): void {
         float lower = vBladeTrack.z;
         float compactBlade = smoothstep(0.055, 0.15, fwidth(vBladeUV.y));
         float aperture = 1.0 - smoothstep(mix(0.64, 0.86, compactBlade), mix(0.94, 1.0, compactBlade), bladeEdge);
-        float core = 1.0 - smoothstep(mix(0.16, 0.10, stem), mix(0.62, 0.43, stem), bladeEdge);
+        float core = 1.0 - smoothstep(mix(0.12, 0.08, stem), mix(0.58, 0.38, stem), bladeEdge);
         float ribPhase = bladeU * vBladeTrack.x / 0.0105 - 0.34 * bladeEdge;
         float ribs = pow(max(0.0, cos(PI2 * ribPhase)), 3.0)
           * (1.0 - smoothstep(0.24, 0.66, fwidth(ribPhase)));
         float source = 0.25 + 0.67 * exp(-5.8 * bladeU) + 0.29 * exp(-11.0 * abs(bladeU - 0.68));
-        float outline = 1.0 - 0.87 * smoothstep(mix(0.82, 0.94, lower), 1.0, bladeU);
+        float outline = 1.0 - 0.87 * smoothstep(mix(0.94, 0.82, stem), 1.0, bladeU);
         float view = gl_FrontFacing ? max(0.0, dot(normal, normalize(vViewPosition))) : 0.0;
-        float facing = mix(view, sqrt(view), lower);
-        float shoulder = mix(0.11, mix(0.61, 0.18, stem), compactBlade);
+        float facing = mix(view, sqrt(view), mix(0.58, 1.0, lower) * (1.0 - stem));
+        float shoulder = mix(0.095, mix(0.30, 0.13, stem), compactBlade);
         diffuseColor.rgb *= 0.11 + aperture * (0.44 + 0.24 * ribs);
         totalEmissiveRadiance *= source * outline * facing * aperture * (shoulder + mix(1.19, 1.43, stem) * core + 0.29 * ribs);
       `)
@@ -456,8 +456,8 @@ function lensPickup(material: T.Material, flux: T.IUniform<number>): void {
         float primaryReturn = dot(normal, normalize(lensView + opticalAxis));
         float obliqueReturn = dot(normal, normalize(lensView + 2.2 * opticalAxis));
         float lowView = 1.0 - smoothstep(0.072, 0.105, dot(normalize(vProjectorUp), lensView));
-        float core = 540.0 * primary * exp(-377.0 * (1.0 - primaryReturn))
-          + 360.0 * oblique * exp(-377.0 * (1.0 - obliqueReturn));
+        float core = 355.0 * primary * exp(-377.0 * (1.0 - primaryReturn))
+          + 220.0 * oblique * exp(-377.0 * (1.0 - obliqueReturn));
         float caustic = (lensAngle - 0.91) * 46.0;
         float arc = 0.15 * exp(-caustic * caustic) * smoothstep(-0.24, 0.58, normal.y);
         float lensGlint = exp(-134.0 * (1.0 - lensAngle));
@@ -586,7 +586,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   const coverRing = fasciaThroat(map, 'eye')?.map(s => vector(s.seat)) ?? bowl
   add('front clear contoured eye lens', cover(signedArea(coverRing) < 0 ? coverRing.reverse() : coverRing, map, full), lensMaterial, true)
   const drl = tag(m.drl.clone(), 'none')
-  drl.emissive.setHex(0xe5f3ff)
+  drl.emissive.setHex(0xeaf5ff)
   drl.color.setHex(0x7e868a)
   drl.roughness = .22
   drl.clearcoat = .26
@@ -606,7 +606,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   add('front Y running guide', guide(map, guideWidth.lens, .0034, .00032), drl, true, guideAssembly)
   emit('front running guide', vector(drlL.p[0]).addScaledVector(forward, .008), false, drl, 3.99)
   const beam = tag(m.beamLens.clone(), 'none')
-  beam.emissive.setHex(0xe4f3ff)
+  beam.emissive.setHex(0xe7f4ff)
   beam.color.setHex(0x939ca1)
   beam.roughness = .28
   beam.transmission = 0
@@ -656,10 +656,10 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
       const running = stage * stage
       const level = T.MathUtils.smoothstep(stage, lampThresholds.beamStart, lampThresholds.beamFull)
       for (const l of lamps) l.level = l.beam ? level : running
-      drl.emissiveIntensity = 432 * running
-      beam.emissiveIntensity = 260 * level
+      drl.emissiveIntensity = 382 * running
+      beam.emissiveIntensity = 192 * level
       lensFlux.value = level
-      rimMetal.emissiveIntensity = .74 * level
+      rimMetal.emissiveIntensity = .52 * level
     },
   }
 }

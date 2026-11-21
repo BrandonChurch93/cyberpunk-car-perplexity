@@ -56,7 +56,9 @@ const creepNeck = 0.15
 /** Earlier runners laid a channel this long above the start, which the hero follows down when it lets go. */
 export const laidLength = 0.18
 /** Half width and height of the laid channel in meters, from its pinches to its swells. */
-const laidChannel = { width: [0.0012, 0.0024], height: [0.0006, 0.001] }
+const laidChannel = { width: [0.002, 0.003], height: [0.0006, 0.001] }
+/** The laid run is flattened by its own weight: a superellipse of this power across, flat over the middle, rolling at the banks. */
+const laidProfile = 3
 const swellAt = (i: number) => 0.5 + 0.5 * Math.sin(i * 0.11 + 0.7) * Math.sin(i * 0.037 + 2.1)
 
 interface Tri {
@@ -330,10 +332,13 @@ export class Runners {
       const side = this.sideAt(i * pathStep)
       for (let k = 0; k < across; k++) {
         const u = (k / (across - 1)) * 2 - 1
-        const h = height * Math.sqrt(Math.max(0, 1 - u * u))
+        const q = THREE.MathUtils.lerp(2, laidProfile, laid * behind)
+        const rest = Math.max(0, 1 - Math.abs(u) ** q)
+        const h = height * rest ** (1 / q)
         const at = i * across + k
         position.setXYZ(at, p.x + side.x * u * width + n.x * h, p.y + side.y * u * width + n.y * h, p.z + side.z * u * width + n.z * h)
-        tilt.copy(n).multiplyScalar(width * Math.sqrt(Math.max(0.02, 1 - u * u))).addScaledVector(side, u * height).normalize()
+        const slope = Math.min(8, (height / Math.max(width, 1e-6)) * Math.abs(u) ** (q - 1) * Math.max(rest, 1e-3) ** (1 / q - 1))
+        tilt.copy(n).addScaledVector(side, Math.sign(u) * slope).normalize()
         normal.setXYZ(at, tilt.x, tilt.y, tilt.z)
       }
     }
