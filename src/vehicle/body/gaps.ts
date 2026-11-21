@@ -146,3 +146,147 @@ export function gapLips(S: Surface, gaps: SurfaceCurve[], removed: TrimFn, depth
   }
   return out
 }
+
+/**
+ * One recessed channel along every shut gap, built on the paint's own edge vertices so the lips and the panel share
+ * them: each edge rolls over `gapRoll` into a wall `gapHalf` off the line, down to `depth`, onto a floor that runs just
+ * past the line. The floor is returned apart so it can take a dark finish.
+ */
+export function gapChannel(parts: TessResult[], gaps: SurfaceCurve[], depth = 0.007): { lips: TessResult; floor: TessResult } {
+  const lips: TessResult = { positions: [], normals: [], uvs: [], indices: [], boundaries: [] }
+  const floor: TessResult = { positions: [], normals: [], uvs: [], indices: [], boundaries: [] }
+  const push = (t: TessResult, p: V3, n: V3, uv: [number, number]): number => {
+    t.positions.push(p[0], p[1], p[2])
+    t.normals.push(n[0], n[1], n[2])
+    t.uvs.push(uv[0], uv[1])
+    return t.positions.length / 3 - 1
+  }
+  const near = onGapEdge(gaps)
+  const steps = 3
+  const lines = gaps.map((g) => resample(g, 0.002).p)
+  const closest = (q: V3): V3 => {
+    let best: V3 = q
+    let bd = Infinity
+    for (const L of lines) {
+      for (let i = 0; i + 1 < L.length; i++) {
+        const a = L[i]
+        const e = sub(L[i + 1], a)
+        const ee = e[0] * e[0] + e[1] * e[1] + e[2] * e[2]
+        const w = sub(q, a)
+        const t = ee > 0 ? Math.max(0, Math.min(1, (w[0] * e[0] + w[1] * e[1] + w[2] * e[2]) / ee)) : 0
+        const c = add(a, scale(e, t))
+        const d = dist(c, q)
+        if (d < bd) {
+          bd = d
+          best = c
+        }
+      }
+    }
+    return best
+  }
+  const strip = (pts: V3[], nor: V3[], uv: Array<[number, number]>, closed: boolean): void => {
+    const n = pts.length
+    const reach = (i: number, dir: number): V3 => {
+      let j = i
+      let l = 0
+      for (let k = 0; k < n && l < 0.0015; k++) {
+        const nj = closed ? (j + dir + n) % n : j + dir
+        if (nj < 0 || nj >= n) break
+        l += dist(pts[j], pts[nj])
+        j = nj
+      }
+      return pts[j]
+    }
+    const lipRows: number[][] = []
+    const floorRows: number[][] = []
+    for (let i = 0; i < n; i++) {
+      const N = nor[i]
+      const t = norm(sub(reach(i, 1), reach(i, -1)))
+      const b = norm(cross(t, N))
+      const row: number[] = []
+      for (let k = 0; k <= steps; k++) {
+        const th = (k / steps) * (Math.PI / 2)
+        row.push(push(lips, add(add(pts[i], scale(b, gapRoll * Math.sin(th))), scale(N, -gapRoll * (1 - Math.cos(th)))), norm(add(scale(N, Math.cos(th)), scale(b, Math.sin(th)))), uv[i]))
+      }
+      const foot = add(add(pts[i], scale(b, gapRoll)), scale(N, -depth))
+      row.push(push(lips, foot, b, uv[i]))
+      lipRows.push(row)
+      const inner = add(closest(pts[i]), scale(N, -depth))
+      floorRows.push([push(floor, foot, N, uv[i]), push(floor, inner, N, uv[i])])
+    }
+    const m = closed ? n : n - 1
+    const P = (t: TessResult, i: number): V3 => [t.positions[i * 3], t.positions[i * 3 + 1], t.positions[i * 3 + 2]]
+    const face = (t: TessResult, a: number, b: number, c: number): void => {
+      const [pa, pb, pc] = [P(t, a), P(t, b), P(t, c)]
+      const x = cross(sub(pb, pa), sub(pc, pa))
+      let s = 0
+      for (const i of [a, b, c]) s += x[0] * t.normals[i * 3] + x[1] * t.normals[i * 3 + 1] + x[2] * t.normals[i * 3 + 2]
+      if (s > 0 && Math.min(dist(pa, pb), dist(pb, pc), dist(pc, pa)) > 2e-5) t.indices.push(a, b, c)
+    }
+    for (const [rows, t] of [[lipRows, lips], [floorRows, floor]] as const) {
+      for (let i = 0; i < m; i++) {
+        const r0 = rows[i]
+        const r1 = rows[(i + 1) % n]
+        for (let k = 0; k + 1 < r0.length; k++) {
+          face(t, r0[k], r1[k + 1], r1[k])
+          face(t, r0[k], r0[k + 1], r1[k + 1])
+        }
+      }
+    }
+  }
+  for (const t of parts) {
+    for (const b of t.boundaries) {
+      const n = b.points.length
+      const on = b.points.map((p) => near(p))
+      if (!on.some(Boolean)) continue
+      const all = on.every(Boolean)
+      const runs: number[][] = []
+      if (all && b.closed) runs.push(b.points.map((_, i) => i))
+      else {
+        const start = b.closed ? on.indexOf(false) : 0
+        let run: number[] = []
+        for (let k = 0; k <= n; k++) {
+          const i = b.closed ? (start + k) % n : k
+          if (k < n && on[i]) run.push(i)
+          else if (run.length) {
+            const lo = b.closed ? (run[0] - 1 + n) % n : Math.max(0, run[0] - 1)
+            const hi = b.closed ? (run[run.length - 1] + 1) % n : Math.min(n - 1, run[run.length - 1] + 1)
+            runs.push([...(lo !== run[0] ? [lo] : []), ...run, ...(hi !== run[run.length - 1] ? [hi] : [])])
+            run = []
+          }
+        }
+      }
+      for (const r of runs) {
+        const idx = thin(r.map((i) => b.points[i])).map((j) => r[j])
+        if (idx.length < 2) continue
+        const closed = all && b.closed
+        strip(idx.map((i) => b.points[i]), idx.map((i) => b.normals[i]), idx.map((i) => b.uv[i] as [number, number]), closed)
+      }
+    }
+  }
+  return { lips, floor }
+}
+
+/** Indices of a polyline with points at least `gap` apart and no turn sharper than 120 degrees. */
+function thin(p: V3[], gap = 0.0005): number[] {
+  const keep: number[] = [0]
+  for (let i = 1; i < p.length; i++) {
+    if (dist(p[i], p[keep[keep.length - 1]]) >= gap) keep.push(i)
+    else if (i === p.length - 1 && keep.length > 1) keep[keep.length - 1] = i
+  }
+  for (let changed = true; changed && keep.length > 2; ) {
+    changed = false
+    for (let j = 1; j + 1 < keep.length; j++) {
+      const a = norm(sub(p[keep[j]], p[keep[j - 1]]))
+      const b = norm(sub(p[keep[j + 1]], p[keep[j]]))
+      if (a[0] * b[0] + a[1] * b[1] + a[2] * b[2] < -0.5) {
+        keep.splice(j, 1)
+        changed = true
+        break
+      }
+    }
+  }
+  return keep
+}
+
+const dist = (a: V3, b: V3): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
