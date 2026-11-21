@@ -17,7 +17,9 @@ export interface PlanarUniforms {
   reflectLodMax: { value: number }
   reflectSeed: { value: number }
   reflectOn: { value: number }
-  reflectBillboard: { value: THREE.Vector4 }
+  reflectEmitters: { value: THREE.Vector4[] }
+  reflectEmitterBounds: { value: THREE.Vector4[] }
+  reflectEmitterPeaks: { value: number[] }
 }
 
 const worldVarying = 'varying vec3 vReflectWorld;'
@@ -78,7 +80,11 @@ uniform vec2 reflectSize;
 uniform float reflectLodMax;
 uniform float reflectSeed;
 uniform float reflectOn;
-uniform vec4 reflectBillboard;
+#if REFLECT_EMITTERS > 0
+  uniform vec4 reflectEmitters[REFLECT_EMITTERS];
+  uniform vec4 reflectEmitterBounds[REFLECT_EMITTERS];
+  uniform float reflectEmitterPeaks[REFLECT_EMITTERS];
+#endif
 
 vec2 reflectUv( vec3 x ) {
   vec4 c = reflectViewProjection * vec4( x, 1.0 );
@@ -131,6 +137,7 @@ vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
   vec2 uvSide = reflectUv( p + planarRay( v, normalize( n + a * t ) ) * dist );
   float minor = length( ( uvSide - uvCenter ) * reflectSize );
   float lod = clamp( log2( max( minor * REFLECT_FILTER, 1.0 ) ), 0.0, reflectLodMax );
+  float mipBlend = smoothstep( REFLECT_MIP_START, REFLECT_MIP_END, roughness );
   vec2 centerEdge = min( uvCenter, 1.0 - uvCenter );
   float fireflyBlend = smoothstep( REFLECT_FIREFLY_START, REFLECT_FIREFLY_END, roughness )
     * smoothstep( 0.0, 0.02, min( centerEdge.x, centerEdge.y ) );
@@ -159,9 +166,18 @@ vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
     vec2 edge = min( uv, 1.0 - uv );
     float inside = smoothstep( 0.0, 0.02, min( edge.x, edge.y ) );
     vec3 env = inside < 1.0 ? reflectEnvironment( r, roughness * 0.5 ) : vec3( 0.0 );
-    vec3 mirror = inside > 0.0 ? textureLod( reflectMap, clamp( uv, 0.0, 1.0 ), clamp( max( lod, log2( max( spread, 1.0 ) ) ), 0.0, reflectLodMax ) ).rgb : vec3( 0.0 );
+    vec3 mirror = inside > 0.0 ? textureLod( reflectMap, clamp( uv, 0.0, 1.0 ), mipBlend * clamp( max( lod, log2( max( spread, 1.0 ) ) ), 0.0, reflectLodMax ) ).rgb : vec3( 0.0 );
     float luma = planarLuma( mirror );
-    float excess = max( luma - tapLimit, 0.0 ) / max( REFLECT_FIREFLY_FLOOR, luma );
+    float ceiling = tapLimit;
+    #if REFLECT_EMITTERS > 0
+      if ( fireflyBlend > 0.0 && luma > ceiling ) {
+        for ( int j = 0; j < REFLECT_EMITTERS; j ++ ) {
+          vec4 bounds = reflectEmitterBounds[j];
+          if ( all( greaterThanEqual( uv, bounds.xy ) ) && all( lessThanEqual( uv, bounds.zw ) ) ) ceiling = max( ceiling, reflectEmitterPeaks[j] );
+        }
+      }
+    #endif
+    float excess = max( luma - ceiling, 0.0 ) / max( REFLECT_FIREFLY_FLOOR, luma );
     mirror *= 1.0 - fireflyBlend * excess;
     sum += mix( env, mirror, inside );
     count += 1.0;
@@ -182,30 +198,44 @@ const spotStart = '#if ( NUM_SPOT_LIGHTS > 0 ) && defined( RE_Direct )'
 const spotDirect = 'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );'
 
 function deckDirectChunk(): string {
-  // The resolved billboard image supplies specular on the mirrored deck, not the analytic light sample.
   const lighting = THREE.ShaderChunk.lights_fragment_begin
   const start = lighting.indexOf(spotStart)
   if (start < 0) throw new Error('deck area shading requires a spot light block')
-  return lighting.slice(0, start) + replaceOnce(lighting.slice(start), spotDirect, /* glsl */ `
+  return lighting.slice(0, start) + /* glsl */ `
+  float deckMirrorCoverage = 0.0;
+  #if REFLECT_EMITTERS > 0
+    if ( reflectOn > 0.5 ) {
+      vec3 worldNormal = transformDirectionByInverseViewMatrix( geometryNormal, viewMatrix );
+      vec2 uv = reflectUv( vReflectWorld );
+      vec2 edge = min( uv, 1.0 - uv );
+      deckMirrorCoverage = smoothstep( 0.0, 0.02, min( edge.x, edge.y ) ) * smoothstep( 0.6, 0.8, worldNormal.y );
+      #ifdef REFLECT_DECK_DETAIL
+        if ( abs( vReflectWorld.y ) > 0.02 || worldNormal.y < 0.7 ) deckMirrorCoverage = 0.0;
+      #endif
+    }
+  #endif
+  ` + replaceOnce(lighting.slice(start), spotDirect, /* glsl */ `
     {
       vec3 beforeSpecular = reflectedLight.directSpecular;
       #ifdef USE_CLEARCOAT
         vec3 beforeCoat = clearcoatSpecularDirect;
       #endif
       ${spotDirect}
-      vec3 billboardView = ( viewMatrix * vec4( reflectBillboard.xyz, 1.0 ) ).xyz;
-      if ( reflectOn > 0.5 && reflectBillboard.w > 0.5 && distance( spotLight.position, billboardView ) < 0.002 ) {
-        vec3 worldNormal = transformDirectionByInverseViewMatrix( geometryNormal, viewMatrix );
-        vec2 uv = reflectUv( vReflectWorld );
-        vec2 edge = min( uv, 1.0 - uv );
-        float covered = smoothstep( 0.0, 0.02, min( edge.x, edge.y ) ) * smoothstep( 0.6, 0.8, worldNormal.y );
-        float areaSpecular = 1.0 - covered * ( 1.0 - smoothstep( 0.12, 0.35, material.roughness ) );
-        reflectedLight.directSpecular = mix( beforeSpecular, reflectedLight.directSpecular, areaSpecular );
-        #ifdef USE_CLEARCOAT
-          float coatAreaSpecular = 1.0 - covered * ( 1.0 - smoothstep( 0.12, 0.35, material.clearcoatRoughness ) );
-          clearcoatSpecularDirect = mix( beforeCoat, clearcoatSpecularDirect, coatAreaSpecular );
-        #endif
-      }
+      #if REFLECT_EMITTERS > 0
+        if ( deckMirrorCoverage > 0.0 && directLight.visible ) {
+          vec3 spotWorld = ( spotLight.position - viewMatrix[3].xyz ) * mat3( viewMatrix );
+          for ( int j = 0; j < REFLECT_EMITTERS; j ++ ) {
+            if ( reflectEmitters[j].w < 0.5 ) continue;
+            vec3 delta = spotWorld - reflectEmitters[j].xyz;
+            if ( dot( delta, delta ) >= 0.000004 ) continue;
+            reflectedLight.directSpecular = mix( reflectedLight.directSpecular, beforeSpecular, deckMirrorCoverage );
+            #ifdef USE_CLEARCOAT
+              clearcoatSpecularDirect = mix( clearcoatSpecularDirect, beforeCoat, deckMirrorCoverage );
+            #endif
+            break;
+          }
+        }
+      #endif
     }
   `)
 }
@@ -217,6 +247,8 @@ export interface PlanarTuning {
   roughEnd: number
   far: number
   tail: number
+  mipStart: number
+  mipEnd: number
   fireflyStart: number
   fireflyEnd: number
   fireflyRatio: number
@@ -231,11 +263,14 @@ export function planarPatch(uniforms: PlanarUniforms, tuning: PlanarTuning, deck
     uniforms: uniforms as unknown as Record<string, THREE.IUniform>,
     defines: {
       REFLECT_TAPS: tuning.taps,
+      REFLECT_EMITTERS: uniforms.reflectEmitters.value.length,
       REFLECT_FILTER: f(tuning.filter),
       REFLECT_ROUGH_START: f(tuning.roughStart),
       REFLECT_ROUGH_END: f(tuning.roughEnd),
       REFLECT_FAR: f(tuning.far),
       REFLECT_TAIL: f(tuning.tail),
+      REFLECT_MIP_START: f(tuning.mipStart),
+      REFLECT_MIP_END: f(tuning.mipEnd),
       REFLECT_FIREFLY_START: f(tuning.fireflyStart),
       REFLECT_FIREFLY_END: f(tuning.fireflyEnd),
       REFLECT_FIREFLY_RATIO: f(tuning.fireflyRatio),
@@ -245,7 +280,9 @@ export function planarPatch(uniforms: PlanarUniforms, tuning: PlanarTuning, deck
     apply(shader) {
       shader.fragmentShader = insertBefore(shader.fragmentShader, 'void main() {', planarPars)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <lights_fragment_maps>', planarApply)
-      if (!deckDetail) shader.fragmentShader = replaceOnce(shader.fragmentShader, '#include <lights_fragment_begin>', deckDirectChunk())
+      if (uniforms.reflectEmitters.value.length > 0) {
+        shader.fragmentShader = replaceOnce(shader.fragmentShader, '#include <lights_fragment_begin>', deckDirectChunk())
+      }
     },
   }
 }
