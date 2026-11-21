@@ -46,6 +46,16 @@ export const atmosphere = {
   projectorSuspendedScatterFraction: 0.58,
   projectorSuspendedHeight: [0.13, 0.27, 0.50, 0.72],
   projectorSuspendedReach: [1.12, 2.48],
+  projectorWakeFocus: [2.2, 3.12],
+  projectorWakeReach: [0.96, 2.18],
+  projectorWakeFraction: 0.27,
+  projectorWakeSlope: [-0.062, -0.012, 0.17, 0.24],
+  projectorWakeScatter: [0.53, 0.54],
+  projectorOpeningFraction: 0.085,
+  projectorOpeningAngle: [0.58, 0.86],
+  projectorOpeningHeight: [-0.12, -0.045],
+  projectorOpeningReach: [0.14, 0.32, 0.97, 1.40],
+  projectorOpeningClearance: [0.10, 0.29],
 } as const
 
 const cloudSeed = (streamSeed('haze/cloud-underlight') / 4294967296 * 64).toFixed(8)
@@ -63,6 +73,7 @@ uniform int hazeLightLimit;
 uniform vec2 sampleJitter;
 uniform float focusDistance;
 uniform float farAirCameraFar;
+uniform bool cameraWake;
 in vec2 vUv;
 out vec4 outColor;
 
@@ -160,14 +171,17 @@ float projectorReceiver(vec3 hit, vec3 source, vec3 axis) {
   return 1.0 - nearBody * noseDepth * aboveDeck;
 }
 
-vec2 projectorDensities(float t, float height, float distanceToLight) {
+vec2 projectorDensities(float t, float height, float distanceToLight, float wakeGain) {
   float h = max(0.0, height);
   float taper = 1.0 - exp(-h / ${atmosphere.projectorAerosolHeight});
   float air = airDensity * exp(-h / airHeight) * taper * taper * taper * taper;
   float suspended = smoothstep(${atmosphere.projectorSuspendedHeight.slice(0, 2).join(', ')}, h)
     * (1.0 - smoothstep(${atmosphere.projectorSuspendedHeight.slice(2).join(', ')}, h));
-  float near = 1.0 - smoothstep(${atmosphere.projectorSuspendedReach.join(', ')}, distanceToLight);
-  float wake = ${atmosphere.projectorSuspendedFraction} * deckDensity * exp(-h / layerHeight) * suspended * near;
+  vec2 reach = mix(vec2(${atmosphere.projectorSuspendedReach.join(', ')}),
+    vec2(${atmosphere.projectorWakeReach.join(', ')}), wakeGain);
+  float near = 1.0 - smoothstep(reach.x, reach.y, distanceToLight);
+  float wake = mix(${atmosphere.projectorSuspendedFraction}, ${atmosphere.projectorWakeFraction}, wakeGain)
+    * deckDensity * exp(-h / layerHeight) * suspended * near;
   return vec2(air, wake) * (1.0 - step(localAirRange, t));
 }
 
@@ -332,6 +346,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   vec3 radiance = airlight * foregroundScatter(far * 0.5);
   vec2 pixel = floor(uv * vec2(textureSize(sceneDepth, 0)));
   float pixelNoise = fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
+  float wakeGain = cameraWake ? smoothstep(${atmosphere.projectorWakeFocus.join(', ')}, focusDistance) : 0.0;
 
   for (int i = 0; i < MAX_FILM_LIGHTS; i++) {
     if (i >= filmLightCount || (hazeLightLimit >= 0 && i >= hazeLightLimit)) break;
@@ -404,6 +419,9 @@ vec4 scatterToDepth(vec2 uv, float depth) {
       : 1.0;
     if (projectorGain < 1e-4) continue;
     float receiver = projector ? projectorReceiver(hit, filmLightPosition[i], axis.xyz) : 1.0;
+    float opening = projector && wakeGain > 0.0 ? ${atmosphere.projectorOpeningFraction} * wakeGain
+      * (1.0 - smoothstep(${atmosphere.projectorOpeningHeight.join(', ')}, hit.y - filmLightPosition[i].y))
+      * smoothstep(${atmosphere.projectorOpeningAngle.join(', ')}, dot(-ray, axis.xyz)) : 0.0;
     float beamRadius = sqrt(perp2 + min(shape.y * shape.y, 0.01));
     float theta0 = atan((segment.x - along) / beamRadius);
     float theta1 = atan((segment.y - along) / beamRadius);
@@ -427,18 +445,30 @@ vec4 scatterToDepth(vec2 uv, float depth) {
         + layerOpticalDepth(origin.y, ray.y, layer, t) + cityOpticalDepth(origin, ray, cityStart, t);
       float cosine = dot(ray, toLight);
       float inScatter;
+      float receive = receiver;
       if (projector) {
         float onset = smoothstep(${atmosphere.projectorScatterDistance.join(', ')}, distanceToLight);
-        float body = projectorBodyPhase(cosine, distanceToLight, dot(toLight, up), far - t);
-        vec2 densities = projectorDensities(t, p.y, distanceToLight);
+        float slope = dot(toLight, up);
+        float clearance = far - t;
+        float body = projectorBodyPhase(cosine, distanceToLight, slope, clearance);
+        float middle = smoothstep(${atmosphere.projectorWakeSlope.slice(0, 2).join(', ')}, slope)
+          * (1.0 - smoothstep(${atmosphere.projectorWakeSlope.slice(2).join(', ')}, slope));
+        float wing = mix(${atmosphere.projectorSuspendedScatterFraction},
+          ${atmosphere.projectorWakeScatter[0]} + ${atmosphere.projectorWakeScatter[1]} * middle, wakeGain);
+        vec2 densities = projectorDensities(t, p.y, distanceToLight, wakeGain);
         inScatter = dot(densities, vec2(
           projectorPhase(cosine) * ${atmosphere.projectorScatterFraction},
-          projectorSuspendedPhase(cosine) * ${atmosphere.projectorSuspendedScatterFraction}
+          projectorSuspendedPhase(cosine) * wing
         ) * onset + body);
+        if (opening > 0.0) {
+          float span = smoothstep(${atmosphere.projectorOpeningReach.slice(0, 2).join(', ')}, distanceToLight)
+            * (1.0 - smoothstep(${atmosphere.projectorOpeningReach.slice(2).join(', ')}, distanceToLight));
+          receive = mix(receiver, 1.0, opening * span * smoothstep(${atmosphere.projectorOpeningClearance.join(', ')}, clearance));
+        }
       } else {
         inScatter = densityAt(t, p.y, layer, cityStart) * phase(cosine, anisotropy) * scatterFraction;
       }
-      radiance += light * (visible * weight * inScatter * receiver
+      radiance += light * (visible * weight * inScatter * receive
         * exp(-opticalDepth) * foregroundScatter(t) * projectorGain);
     }
   }
@@ -510,6 +540,7 @@ function hazeUniforms({ rig, world }: HazeDomain, texture: THREE.Texture | null)
     sampleJitter: { value: new THREE.Vector2() },
     focusDistance: { value: 1 },
     farAirCameraFar: { value: 1 },
+    cameraWake: { value: false },
   }
 }
 
@@ -608,6 +639,7 @@ export function createHaze({ rig, world }: HazeDomain): StagePart {
     generateMipmaps: false,
   })
   const uniforms = hazeUniforms({ rig, world }, coarse.texture)
+  uniforms.cameraWake.value = true
   const integratePass = new FullscreenPass(passMaterial(integrate, uniforms, { blending: THREE.NoBlending }))
   const compositePass = new FullscreenPass(passMaterial(composite, uniforms, { blending: THREE.NoBlending }))
   return {
