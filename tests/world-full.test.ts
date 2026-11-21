@@ -368,6 +368,24 @@ describe('full roof world', () => {
     for (const shell of northShells) expect(fill(shell.name)[0]).toBe(0)
   })
 
+  it('concentrates unlit cladding and floor clusters on the southern street faces', () => {
+    const profile = (name: string) => {
+      const shell = world.root.getObjectByName(name) as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
+      return shell.material.userData.leasing as [number,number]
+    }
+    const center = profile('hero screen tower')
+    const far = profile('c9 center distant crown')
+    for (const name of ['hero left edge tower','hero hotel tower','hero amber tower']) {
+      const frontage = profile(name)
+      expect(frontage[0]).toBeGreaterThan(center[0])
+      expect(frontage[1]).toBeGreaterThan(center[1])
+    }
+    expect(far[1]).toBeLessThan(center[1])
+    for (const shell of world.root.getObjectByName('north tower ranks')!.children) {
+      if (shell.name.startsWith('north tower shells')) expect(profile(shell.name)).toEqual([0,0])
+    }
+  })
+
   it('mounts distinct stepped rooftop plants on their southern tower footprints', () => {
     const city = world.root.getObjectByName('hero tower layout')!
     const crowns = city.getObjectsByProperty('name','terraced mechanical crown')
