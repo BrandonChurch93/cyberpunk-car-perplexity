@@ -6,6 +6,7 @@ import { plate, type Label } from './fixtures'
 import { group, heroCityYaw, heroDrainLayout, streetY, type Tuple } from './forms'
 import { heroFrontageDistance, heroPoint, heroScale as scale, heroSize } from './hero-scale'
 import { billboardMural, fixtureOpal, signGlass, towerSurface, type Facade, type FacadeLayer, type SignSpill } from './hero-surfaces'
+import { washHeroParapet } from './parapet-wash'
 import { reflectionPracticalBuilder } from './reflection-practicals'
 import type { finishRoof } from './roof-look'
 
@@ -30,7 +31,6 @@ const opalRadiance: Readonly<Record<string,number>> = {
   'cyan garage rise': 2.7, 'cyan garage return': 4.0, 'cyan hotel facade strip': 3.7,
   'violet mid distance blade': 4.8,
   'right amber facade sail': 2.8, 'amber garage rise': 2.65, 'amber garage return': 4.15,
-  'left warm parapet strip': 1.7, 'right warm parapet strip': 1.7,
 }
 const cyanApertures: Readonly<Partial<Record<string,readonly [width: number, gain: number]>>> = {
   'left cyan facade sail': [.83,1.54], 'left cyan secondary strip': [.62,1.48],
@@ -78,6 +78,9 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const city = group(root, 'hero tower layout')
   const roof = group(root, 'hero parapet and near deck layout')
   const { heroWall, zinc, heroStripe, tar } = materials
+  const wallZ = -10.025, wallDepth = .34
+  const warmOpal = new THREE.Color(24.6,22.0,17.7)
+  washHeroParapet(heroWall,wallZ+wallDepth*.5,(approvedHeroSources as readonly Source[]).filter(source=>source.onWall))
   const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.035,.039,.048), roughness: .54, metalness: .59 })
   const oxidizedAluminum = new THREE.MeshStandardMaterial({ color: new THREE.Color(.033,.038,.041), roughness: .61, metalness: .38 })
   const charcoalConcrete = new THREE.MeshStandardMaterial({ color: new THREE.Color(.054,.052,.049), roughness: .83, metalness: .06 })
@@ -98,9 +101,9 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const survey = approvedHeroSourceSurvey()
   const screen = survey.find(source => source.id === 'magenta violet tower screen')!
   const mural = billboardMural(...screen.size,new THREE.Color(...screen.rgb),{ travel: .166, laps: 2, picture: true, artworkGain: .98 })
-  const screenReflection = { point: new THREE.Vector3(...screen.at), normal: new THREE.Vector3(...screen.normal),
-    size: new THREE.Vector2(...screen.size), picture: mural.picture }
   const muralSpill = new THREE.Color()
+  const screenReflection = { point: new THREE.Vector3(...screen.at), normal: new THREE.Vector3(...screen.normal),
+    size: new THREE.Vector2(...screen.size), picture: mural.picture, spill: muralSpill }
   const muralCloud = new THREE.Color()
   const ambientCloud = new THREE.Color(1.02,.39,1.05)
   animation.push(time => {
@@ -110,23 +113,23 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     muralSpill.multiplyScalar(.68)
   })
   const washes = [
-    ['left edge','left cyan facade sail'],
+    ['left edge','left cyan facade sail','left cyan secondary strip'],
     ['hotel tower','hotel rooftop cabinet'],
-    ['parking tower','white parking blade'],
-    ['west garage','cyan garage rise'],
+    ['parking tower','white parking blade','cyan hotel facade strip'],
+    ['west garage','cyan garage rise','cyan garage return'],
     ['bar tower','far cyan bar cabinet'],
     ['setback','violet mid distance blade'],
-    ['screen tower','magenta violet tower screen'],
-    ['amber tower','amber upper tower cabinet'],
+    ['violet tower','violet mid distance blade'],
+    ['amber tower','amber upper tower cabinet','amber lower tower cabinet'],
     ['right edge','right amber facade sail'],
-    ['east garage','amber garage rise'],
+    ['east garage','amber garage rise','amber garage return'],
   ] as const
   const spillAt = (name: string): SignSpill[] => {
-    const key = washes.find(([fragment]) => name.includes(fragment))?.[1]
-    const amber = key === 'amber upper tower cabinet'
-    return survey.filter(source => source.id === key || amber && source.id === 'amber lower tower cabinet').map(entry => {
-      const color = entry.id === screen.id ? muralSpill : new THREE.Color(...entry.rgb)
-      if (color !== muralSpill) color.multiplyScalar((amber ? 1.65 : .68)/Math.max(color.r,color.g,color.b))
+    const keys: readonly string[] = washes.find(([fragment]) => name.includes(fragment))?.slice(1) ?? []
+    const amber = keys[0] === 'amber upper tower cabinet'
+    return survey.filter(source => keys.includes(source.id)).map(entry => {
+      const color = new THREE.Color(...entry.rgb)
+      color.multiplyScalar((amber ? .97 : .62)/Math.max(color.r,color.g,color.b))
       return { point: new THREE.Vector3(...entry.at), size: new THREE.Vector2(...entry.size), color }
     })
   }
@@ -524,7 +527,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   markerRow('far central cyan stack',[-62.2,11.7,-345.89],[.56,.88,.22],3.5,10,[.076,1.02,1.87],scale.farCentralWest)
   markerRow('middle service cyan squares',[-11.38,2.7,-59.95],[.23,.29,.08],.63,8,[.043,1.12,1.71],scale.middleWest)
   markerRow('east outer glass cyan markers',[52.6,5.3,-150.948],[.48,1.26,.12],1.36,13,[.056,.85,1.59],scale.outerEast)
-  box(roof, 'hero full span concrete parapet', [0, .525, -10.025], [29, 1.05, .34], heroWall)
+  box(roof, 'hero full span concrete parapet', [0, .525, wallZ], [29, 1.05, wallDepth], heroWall)
   box(roof, 'hero concrete wall cap', [0, 1.047, -10.02], [29, .048, .377], heroWall)
   box(roof, 'hero full span steel top rail', [0, 1.228, -10.015], [29, .034, .052], zinc)
   box(roof, 'hero steel intermediate rail', [0, 1.145, -10.015], [29, .020, .032], zinc)
@@ -576,7 +579,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const segments = source.onWall ? 1 : Math.round(height / (source.tint === 'cyan' ? .34 : .50))
       const shape = cyanApertures[source.id]
       const gain = (opalRadiance[source.id] ?? 1)*(shape?.[1] ?? 1)
-      const opal = fixtureOpal(color.clone().multiplyScalar(gain),segments,shape!==undefined)
+      const opal = fixtureOpal(source.onWall ? warmOpal.clone() : color.clone().multiplyScalar(gain),segments,shape!==undefined)
       plate(housing, 'weather-sealed opal face', source.scale ? offset(opal,-4) : opal, [0,0,.002], width*(shape?.[0] ?? 1),height)
       if (!source.onWall) for (const fraction of [-.40,-.17,.17,.40]) {
         const horizontal = width > height

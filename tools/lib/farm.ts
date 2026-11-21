@@ -10,6 +10,7 @@ import { stillName, type StillRecord, type StillSpec } from './render.ts'
 
 export interface FarmJob {
   name: string
+  tier?: TierId
   frame: number
   format: string
   diag: string
@@ -40,7 +41,7 @@ export const farmDir = (): string => join(workDir, 'farm')
 export const stillsDir = (): string => join(workDir, 'stills')
 
 export function jobSpec(job: FarmJob, plan: Pick<FarmPlan, 'tier' | 'paint' | 'detail'>): StillSpec {
-  return { frame: job.frame, tier: plan.tier, format: formatById(job.format), diag: job.diag, paint: plan.paint, detail: plan.detail }
+  return { frame: job.frame, tier: job.tier ?? plan.tier, format: formatById(job.format), diag: job.diag, paint: plan.paint, detail: plan.detail }
 }
 
 /** The final tier stills the phase packs ask for: every judged frame wide, the vertical ones tall, and the plain gray and stripe views of each judged frame with a vehicle anchor crop. */
@@ -56,6 +57,27 @@ export function farmJobs(phase: number, judged: JudgedFrame[], withVehicle: Set<
   for (const diag of ['clay', 'zebra']) for (const f of views) out.push(job(f, master, diag, `C4 ${diag}`))
   const seen = new Set<string>()
   return out.filter((j) => (seen.has(j.name) ? false : (seen.add(j.name), true)))
+}
+
+export interface ReviewFrames {
+  wide: number[]
+  hook: number[]
+}
+
+/** The review tier stills of the Phase 4 contact sheets, event runs and phone previews. With a tier override every job takes that tier. */
+export function reviewJobs(frames: ReviewFrames, base: Pick<FarmPlan, 'tier' | 'paint' | 'detail'>, known: FarmJob[]): FarmJob[] {
+  const tier: TierId = base.tier === 'final' ? 'review' : base.tier
+  const seen = new Set(known.map((j) => j.name))
+  const out: FarmJob[] = []
+  const add = (frame: number, format: FormatSpec, why: string): void => {
+    const name = stillName({ frame, format, diag: 'beauty', tier, paint: base.paint, detail: base.detail })
+    if (seen.has(name)) return
+    seen.add(name)
+    out.push({ name, tier, frame, format: format.id, diag: 'beauty', why })
+  }
+  for (const f of [...new Set(frames.wide)].sort((a, b) => a - b)) add(f, config.formats.master, 'sheet or run cell')
+  for (const format of [config.formats.master, config.formats.vertical]) for (const f of frames.hook) add(f, format, 'phone preview')
+  return out
 }
 
 /** Job k of the plan goes to shard (k mod n) + 1, so every shard gets a mix of formats and views. */
