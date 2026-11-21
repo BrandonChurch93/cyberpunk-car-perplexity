@@ -194,8 +194,7 @@ export function sidePoint(s: number, y: number, side: number): Point {
   const run = shoulder(s) - doorBelt(s)
   const peak = .0018 + .32 * thickness
   const crest = (t: number) => peak - .137 * t + .378 * hinge(t, foldHalf)
-  const closing = mix(fairStep(rise, .003, .0031 + fairPositive(run - .003, .012)),
-    (fairPositive(rise - .003, .002) / Math.max(fairPositive(run - .003, .002), 1e-5)) ** 2, fairStep(run, .02, .05))
+  const closing = (fairPositive(rise - .003, .003) / Math.max(fairPositive(run - .003, .003), 1e-5)) ** 2
   const close = (thickness - crest(run)) * closing
   const flank = fairStep(s, .572, .644) * (1 - fairStep(s, .898, .926))
     * (1 - fairStep(-rise, .02, .32))
@@ -803,10 +802,10 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
       const lead = a < .5 ? mix(a, cutLeading(1) + gap, v) - a : 0
       return sillPoint(s + lead * (1 - u), mix(s < slotStart ? intakeTopLeft : slotHigh(s), shoulder(s + lead * (1 - u)), v))
     }, uSide, [beltLine, haunchLine])
-    part(paint, (u, v) => {
+    folded((u, v) => {
       const s = mix(slotJoin, last.before, u)
       return sillPoint(s, mix(intakeTopRight, slotLow(s) + .0003 * smooth(s, slotEnd, slotEnd + .005), v))
-    }, uSide, n, 4, 0)
+    }, uSide, [haunchLine, beltLine], n, 0)
     const rearCorner = (u: number) => mix(.19, .64, u)
     folded((u, v) => cap(mix(last.after, .926, u), mix(rearCorner(u), 1, v)), uSide, [beltLine])
     part(black, (u, v) => cap(mix(last.after, .926, u), rearCorner(u) * v), uSide, n, 6)
