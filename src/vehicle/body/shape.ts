@@ -2,6 +2,7 @@ import { Loft, type LoftDef } from '../geom/loft'
 import { Track3 } from '../geom/spline'
 import { add, dot, len, norm, scale, smoothstep, sub, type V3 } from '../geom/vec'
 import { featureLines, frontSection, type PathNode } from './lines'
+import { fasciaDown } from './nose'
 import { capZ } from './tail'
 
 export const dims = {
@@ -359,27 +360,6 @@ function oldSlopeAt(t: Track3, u: number): [number, number] {
 const oldSlope = (t: Track3, z: number): [number, number] => oldSlopeAt(t, uOf(z))
 
 const node = (p: V3, d?: readonly [number, number]): PathNode => ({ z: p[2], x: p[0], y: p[1], d })
-
-/** Down the fascia from the front edge: a stand-in for the front module's own until it lands. Constant per edge
- * interval, averaged at the knots; on the brow the fascia rakes 23 degrees back, on the side it faces forward. */
-export function fasciaDownStandIn(v: number): V3 {
-  const rake = (23 * Math.PI) / 180
-  const intervals: Array<{ a: number; b: number; d: V3 }> = []
-  const edge = (pts: typeof frontSection.brow, g: V3): void => {
-    for (let i = 0; i + 1 < pts.length; i++) {
-      const e = norm(sub(pts[i + 1].p as V3, pts[i].p as V3))
-      intervals.push({ a: pts[i + 1].v, b: pts[i].v, d: norm(sub(g, scale(e, dot(g, e)))) })
-    }
-  }
-  edge(frontSection.brow, [0, -Math.cos(rake), -Math.sin(rake)])
-  edge(frontSection.side, [-1, 0, 0])
-  const hits = intervals.filter((i) => v >= i.a - 1e-9 && v <= i.b + 1e-9)
-  let d = norm(hits.reduce<V3>((s, i) => add(s, i.d), [0, 0, 0]))
-  if (v >= 1 - 1e-9) d = norm([0, d[1], d[2]])
-  return d
-}
-
-const fasciaDown = fasciaDownStandIn
 
 /**
  * One key line: the roll at the front edge, then the path, then from `uJoin` the old key line unchanged. Until `uMerge`

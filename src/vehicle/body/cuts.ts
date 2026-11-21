@@ -50,11 +50,11 @@ export interface BodyCuts {
   maps: { main: SurfaceMap; front: SurfaceMap; rear: SurfaceMap }
 }
 
-export function makeCuts(main: Surface, front: Surface, rear: Surface): BodyCuts {
+/** The body's cuts. The front surface is made from the main cuts, because the fascia is fitted to the main skin's
+ * tessellated front edge, and the main skin's trims never reach that edge. */
+export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, rear: Surface): BodyCuts {
   const mm = new SurfaceMap(main, 0, 1, 0, 1, 500, 200)
-  const fm = new SurfaceMap(front, 0, 1, 0, 1, 160, 160)
   const rm = new SurfaceMap(rear, 0, 1, 0, 1, 160, 160)
-  const nose = noseCuts(fm)
   const tail = tailCuts(rm)
   const sideWin: [number, number, number, number] = [0, 1, 0, 0.52]
   const topWin: [number, number, number, number] = [0, 1, 0.36, 1]
@@ -67,20 +67,23 @@ export function makeCuts(main: Surface, front: Surface, rear: Surface): BodyCuts
   const bay = projectCurve(mm, 'y', planLines.bay, true, 0.008, topWin, true, 0.06)
   const bonnet = projectCurve(mm, 'y', planLines.bonnet, false, 0.006, topWin, false, 0.08)
   const wing = projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08)
+  const mainCuts: Cuts = {
+    holes: [
+      { c: dlo, inset: 0 },
+      { c: screen, inset: 0 },
+      { c: rearGlass, inset: 0 },
+      { c: bay, inset: 0 },
+      { c: intake, inset: 0 },
+      { c: upper, inset: 0 },
+    ],
+    gaps: [door, bonnet, wing],
+    glass: [dlo, screen, rearGlass],
+    bands: [],
+  }
+  const fm = new SurfaceMap(frontOf(mainCuts), 0, 1, 0, 1, 160, 160)
+  const nose = noseCuts(fm)
   return {
-    main: {
-      holes: [
-        { c: dlo, inset: 0 },
-        { c: screen, inset: 0 },
-        { c: rearGlass, inset: 0 },
-        { c: bay, inset: 0 },
-        { c: intake, inset: 0 },
-        { c: upper, inset: 0 },
-      ],
-      gaps: [door, bonnet, wing],
-      glass: [dlo, screen, rearGlass],
-      bands: [],
-    },
+    main: mainCuts,
     front: nose.cuts,
     rear: tail.cuts,
     maps: { main: mm, front: fm, rear: rm },

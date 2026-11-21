@@ -5,7 +5,7 @@ import { tessellate, type TessOptions, type TessResult, type TrimFn } from '../g
 import { cross, norm, sub, type V3 } from '../geom/vec'
 import { makeCuts, paintTrim, wheelOpenings, type BodyCuts } from './cuts'
 import { gapLips, onGapEdge, withoutGapEdges } from './gaps'
-import { frontFace } from './nose'
+import { fitFascia, tessellateFascia, type FasciaEdge } from './nose'
 import { rearFace } from './tail'
 import { mainLoft } from './shape'
 
@@ -100,31 +100,49 @@ export function flange(parts: TessResult[], depth: number, roll?: (p: V3) => num
   return out
 }
 
+/** The paint's own vertices on the main surface's front edge (u = 0), in descending v, split at the brow tip. The
+ * fascia is fitted to exactly these, so the two meet sample for sample. */
+function frontEdges(t: TessResult, S: Surface, split: number): { brow: FasciaEdge; side: FasciaEdge } {
+  const vs = new Set<number>()
+  for (let i = 0; i < t.uvs.length; i += 2) if (t.uvs[i] === 0) vs.add(t.uvs[i + 1])
+  const all = [...vs].sort((a, b) => b - a)
+  const edge = (keep: (v: number) => boolean): FasciaEdge => {
+    const v = all.filter(keep)
+    return { v, p: v.map((x) => S(0, x)) }
+  }
+  return { brow: edge((v) => v >= split), side: edge((v) => v <= split) }
+}
+
 export function buildBody(q: BodyQuality): BodyGeometry {
   const loft = mainLoft()
   const main: Surface = (u, v) => loft.at(u, v)
-  const front = frontFace(loft)
   const rear = rearFace(loft)
-  const cuts = makeCuts(main, front, rear)
   const base = { maxEdge: q.maxEdge, maxAngle: q.maxAngle, tolerance: q.tolerance, minEdge: 0.0012, edgeLength: q.edgeLength }
   const mainGrid = { us: steps(40), vs: [...loft.vAt] }
   const faceGrid = { us: steps(8), vs: steps(8) }
   const run = (S: Surface, grid: Pick<TessOptions, 'us' | 'vs'>, trim?: TrimFn, coarse = 1, normal?: TessOptions['normal']): TessResult =>
     tessellate(S, { ...base, maxEdge: base.maxEdge * coarse, tolerance: base.tolerance * coarse, edgeLength: base.edgeLength * coarse, ...grid, trim, normal })
-  const paint = [
-    run(main, mainGrid, paintTrim(cuts.main, wheelOpenings)),
-    run(front, faceGrid, paintTrim(cuts.front)),
-    run(rear, faceGrid, paintTrim(cuts.rear)),
-  ]
+  // The main skin goes first: the fascia is fitted to its front edge.
+  let mainPaint: TessResult | undefined
+  let fascia: ReturnType<typeof fitFascia> | undefined
+  const cuts = makeCuts(main, (c) => {
+    mainPaint = run(main, mainGrid, paintTrim(c, wheelOpenings))
+    const edges = frontEdges(mainPaint, main, loft.vAt[3])
+    fascia = fitFascia(edges.brow, edges.side)
+    return fascia.surface
+  }, rear)
+  if (!mainPaint || !fascia) throw new Error('front not fitted')
+  const front: Surface = fascia.surface
+  const nose = tessellateFascia(cuts.maps.front, cuts.front.holes, fascia.uEdge, fascia.vEdge, fascia.surface.fieldStops)
+  const paint = [mainPaint, run(rear, faceGrid, paintTrim(cuts.rear))]
   // Openings roll over 4 mm. Shut gaps roll over 2 mm from paint edges cut 4 mm off the line, so the gap between the
-  // two walls stays 4 mm.
-  const allGaps = [cuts.main, cuts.front, cuts.rear].flatMap((c) => c.gaps)
-  const lips = ([[main, cuts.main, wheelOpenings], [front, cuts.front, undefined], [rear, cuts.rear, undefined]] as const).map(([S, c, extra]) =>
+  // two walls stays 4 mm. The fascia rolls and returns its own openings.
+  const allGaps = [cuts.main, cuts.rear].flatMap((c) => c.gaps)
+  const lips = ([[main, cuts.main, wheelOpenings], [rear, cuts.rear, undefined]] as const).map(([S, c, extra]) =>
     gapLips(S, c.gaps, paintTrim({ ...c, gaps: [] }, extra)))
-  paint.push(flange(withoutGapEdges(paint, onGapEdge(allGaps)), 0.014, () => 0.004), ...lips)
-  // The eye is a real opening for the front module's lens, not glass in the body.
+  paint.push(flange(withoutGapEdges(paint, onGapEdge(allGaps)), 0.014, () => 0.004), ...lips, ...nose.paint)
   const inner = -0.014
-  // The backing is open wherever the skin has an opening (glass, bay, intakes, eyes, ducts, outlets), so every opening
+  // The backing is open wherever the skin has an opening (glass, bay, intakes, ducts, outlets), so every opening
   // goes through the thick panel and its returned walls are the paint flange. Shut gaps stay closed behind.
   const openings = (c: typeof cuts.main, extra?: (p: V3) => number): TrimFn => {
     const keep = paintTrim({ ...c, gaps: [], bands: [] }, extra)
@@ -135,6 +153,6 @@ export function buildBody(q: BodyQuality): BodyGeometry {
   // is tighter than the offset, and its own tangents vanish there.
   const backing = (S: Surface, grid: Pick<TessOptions, 'us' | 'vs'>, trim?: TrimFn): TessResult =>
     run(offsetSurface(S, inner), grid, trim, 3, (u, v) => surfaceNormal(S, u, v))
-  const shell = [backing(main, mainGrid, bayTrim), backing(front, faceGrid, openings(cuts.front)), backing(rear, faceGrid, openings(cuts.rear))]
+  const shell = [backing(main, mainGrid, bayTrim), nose.shell, backing(rear, faceGrid, openings(cuts.rear))]
   return { paint: toGeometry(paint, true), shell: toGeometry(shell, true), cuts, surfaces: { main, front, rear }, grids: { main: mainGrid } }
 }
