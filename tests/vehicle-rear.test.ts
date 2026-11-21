@@ -9,7 +9,7 @@ import { bumper, cornerCut, cornerFront, lensEdge, rearFace } from '../src/vehic
 import { lampWrap } from '../src/vehicle/body/cuts'
 import { createVehicle } from '../src/vehicle'
 import { defaultPaint, paintById } from '../src/config'
-import { outlets } from '../src/vehicle/parts/outlets'
+import { outletSpec, outlets } from '../src/vehicle/parts/outlets'
 import { taillamps } from '../src/vehicle/parts/taillamps'
 import { engineBay, grilleFrame } from '../src/vehicle/parts/enginebay'
 
@@ -189,6 +189,31 @@ describe('rear module', () => {
       expect(g.boundingBox!.min.z).toBeGreaterThan(-dims.halfLength - 0.005)
       expect(g.boundingBox!.max.x).toBeLessThan(dims.width / 2)
     }
+  })
+
+  it('runs each outlet pipe from a thick rolled tip down a reducer into piping through the back plate', () => {
+    const pos = ex.pipes.getAttribute('position')
+    const n = ex.normal
+    const depth = (i: number): number => -((pos.getX(i) - ex.center[0]) * n[0] + (pos.getY(i) - ex.center[1]) * n[1] + (pos.getZ(i) - ex.center[2]) * n[2])
+    let deepest = 0
+    let mouthMin = Infinity
+    let mouthMax = 0
+    for (let i = 0; i < pos.count; i++) {
+      const d = depth(i)
+      deepest = Math.max(deepest, d)
+      if (d < 0.05) {
+        const dx = Math.abs(pos.getX(i) - ex.center[0])
+        const r = Math.hypot(Math.abs(dx - outletSpec.pipe.dx), pos.getY(i) - ex.center[1])
+        mouthMin = Math.min(mouthMin, r)
+        mouthMax = Math.max(mouthMax, r)
+      }
+    }
+    expect(deepest).toBeGreaterThan(outletSpec.depth + 0.05)
+    expect(mouthMax - mouthMin).toBeGreaterThan(0.004)
+    const lip = ex.lip.getAttribute('position')
+    let inner = Infinity
+    for (let i = 0; i < lip.count; i++) inner = Math.min(inner, lip.getX(i))
+    expect(inner).toBeGreaterThan(0.015)
   })
 
   it('closes the reflector faces with strips across the slot, not fans to its middle', () => {
