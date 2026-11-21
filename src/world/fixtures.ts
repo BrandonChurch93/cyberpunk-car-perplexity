@@ -128,6 +128,30 @@ export function addSky(root: THREE.Group): void {
         vec3 upperBase = mix(vec3(.0038,.0035,.0047),vec3(.0087,.0079,.0100),mass);
         upperBase += vec3(.010,.007,.014)*smoothstep(.11,.42,underside)*(.24+.76*wash);
         c = mix(c,upperBase,upper);
+        float azimuth = atan(d.x/max(-d.z,.001));
+        float southClouds = smoothstep(.04,.31,-d.z)*smoothstep(-.93,-.76,azimuth)*(1.0-smoothstep(-.22,-.04,azimuth));
+        float lowerSky = smoothstep(.024,.078,d.y)*(1.0-smoothstep(.192,.240,d.y));
+        vec2 bankPoint = vec2((azimuth+.48)*21.4,(d.y-.158)*57.1);
+        float baseRoll = cloudNoise(bankPoint*.72+vec2(6.2,1.9));
+        float drift = cloudNoise(bankPoint*.93+vec2(9.7,-5.3));
+        vec2 advected = bankPoint + vec2(1.70*(baseRoll-.5),.29*bankPoint.x+2.33*(drift-.5));
+        float rolls = cloudNoise(advected*1.47+vec2(3.8,-1.1));
+        float pockets = cloudNoise(advected*3.31 + vec2(rolls*1.70,-baseRoll));
+        float wisps = cloudNoise(advected*7.13-pockets*.84);
+        float cloudBody = .50*baseRoll+.30*rolls+.15*pockets+.05*wisps;
+        float clouds = smoothstep(.31,.73,cloudBody);
+        float darkFolds = smoothstep(.29,.80,.53*rolls+.34*baseRoll+.13*pockets);
+        float breaks = smoothstep(.25,.70,.52*rolls+.36*pockets+.12*wisps);
+        float illuminatedEdge = smoothstep(.025,.30,
+          cloudNoise(advected*1.47+vec2(3.90,-1.58))-rolls)*(.31+.69*breaks);
+        float arc = (azimuth+.441)*6.25;
+        float loft = (d.y-.156-.039*(drift-.5)-.027*(baseRoll-.5))*20.0;
+        float field = exp(-arc*arc-loft*loft);
+        vec3 dusk = mix(vec3(.076,.077,.105),vec3(.138,.132,.167),clouds);
+        vec3 litCloud = mix(vec3(1.73,.62,.55),vec3(2.93,1.39,1.14),smoothstep(.25,.76,pockets));
+        float underlit = (.25+.56*clouds+1.02*illuminatedEdge)*(1.0-.37*darkFolds);
+        float underSky = smoothstep(.020,.067,d.y)*(1.0-smoothstep(.165,.201,d.y));
+        c = mix(c,dusk,southClouds*lowerSky*.71) + litCloud*field*underlit*southClouds*underSky*.53;
         gl_FragColor = vec4(c, 1.0);
       }
     `,
