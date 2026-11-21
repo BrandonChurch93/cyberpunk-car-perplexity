@@ -2,6 +2,8 @@ import * as THREE from 'three'
 import { MeshBuilder } from '../geom/mesh'
 import { add, clamp, cross, norm, scale, sub, type V2, type V3 } from '../geom/vec'
 import { dims } from '../body/shape'
+import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
+import { solid } from './solid'
 
 /** Plate and strake thickness. Every free edge is a full round of half this. */
 export const sheet = 0.01
@@ -333,4 +335,98 @@ export function underbody(): Underbody {
   const sb = new MeshBuilder()
   for (const s of strakes) strake(sb, s)
   return { floor: fb.geometry(), strakes: sb.geometry() }
+}
+
+/** Depth of the recessed panel behind the lower tail opening, and the wall it hangs from. */
+export const valanceDepth = 0.09
+const wallT = 0.004
+const flangeDepth = 0.012
+
+/**
+ * The recess behind the lower tail opening: a returned wall that continues the paint flange back along the top and outer
+ * edges, and a panel across the back from the diffuser plate up, open only on the centre line.
+ */
+export function valance(lower: SurfaceCurve, rm: SurfaceMap): { wall: THREE.BufferGeometry; panel: THREE.BufferGeometry } {
+  const S = rm.S
+  const bottom = Math.min(...lower.p.map((p) => p[1])) + 0.004
+  const keep = (p: V3): boolean => p[0] > 0.004 && p[1] > bottom
+  const pts = lower.p
+  const n = pts.length
+  let start = 0
+  while (keep(pts[start]) || !keep(pts[(start + 1) % n])) start = (start + 1) % n
+  const run: V3[] = []
+  for (let k = 1; k <= n && keep(pts[(start + k) % n]); k++) run.push(pts[(start + k) % n])
+  if (run[0][0] > run[run.length - 1][0]) run.reverse()
+  const path = run.filter((_, i) => i % 2 === 0 || i === run.length - 1)
+  const normalAt = (p: V3): V3 => {
+    const [u, v] = rm.invert('-z', p[0], p[1])
+    const h = 1e-4
+    return norm(cross(sub(S(Math.min(1, u + h), v), S(Math.max(0, u - h), v)), sub(S(u, Math.min(1, v + h)), S(u, Math.max(0, v - h)))))
+  }
+  const centre: V3 = [0.28, 0.45, 0]
+  const rows: V3[][] = [[], [], [], []]
+  for (let j = 0; j < path.length; j++) {
+    const p = path[j]
+    let nn = normalAt(p)
+    if (nn[2] > 0) nn = scale(nn, -1)
+    const t = sub(path[Math.min(path.length - 1, j + 1)], path[Math.max(0, j - 1)])
+    let h = norm(cross(nn, t))
+    if ((centre[0] - p[0]) * h[0] + (centre[1] - p[1]) * h[1] < 0) h = scale(h, -1)
+    const q = (inward: number, depth: number): V3 => add(add(p, scale(h, inward)), scale(nn, -depth))
+    rows[0].push(q(0.001, flangeDepth))
+    rows[1].push(q(0.001, valanceDepth + wallT))
+    rows[2].push(q(-wallT, valanceDepth + wallT))
+    rows[3].push(q(-wallT, flangeDepth))
+  }
+  const wall = solid(rows, [true, true, true, true], true, false)
+
+  const top = path[0][1]
+  let outer = 0
+  for (const p of path) outer = Math.max(outer, p[0])
+  const yb = floorY + 0.17
+  const cols = 16
+  const rowsN = 10
+  const panelAt = (x: number, y: number, s: number): V3 => {
+    const [u, v] = rm.invert('-z', Math.min(x, outer - 0.002), Math.max(Math.min(y, top - 0.002), bottom + 0.002))
+    const p = S(u, v)
+    return [x, y, p[2] + valanceDepth + s]
+  }
+  const pb = new MeshBuilder()
+  const xs = Array.from({ length: cols + 1 }, (_, j) => ((outer + 0.002) * j) / cols)
+  const ys = Array.from({ length: rowsN + 1 }, (_, i) => yb + ((top + 0.002 - yb) * i) / rowsN)
+  const front = ys.map((y) => xs.map((x) => panelAt(x, y, 0)))
+  const back = ys.map((y) => xs.map((x) => panelAt(x, y, wallT)))
+  const face = (g: V3[][], out: number): void => {
+    const base = pb.pos.length / 3
+    for (let i = 0; i <= rowsN; i++) for (let j = 0; j <= cols; j++) pb.vertex(g[i][j], [0, 0, out])
+    for (let i = 0; i < rowsN; i++) {
+      for (let j = 0; j < cols; j++) {
+        const a = base + i * (cols + 1) + j
+        const quad = [a, a + 1, a + cols + 2, a + cols + 1]
+        const e1 = sub(g[i][j + 1], g[i][j])
+        const e2 = sub(g[i + 1][j], g[i][j])
+        if (cross(e1, e2)[2] * out > 0) pb.quad(quad[0], quad[1], quad[2], quad[3])
+        else pb.quad(quad[0], quad[3], quad[2], quad[1])
+      }
+    }
+  }
+  face(front, -1)
+  face(back, 1)
+  const rim = (a: V3[], c: V3[], out: V3): void => {
+    const base = pb.pos.length / 3
+    for (const p of a) pb.vertex(p, out)
+    for (const p of c) pb.vertex(p, out)
+    const m = a.length
+    for (let k = 0; k < m - 1; k++) {
+      const e1 = sub(a[k + 1], a[k])
+      const e2 = sub(c[k], a[k])
+      const ok = cross(e1, e2)[0] * out[0] + cross(e1, e2)[1] * out[1] + cross(e1, e2)[2] * out[2] > 0
+      if (ok) pb.quad(base + k, base + k + 1, base + m + k + 1, base + m + k)
+      else pb.quad(base + k, base + m + k, base + m + k + 1, base + k + 1)
+    }
+  }
+  rim(front[rowsN], back[rowsN], [0, 1, 0])
+  rim(front[0], back[0], [0, -1, 0])
+  rim(front.map((r) => r[cols]), back.map((r) => r[cols]), [1, 0, 0])
+  return { wall: wall.geometry(), panel: pb.geometry() }
 }
