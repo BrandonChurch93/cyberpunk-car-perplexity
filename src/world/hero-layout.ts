@@ -7,6 +7,7 @@ import { group, heroCityYaw, heroDrainLayout, streetY, type Tuple } from './form
 import { heroFrontageDistance, heroPoint, heroScale as scale, heroSize } from './hero-scale'
 import { billboardMural, fixtureOpal, signGlass, towerSurface, type Facade, type FacadeLayer, type SignSpill } from './hero-surfaces'
 import { dressHeroSign } from './hero-signs'
+import { muralRise } from './mural-picture'
 import { washHeroParapet } from './parapet-wash'
 import { reflectionPracticalBuilder } from './reflection-practicals'
 import type { finishRoof } from './roof-look'
@@ -26,7 +27,8 @@ type RoofMaterials = ReturnType<typeof finishRoof>['materials']
 const screenTowerFront = -30.01
 const amberTowerFront = -30.40
 const hotelRoof = 5.80
-export const heroScreenMount = { at: [2.94,5.09,-29.80], yaw: -.32, scale: scale.screen*.972 } as const
+export const heroScreenRise = 5.18*muralRise
+export const heroScreenMount = { at: [2.94,2.50+heroScreenRise/2,-29.80], yaw: -.32, scale: scale.screen*.972 } as const
 const signRadiance: Readonly<Record<string,number>> = { HOTEL: 6.5, PARKING: 5.6, BAR: 7.0, '24H': 3.4, OPEN: 4.1, EXIT: 3.4 }
 const opalRadiance: Readonly<Record<string,number>> = {
   'left cyan facade sail': 2.7,
@@ -61,7 +63,7 @@ export const approvedHeroSources = [
   { id: 'cyan hotel facade strip', at: [-8.43, 2.74, -25.23], size: [.07, 3.72], tint: 'cyan', scale: scale.westFrontage },
   { id: 'far cyan bar cabinet', at: [-6.10, 4.01, -43.40], size: [1.98, 1.11], tint: 'cyan', text: 'BAR', scale: scale.bar },
   { id: 'violet mid distance blade', at: [-1.48, 5.38, -31.64], size: [.44, 2.58], tint: 'violet', scale: scale.screen },
-  { id: 'magenta violet tower screen', ...heroScreenMount, size: [5.08,5.18], tint: 'magenta' },
+  { id: 'magenta violet tower screen', ...heroScreenMount, size: [5.08,heroScreenRise], tint: 'magenta' },
   { id: 'magenta upper service ribbon', at: [2.62, 15.79, -30.02], size: [3.22, .37], tint: 'magenta', scale: scale.screen },
   { id: 'cool glass service ribbon', at: [1.20, 16.91, -30.10], size: [1.58, .26], tint: 'cyan', scale: scale.screen },
   { id: 'amber upper tower cabinet', at: [7.44, 3.79, -30.12], size: [1.11, .72], tint: 'amber', text: '24H', scale: scale.amber },
@@ -641,6 +643,12 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
         box(housing, 'billboard facade tie plate', [x,dy*height,back], [.27,.36,.126], charcoalConcrete)
       }
       box(housing, 'LED wall lower truss', [0,-height*.5-.182,-.176], [width+.13,.17,.39], frame)
+      for (const rise of [5.18,7.77]) {
+        const y = rise-height*.5
+        box(housing, 'LED wall service band', [0,y,.012], [width+.04,.085,.05], charcoalConcrete)
+        box(housing, 'service band catwalk', [0,y-.07,.09], [width+.02,.024,.17], frame)
+        for (const dx of [-.42,-.14,.14,.42]) box(housing, 'service band hanger', [dx*width,y-.035,.07], [.02,.07,.02], frame)
+      }
       for (const dx of [-.32,.32]) box(housing, 'LED wall lower seat', [dx*width,-height*.5-.31,-.231], [.165,.34,.51], zinc)
       const { light } = mountLight(housing,'billboard',source.size,color,91,75)
       light.colorAt = mural.colorAt

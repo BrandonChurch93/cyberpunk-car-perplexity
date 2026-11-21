@@ -20,7 +20,7 @@ export function stageOf(entry: Pick<ProfileDraw, 'path' | 'target'> & { op?: str
   const where = parts.includes('reflect') ? (inFrame ? (target.startsWith('128x128') ? 'bounce probe' : 'probe') : 'planar') : inFrame ? 'frame' : parts.includes('sample') ? 'main' : 'accumulate'
   if (parts.includes('shadow maps')) return `${where} shadow maps`
   if (path.includes('render cube lamp emitters')) return `${where} emitters`
-  if (target.includes('msaa')) return `${where} transmission prepass`
+  if (target.includes('msaa') || target.includes('transmission')) return `${where} transmission prepass`
   if (entry.op && entry.op !== 'clear') return `${where} resolve and mips`
   if (path.endsWith('render quad') && (where === 'probe' || where === 'bounce probe')) return `${where} prefilter`
   return `${where} scene`
