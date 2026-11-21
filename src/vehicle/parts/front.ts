@@ -252,6 +252,30 @@ function guide(map: SurfaceMap, radius: number, depth: number, crown: number): T
   return merged(parts)
 }
 
+function reflectorReturns(g: T.BufferGeometry): T.BufferGeometry {
+  if (!(g instanceof T.LatheGeometry) || !g.index) throw new Error('Expected an indexed projector reflector')
+  const points = g.parameters.points
+  const wall: number[] = [], steps: number[] = []
+  for (let i = 0; i < g.index.count; i += 6) {
+    const j = (i / 6) % (points.length - 1)
+    const destination = points[j + 1].x < points[j].x && points[j + 1].y > points[j].y ? steps : wall
+    for (let k = 0; k < 6; k++) destination.push(g.index.getX(i + k))
+  }
+  const returns = g.clone().setIndex(steps)
+  g.setIndex(wall)
+  compactSurface(returns).computeVertexNormals()
+  return returns
+}
+
+function lensRetainers(center: T.Vector3, axis: T.Vector3, radius: number): T.BufferGeometry {
+  const rotation = new T.Quaternion().setFromUnitVectors(forward, axis)
+  return merged(Array.from({ length: 4 }, (_, i) =>
+    new T.BoxGeometry(radius * .14, radius * .045, .00055)
+      .translate(0, radius * .973, 0)
+      .rotateZ((i + .5) * Math.PI / 2)
+      .scale(1, .84, 1).applyQuaternion(rotation).translate(...center.toArray())))
+}
+
 function splitter(S: Surface, full: boolean): T.BufferGeometry {
   const count = full ? 72 : 36, end = Math.max(S(0, 0)[2], S(0, 1)[2]) - .001
   const positions = Array.from({ length: 2 * count + 1 }, (_, i) => {
@@ -331,6 +355,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   const projector = m.projector ?? tag(new T.MeshPhysicalMaterial({ color: 0xbec6d0, roughness: .09, transmission: .96, ior: 1.51, thickness: .007 }), 'none')
   const brushed = m.brushed ?? tag(new T.MeshStandardMaterial({ color: 0x9ca4ae, metalness: .9, roughness: .26 }), 'none')
   const reflector = m.reflector ?? tag(new T.MeshStandardMaterial({ color: 0xc4c9ce, metalness: 1, roughness: .11 }), 'none')
+  const facetReturn = tag(new T.MeshStandardMaterial({ color: 0x626262, metalness: .71, roughness: .32 }), 'none')
   const bowl = outline(eye)
   const pocket = pocketAt('eye', .092, .94, -.95)
   add('front eye housing returns', pocket.wall, m.housing, true)
@@ -359,7 +384,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   beam.emissiveIntensity = 0
   projectorOptics(beam)
   const eyeBox = new T.Box3().setFromPoints(bowl)
-  const [cases, collars, bowls, lenses, dies] = Array.from({ length: 5 }, () => [] as T.BufferGeometry[])
+  const [cases, collars, bowls, rings, retainers, lenses, dies] = Array.from({ length: 7 }, () => [] as T.BufferGeometry[])
   for (const [along, maxRadius, intensity] of [[.46, .029, 170], [.76, .023, 80]]) {
     const x = T.MathUtils.lerp(eyeBox.min.x, eyeBox.max.x, along)
     const ys: number[] = []
@@ -376,14 +401,18 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
     const parts = projectorParts(p, axis, r, full)
     cases.push(parts.casework)
     collars.push(parts.collar)
+    rings.push(reflectorReturns(parts.bowl))
     bowls.push(parts.bowl)
+    retainers.push(lensRetainers(p, axis, r))
     lenses.push(parts.lens)
     dies.push(parts.source)
     emit('main beam projector', seat.addScaledVector(forward, .022), true, beam, intensity)
   }
   add('front projector casings', merged(cases), m.housing, true)
   add('front machined projector collars', merged(collars), brushed, true)
+  add('front projector lens retainers', merged(retainers), m.housing, true)
   add('front faceted projector reflector bowls', merged(bowls), reflector, true)
+  add('front projector reflector step returns', merged(rings), facetReturn, true)
   add('front convex projector lenses', merged(lenses), projector, true)
   for (const [i, g] of dies.entries()) add('front projector LED dies ' + i, g, beam, true)
 
