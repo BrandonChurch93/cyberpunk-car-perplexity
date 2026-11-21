@@ -373,6 +373,20 @@ function paintStack(paint: T.MeshPhysicalMaterial, spec: PaintSpec) {
   }
 }
 
+/** Light from the instrument cluster spills a few nits of cool glow over the dash top around its hood, falling off over 0.16 m. */
+function clusterSpill(m: T.Material): void {
+  patchMaterial(m, {
+    id: 'cabin cluster spill',
+    apply(shader) {
+      shader.vertexShader = 'varying vec3 cabinPoint;\nvarying vec3 cabinUp;\n' + insertAfter(shader.vertexShader, '#include <begin_vertex>', 'cabinPoint = position;\ncabinUp = objectNormal;')
+      shader.fragmentShader = 'varying vec3 cabinPoint;\nvarying vec3 cabinUp;\n' + insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
+        vec3 cabinOff = (cabinPoint - vec3(0.37, 0.82, 0.64)) / vec3(0.2, 0.08, 0.16);
+        totalEmissiveRadiance += vec3(0.014, 0.031, 0.056) * exp(-dot(cabinOff, cabinOff)) * smoothstep(0.2, 0.7, normalize(cabinUp).y);
+      `)
+    },
+  })
+}
+
 /**
  * The derivative tangent frame is zero where a mesh has no UV gradient, rank one where the UVs vary along one direction
  * only, and never held square to the shading normal. Anisotropic GGX divides by the frame, so any of these can blow up
@@ -410,13 +424,13 @@ export function palette(spec: PaintSpec, full: boolean) {
   const glass = new T.MeshPhysicalMaterial({
     color: full ? 0xc9d2d6 : 0x30383f, metalness: full ? 0 : .1, roughness: full ? .03 : .17,
     ior: 1.52, clearcoat: .6, clearcoatRoughness: .03, transmission: full ? .95 : 0,
-    thickness: full ? .005 : 0, attenuationColor: new T.Color(0x6f8a8e), attenuationDistance: .02,
-    opacity: full ? 1 : .87, transparent: !full, depthWrite: full, side: T.FrontSide,
+    thickness: full ? .005 : 0, attenuationColor: new T.Color(0x6f8a8e), attenuationDistance: .008,
+    opacity: full ? 1 : .87, transparent: !full, depthWrite: full, side: full ? T.DoubleSide : T.FrontSide,
   })
   const windscreen = glass.clone()
-  windscreen.color.setHex(full ? 0xd0d8db : 0x273038)
-  windscreen.attenuationColor.setHex(0x80989c)
-  windscreen.attenuationDistance = .03
+  windscreen.color.setHex(full ? 0xeef2f3 : 0x273038)
+  windscreen.attenuationColor.setHex(0x9aaeb1)
+  windscreen.attenuationDistance = .05
   windscreen.clearcoat = .5
   const rearOptics = new T.MeshPhysicalMaterial({
     color: full ? 0xedf0f3 : 0x858e99, metalness: full ? 0 : .1, roughness: full ? .071 : .105,
@@ -628,6 +642,8 @@ export async function makeMaterials(detail: VehicleDetail, paint: PaintSpec): Pr
   const beamLens = emitter(0x55585c, .2, new T.Color(1, .96, .9))
   const darkCarbon = p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x0e0f11 : 0x1a1b1e, metalness: .15, roughness: .4, clearcoat: .7, clearcoatRoughness: .1, anisotropy: full ? .3 : 0, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial
   if (darkCarbon.anisotropy > 0) tangentFallback(darkCarbon)
+  const cabinTrim = p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x3e4146 : 0x1c1e21, roughness: .38, clearcoat: full ? .45 : 0, clearcoatRoughness: .2, envMapIntensity: full ? 2 : 1, side: T.DoubleSide }), 'none') as T.MeshPhysicalMaterial
+  if (full) clusterSpill(cabinTrim)
   const tailInner = emitter(0x3a3c40, .4, new T.Color(1, .02, .01))
   const wet = (color: number, metalness: number, roughness: number, clearcoat: number, clearcoatRoughness: number): T.MeshPhysicalMaterial =>
     p.tag(new T.MeshPhysicalMaterial({ color, metalness, roughness, clearcoat, clearcoatRoughness, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial
@@ -648,10 +664,10 @@ export async function makeMaterials(detail: VehicleDetail, paint: PaintSpec): Pr
     hat: p.brushed,
     seal: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x0d0e10 : 0x202226, roughness: .34, clearcoat: .6, clearcoatRoughness: .12, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial,
     glassEdge: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x1d2a2c : 0x273038, roughness: .1, ior: 1.51 }), 'none') as T.MeshPhysicalMaterial,
-    leather: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x4a4441 : 0x3b3735, roughness: .42, clearcoat: full ? .25 : 0, clearcoatRoughness: .3 }), 'none') as T.MeshPhysicalMaterial,
-    cabinTrim: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x2a2c30 : 0x1c1e21, roughness: .38, clearcoat: full ? .35 : 0, clearcoatRoughness: .2, side: T.DoubleSide }), 'none') as T.MeshPhysicalMaterial,
+    leather: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x8c8279 : 0x3b3735, roughness: .42, clearcoat: full ? .5 : 0, clearcoatRoughness: .16, envMapIntensity: full ? 2 : 1, sheen: full ? .6 : 0, sheenRoughness: .45, sheenColor: new T.Color(0x8a8580) }), 'none') as T.MeshPhysicalMaterial,
+    cabinTrim,
     cabinCarbon: p.carbon,
-    screen: p.tag(new T.MeshPhysicalMaterial({ color: 0x060708, roughness: .22, clearcoat: full ? 1 : 0, clearcoatRoughness: .04, side: T.DoubleSide }), 'none') as T.MeshPhysicalMaterial,
+    screen: p.tag(new T.MeshPhysicalMaterial({ color: 0x060708, roughness: .22, clearcoat: full ? 1 : 0, clearcoatRoughness: .04, emissive: 0x6f9fd8, emissiveIntensity: full ? .15 : 0, side: T.DoubleSide }), 'none') as T.MeshPhysicalMaterial,
     darkCarbon,
     satin: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x1d1f22 : 0x2a2c30, metalness: .1, roughness: .45, clearcoat: .25, clearcoatRoughness: .35, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial,
     retro: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x7a0b08 : 0x6a1210, metalness: .1, roughness: .2, clearcoat: 1, clearcoatRoughness: .04, side: T.DoubleSide }), 'beads') as T.MeshPhysicalMaterial,
