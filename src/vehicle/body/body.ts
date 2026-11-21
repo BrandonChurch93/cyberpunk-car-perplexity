@@ -3,7 +3,7 @@ import type { Surface } from '../geom/cuts'
 import { toGeometry } from '../geom/mesh'
 import { tessellate, type TessOptions, type TessResult, type TrimFn } from '../geom/tessellate'
 import { cross, norm, sub, type V3 } from '../geom/vec'
-import { arches, gapHalf, gapRoll, makeCuts, paintTrim, type BodyCuts } from './cuts'
+import { gapHalf, gapRoll, makeCuts, paintTrim, wheelOpenings, type BodyCuts } from './cuts'
 import { frontFace } from './nose'
 import { rearFace } from './tail'
 import { mainLoft } from './shape'
@@ -111,7 +111,7 @@ export function buildBody(q: BodyQuality): BodyGeometry {
   const run = (S: Surface, grid: Pick<TessOptions, 'us' | 'vs'>, trim?: TrimFn, coarse = 1, normal?: TessOptions['normal']): TessResult =>
     tessellate(S, { ...base, maxEdge: base.maxEdge * coarse, tolerance: base.tolerance * coarse, edgeLength: base.edgeLength * coarse, ...grid, trim, normal })
   const paint = [
-    run(main, mainGrid, paintTrim(cuts.main, arches)),
+    run(main, mainGrid, paintTrim(cuts.main, wheelOpenings)),
     run(front, faceGrid, paintTrim(cuts.front)),
     run(rear, faceGrid, paintTrim(cuts.rear)),
   ]
@@ -128,7 +128,7 @@ export function buildBody(q: BodyQuality): BodyGeometry {
     const keep = paintTrim({ ...c, gaps: [], bands: [] }, extra)
     return (u, v, p) => keep(u, v, p)
   }
-  const bayTrim: TrimFn = (u, v, p) => Math.max(openings(cuts.main, arches)(u, v, p), -cuts.curves.bay.signed(u, v, p, 0.3) - 0.02)
+  const bayTrim: TrimFn = (u, v, p) => Math.max(openings(cuts.main, wheelOpenings)(u, v, p), -cuts.curves.bay.signed(u, v, p, 0.3) - 0.02)
   // The backing shell is the paint pushed inward. It keeps the paint's normal: the offset folds on itself where a crease
   // is tighter than the offset, and its own tangents vanish there.
   const backing = (S: Surface, grid: Pick<TessOptions, 'us' | 'vs'>, trim?: TrimFn): TessResult =>

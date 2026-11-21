@@ -127,7 +127,7 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const { cuts } = body
   const S = body.surfaces
 
-  const tl = taillamps(cuts.maps.rear, [cuts.curves.stem, cuts.curves.lampU, cuts.curves.lampL, cuts.curves.chev])
+  const tl = taillamps(cuts.maps.rear, [cuts.curves.stem, cuts.curves.lampU, cuts.curves.lampL, cuts.curves.chev], cuts.curves.lens, cuts.curves.slot)
   addPair(tl.guide, m.tail, 'tail-guide')
   addPair(tl.housing, m.under, 'tail-housing')
 
@@ -135,7 +135,7 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   // The registry accepts any material; the front module tags its own lens, guide and die finishes.
   const front = buildFront(sprung, cuts, { ...m, tag }, full)
 
-  const ex = outlets(cuts.curves.surround)
+  const ex = outlets(cuts.maps.rear, cuts.curves.surround)
   addPair(ex.lip, m.ceramic, 'outlet-lip')
   addPair(ex.pipes, m.soot, 'outlet-pipe')
   addPair(ex.soot, m.soot, 'outlet-back')

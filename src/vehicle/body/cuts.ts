@@ -1,8 +1,8 @@
-import { projectCurve, SurfaceMap, type Surface, type SurfaceCurve } from '../geom/cuts'
+import { projectCurve, smax, SurfaceMap, type Surface, type SurfaceCurve } from '../geom/cuts'
 import type { V3 } from '../geom/vec'
 import { planLines, sideLines } from './lines'
 import { noseCuts } from './nose'
-import { tailCuts } from './tail'
+import { cornerCut, tailCuts } from './tail'
 import { dims } from './shape'
 
 const archFront = { z: dims.frontHubZ, y: dims.frontTire.radius, r: 0.405 }
@@ -15,6 +15,11 @@ export const gapRoll = 0.002
 export function arches(p: V3): number {
   if (p[0] < 0.5) return -1
   return Math.max(arch(p, archFront), arch(p, archRear))
+}
+
+/** The wheel openings plus the lower corner cut away behind each rear wheel, joined smoothly: positive inside. */
+export function wheelOpenings(p: V3): number {
+  return smax(arches(p), cornerCut(p), 0.04)
 }
 
 function arch(p: V3, a: { z: number; y: number; r: number }): number {

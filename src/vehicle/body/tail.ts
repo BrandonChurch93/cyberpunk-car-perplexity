@@ -1,8 +1,7 @@
 import type { Loft } from '../geom/loft'
-import { projectCurve, SurfaceCurve, type SurfaceMap } from '../geom/cuts'
+import { projectCurve, SurfaceCurve, type Surface, type SurfaceMap } from '../geom/cuts'
 import type { V2, V3 } from '../geom/vec'
 import type { Cuts } from './cuts'
-import { elev, map } from './lines'
 
 // The tail cap: one fair height field z(x, y), even in x so the centre line is smooth, with the loft's last section
 // as its top and outer edges. The section's own deviation from the field is blended out within a short band.
@@ -101,40 +100,31 @@ export function rearFace(loft: Loft): (a: number, b: number) => V3 {
   }
 }
 
-/** Rear elevation outlines, left half. */
-export const lines = {
-  exhaust: map(elev, [[495, 256], [516, 221], [655, 221], [677, 256], [655, 292], [516, 292]]),
-  surround: map(elev, [[470, 256], [505, 191], [680, 191], [712, 256], [680, 322], [505, 322]]),
-  lower: map(elev, [[745, 369], [420, 369], [365, 395], [362, 800], [745, 800]]),
+/** Height of the bumper's lower edge: the top of the open lower tail and of the corner cut behind the rear wheel. */
+export const bumper = 0.59
+
+/** Front of the corner cut, ahead of the rear arch's trailing edge so the two openings are one. */
+export const cornerFront = -1.85
+
+/**
+ * Rear elevation outlines in metres (|x|, y), left half, after the patent rear view: one dark housing round both
+ * outlets under the deck nose, a lamp lens out to the corner, a dark slot under it, and the lower tail open from the
+ * bumper edge down and out through the corner.
+ */
+export const lines: Record<'exhaust' | 'surround' | 'lens' | 'slot' | 'lower', V2[]> = {
+  exhaust: [[0.03, 0.787], [0.064, 0.843], [0.286, 0.843], [0.32, 0.787], [0.286, 0.731], [0.064, 0.731]],
+  surround: [[-0.03, 0.85], [0.006, 0.85], [0.046, 0.872], [0.33, 0.872], [0.372, 0.83], [0.372, 0.75], [0.33, 0.706], [-0.03, 0.706]],
+  lens: [[0.388, 0.774], [0.388, 0.8], [0.5, 0.812], [0.598, 0.868], [0.598, 0.748], [0.5, 0.762]],
+  slot: [[0.395, 0.704], [0.59, 0.704], [0.59, 0.731], [0.395, 0.734]],
+  lower: [[-0.03, bumper], [0.72, bumper], [0.72, 0], [-0.03, 0]],
 }
 
 /** Tail lamp light guides in metres (|x|, y): a stem from the outlets that splits into a sideways Y closed at the corner. */
 export const lampPaths: Record<'stem' | 'upper' | 'lower' | 'end', V2[]> = {
-  stem: [[0.415, 0.81], [0.51, 0.81]],
-  upper: [[0.51, 0.81], [0.585, 0.858]],
-  lower: [[0.51, 0.81], [0.585, 0.764]],
-  end: [[0.585, 0.858], [0.585, 0.764]],
-}
-
-/** Half width of the lamp recess. */
-export const lampSlot = 0.012
-
-/** A closed outline round a straight stroke with round ends. */
-function capsule(p: V2, q: V2, h: number): V2[] {
-  const d = Math.hypot(q[0] - p[0], q[1] - p[1])
-  const ux = (q[0] - p[0]) / d
-  const uy = (q[1] - p[1]) / d
-  const out: V2[] = []
-  const n = 10
-  for (let i = 0; i <= n; i++) {
-    const a = -Math.PI / 2 + (Math.PI * i) / n
-    out.push([q[0] + h * (ux * Math.cos(a) - uy * Math.sin(a)), q[1] + h * (uy * Math.cos(a) + ux * Math.sin(a))])
-  }
-  for (let i = 0; i <= n; i++) {
-    const a = Math.PI / 2 + (Math.PI * i) / n
-    out.push([p[0] + h * (ux * Math.cos(a) - uy * Math.sin(a)), p[1] + h * (uy * Math.cos(a) + ux * Math.sin(a))])
-  }
-  return out
+  stem: [[0.398, 0.787], [0.5, 0.787]],
+  upper: [[0.5, 0.787], [0.584, 0.853]],
+  lower: [[0.5, 0.787], [0.584, 0.763]],
+  end: [[0.584, 0.853], [0.584, 0.763]],
 }
 
 /** A hole that runs across the centre line: points on the face's centre edge count as inside. */
@@ -144,20 +134,61 @@ class CentreHole extends SurfaceCurve {
   }
 }
 
-type TailCurve = 'lampU' | 'lampL' | 'chev' | 'stem' | 'surround' | 'lower'
+function seg(q: V3, a: V3, b: V3): number {
+  const ab: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+  const l2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2]
+  const t = l2 > 0 ? Math.min(1, Math.max(0, ((q[0] - a[0]) * ab[0] + (q[1] - a[1]) * ab[1] + (q[2] - a[2]) * ab[2]) / l2)) : 0
+  return Math.hypot(q[0] - a[0] - ab[0] * t, q[1] - a[1] - ab[1] * t, q[2] - a[2] - ab[2] * t)
+}
+
+/** A hole that runs off the face: its stretches along the face's own edges are not trim lines. */
+class EdgeHole extends CentreHole {
+  private readonly segs: Array<[V3, V3]> = []
+  constructor(S: Surface, uv: V2[]) {
+    super(S, uv, true, true)
+    const rim = (q: V2): boolean => q[0] < 1e-4 || q[0] > 1 - 1e-4 || q[1] < 1e-4 || q[1] > 1 - 1e-4
+    for (let i = 0; i < uv.length; i++) {
+      const j = (i + 1) % uv.length
+      if (!(rim(uv[i]) && rim(uv[j]))) this.segs.push([this.p[i], this.p[j]])
+    }
+  }
+
+  override distance(q: V3, cap = 1): number {
+    let best = cap
+    for (const [a, b] of this.segs) best = Math.min(best, seg(q, a, b))
+    return best
+  }
+}
+
+type TailCurve = 'lampU' | 'lampL' | 'chev' | 'stem' | 'surround' | 'lens' | 'slot' | 'lower'
 
 /** Openings in the tail. Every one is a hole, so the backing opens with the skin and the paint flange is its wall. */
 export function tailCuts(rm: SurfaceMap): { cuts: Cuts; curves: Record<TailCurve, SurfaceCurve> } {
   const path = (p: V2[]): SurfaceCurve => projectCurve(rm, '-z', p, false, 0.004, undefined, false, 0.004)
-  const slot = (p: V2[]): SurfaceCurve => projectCurve(rm, '-z', capsule(p[0], p[1], lampSlot), true, 0.003, undefined, false, 0.002)
-  const surround = projectCurve(rm, '-z', lines.surround, true, 0.005, undefined, false, 0.03)
-  const lowerRaw = projectCurve(rm, '-z', lines.lower, true, 0.006, undefined, true, 0.04)
-  const lower = new CentreHole(rm.S, lowerRaw.uv, true, true)
-  const slots = Object.values(lampPaths).map(slot)
+  const hole = (p: V2[], round: number): SurfaceCurve => projectCurve(rm, '-z', p, true, 0.004, undefined, false, round)
+  const surroundRaw = projectCurve(rm, '-z', lines.surround, true, 0.004, undefined, true, 0.012)
+  const surround = new CentreHole(rm.S, surroundRaw.uv, true, true)
+  const lens = hole(lines.lens, 0.008)
+  const slot = hole(lines.slot, 0.008)
+  const lowerRaw = projectCurve(rm, '-z', lines.lower, true, 0.006, undefined, true, 0.03)
+  const lower = new EdgeHole(rm.S, lowerRaw.uv)
   return {
-    cuts: { holes: [surround, lower, ...slots].map((c) => ({ c, inset: 0 })), gaps: [], glass: [], bands: [] },
-    curves: { lampU: path(lampPaths.upper), lampL: path(lampPaths.lower), chev: path(lampPaths.end), stem: path(lampPaths.stem), surround, lower },
+    cuts: { holes: [surround, lens, slot, lower].map((c) => ({ c, inset: 0 })), gaps: [], glass: [], bands: [] },
+    curves: { lampU: path(lampPaths.upper), lampL: path(lampPaths.lower), chev: path(lampPaths.end), stem: path(lampPaths.stem), surround, lens, slot, lower },
   }
+}
+
+/**
+ * The lower body corner behind each rear wheel, cut away below the bumper edge so the tyre shows from behind: positive
+ * inside, in metres. For the main loft's trim, joined to the rear arch with a smooth max.
+ */
+export function cornerCut(p: V3): number {
+  const r = 0.03
+  const a = bumper - p[1]
+  const b = cornerFront - p[2]
+  const c = Math.abs(p[0]) - 0.5
+  const ab = a > -r && b > -r && a < r && b < r ? r - Math.hypot(Math.max(0, r - a), Math.max(0, r - b)) : Math.min(a, b)
+  return Math.min(ab, c)
 }
 
 /** World point on the tail at elevation (|x|, y), for parts that sit on it. */

@@ -1,30 +1,21 @@
 import type * as THREE from 'three'
 import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
 import { MeshBuilder } from '../geom/mesh'
-import { add, norm, scale, sub, type V3 } from '../geom/vec'
-import { lampSlot } from '../body/tail'
-import { bar, merge } from './solid'
+import { bar, holePlane, merge, pocket } from './solid'
 
-/** Light guide section and the dark floor of its recess. */
-export const lampSpec = { guide: 0.014, thick: 0.01, front: 0.004, corner: 0.003, floor: 0.018, floorThick: 0.004 } as const
+/** Light guide section, the depth of the dark lens recess it sits in, and of the slot below. */
+export const lampSpec = { guide: 0.012, thick: 0.016, front: 0.005, corner: 0.003, lens: 0.022, slot: 0.05 } as const
 
 /**
- * Tail lamps, left side: a light guide bar along each stroke of the sideways Y, set into the paint's slot, and a dark
- * floor behind each slot. Strokes are the tail's lamp curves; the slot walls are the paint flange.
+ * Tail lamps, left side: a light guide bar along each stroke of the sideways Y, standing on the floor of a dark lens
+ * recess, and the dark slot below the lamp. Strokes are the tail's lamp curves; the recess walls continue the paint flange.
  */
-export function taillamps(rm: SurfaceMap, strokes: SurfaceCurve[]): { guide: THREE.BufferGeometry; housing: THREE.BufferGeometry } {
+export function taillamps(rm: SurfaceMap, strokes: SurfaceCurve[], lens: SurfaceCurve, slot: SurfaceCurve): { guide: THREE.BufferGeometry; housing: THREE.BufferGeometry } {
   const s = lampSpec
   const guide = new MeshBuilder()
+  for (const c of strokes) merge(guide, bar(rm, c.p, s.guide, s.thick, s.front, s.corner))
   const housing = new MeshBuilder()
-  for (const c of strokes) {
-    merge(guide, bar(rm, c.p, s.guide, s.thick, s.front, s.corner))
-    merge(housing, bar(rm, extend(c.p, lampSlot + 0.006), 2 * lampSlot + 0.016, s.floorThick, s.floor, 0.0015))
-  }
+  merge(housing, pocket(rm, lens, holePlane(rm, lens), s.lens))
+  merge(housing, pocket(rm, slot, holePlane(rm, slot), s.slot))
   return { guide: guide.geometry(), housing: housing.geometry() }
-}
-
-function extend(p: V3[], d: number): V3[] {
-  const a = norm(sub(p[0], p[1]))
-  const b = norm(sub(p[p.length - 1], p[p.length - 2]))
-  return [add(p[0], scale(a, d)), ...p, add(p[p.length - 1], scale(b, d))]
 }

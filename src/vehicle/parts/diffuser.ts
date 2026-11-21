@@ -1,9 +1,11 @@
 import * as THREE from 'three'
 import { MeshBuilder } from '../geom/mesh'
 import { add, clamp, cross, norm, scale, sub, type V2, type V3 } from '../geom/vec'
-import { dims } from '../body/shape'
+import { dims, mainLoft } from '../body/shape'
+import { bumper } from '../body/tail'
 import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
-import { solid } from './solid'
+import { flat, merge } from './solid'
+import { honeycomb } from './enginebay'
 
 /** Plate and strake thickness. Every free edge is a full round of half this. */
 export const sheet = 0.01
@@ -201,34 +203,40 @@ function rounded(poly: V2[], radii: number[]): V2[] {
     const ia: V2 = [(p[0] - a[0]) / la, (p[1] - a[1]) / la]
     const oc: V2 = [(c[0] - p[0]) / lc, (c[1] - p[1]) / lc]
     const turn = Math.acos(clamp(ia[0] * oc[0] + ia[1] * oc[1], -1, 1))
-    const d = rad * Math.tan(turn / 2)
+    const d = Math.min(rad * Math.tan(turn / 2), 0.9 * Math.min(la, lc))
+    const rr = d / Math.tan(turn / 2)
     const t1: V2 = [p[0] - ia[0] * d, p[1] - ia[1] * d]
     const left = ia[0] * oc[1] - ia[1] * oc[0] > 0 ? 1 : -1
     const nrm: V2 = [-ia[1] * left, ia[0] * left]
-    const ctr: V2 = [t1[0] + nrm[0] * rad, t1[1] + nrm[1] * rad]
+    const ctr: V2 = [t1[0] + nrm[0] * rr, t1[1] + nrm[1] * rr]
     const a0 = Math.atan2(t1[1] - ctr[1], t1[0] - ctr[0])
     const steps = 10
     for (let k = 0; k <= steps; k++) {
       const ang = a0 + left * (turn * k) / steps
-      out.push([ctr[0] + rad * Math.cos(ang), ctr[1] + rad * Math.sin(ang)])
+      out.push([ctr[0] + rr * Math.cos(ang), ctr[1] + rr * Math.sin(ang)])
     }
   }
   return out
 }
 
-/** One closed strake: a flat slab with a full round on its leading edge, foot and tail; its root sits inside the plate. */
+/**
+ * One closed strake: a flat slab with a full round on its leading edge, foot and tail. Behind the mesh it rises to the
+ * bumper edge as a blade in the open lower tail; ahead of it its root sits inside the plate.
+ */
 function strake(b: MeshBuilder, s: (typeof strakes)[number]): void {
   const midX = (y: number): number => s.x - ((y - leanAxis) / Math.cos(s.lean)) * Math.sin(s.lean)
   const root = (z: number): number => centreY(z) + sheet + 0.002
-  const top = tailZ(midX(root(tailZ(s.x))) + r) - r
+  const upper = bumper + 0.01
+  const top = tailZ(midX(upper) + r) - r
   const bottom = tailZ(midX(s.low) + r) - r
-  const poly: V2[] = []
-  const radii: number[] = []
-  const n = 32
+  const back = meshZ + 0.002
+  const poly: V2[] = [[top, upper], [back, upper]]
+  const radii: number[] = [0.008, 0]
+  const n = 24
   for (let i = 0; i <= n; i++) {
-    const z = top + ((s.lead - top) * i) / n
+    const z = back + ((s.lead - back) * i) / n
     poly.push([z, root(z)])
-    radii.push(i === 0 || i === n ? 0.006 : 0)
+    radii.push(i === n ? 0.006 : 0)
   }
   poly.push([s.foot, s.low + r])
   radii.push(0.06)
@@ -337,96 +345,100 @@ export function underbody(): Underbody {
   return { floor: fb.geometry(), strakes: sb.geometry() }
 }
 
-/** Depth of the recessed panel behind the lower tail opening, and the wall it hangs from. */
-export const valanceDepth = 0.09
+/** Front of the mesh across the back of the open lower tail, well inside the paint. */
+export const meshZ = -2.13
+const meshT = 0.004
+/** The dark plate behind the mesh. */
+const meshBack = 0.09
+/** The dark plate inboard of the side vent. */
+const ventBack = 0.08
 const wallT = 0.004
-const flangeDepth = 0.012
+const ceilingY = bumper + 0.002
+/** Inboard wall of the corner cavity behind the rear tyre, and how far forward it runs. */
+const innerX = 0.6
+const cavityFront = -1.875
+
+/** Point on the tail at elevation (x, y), and its outward normal in plan. */
+function faceAt(rm: SurfaceMap, x: number, y: number): { p: V3; n: V2 } {
+  const [u, v] = rm.invert('-z', x, y)
+  const p = rm.S(u, v)
+  const h = 1e-4
+  const a = sub(rm.S(Math.min(1, u + h), v), rm.S(Math.max(0, u - h), v))
+  const c = sub(rm.S(u, Math.min(1, v + h)), rm.S(u, Math.max(0, v - h)))
+  let nn = norm(cross(a, c))
+  if (nn[2] > 0) nn = scale(nn, -1)
+  const l = Math.hypot(nn[0], nn[2])
+  return { p, n: [nn[0] / l, nn[2] / l] }
+}
+
+/** Point on the body corner at section u and height y, and its outward normal in plan. */
+function cornerAt(u: number, y: number): { p: V3; n: V2 } {
+  const loft = mainLoft()
+  let lo = 0
+  let hi = loft.vAt[2]
+  for (let k = 0; k < 40; k++) {
+    const m = (lo + hi) / 2
+    if (loft.at(u, m)[1] < y) lo = m
+    else hi = m
+  }
+  const v = (lo + hi) / 2
+  const p = loft.at(u, v)
+  const h = 1e-4
+  const a = sub(loft.at(Math.min(1, u + h), v), loft.at(Math.max(0, u - h), v))
+  const c = sub(loft.at(u, v + h), loft.at(u, v - h))
+  let nn = norm(cross(a, c))
+  if (nn[0] < 0) nn = scale(nn, -1)
+  const l = Math.hypot(nn[0], nn[2])
+  return { p, n: [nn[0] / l, nn[2] / l] }
+}
 
 /**
- * The recess behind the lower tail opening: a returned wall that continues the paint flange back along the top and outer
- * edges, and a panel across the back from the diffuser plate up, open only on the centre line.
+ * The open lower tail behind the bumper edge, left half: a ceiling that continues the paint flange back to a mesh set well
+ * inside the body and out through the corner cut to the rear tyre, the mesh itself from the diffuser up, and an inboard
+ * wall that closes the corner cavity off from the engine.
  */
 export function valance(lower: SurfaceCurve, rm: SurfaceMap): { wall: THREE.BufferGeometry; panel: THREE.BufferGeometry } {
-  const S = rm.S
-  const bottom = Math.min(...lower.p.map((p) => p[1])) + 0.004
-  const keep = (p: V3): boolean => p[0] > 0.004 && p[1] > bottom
-  const pts = lower.p
-  const n = pts.length
-  let start = 0
-  while (keep(pts[start]) || !keep(pts[(start + 1) % n])) start = (start + 1) % n
-  const run: V3[] = []
-  for (let k = 1; k <= n && keep(pts[(start + k) % n]); k++) run.push(pts[(start + k) % n])
-  if (run[0][0] > run[run.length - 1][0]) run.reverse()
-  const path = run.filter((_, i) => i % 2 === 0 || i === run.length - 1)
-  const normalAt = (p: V3): V3 => {
-    const [u, v] = rm.invert('-z', p[0], p[1])
-    const h = 1e-4
-    return norm(cross(sub(S(Math.min(1, u + h), v), S(Math.max(0, u - h), v)), sub(S(u, Math.min(1, v + h)), S(u, Math.max(0, v - h)))))
+  void lower
+  const inset = 0.008
+  const y = ceilingY + wallT / 2
+  const skin: V2[] = []
+  for (let i = 0; i <= 12; i++) {
+    const f = faceAt(rm, (0.6 * i) / 12, y)
+    skin.push([f.p[0] - f.n[0] * inset, f.p[2] - f.n[1] * inset])
   }
-  const centre: V3 = [0.28, 0.45, 0]
-  const rows: V3[][] = [[], [], [], []]
-  for (let j = 0; j < path.length; j++) {
-    const p = path[j]
-    let nn = normalAt(p)
-    if (nn[2] > 0) nn = scale(nn, -1)
-    const t = sub(path[Math.min(path.length - 1, j + 1)], path[Math.max(0, j - 1)])
-    let h = norm(cross(nn, t))
-    if ((centre[0] - p[0]) * h[0] + (centre[1] - p[1]) * h[1] < 0) h = scale(h, -1)
-    const q = (inward: number, depth: number): V3 => add(add(p, scale(h, inward)), scale(nn, -depth))
-    rows[0].push(q(0.001, flangeDepth))
-    rows[1].push(q(0.001, valanceDepth + wallT))
-    rows[2].push(q(-wallT, valanceDepth + wallT))
-    rows[3].push(q(-wallT, flangeDepth))
+  for (let i = 1; i <= 40; i++) {
+    const c = cornerAt(1 - (0.12 * i) / 40, y)
+    const q: V2 = [c.p[0] - c.n[0] * inset, c.p[2] - c.n[1] * inset]
+    if (q[1] > cavityFront) break
+    if (q[0] > skin[skin.length - 1][0]) skin.push(q)
   }
-  const wall = solid(rows, [true, true, true, true], true, false)
-
-  const top = path[0][1]
-  let outer = 0
-  for (const p of path) outer = Math.max(outer, p[0])
-  const yb = floorY + 0.17
-  const cols = 16
-  const rowsN = 10
-  const panelAt = (x: number, y: number, s: number): V3 => {
-    const [u, v] = rm.invert('-z', Math.min(x, outer - 0.002), Math.max(Math.min(y, top - 0.002), bottom + 0.002))
-    const p = S(u, v)
-    return [x, y, p[2] + valanceDepth + s]
+  const last = skin[skin.length - 1]
+  const plan: V2[] = [[0, meshZ + meshBack + wallT], ...skin, [last[0], cavityFront], [innerX + wallT, cavityFront], [innerX + wallT, meshZ + meshBack + wallT]]
+  const horiz = { o: [0, ceilingY, 0] as V3, ex: [1, 0, 0] as V3, ey: [0, 0, -1] as V3, ez: [0, 1, 0] as V3 }
+  const wall = new MeshBuilder()
+  merge(wall, flat(horiz, plan.map(([x, z]) => [x, -z]), [], 0, wallT))
+  const side = { o: [innerX, 0, 0] as V3, ex: [0, 1, 0] as V3, ey: [0, 0, 1] as V3, ez: [1, 0, 0] as V3 }
+  const sideLine: V2[] = []
+  for (let i = 0; i <= 16; i++) {
+    const z = meshZ + ((cavityFront - meshZ) * i) / 16
+    sideLine.push([centreY(z) + 0.002, z])
   }
-  const pb = new MeshBuilder()
-  const xs = Array.from({ length: cols + 1 }, (_, j) => ((outer + 0.002) * j) / cols)
-  const ys = Array.from({ length: rowsN + 1 }, (_, i) => yb + ((top + 0.002 - yb) * i) / rowsN)
-  const front = ys.map((y) => xs.map((x) => panelAt(x, y, 0)))
-  const back = ys.map((y) => xs.map((x) => panelAt(x, y, wallT)))
-  const face = (g: V3[][], out: number): void => {
-    const base = pb.pos.length / 3
-    for (let i = 0; i <= rowsN; i++) for (let j = 0; j <= cols; j++) pb.vertex(g[i][j], [0, 0, out])
-    for (let i = 0; i < rowsN; i++) {
-      for (let j = 0; j < cols; j++) {
-        const a = base + i * (cols + 1) + j
-        const quad = [a, a + 1, a + cols + 2, a + cols + 1]
-        const e1 = sub(g[i][j + 1], g[i][j])
-        const e2 = sub(g[i + 1][j], g[i][j])
-        if (cross(e1, e2)[2] * out > 0) pb.quad(quad[0], quad[1], quad[2], quad[3])
-        else pb.quad(quad[0], quad[3], quad[2], quad[1])
-      }
-    }
-  }
-  face(front, -1)
-  face(back, 1)
-  const rim = (a: V3[], c: V3[], out: V3): void => {
-    const base = pb.pos.length / 3
-    for (const p of a) pb.vertex(p, out)
-    for (const p of c) pb.vertex(p, out)
-    const m = a.length
-    for (let k = 0; k < m - 1; k++) {
-      const e1 = sub(a[k + 1], a[k])
-      const e2 = sub(c[k], a[k])
-      const ok = cross(e1, e2)[0] * out[0] + cross(e1, e2)[1] * out[1] + cross(e1, e2)[2] * out[2] > 0
-      if (ok) pb.quad(base + k, base + k + 1, base + m + k + 1, base + m + k)
-      else pb.quad(base + k, base + m + k, base + m + k + 1, base + k + 1)
-    }
-  }
-  rim(front[rowsN], back[rowsN], [0, 1, 0])
-  rim(front[0], back[0], [0, -1, 0])
-  rim(front.map((r) => r[cols]), back.map((r) => r[cols]), [1, 0, 0])
-  return { wall: wall.geometry(), panel: pb.geometry() }
+  const ventLow = centreY(meshZ) + 0.012
+  merge(wall, flat(side, [...sideLine, [ventLow, cavityFront], [ventLow, meshZ]], [], 0, wallT))
+  const inside = { ...side, o: [innerX - ventBack, 0, 0] as V3 }
+  const zs = meshZ + meshBack + wallT
+  const inLine: V2[] = [[centreY(zs) + 0.002, zs], ...sideLine.filter(([, z]) => z > zs + 0.005)]
+  merge(wall, flat(inside, [...inLine, [ceilingY + wallT, cavityFront], [ceilingY + wallT, zs]], [], 0, wallT))
+  const yb = centreY(meshZ + meshBack) + 0.004
+  const yt = ceilingY + wallT
+  const back = { o: [0, 0, meshZ + meshBack] as V3, ex: [1, 0, 0] as V3, ey: [0, 1, 0] as V3, ez: [0, 0, 1] as V3 }
+  merge(wall, flat(back, [[0, yb], [innerX + wallT, yb], [innerX + wallT, yt], [0, yt]], [], 0, wallT))
+  const ym = centreY(meshZ) + 0.004
+  const ha = (innerX + wallT) / 2
+  const hb = (yt - ym) / 2
+  const panel = honeycomb({ c: [ha, ym + hb, meshZ + meshT / 2], a: [1, 0, 0], b: [0, 1, 0], n: [0, 0, -1] }, ha, hb, 0.018, 0.003, meshT, 0.0006, 0.006)
+  const va = (cavityFront - meshZ) / 2
+  const vb = (yt - ventLow) / 2
+  merge(panel, honeycomb({ c: [innerX + meshT / 2, ventLow + vb, meshZ + va], a: [0, 0, 1], b: [0, 1, 0], n: [1, 0, 0] }, va, vb, 0.018, 0.003, meshT, 0.0006, 0.006))
+  return { wall: wall.geometry(), panel: panel.geometry() }
 }
