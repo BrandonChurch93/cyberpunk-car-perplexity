@@ -84,8 +84,8 @@ export const trackClear = 0.0045
 
 /** Drops at or above this diameter are real geometry near the lens. Smaller ones stay in the shader at every distance. */
 export const geometryMinMm = 0.8
-/** Height a large drop levels off at, against gravity: about the capillary length of water. */
-const capMm = 3
+/** Capillary length of water. A puddle levels off at 2 l sin(theta / 2), about 4.2 mm at 100 degrees. */
+const capillaryMm = 2.71
 
 export interface BeadClass {
   /** Contact angle in degrees. Board 08: 95 to 110 on waxed paint. Board 09: under 15 on bare glass, more with a coating. */
@@ -116,7 +116,7 @@ export function dominantAxis(n: THREE.Vector3): number {
 export function capHeight(radius: number, contactDegrees: number): number {
   const theta = THREE.MathUtils.degToRad(contactDegrees)
   const hs = (radius * (1 - Math.cos(theta))) / Math.sin(theta)
-  const cap = capMm / 1000
+  const cap = (2 * capillaryMm * Math.sin(theta / 2)) / 1000
   return hs / Math.sqrt(1 + (hs / cap) * (hs / cap))
 }
 
@@ -227,8 +227,15 @@ float surfCoverage(vec2 uv, int axis, uint salt) {
 float surfCapHeight(float radius) {
   float theta = radians(surfBeadContact);
   float hs = radius * (1.0 - cos(theta)) / sin(theta);
-  float cap = ${(capMm / 1000).toFixed(4)};
+  float cap = ${((2 * capillaryMm) / 1000).toFixed(5)} * sin(0.5 * theta);
   return hs / sqrt(1.0 + (hs / cap) * (hs / cap));
+}
+
+// Fit to a 3D trace through the cap profile: the share of a bead's silhouette whose rays leave through its far side
+// without reaching the paint, by aspect h/r and view elevation. Flattened puddles send nearly every ray into the paint.
+float surfLensExit(float aspect, float sinE) {
+  float elevMax = radians(mix(4.0, 24.0, smoothstep(0.75, 1.0, aspect)));
+  return 0.85 * smoothstep(0.45, 0.75, aspect) * max(0.0, 1.0 - asin(sinE) / elevMax);
 }
 
 /** Embeds a projected offset back into 3D on the tangent plane, so footprints stay round on tilted faces. */
@@ -274,6 +281,9 @@ vec3 surfGradNoiseWrap(vec2 p, int period, int z, uint salt) {
 float surfCoatVar = 0.0;
 float surfRunLine = 0.0;
 float surfPixA = 1.0;
+float surfLensW = 0.0;
+float surfSinE = 1.0;
+float surfLensOpen = 0.0;
 
 /** Slope of the water on the coat, in object space on the tangent plane. coverage: the drift field, 1 where drops pack densest. */
 vec3 surfCoatSlope(vec3 p, vec3 n, vec3 down, float slope, float pix, float coverage, uint salt) {
@@ -382,6 +392,9 @@ float surfGlint = 0.0;
   surfPixA = pixA;
   mat3 toView = mat3(surfObjToView0, surfObjToView1, surfObjToView2);
   float up = smoothstep(0.2, 0.95, level);
+  surfSinE = max(abs(dot(normalize(toView * n), normalize(vViewPosition))), 0.03);
+  float cotE = sqrt(1.0 - surfSinE * surfSinE) / surfSinE;
+  float screenCover = 0.0;
   float under = smoothstep(0.3, 0.9, -level);
   float surfEdge = smoothstep(0.05, 0.4, -level) * (1.0 - smoothstep(0.7, 0.95, -level));
   uint salt = uint(surfBeadSalt);
@@ -400,11 +413,17 @@ float surfGlint = 0.0;
       float fill = density * mix(sparseD, denseD, surfCoverage(uv, axis, salt));
       surfMist += fill * 0.6 * (maxMm / cellMm) * (maxMm / cellMm);
       float meanR = 0.25 * (minMm + maxMm) / cellMm;
-      surfGlint += fill * 0.25 * meanR * meanR;
+      float meanA = surfCapHeight(meanR * cell) / (meanR * cell);
+      float side = 1.0 + 0.5 * meanA * cotE;
+      screenCover += fill * 3.14159 * meanR * meanR * side;
+      surfGlint += fill * 0.25 * meanR * meanR * side;
+      surfLensW += fill * 0.25 * meanR * meanR * side * 12.566371 * surfLensExit(meanA, surfSinE);
       continue;
     }
     ivec2 c = ivec2(floor(uv / cell));
     density = min(0.95, density * mix(sparseD, denseD, surfCoverage((vec2(c) + 0.5) * cell, axis, salt)));
+    float meanR = 0.25 * (minMm + maxMm) * 0.001;
+    screenCover += density * 3.14159 * meanR * meanR / (cell * cell) * (1.0 + 0.5 * surfCapHeight(meanR) / meanR * cotE);
     vec3 h = surfHash3(ivec3(c, axis * 4 + i), salt);
     if (h.x >= density) continue;
     float size = h.x / density;
@@ -431,6 +450,8 @@ float surfGlint = 0.0;
       radius *= 1.0 - 0.85 * gone;
     }
     float height = surfCapHeight(radius);
+    // Seen low across the panel a bead shows its side as well as its foreshortened base.
+    float side = 1.0 + 0.5 * height / radius * cotE;
     vec3 worldCenter = surfWorldPos + (vec4(toView * d3, 0.0) * viewMatrix).xyz;
     if (nearTrack && surfTrackDistance(worldCenter) < ${trackClear} + radius) continue;
     float geometry = surfGeo.w > 0.5 && i > 0 && dMm >= ${geometryMinMm.toFixed(2)} && distance(worldCenter, surfGeo.xyz) < surfGeo.w && dMm * 0.001 >= surfGeoAngle * distance(worldCenter, surfGeo.xyz) ? 1.0 : 0.0;
@@ -440,7 +461,9 @@ float surfGlint = 0.0;
       surfMist += density * (1.0 - resolved) * 0.6 * (dMm / cellMm) * (dMm / cellMm);
       // A drop under a pixel is a convex mirror that sends each light's irradiance out as E F r^2 / 4 per steradian: it lands as one point.
       float spot = 0.5 * pixA;
-      surfGlint += (1.0 - resolved) * radius * radius / (12.566371 * spot * spot) * exp(-dot(d3, d3) / (spot * spot));
+      float point = (1.0 - resolved) * side * radius * radius / (12.566371 * spot * spot) * exp(-dot(d3, d3) / (spot * spot));
+      surfGlint += point;
+      surfLensW += point * 12.566371 * surfLensExit(height / radius, surfSinE);
     }
     if (resolved <= 0.0) continue;
     surfCap(surfHit, d3, radius, height * resolved, n, down, slope, pix, geometry);
@@ -455,6 +478,10 @@ float surfGlint = 0.0;
     }
   }
   surfMist = clamp(surfMist, 0.0, 1.0) * (1.0 - surfLane);
+  // Beads in front hide beads behind once their silhouettes fill the view.
+  float hidden = screenCover > 1e-4 ? (1.0 - exp(-screenCover)) / screenCover : 1.0;
+  surfGlint *= hidden;
+  surfLensW *= hidden;
   float coatFar = smoothstep(${coatFade[0].toFixed(4)}, ${coatFade[1].toFixed(4)}, pix) * (1.0 - 0.7 * surfLane);
   vec3 coatTilt = coatFar > 0.0 ? toView * surfCoatSlope(p, n, down, slope, pix, surfCoverage(uv, axis, salt), salt) * coatFar : vec3(0.0);
   surfCoatVar *= coatFar * coatFar;
@@ -472,8 +499,47 @@ float surfGlint = 0.0;
   float w = surfHit.cover * (1.0 - 0.8 * smoothstep(1.0, 3.0, surfSpread));
   float shaded = w * (1.0 - surfHit.geometry);
   vec3 dropView = surfSafeNormalize(toView * surfHit.normal, normal);
+  #ifdef USE_ENVMAP
+  if (shaded > 0.0) {
+    // A resolved bead is a lens: refract in, cross the water, refract out. The ray either reaches the paint under the bead,
+    // the dark crescent, or leaves through the far side carrying an inverted image of the city, bouncing once off the coat
+    // behind the bead when it leaves heading down.
+    vec3 nV = normalize(toView * n);
+    vec3 vIn = -normalize(vViewPosition);
+    float R = surfHit.radius;
+    float h = max(surfCapHeight(R), surfHit.height + 1e-6);
+    vec3 x0 = toView * (-surfHit.offset) + nV * surfHit.height;
+    vec3 t = refract(vIn, dropView, 0.7519);
+    if (dot(t, t) > 0.0) {
+      float k = R / h - 1.0;
+      vec3 xs = x0 + nV * dot(x0, nV) * k;
+      vec3 ts = t + nV * dot(t, nV) * k;
+      float qa = dot(ts, ts), qb = dot(xs, ts), qc = dot(xs, xs) - R * R;
+      float s = (-qb + sqrt(max(qb * qb - qa * qc, 0.0))) / qa;
+      float tn = dot(t, nV);
+      float sBase = tn < 0.0 ? -dot(x0, nV) / tn : 1e9;
+      if (sBase > s) {
+        vec3 xe = x0 + s * t;
+        float en = dot(xe, nV);
+        vec3 ne = normalize((xe - nV * en) / (R * R) + nV * en / (h * h));
+        vec3 o = refract(t, -ne, 1.33);
+        if (dot(o, o) > 0.0) {
+          float carry = 0.9;
+          float on = dot(o, nV);
+          if (on < 0.0) {
+            o = reflect(o, nV);
+            carry *= 0.04 + 0.96 * pow(1.0 - min(-on, 1.0), 5.0);
+          }
+          float lensRough = max(0.12, mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, R)));
+          surfLensOpen = shaded * smoothstep(0.0, 0.08, 1.0 - surfHit.r);
+          totalEmissiveRadiance += surfLensOpen * carry * getIBLRadiance(o, o, lensRough);
+        }
+      }
+    }
+  }
+  #endif
   diffuseColor.rgb *= mix(1.0, 0.86, surfMist) * mix(1.0, 0.8, surfLane) * (1.0 - 0.55 * surfHalo * (1.0 - w));
-  diffuseColor.rgb *= mix(1.0, mix(0.72, 0.3, surfHit.rim), w);
+  diffuseColor.rgb *= mix(1.0, mix(0.72, 0.3, surfHit.rim), w) * (1.0 - surfLensOpen);
   if (shaded > 0.0) {
     vec3 tilt = dropView - normal;
     normal = surfSafeNormalize(normal - shaded * (0.6 + 1.2 * surfHit.r) * tilt, normal);
@@ -528,6 +594,20 @@ float surfGlint = 0.0;
     #endif
     totalEmissiveRadiance += glint * surfGlint * (1.0 - surfLane);
   }
+  #ifdef USE_ENVMAP
+  if (surfLensW > 0.0) {
+    // Unresolved beads: the rays that cross a bead leave heading down into the coat just behind it, so each bead carries a
+    // small image of the sky ahead and above, at about 13 degrees plus twice the view elevation, through the coat's Fresnel.
+    vec3 nV = normalize(toView * n);
+    vec3 vIn = -normalize(vViewPosition);
+    vec3 ahead = surfSafeNormalize(vIn - nV * dot(vIn, nV), nV);
+    float rise = radians(13.0) + 2.0 * asin(surfSinE);
+    float sinRise = sin(min(rise, 1.5));
+    vec3 dir = normalize(ahead * cos(min(rise, 1.5)) + nV * sinRise);
+    float coat = 0.04 + 0.96 * pow(1.0 - sinRise, 5.0);
+    totalEmissiveRadiance += 0.9 * coat * surfLensW * (1.0 - surfLane) * getIBLRadiance(dir, dir, 0.45);
+  }
+  #endif
   surfBeadOut = shaded;
   // A dome a few pixels across holds every normal inside one pixel: spread its highlight, as a prefiltered normal map would.
   surfBeadRough = mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, surfHit.radius));
@@ -539,6 +619,7 @@ float surfGlint = 0.0;
 // Three's own floor on roughness is applied before this chunk; a tighter lobe under a compact light blows up into fireflies.
 const beadsSpecular = /* glsl */ `
 surfBeadRough = min(max(surfBeadRough, 0.045) + geometryRoughness, 1.0);
+material.specularColor *= 1.0 - surfLensOpen;
 #ifdef USE_CLEARCOAT
   material.clearcoat *= 1.0 - 0.6 * surfHalo * (1.0 - surfBeadOut);
   material.clearcoat = mix(material.clearcoat, 1.0, surfBeadOut);
