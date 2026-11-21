@@ -106,6 +106,12 @@ export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector
         vec2 q=f*f*(3.0-2.0*f);
         return mix(mix(cloudHash(i),cloudHash(i+vec2(1,0)),q.x),mix(cloudHash(i+vec2(0,1)),cloudHash(i+1.0),q.x),q.y);
       }
+      float stormBody(vec2 p) {
+        float bank = cloudNoise(p*vec2(.63,.89)+vec2(8.03,-3.12));
+        float roll = cloudNoise(p*vec2(1.33,1.85)+vec2(1.38*bank,5.17));
+        float fold = cloudNoise(p*vec2(2.67,3.84)+vec2(-4.62,.94*roll));
+        return .51*bank+.35*roll+.14*fold;
+      }
       void main() {
         vec3 d = normalize(skyDirection);
         float horizon = exp(-max(d.y, 0.0)*4.2);
@@ -131,24 +137,44 @@ export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector
           float az = atan(d.x,-d.z);
           float bill = atan(cloudDistricts[0].x,-cloudDistricts[0].y);
           float west = atan(cloudDistricts[1].x,-cloudDistricts[1].y);
-          float haze = smoothstep(.13,.57,d.y);
-          float hazeBank = cloudNoise(vec2(az*3.9,d.y*6.6)+vec2(7.3,4.1))-.5;
-          vec3 base = mix(vec3(.137,.125,.168),vec3(.026,.020,.047),haze);
-          base += vec3(.030,.022,.043)*hazeBank*(1.0-.73*haze);
-          vec2 spread = vec2((az-bill+.10)/.235,(d.y-.155+.033*hazeBank)/.207);
+          vec2 drift = vec2((az-bill+.107)*17.8,(d.y-.162)*34.4);
+          vec2 longWind = mat2(.954,-.299,.299,.954)*drift;
+          vec2 curls = vec2(cloudNoise(longWind*.48+vec2(6.8,-4.1)),cloudNoise(longWind*.51+vec2(-3.1,6.7)));
+          vec2 p = longWind+vec2(2.32,1.89)*(curls-.5)+vec2(1.85,-2.17);
+          float low = stormBody(p);
+          float high = stormBody(p*vec2(.71,.83)+vec2(3.7,4.0));
+          float cap = smoothstep(.26,.73,.67*high+.33*low);
+          float belly = smoothstep(.30,.66,low);
+          float rim = smoothstep(.017,.144,low-stormBody(p-vec2(.035,.29)));
+          rim *= smoothstep(.25,.53,low)*(.65+.35*cloudNoise(p*vec2(2.53,1.74)+vec2(1.9,5.2)));
+          float loft = smoothstep(.097,.407,d.y+.025*(high-.5));
+          float corner = smoothstep(.13,.58,abs(az-bill+.114));
+          vec3 dusk = mix(vec3(.151,.143,.194),vec3(.031,.028,.067),max(loft,.44*corner));
+          vec3 darkCloud = mix(vec3(.083,.088,.138),vec3(.014,.016,.041),max(loft,.45*corner));
+          vec3 storm = mix(dusk,darkCloud,.18+.68*cap);
+          float basin = (az-bill+.114)/.222;
+          float rise = (d.y-.171-.095*(curls.y-.5))/.110;
+          float pink = exp(-basin*basin-rise*rise);
+          float scatter = (.39+.80*belly)*(1.0-.53*cap)+1.07*rim*(1.0-.63*cap);
+          vec3 litBellies = mix(vec3(.248,.068,.130),muralCloud*vec3(.351,.152,.229),.61);
+          float across = az-bill+.171;
+          float sag = cloudNoise(vec2(19.7*across+9.68,3.38));
+          float ceiling = .154+.037*(sag-.5)-.060*across;
+          float curlY = d.y-ceiling;
+          vec2 swell = vec2(across*37.0+8.24,curlY*91.0-4.17);
+          float shelf = stormBody(swell);
+          float scallop = smoothstep(.006,.096,shelf-stormBody(swell-vec2(.11,.31)));
+          vec2 bankFalloff = vec2(across/.167,curlY/.032);
+          float bankLight = exp(-dot(bankFalloff,bankFalloff));
+          float ruffle = smoothstep(.28,.71,shelf)*(.20+.80*scallop);
+          vec2 shadeFalloff = vec2(across/.208,(curlY-.029)/.035);
+          float shadedFold = smoothstep(.44,.71,shelf)*exp(-dot(shadeFalloff,shadeFalloff));
+          storm *= 1.0-.19*shadedFold;
+          storm += vec3(.238,.073,.103)*bankLight*ruffle;
           vec2 cyanSpread = vec2((az-west)/.23,(d.y-.118)/.16);
-          float magenta = exp(-dot(spread,spread));
           float cyan = exp(-dot(cyanSpread,cyanSpread));
-          vec3 spill = muralCloud*vec3(.193,.100,.086)*magenta*(.94+.09*hazeBank);
-          vec2 wind = vec2((az-bill)*15.5+3.3*d.y,d.y*25.5-(az-bill)*6.0);
-          float fold = cloudNoise(wind*.43+vec2(6.2,-4.8));
-          float sheet = cloudNoise(wind+vec2(fold*1.4,fold*1.7));
-          float lobes = smoothstep(.33,.78,.72*sheet+.28*cloudNoise(wind*1.63+fold*1.18));
-          float lane = (d.y-.168-(fold-.5)*.074)/.096;
-          float shoulder = (az-bill+.157)/.33;
-          float pinkCloud = exp(-lane*lane-shoulder*shoulder)*(lobes-.37);
-          vec3 cloudLight = mix(vec3(.133,.057,.096),muralCloud*vec3(.242,.134,.202),.47);
-          c = mix(c,base+spill+vec3(.0015,.008,.020)*cyan+cloudLight*pinkCloud,southSky);
+          storm += pink*litBellies*scatter+vec3(.002,.012,.028)*cyan*(.58+.42*belly);
+          c = mix(c,storm,southSky);
         }
         float northBand = northGlow*smoothstep(.15,.36,d.y)*(1.0-smoothstep(.80,.96,d.y))*smoothstep(0.0,.32,d.z);
         if (northBand > .0) {
