@@ -931,6 +931,9 @@ describe('full roof world', () => {
     const firstFrame = (timeSeconds: number) => world.beginFrame({ frame: { timeSeconds } } as FrameContext)
     firstFrame(0)
     const first = face.material.uniforms.flow.value.clone()
+    const sky = world.root.getObjectByName('city-lit cloud base') as THREE.Mesh<THREE.SphereGeometry,THREE.ShaderMaterial>
+    const cloud = sky.material.uniforms.muralCloud.value as THREE.Color
+    const firstCloud = cloud.clone()
     const wall = world.root.getObjectByName(id)
     const rate = emitter.level(0)
     expect(emitter.object.parent).toBe(wall)
@@ -942,8 +945,18 @@ describe('full roof world', () => {
     for (const tie of ties) expect(supportPlane.intersectsBox(new THREE.Box3().setFromObject(tie))).toBe(true)
     expect(emitter.intensity).toBe(Math.max(...world.lights.filter(light=>!light.shadow).map(light=>light.intensity)))
     const travel = face.material.uniforms.travel.value as number
+    const ink = face.material.uniforms.artwork.value
+    const upper = world.root.getObjectByName('bonnet media bank')!.getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    expect(ink).toBe(upper.material.uniforms.artwork.value)
     firstFrame(.08*config.film.durationSeconds)
-    expect(face.material.uniforms.flow.value.distanceTo(first)*travel).toBeGreaterThan(.12)
+    const flow = face.material.uniforms.flow.value as THREE.Vector2
+    expect(flow.distanceTo(first)*travel).toBeGreaterThan(.12)
+    const mean = muralMean(flow.x,flow.y,travel,new THREE.Color())
+    const key = new THREE.Color()
+    emitter.colorAt!(.08*config.film.durationSeconds,key)
+    expect(key.r/key.b).toBeCloseTo(mean.r/mean.b,12)
+    expect(key.g/key.b).toBeCloseTo(mean.g/mean.b,12)
+    expect(cloud.toArray()).not.toEqual(firstCloud.toArray())
     const wake = config.beats.find(beat=>beat.id==='wake')!
     world.beginSample({ timeSeconds: wake.end+.003, sample: { frame: { timeSeconds: wake.end-.001 } } } as SampleContext)
     expect(emitter.object.parent).toBe(wall)
@@ -955,6 +968,7 @@ describe('full roof world', () => {
     expect(emitter.object.parent).toBe(wall)
     expect(face.material.uniforms.flow.value.toArray()).toEqual(first.toArray())
     expect(emitter.level(config.film.durationSeconds)).toBeCloseTo(rate,12)
+    expect(cloud.toArray()).toEqual(firstCloud.toArray())
     firstFrame(0)
   })
 

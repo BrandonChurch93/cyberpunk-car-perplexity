@@ -97,7 +97,18 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const animation: ((time: number) => void)[] = []
   const survey = approvedHeroSourceSurvey()
   const screen = survey.find(source => source.id === 'magenta violet tower screen')!
-  const screenReflection = { point: new THREE.Vector3(...screen.at), normal: new THREE.Vector3(...screen.normal), size: new THREE.Vector2(...screen.size) }
+  const mural = billboardMural(...screen.size,new THREE.Color(...screen.rgb),{ travel: .166, laps: 2, picture: true, artworkGain: .98 })
+  const screenReflection = { point: new THREE.Vector3(...screen.at), normal: new THREE.Vector3(...screen.normal),
+    size: new THREE.Vector2(...screen.size), picture: mural.picture }
+  const muralSpill = new THREE.Color()
+  const muralCloud = new THREE.Color()
+  const ambientCloud = new THREE.Color(1.02,.39,1.05)
+  animation.push(time => {
+    mural.set(time)
+    mural.colorAt(time,muralSpill)
+    muralCloud.copy(muralSpill).multiplyScalar(mural.level(time)*1.62).lerp(ambientCloud,.53)
+    muralSpill.multiplyScalar(.68)
+  })
   const washes = [
     ['left edge','left cyan facade sail'],
     ['hotel tower','hotel rooftop cabinet'],
@@ -114,8 +125,8 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     const key = washes.find(([fragment]) => name.includes(fragment))?.[1]
     const amber = key === 'amber upper tower cabinet'
     return survey.filter(source => source.id === key || amber && source.id === 'amber lower tower cabinet').map(entry => {
-      const color = new THREE.Color(...entry.rgb)
-      color.multiplyScalar((amber ? 1.65 : .68)/Math.max(color.r,color.g,color.b))
+      const color = entry.id === screen.id ? muralSpill : new THREE.Color(...entry.rgb)
+      if (color !== muralSpill) color.multiplyScalar((amber ? 1.65 : .68)/Math.max(color.r,color.g,color.b))
       return { point: new THREE.Vector3(...entry.at), size: new THREE.Vector2(...entry.size), color }
     })
   }
@@ -539,7 +550,6 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     }
     const color = new THREE.Color(...palette[source.tint])
     if (source.id === 'magenta violet tower screen') {
-      const mural = billboardMural(width*k, height*k, color, { travel: .166, laps: 2, picture: true })
       plate(housing, 'animated magenta violet mural', offset(mural.material,-4), [0,0,.002], width,height)
       const wallZ = heroPoint([0,0,screenTowerFront],scale.screen)[2]
       const yaw = housing.rotation.y
@@ -562,7 +572,6 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const { light } = mountLight(housing,'billboard',source.size,color,91,75)
       light.colorAt = mural.colorAt
       light.level = mural.level
-      animation.push(mural.set)
     } else if (!source.text) {
       const segments = source.onWall ? 1 : Math.round(height / (source.tint === 'cyan' ? .34 : .50))
       const shape = cyanApertures[source.id]
@@ -623,5 +632,5 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   for (const z of [-.111,.111]) box(drain,'iron grate side rim',[0,.0041,z],[.50,.0082,.018],zinc)
   box(drain,'recessed slot bed',[0,.0007,0],[.50,.0014,.22],tar)
   for (let i=0;i<21;i++) box(drain,'iron drainage bar',[(i-10)*.0234,.0059,0],[.010,.0047,.211],zinc)
-  return { root, signs, lights, set: (time: number) => animation.forEach(update => update(time)) }
+  return { root, signs, lights, muralCloud, set: (time: number) => animation.forEach(update => update(time)) }
 }

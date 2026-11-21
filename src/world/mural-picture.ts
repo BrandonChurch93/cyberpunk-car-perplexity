@@ -78,10 +78,14 @@ export function muralMean(shiftX: number, shiftY: number, travel: number, out: T
   let r=0, g=0, b=0
   const count = 24
   for (let i=0;i<count;i++) for (let j=0;j<count;j++) {
-    const x = floor((x0+((j+.5)/count-.5)*pictureSpan)*side)
-    const y = floor((y0+((i+.5)/count-.5)*pictureSpan)*side)
+    const u = (x0+((j+.5)/count-.5)*pictureSpan)*side-.5
+    const v = (y0+((i+.5)/count-.5)*pictureSpan)*side-.5
+    const x = floor(u), y = floor(v), fx = u-x, fy = v-y
     const k = (y*side+x)*4
-    r+=ink[k]; g+=ink[k+1]; b+=ink[k+2]
+    const t = k+side*4
+    r+=lerp(lerp(ink[k],ink[k+4],fx),lerp(ink[t],ink[t+4],fx),fy)
+    g+=lerp(lerp(ink[k+1],ink[k+5],fx),lerp(ink[t+1],ink[t+5],fx),fy)
+    b+=lerp(lerp(ink[k+2],ink[k+6],fx),lerp(ink[t+2],ink[t+6],fx),fy)
   }
   return out.setRGB(r/(count*count),g/(count*count),b/(count*count))
 }
