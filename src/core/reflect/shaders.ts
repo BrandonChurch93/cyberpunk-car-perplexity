@@ -115,28 +115,40 @@ float planarLuma( vec3 c ) {
   return dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );
 }
 
-// GGX lobe sampled per sub-render with the distance to the reflected object read from the mirror depth.
-// The lobe's footprint on screen comes out long and vertical at grazing view, and grows with that distance.
+float planarDistance( vec3 p, vec2 uv ) {
+  float depth = texture( reflectDepth, uv ).r;
+  if ( depth >= 1.0 ) return REFLECT_FAR;
+  vec4 hit = reflectInverseViewProjection * vec4( vec3( uv, depth ) * 2.0 - 1.0, 1.0 );
+  return clamp( distance( hit.xyz / hit.w, p ), 0.02, REFLECT_FAR );
+}
+
+// Marginal cross-slope and conditional elevation quantiles of the GGX slope distribution.
+const int planarFilmTaps = 9;
+const int planarCross[planarFilmTaps] = int[planarFilmTaps]( 2, 7, 3, 0, 4, 8, 5, 1, 6 );
+const float planarElevation[planarFilmTaps] = float[planarFilmTaps](
+  -1.29242645, -0.66422739, -0.38192303, -0.17820084, 0.0, 0.17820084, 0.38192303, 0.66422739, 1.29242645
+);
+
 vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
-  if ( reflectOn < 0.5 ) return fallback;
+  if ( reflectOn < 0.5 || roughness >= REFLECT_ROUGH_END ) return fallback;
   vec3 p = vReflectWorld;
   vec3 n = normalize( transformDirectionByInverseViewMatrix( normalView, viewMatrix ) );
   #ifdef REFLECT_DECK_DETAIL
     if ( abs( p.y ) > 0.02 || n.y < 0.7 ) return fallback;
   #endif
   vec3 v = normalize( cameraPosition - p );
-  vec2 uv0 = reflectUv( p );
-  float depth = texture( reflectDepth, uv0 ).r;
-  vec4 hitClip = reflectInverseViewProjection * vec4( vec3( uv0, depth ) * 2.0 - 1.0, 1.0 );
-  float dist = depth >= 1.0 ? REFLECT_FAR : clamp( distance( hitClip.xyz / hitClip.w, p ), 0.02, REFLECT_FAR );
+  float dist = planarDistance( p, reflectUv( p ) );
   float a = roughness * roughness;
   vec3 t = cross( n, v );
   t = dot( t, t ) > 1e-8 ? normalize( t ) : normalize( cross( n, vec3( 0.0, 0.0, 1.0 ) ) );
   vec3 b = cross( t, n );
   vec2 uvCenter = reflectUv( p + planarRay( v, n ) * dist );
   vec2 uvSide = reflectUv( p + planarRay( v, normalize( n + a * t ) ) * dist );
-  float minor = length( ( uvSide - uvCenter ) * reflectSize );
+  vec2 acrossPx = ( uvSide - uvCenter ) * reflectSize;
+  float minor = length( acrossPx );
+  vec2 acrossDir = minor > 1e-4 ? acrossPx / minor : vec2( 1.0, 0.0 );
   float lod = clamp( log2( max( minor * REFLECT_FILTER, 1.0 ) ), 0.0, reflectLodMax );
+  float filmBlend = smoothstep( REFLECT_FILM_START, REFLECT_FILM_END, roughness );
   float mipBlend = smoothstep( REFLECT_MIP_START, REFLECT_MIP_END, roughness );
   vec2 centerEdge = min( uvCenter, 1.0 - uvCenter );
   float fireflyBlend = smoothstep( REFLECT_FIREFLY_START, REFLECT_FIREFLY_END, roughness )
@@ -149,20 +161,40 @@ vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
     vec3 center = textureLod( reflectMap, uvCenter, refLod ).rgb;
     tapLimit += REFLECT_FIREFLY_RATIO * max( 0.0, planarLuma( center ) );
   }
-  vec2 jitter = vec2( reflectHash( gl_FragCoord.xy ), reflectHash( gl_FragCoord.yx + 71.0 ) );
+  vec2 jitter = filmBlend < 1.0 ? vec2( reflectHash( gl_FragCoord.xy ), reflectHash( gl_FragCoord.yx + 71.0 ) ) : vec2( 0.0 );
   vec3 sum = vec3( 0.0 );
   float count = 0.0;
-  for ( int k = 0; k < REFLECT_TAPS; k ++ ) {
-    vec2 u = fract( jitter + float( k ) * vec2( 0.7548776662, 0.5698402910 ) );
-    float phi = 6.28318530718 * u.x;
-    float cos2 = ( 1.0 - u.y ) / ( 1.0 + ( a * a - 1.0 ) * u.y );
-    float sinT = sqrt( max( 0.0, 1.0 - cos2 ) );
-    vec3 h = normalize( t * ( cos( phi ) * sinT ) + b * ( sin( phi ) * sinT ) + n * sqrt( cos2 ) );
+  for ( int k = 0; k < max( planarFilmTaps, REFLECT_TAPS ); k ++ ) {
+    float weight = mix( k < REFLECT_TAPS ? 1.0 : 0.0, k < planarFilmTaps ? 1.0 : 0.0, filmBlend );
+    if ( weight <= 0.0 ) continue;
+    vec3 h = n;
+    if ( filmBlend < 1.0 ) {
+      vec2 u = fract( jitter + float( k ) * vec2( 0.7548776662, 0.5698402910 ) );
+      float phi = 6.28318530718 * u.x;
+      float cos2 = ( 1.0 - u.y ) / ( 1.0 + ( a * a - 1.0 ) * u.y );
+      float sinT = sqrt( max( 0.0, 1.0 - cos2 ) );
+      h = normalize( t * ( cos( phi ) * sinT ) + b * ( sin( phi ) * sinT ) + n * sqrt( cos2 ) );
+    }
+    if ( filmBlend > 0.0 && k < planarFilmTaps ) {
+      float u = 2.0 * ( float( planarCross[k] ) + 0.5 ) / float( planarFilmTaps ) - 1.0;
+      float s = inversesqrt( 1.0 - u * u );
+      vec3 filmH = normalize( n + a * s * ( u * t + planarElevation[k] * b ) );
+      h = normalize( mix( h, filmH, filmBlend ) );
+    }
     vec3 r = reflect( - v, h );
     if ( dot( r, n ) <= 0.0 ) continue;
     r.y = abs( r.y );
-    vec2 uv = reflectUv( p + r * dist );
-    float spread = length( ( uv - uvCenter ) * reflectSize ) * REFLECT_TAIL;
+    float tapDistance = dist;
+    if ( mipBlend > 0.0 ) {
+      // A near center hit must not collapse the angular spread of rays that reach the city.
+      vec2 farUv = reflectUv( p + r * REFLECT_FAR );
+      if ( all( greaterThan( farUv, vec2( 0.0 ) ) ) && all( lessThan( farUv, vec2( 1.0 ) ) ) ) {
+        tapDistance = mix( dist, planarDistance( p, farUv ), mipBlend );
+      }
+    }
+    vec2 uv = reflectUv( p + r * tapDistance );
+    vec2 delta = ( uv - uvCenter ) * reflectSize;
+    float spread = mix( length( delta ), abs( dot( delta, acrossDir ) ), filmBlend ) * REFLECT_TAIL;
     vec2 edge = min( uv, 1.0 - uv );
     float inside = smoothstep( 0.0, 0.02, min( edge.x, edge.y ) );
     vec3 env = inside < 1.0 ? reflectEnvironment( r, roughness * 0.5 ) : vec3( 0.0 );
@@ -179,8 +211,8 @@ vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
     #endif
     float excess = max( luma - ceiling, 0.0 ) / max( REFLECT_FIREFLY_FLOOR, luma );
     mirror *= 1.0 - fireflyBlend * excess;
-    sum += mix( env, mirror, inside );
-    count += 1.0;
+    sum += weight * mix( env, mirror, inside );
+    count += weight;
   }
   vec3 planar = count > 0.0 ? sum / count : fallback;
   return mix( fallback, planar, 1.0 - smoothstep( REFLECT_ROUGH_START, REFLECT_ROUGH_END, roughness ) );
@@ -247,6 +279,8 @@ export interface PlanarTuning {
   roughEnd: number
   far: number
   tail: number
+  filmStart: number
+  filmEnd: number
   mipStart: number
   mipEnd: number
   fireflyStart: number
@@ -269,6 +303,8 @@ export function planarPatch(uniforms: PlanarUniforms, tuning: PlanarTuning, deck
       REFLECT_ROUGH_END: f(tuning.roughEnd),
       REFLECT_FAR: f(tuning.far),
       REFLECT_TAIL: f(tuning.tail),
+      REFLECT_FILM_START: f(tuning.filmStart),
+      REFLECT_FILM_END: f(tuning.filmEnd),
       REFLECT_MIP_START: f(tuning.mipStart),
       REFLECT_MIP_END: f(tuning.mipEnd),
       REFLECT_FIREFLY_START: f(tuning.fireflyStart),

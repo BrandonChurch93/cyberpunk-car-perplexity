@@ -597,6 +597,7 @@ function sweepPlanarLimiter(three: typeof THREE, box: typeof boxPatch, planar: t
   slab.position.z = 9
   scene.add(slab)
   const noise = { value: 0 }
+  const showRadiance = { value: 0 }
   patch(material, box({
     reflectBoxMin: { value: new three.Vector3() }, reflectBoxMax: { value: new three.Vector3() },
     reflectProbe: { value: eye.position }, reflectBoxOn: { value: 0 },
@@ -610,18 +611,21 @@ function sweepPlanarLimiter(three: typeof THREE, box: typeof boxPatch, planar: t
   }, tuning))
   patch(material, {
     id: 'measure planar limiter',
+    uniforms: { testShowRadiance: showRadiance },
     apply(shader) {
       shader.fragmentShader = shader.fragmentShader
+        .replace('uniform sampler2D reflectMap;', 'uniform sampler2D reflectMap;\nuniform float testShowRadiance;')
         .replace('float count = 0.0;', 'vec3 measure = vec3(0.0);\nfloat count = 0.0;')
         .replace(/(vec3 mirror = [^\n]+;)/, '$1\nvec3 rawMirror = mirror;')
-        .replace('sum += mix( env, mirror, inside );', `
-          vec3 delta = abs(mirror) - abs(rawMirror);
-          if (any(isnan(mirror)) || any(isinf(mirror)) || any(greaterThan(delta, vec3(.0002)))
+        .replace('sum += weight * mix( env, mirror, inside );', `
+          sum += weight * mix( env, mirror, inside );
+          vec3 testDelta = abs(mirror) - abs(rawMirror);
+          if (any(isnan(mirror)) || any(isinf(mirror)) || any(greaterThan(testDelta, vec3(.0002)))
             || any(lessThan(mirror * rawMirror, vec3(-.0002)))) measure.r = 1.0;
-          if (any(lessThan(delta, vec3(-.0002)))) measure.g = 1.0;
+          if (any(lessThan(testDelta, vec3(-.0002)))) measure.g = 1.0;
           if (any(lessThan(rawMirror, vec3(-.0002)))) measure.b = 1.0;
         `)
-        .replace(/return mix\( fallback, planar,[^\n]+;/, 'return measure;')
+        .replace(/return mix\( fallback, planar,[^\n]+;/, 'return testShowRadiance > .5 ? planar : measure;')
         .replace('#include <opaque_fragment>', 'outgoingLight = radiance;\n#include <opaque_fragment>')
     },
   })
@@ -642,13 +646,33 @@ function sweepPlanarLimiter(three: typeof THREE, box: typeof boxPatch, planar: t
     }
     if (!passed) failures.push(frame)
   }
+  showRadiance.value = 1
+  const first = new Float32Array(measures.length)
+  const variation = (roughness: number) => {
+    material.roughness = roughness
+    noise.value = hash(seed, 195, 0)
+    renderer.render(scene, eye)
+    renderer.readRenderTargetPixels(target, 0, 0, edge, edge, first)
+    noise.value = hash(seed, 196, 0)
+    renderer.render(scene, eye)
+    renderer.readRenderTargetPixels(target, 0, 0, edge, edge, measures)
+    let distinct = 0
+    let energy = 0
+    for (let p = 0; p < measures.length; p += 4) {
+      if (Math.abs(first[p]! - measures[p]!) > .0002) distinct++
+      energy += Math.abs(measures[p]!)
+    }
+    return { distinct, energy }
+  }
+  const film = variation(.22)
+  const puddle = variation(.05)
   target.dispose()
   image.dispose()
   depth.dispose()
   slab.geometry.dispose()
   material.dispose()
   renderer.dispose()
-  return { failures, darkened, signed }
+  return { failures, darkened, signed, film, puddle }
 }
 
 function resumeMirror(three: typeof THREE, reflections: typeof createReflections, Engine: typeof FrameEngine,
@@ -888,6 +912,9 @@ it('matches camera and probe reflections, bounds planar taps, and resumes review
       expect(limiter.darkened).toBeGreaterThan(0)
       expect(limiter.signed).toBeGreaterThan(0)
       expect(limiter.failures).toEqual([])
+      expect(limiter.film.energy).toBeGreaterThan(1)
+      expect(limiter.film.distinct).toBe(0)
+      expect(limiter.puddle.distinct).toBeGreaterThan(0)
       await page.close()
       const total = config.tiers.review.samplesPerFrame
       const frameIndex = Math.round(config.film.heroFrameSeconds * config.film.fps)

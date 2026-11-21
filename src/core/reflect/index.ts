@@ -38,7 +38,7 @@ const captureFar = 1500
 const cubePlanarGuard = 1.18
 export const planarTuning = {
   taps: 4, filter: 0.7, roughStart: 0.55, roughEnd: 0.9, far: 4000, tail: 0.2,
-  mipStart: 0.2, mipEnd: 0.35,
+  filmStart: 0.06, filmEnd: 0.13, mipStart: 0.075, mipEnd: 0.20,
   fireflyStart: 0.12, fireflyEnd: 0.18, fireflyRatio: 4, fireflyFloor: 0.35,
 }
 
