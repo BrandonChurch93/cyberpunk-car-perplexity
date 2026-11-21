@@ -606,6 +606,7 @@ describe('full roof world', () => {
       ['west parking fascia return','feathered LED ribbon','ribbon casing'],
       ['west roof wayfinding crown','feathered LED ribbon','ribbon casing'],
       ['northwest concourse ribbon','feathered LED ribbon','ribbon casing'],
+      ['east glazed concourse return','feathered LED ribbon','ribbon casing'],
       ['west upper service LED cabinet','segmented cool white LED face','sealed practical casing'],
     ].map(([id,optic,back])=>[required(optic!,required(id!)) as THREE.Mesh<THREE.PlaneGeometry>,bounds(required(back!,required(id!)))])
     for (const fixture of north.getObjectsByProperty('name','reflected cyan north guardwall lamp')) {

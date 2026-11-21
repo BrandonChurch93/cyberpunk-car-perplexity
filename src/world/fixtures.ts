@@ -507,8 +507,9 @@ function paintPracticals(roof: THREE.Group, city: THREE.Group, shell: THREE.Mate
   westFacadePractical(west,shell,metal,'west upper service LED cabinet',[-52.65,12.61,34.92],[4.66,1.45],false)
   westFacadePractical(west,shell,metal,'west south frontage neon badge',[-51.61,8.02,18.42],[2.82,1.31],true)
   const north = city.getObjectByName('northwest tower')!
-  const eastReturn = frontageRibbon(north,shell,'east glazed concourse return',[-40.98,22.48,51.04],Math.PI/2,[11.75,3.18],4.25)
-  for (const x of [-4.61,0,4.61]) block(eastReturn,'concourse return standoff',metal,[x,0,-.67],[.23,2.4,1.12])
+  const eastReturn = frontageRibbon(north,shell,'east glazed concourse return',[-41.57,22.48,51.04],Math.PI/2,[10.85,1.52],3.95,'glazed')
+  block(eastReturn,'concourse return slab',metal,[0,-.88,-.31],[11.25,.37,.56])
+  for (const x of [-4.61,0,4.61]) block(eastReturn,'concourse return standoff',metal,[x,0,-.39],[.23,1.67,.56])
   const concourse = frontageRibbon(north,shell,'northwest concourse ribbon',[-49.45,11.10,43.92],Math.PI,[13.35,1.88],4.85,'glazed')
   block(concourse,'concourse slab return',metal,[0,-1.03,-.34],[13.83,.43,.91])
   for (const x of [-6.25,0,6.25]) {
