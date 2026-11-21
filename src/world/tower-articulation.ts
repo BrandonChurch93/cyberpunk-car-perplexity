@@ -26,7 +26,7 @@ export function articulateSouthTowers(root: THREE.Group): void {
     roughness: .68,
     metalness: .33,
   })
-  const lens = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.31,.051,.088), toneMapped: false })
+  const lens = new THREE.MeshBasicMaterial({ color: new THREE.Color(9.10,.112,.17), toneMapped: false })
   const add = (parent: THREE.Object3D, name: string, at: Tuple, size: Tuple, material: THREE.Material) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size),material)
     mesh.name = name
@@ -50,6 +50,12 @@ export function articulateSouthTowers(root: THREE.Group): void {
     const r = stream(`world/hero/roof plant/${shell.name}`)
     add(stage,'recessed service floor',[rx,roof.rise*.5-.16,dz],[rw,roof.rise+.32,rd],shell.material)
     add(stage,'standing seam service roof',[rx,roof.rise,dz],[rw+.36,.36,rd+.38],zinc)
+    for (const edge of [-.36,.38]) {
+      const lead = rx+edge*rw
+      const front = dz+rd*.38
+      add(stage,'crown obstruction mount',[lead,roof.rise+.33,front],[.92,.34,.72],zinc)
+      add(stage,'crown red obstruction lens',[lead,roof.rise+.67,front],[.78,.36,.62],lens)
+    }
     const upperSide = rx-pivot*rw*.17
     const upperSpan = rw*(roof.plant === 'flow' ? .47 : .61)
     const upperRise = roof.rise*(roof.plant === 'relay' ? .47 : .27)
@@ -72,7 +78,7 @@ export function articulateSouthTowers(root: THREE.Group): void {
       const start = roof.rise+upperRise
       add(stage,'socketed communication mast',[upperSide,(start+tip)*.5,dz-rd*.11],[.39,roof.aerial,.42],zinc)
       add(stage,'asymmetric antenna spreader',[upperSide+rw*.08,tip-.94,dz-rd*.11],[rw*.44,.19,.18],zinc)
-      add(stage,'shielded antenna lens',[upperSide,tip+.19,dz-rd*.11],[.53,.39,.47],lens)
+      add(stage,'shielded antenna lens',[upperSide,tip+.21,dz-rd*.11],[.67,.43,.57],lens)
     }
   }
 }
