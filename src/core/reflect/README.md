@@ -20,7 +20,7 @@ The patch adds `varying vec3 vReflectWorld` (world position, after batching and 
 
 ## Planar reflection of the deck (`planar`)
 
-Redrawn before every sub-render (first sub-render only below the final tier) from the mirrored sample camera with an oblique near plane on y = 0, deck hidden, `layers.scene` only, same lights and time. The `reflect-planar` patch on `world.deck.material` replaces the specular environment term (`radiance` and `clearcoatRadiance` after `#include <lights_fragment_maps>`) with GGX taps into the mirror image. It reads `geometryNormal`, `geometryClearcoatNormal` and `material.*`, so normal and roughness changes made earlier in the shader bend and blur it.
+Drawn from the mirrored camera with an oblique near plane on y = 0, deck hidden and `layers.scene` only. Review draws once at frame center with no lens jitter so a page resuming at any sample index rebuilds the same mirror. Draft and final use the sample camera, lights and time. The `reflect-planar` patch on `world.deck.material` replaces the specular environment term (`radiance` and `clearcoatRadiance` after `#include <lights_fragment_maps>`) with GGX taps into the mirror image. It reads `geometryNormal`, `geometryClearcoatNormal` and `material.*`, so normal and roughness changes made earlier in the shader bend and blur it.
 
 | Uniform | Meaning |
 | --- | --- |
@@ -41,7 +41,7 @@ A world point `x` is found in the mirror image at `(reflectViewProjection * vec4
 | Tier | Cube face | Camera planar scale | Camera planar cadence |
 | --- | --- | --- | --- |
 | draft | 256 px | 0.25 | First sample |
-| review | 512 px | 0.5 | First sample |
+| review | 512 px | 0.5 | Frame center |
 | final | 1024 px | 0.5 | Every sample |
 
 ## Diagnostics
