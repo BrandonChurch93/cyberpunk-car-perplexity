@@ -138,7 +138,7 @@ export function addNorthSkyline(parent: THREE.Object3D, labels: Label) {
   const slabAt: Tuple = [slab.x+slab.w*.5-17,52,slabFront-.05]
   media(root,'north slab violet media blade',slabAt,slabMedia,[3.6,.32,3.1],[1.6,.42,9.6],{ offset: 4.1, banded: .62, travel: .12 })
 
-  const screen: ScreenReflection = { point: new THREE.Vector3(...ledAt), normal: new THREE.Vector3(0,0,-1), size: new THREE.Vector2(...led), picture: courtMural.picture }
+  const screen: ScreenReflection = { point: new THREE.Vector3(...ledAt), normal: new THREE.Vector3(0,0,-1), size: new THREE.Vector2(...led), picture: courtMural.picture, spill: new THREE.Color(.42,.034,.286) }
   const spills: SignSpill[] = [
     { point: new THREE.Vector3(...ledAt), size: new THREE.Vector2(...led), color: new THREE.Color(.62,.05,.42) },
     { point: new THREE.Vector3(...slabAt), size: new THREE.Vector2(...slabMedia), color: new THREE.Color(.34,.07,.62) },
