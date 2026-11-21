@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { config, frameCount } from '../src/config'
 import { candelaPerUnit, type FrameContext, type SampleContext } from '../src/core/contract'
-import { luminance, solidAngle } from '../src/core/emitters'
+import { airTransmittance, luminance, solidAngle } from '../src/core/emitters'
 import { apertureRadius, applyLens } from '../src/core/lens'
 import { LightRig } from '../src/core/lights'
 import { quality } from '../src/core/reflect'
@@ -38,9 +38,9 @@ describe('full roof world', () => {
       if (object instanceof THREE.Mesh && object.geometry instanceof THREE.PlaneGeometry &&
           object.material instanceof THREE.MeshBasicMaterial && object.name === 'compact bead optic') faces.push(object)
     })
-    expect(faces).toHaveLength(2)
+    expect(faces).toHaveLength(4)
     expect(faces.map(face=>face.parent?.parent?.name).sort()).toEqual([
-      'deck light pole','sealed cutoff LED head',
+      'deck light pole','sealed cutoff LED head','west corner slab','west market tower',
     ])
     const optics = faces.map(face => {
       const center = face.getWorldPosition(new THREE.Vector3())
@@ -48,10 +48,15 @@ describe('full roof world', () => {
       const u = face.localToWorld(new THREE.Vector3(width*.5,0,0)).sub(center)
       const v = face.localToWorld(new THREE.Vector3(0,height*.5,0)).sub(center)
       expect(Math.hypot(center.x,center.z)).toBeGreaterThan(9)
-      expect(width*height).toBeLessThan(.003)
+      expect(width).toBe(height)
+      expect(width).toBeGreaterThanOrEqual(.08)
+      expect(width).toBeLessThanOrEqual(.15)
+      expect(face.geometry.attributes.position.count).toBeGreaterThan(20)
       expect(face.material.toneMapped).toBe(false)
-      return { face, center, u, v, radiance: face.material.color, visibility: 1, bounds: new THREE.Box3().setFromObject(face.parent!) }
+      const radiance = face.material.color.clone().multiplyScalar(Math.PI*.25)
+      return { face, center, u, v, radiance, visibility: 1, bounds: new THREE.Box3().setFromObject(face.parent!) }
     })
+    expect(optics.some(({ radiance: c })=>c.b>c.g*4 && c.r>c.b)).toBe(true)
     const upperBody = [[.08,.53,1.88],[.08,.79,1.29],[0,1.05,.47],[0,1.28,-.24],[-.85,.68,1.72],[.85,.68,1.72]] as const
     for (const [x,y,z] of upperBody) {
       const receiver = new THREE.Vector3(x,y,z)
@@ -61,14 +66,25 @@ describe('full roof world', () => {
         const hit = new THREE.Raycaster(receiver,ray.normalize(),.01,distance+.01).intersectObject(world.root,true)[0]
         expect(hit?.object.name,optic.face.parent?.name).toBe(optic.face.name)
         expect(hit?.object === optic.face,optic.face.parent?.name).toBe(true)
-        return luminance(optic.radiance)*solidAngle(optic,receiver)
+        return luminance(optic.radiance)*solidAngle(optic,receiver)*airTransmittance(optic.center.length())
       })
       const total = energy.reduce((sum,next)=>sum+next,0)
-      expect(total).toBeGreaterThan(.27)
-      expect(total).toBeLessThan(.36)
+      expect(total).toBeGreaterThan(.50)
+      expect(total).toBeLessThan(.74)
     }
+    const hood = new THREE.Vector3(...upperBody[1])
+    const azimuths = optics.map(({ center }) => THREE.MathUtils.radToDeg(Math.atan2(center.x-hood.x,hood.z-center.z)))
+    expect(Math.max(...azimuths)-Math.min(...azimuths)).toBeGreaterThan(30)
     const half = config.film.shutterDegrees/(720*config.film.fps)
     for (const format of [config.formats.master,config.formats.vertical]) {
+      const heroTime = config.film.heroFrameSeconds
+      for (const delta of [-half,0,half]) {
+        const pose = cameraAt(heroTime+delta,format,anchors,heroTime)
+        const camera = new THREE.PerspectiveCamera()
+        applyLens(camera,pose,format.width,format.height,{ pixel: [0,0], aperture: [0,0] },1)
+        const clip = new THREE.Frustum().setFromProjectionMatrix(camera.projectionMatrix.clone().multiply(camera.matrixWorldInverse))
+        for (const { face, bounds } of optics) expect(clip.intersectsBox(bounds),face.parent?.name).toBe(false)
+      }
       let clearance = Infinity
       for (let frame = 0; frame <= frameCount; frame++) {
         const time = frame/config.film.fps
