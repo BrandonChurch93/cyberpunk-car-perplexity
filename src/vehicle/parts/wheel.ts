@@ -489,18 +489,18 @@ function tireGeometry(w: WheelSize, full: boolean, hero = w.front): THREE.Buffer
     ...new Set(
       full
         ? [
-            ...Array.from({ length: 49 }, (_, i) => i / 48),
-            ...grooves.flatMap((v) => [v - 0.0148, v - 0.0066, v + 0.0066, v + 0.0148]),
-            0.035, 0.06, 0.262, 0.276, 0.308,
-            0.672, 0.684, 0.694, 0.7, 0.707, 0.716, 0.728, 0.742, 0.756, 0.768, 0.792,
-            0.833, 0.855, 0.885, 0.913, 0.948, 0.966, 0.981,
+            0, 0.035, 0.062, 0.14, 0.21, 0.262, 0.284, 0.312,
+            ...grooves.flatMap((v) => [v - 0.0148, v - 0.0066, v, v + 0.0066, v + 0.0148]),
+            0.399, 0.505, 0.608,
+            0.676, 0.694, 0.7, 0.707, 0.722, 0.742, 0.764,
+            0.79, 0.815, 0.833, 0.86, 0.892, 0.92, 0.942, 0.966, 0.984, 1,
           ]
         : hero
           ? [0, 0.276, ...grooves.flatMap((v) => [v - 0.0148, v, v + 0.0148]), 0.7, 0.728, 0.762, 0.802, 0.833, 0.873, 0.913, 0.952, 1]
           : [0, 0.22, 0.36, 0.5, 0.64, 0.74, 0.84, 0.94, 1],
     ),
   ].sort((a, b) => a - b)
-  const uSteps = full ? (front ? 480 : 288) : hero ? 128 : 36
+  const uSteps = full ? (front ? 240 : 192) : hero ? 128 : 36
   const geom = patch((u, v) => place(u, v, depth(u, v)), uSteps, rows.length - 1, [0, -1, 0], 0, (_, i) => rows[i])
   const vCount = geom.getAttribute('position').count
   const cavity = new Float32Array(vCount)
@@ -524,20 +524,18 @@ function tireGeometry(w: WheelSize, full: boolean, hero = w.front): THREE.Buffer
 
 function sidewallReliefGeometry(w: WheelSize, full: boolean, hero = w.front): THREE.BufferGeometry {
   const { place } = tireShell(w)
-  const uSteps = full ? (w.front ? 360 : 240) : hero ? 72 : 28
+  const uSteps = full ? (w.front ? 144 : 108) : hero ? 72 : 28
   const bandKnots: Profile = full
     ? [
-        [0.833, -0.0008], [0.837, 0.0016], [0.843, 0.0016], [0.847, 0.00065],
-        [0.869, 0.00065], [0.872, 0.00128], [0.875, 0.00128], [0.878, 0.00065],
-        [0.899, 0.00065], [0.903, 0.0016], [0.909, 0.0016], [0.913, -0.0008],
+        [0.833, -0.0008], [0.838, 0.0016], [0.846, 0.00065],
+        [0.873, 0.00128],
+        [0.9, 0.00065], [0.908, 0.0016], [0.913, -0.0008],
       ]
     : [
         [0.833, -0.0008], [0.84, 0.0016], [0.847, 0.00065], [0.873, 0.00128],
         [0.899, 0.00065], [0.906, 0.0016], [0.913, -0.0008],
       ]
-  const beadKnots: Profile = full
-    ? [[0.948, -0.0008], [0.955, 0.00135], [0.966, 0.0014], [0.974, 0.0007], [0.981, -0.0008]]
-    : [[0.948, -0.0008], [0.96, 0.0014], [0.973, 0.0007], [0.981, -0.0008]]
+  const beadKnots: Profile = [[0.948, -0.0008], [0.96, 0.0014], [0.973, 0.0007], [0.981, -0.0008]]
   const buildBand = (knots: Profile) =>
     patch(
       (u, s) => {
@@ -558,7 +556,7 @@ function sidewallReliefGeometry(w: WheelSize, full: boolean, hero = w.front): TH
 function rotor(w: WheelSize, full: boolean, axis: number, hero = w.front): [THREE.BufferGeometry, THREE.BufferGeometry, THREE.BufferGeometry] {
   const front = w.front
   const face = new THREE.Shape()
-  const segments = full ? 180 : hero ? 96 : 36
+  const segments = full ? 108 : hero ? 96 : 36
   const radius = w.disc
   const ring = 0.104
   const lip = radius - 0.0018
@@ -580,7 +578,7 @@ function rotor(w: WheelSize, full: boolean, axis: number, hero = w.front): [THRE
   const wells: THREE.BufferGeometry[] = []
   const count = full || hero ? 24 : 8
   const drillRows = full || hero ? 4 : 2
-  const edges = full ? (front ? 14 : 10) : hero ? 10 : 5
+  const edges = full ? (front ? 8 : 6) : hero ? 8 : 5
   const qOuter = full || hero ? 0.0043 : 0.0036
   const qInner = 0.0032
   for (let i = 0; i < count; i++) {
@@ -635,9 +633,9 @@ function rotor(w: WheelSize, full: boolean, axis: number, hero = w.front): [THRE
       [rear + cheek, radius],
       [rear + cheek, ring],
     ],
-    full ? segments : 16,
+    full ? 36 : 16,
   )
-  const vaneCount = full ? 40 : hero ? 32 : 10
+  const vaneCount = full ? 32 : hero ? 28 : 10
   const edgeVanes: THREE.BufferGeometry[] = []
   for (let i = 0; i < vaneCount; i++) {
     const a = (tau * i) / vaneCount + 0.04
@@ -675,7 +673,7 @@ function rotor(w: WheelSize, full: boolean, axis: number, hero = w.front): [THRE
       [axis - cheek, radius - 0.0148],
       [axis - cheek, 0.122],
     ],
-    full ? 80 : hero ? 36 : 16,
+    full ? 48 : hero ? 36 : 16,
   )
   const hatGeom = lathe(
     [
@@ -688,7 +686,7 @@ function rotor(w: WheelSize, full: boolean, axis: number, hero = w.front): [THRE
       [axis - 0.005, 0.081],
       [axis - 0.005, 0.047],
     ],
-    full ? segments / 2 : hero ? 40 : 20,
+    full ? 48 : hero ? 36 : 20,
   )
   return [ceramic, joined([...wells, slotFloor]), hatGeom]
 }
@@ -981,8 +979,8 @@ function forgedWheelAssembly(
   const rLug = 0.204 * R
   const rLugWell = 0.0066
   const tLugSeam = 0.0014
-  const cornerSegs = full ? 16 : front ? 7 : 2
-  const maxLoopEdge = full ? 0.0055 : front ? 0.015 : 0.045
+  const cornerSegs = full ? 9 : front ? 6 : 2
+  const maxLoopEdge = full ? 0.013 : front ? 0.016 : 0.045
   const rimArcPts = (a0: number, a1: number, count: number): { pts: Pt2[]; radii: number[] } => {
     const pad = 0.088
     const pts: Pt2[] = [polar2(rWinOuter, a0)]
@@ -997,7 +995,7 @@ function forgedWheelAssembly(
     radii.push(0.0148)
     return { pts, radii }
   }
-  const arcSub = full ? 9 : front ? 4 : 0
+  const arcSub = full ? 5 : front ? 3 : 0
 
   for (let k = 0; k < 5; k++) {
     const th = theta0 + (k / 5) * tau
@@ -1023,31 +1021,29 @@ function forgedWheelAssembly(
 
     const lugCenter = polar2(rLug, th + tau / 10)
     lugCenters.push(lugCenter)
-    lugLoops.push(circleLoopCCW(lugCenter, rLugWell, full ? 20 : front ? 12 : 8))
+    lugLoops.push(circleLoopCCW(lugCenter, rLugWell, full ? 12 : front ? 10 : 8))
   }
 
   const hubBowlX = hubPlane + 0.0042
   const dishAt = (r: number): number => mix(hubPlane + 0.0068, face - 0.0008, smooth(r, rHubOuter, rWebOuter) ** 0.76)
-  const backAt = (r: number): number => dishAt(r) - 0.0135
   const webHeight = (y: number, z: number): number => dishAt(Math.hypot(y, z))
-  const backHeight = (y: number, z: number): number => backAt(Math.hypot(y, z))
   const hubFlatHeight = (): number => hubBowlX
 
-  const collarLoop = circleLoopCCW([0, 0], rCollar, full ? 48 : front ? 28 : 16)
+  const collarLoop = circleLoopCCW([0, 0], rCollar, full ? 32 : front ? 24 : 16)
   const collarSeamOffset = 0.0018
   const collarSeamPts = collarLoop.map(({ p, n }) => [p[0] + n[0] * collarSeamOffset, p[1] + n[1] * collarSeamOffset] as Pt2)
 
-  const hubDiscSegs = full ? 72 : front ? 36 : 18
+  const hubDiscSegs = full ? 48 : front ? 32 : 18
   const hubInnerPts = Array.from({ length: hubDiscSegs }, (_, i) => polar2(rHubInner, (i / hubDiscSegs) * tau))
   const hubOuterLoop = circleLoopCCW([0, 0], rHubOuter, hubDiscSegs)
   const hubOuterPts = hubOuterLoop.map(({ p }) => p)
 
-  const barrelCount = full ? 180 : front ? 75 : 30
+  const barrelCount = full ? 108 : front ? 72 : 30
   const outerWebPts = Array.from({ length: barrelCount }, (_, i) => polar2(rWebOuter, (i / barrelCount) * tau))
   const windowSeamHoles = windowLoops.map((loop) => loop.map(({ p, n }) => [p[0] + n[0] * tSeam, p[1] + n[1] * tSeam] as Pt2))
   const lugSeamHoles = lugLoops.map((loop) => loop.map(({ p, n }) => [p[0] + n[0] * tLugSeam, p[1] + n[1] * tLugSeam] as Pt2))
 
-  const frontWeb = buildPlanarSurface(outerWebPts, [hubOuterPts, ...windowSeamHoles], webHeight, 1, full ? 0.0085 : 0, full ? 2 : 0)
+  const frontWeb = buildPlanarSurface(outerWebPts, [hubOuterPts, ...windowSeamHoles], webHeight, 1, full ? 0.016 : 0, full ? 1 : 0)
   const hubDisc = buildPlanarSurface(hubInnerPts, [collarSeamPts, ...lugSeamHoles], hubFlatHeight, 1, 0)
   const xHubOuter = dishAt(rHubOuter)
   const hubStepWall = lathe(
@@ -1061,26 +1057,14 @@ function forgedWheelAssembly(
   )
 
   const forgedParts: THREE.BufferGeometry[] = [hubDisc, hubStepWall]
-  if (full || hero) {
-    const backCollarPts = collarLoop.map(({ p }) => p)
-    const backWindowHoles = windowLoops.map((loop) => loop.map(({ p, n }) => [p[0] + n[0] * 0.0006, p[1] + n[1] * 0.0006] as Pt2))
-    forgedParts.unshift(buildPlanarSurface(outerWebPts, [backCollarPts, ...backWindowHoles], backHeight, -1, 0))
-  }
   const machinedParts: THREE.BufferGeometry[] = []
 
   for (const loop of windowLoops) {
-    const sidewall: Profile = full
-      ? [
-          [0.0006, -0.0135],
-          [0, -0.0126],
-          [0.0008, -0.0074],
-          [tDraft, -0.0027],
-        ]
-      : [
-          [0.0006, -0.0135],
-          [0, -0.0126],
-          [tDraft, -0.0027],
-        ]
+    const sidewall: Profile = [
+      [0.0006, -0.0135],
+      [0, -0.012],
+      [tDraft, -0.0027],
+    ]
     const chamfer: Profile = full
       ? [
           [tDraft, -0.0027],
@@ -1138,13 +1122,6 @@ function forgedWheelAssembly(
       [-0.064, R - 0.0182],
       [-w.rimWidth / 2 + 0.016, R - 0.0145],
       [-w.rimWidth / 2, R + 0.0045],
-      ...(full
-        ? ([
-            [-w.rimWidth / 2, R + 0.007],
-            [face - 0.012, R + 0.007],
-            [face - 0.012, R + 0.0065],
-          ] as const)
-        : []),
     ],
     barrelCount,
   )
@@ -1161,7 +1138,7 @@ function forgedWheelAssembly(
     barrelCount,
   )
 
-  const ringSegs = full ? 60 : front ? 32 : 16
+  const ringSegs = full ? 40 : front ? 28 : 16
   const hub = lathe(
     [
       [hubPlane - 0.003, rCollar + 0.003],
@@ -1210,7 +1187,7 @@ function forgedWheelAssembly(
         [lugFloorX + 0.0016, 0.0022],
         [lugFloorX + 0.0016, 0.0002],
       ],
-      full ? 12 : 8,
+      full ? 8 : 6,
     ).translate(0, ly, lz)
     lugGeoms.push(ensureValidWheelGeometry(bolt))
   }
@@ -1311,8 +1288,8 @@ function caliper(
       Math.max(smooth(u, 0.21, 0.265) * (1 - smooth(u, 0.435, 0.49)), smooth(u, 0.51, 0.565) * (1 - smooth(u, 0.735, 0.79)))
     return placeArch(u, x - 0.003 * topWindow, t - 0.006 * topWindow, (0.0015 * boss - 0.0015 * flutes) * cheekMask)
   }
-  const sections = full ? (rear ? nPts : nPts * 2) : nPts
-  const uSpan = full ? (rear ? 36 : 74) : hero ? 34 : 12
+  const sections = nPts
+  const uSpan = full ? (rear ? 28 : 44) : hero ? 28 : 12
   const cast: THREE.BufferGeometry[] = [patch(body, uSpan, sections, [-1, 0, 0])]
   for (const end of [0, 1]) {
     const a = middle + half * (2 * end - 1)
@@ -1326,7 +1303,7 @@ function caliper(
       const taper = Math.sin(Math.PI * u) ** 0.45
       return [p[0] + 0.002 * taper * Math.sin(Math.PI * v), p[1], p[2]]
     },
-    full ? 24 : 10,
+    full ? 16 : 10,
     3,
     [1, 0, 0],
   )
@@ -1339,7 +1316,7 @@ function caliper(
     [0.85, 0.09],
   ] as const) {
     const [x, y, z] = body(u, vPos)
-    clips.push(ensureValidWheelGeometry(disk(0.0058, 0.0028, x + 0.0006, full ? 16 : 8).translate(0, y, z)))
+    clips.push(ensureValidWheelGeometry(disk(0.0058, 0.0028, x + 0.0006, full ? 10 : 8).translate(0, y, z)))
     fasteners.push(
       ensureValidWheelGeometry(
         lathe(
@@ -1350,14 +1327,14 @@ function caliper(
             [x + 0.0012, 0.0016],
             [x + 0.0012, 0.0002],
           ],
-          full ? 12 : 6,
+          full ? 8 : 6,
         ).translate(0, y, z),
       ),
     )
   }
   if (!rear) {
     const [bx, by, bz] = body(0.908, 0.31)
-    clips.push(ensureValidWheelGeometry(disk(0.0052, 0.0022, bx + 0.0005, full ? 14 : 8).translate(0, by, bz)))
+    clips.push(ensureValidWheelGeometry(disk(0.0052, 0.0022, bx + 0.0005, full ? 10 : 8).translate(0, by, bz)))
     fasteners.push(
       ensureValidWheelGeometry(
         lathe(
@@ -1369,7 +1346,7 @@ function caliper(
             [bx + 0.0076, 0.0017],
             [bx + 0.0076, 0.0002],
           ],
-          full ? 12 : 8,
+          full ? 8 : 6,
         ).translate(0, by, bz),
       ),
     )
@@ -1426,7 +1403,7 @@ export function buildWheel(s: WheelSpec): WheelParts {
           [axis + 0.0018, 0.0031],
           [axis - 0.003, 0.0027],
         ],
-        full ? 12 : 6,
+        full ? 8 : 6,
       ).translate(0, y, z),
     )
   })
@@ -1633,7 +1610,7 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
         wrOuterR: { value: w.disc },
         wrMidX: { value: axis - 0.5 * w.discDepth },
         wrHalfSlot: { value: 0.5 * w.discDepth - 0.0088 },
-        wrVanes: { value: full ? 40 : w.front ? 32 : 12 },
+        wrVanes: { value: full ? 32 : w.front ? 28 : 12 },
         wrGrainAmt: { value: full ? 1 : 0 },
       },
       apply(shader) {
@@ -1845,12 +1822,12 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
               [axis + 0.0018, 0.0031],
               [axis - 0.003, 0.0027],
             ],
-            full ? (w.front ? 16 : 10) : 6,
+            full ? 8 : 6,
           ).translate(0, y, z),
         )
       }),
     )
-    const shield = disk(w.disc - 0.004, 0.008, -0.054, full ? 64 : 16)
+    const shield = disk(w.disc - 0.004, 0.008, -0.054, full ? 36 : 16)
     const buildSet = (hero: boolean) => ({
       tire: tireGeometry(w, full, hero),
       wheel: forgedWheelAssembly(w, full, hero),
