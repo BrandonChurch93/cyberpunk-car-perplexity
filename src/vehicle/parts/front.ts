@@ -398,11 +398,15 @@ function lensPickup(material: T.Material, flux: T.IUniform<number>): void {
       `)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
         vec3 lensView = normalize(vViewPosition);
+        vec3 opticalAxis = normalize(vProjectorAxis);
         float lensAngle = dot(normal, lensView);
-        float incidence = dot(normalize(vProjectorAxis), lensView);
+        float incidence = dot(opticalAxis, lensView);
         float primary = smoothstep(0.971, 0.983, incidence) * (1.0 - smoothstep(0.991, 0.996, incidence));
         float oblique = smoothstep(0.23, 0.38, incidence) * (1.0 - smoothstep(0.48, 0.62, incidence));
-        float core = (540.0 * primary + 360.0 * oblique) * exp(-285.0 * (1.0 - lensAngle));
+        float primaryReturn = dot(normal, normalize(lensView + opticalAxis));
+        float obliqueReturn = dot(normal, normalize(lensView + 2.2 * opticalAxis));
+        float core = 540.0 * primary * exp(-285.0 * (1.0 - primaryReturn))
+          + 360.0 * oblique * exp(-285.0 * (1.0 - obliqueReturn));
         float caustic = (lensAngle - 0.91) * 46.0;
         float arc = 0.15 * exp(-caustic * caustic) * smoothstep(-0.24, 0.58, normal.y);
         float lensGlint = exp(-134.0 * (1.0 - lensAngle));
