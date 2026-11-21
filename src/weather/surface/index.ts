@@ -13,7 +13,7 @@ import { DropGeometry, geometryAngle, geometryRange } from './drop-geometry'
 import { applyPorous, type Uniforms } from './porous'
 import { heroBasin, SyntheticRelief, type Basin } from './relief'
 import { type ExtraImpact, RippleField } from './ripples'
-import { rivuletPace, rivuletTravel, Runners } from './runners'
+import { laidLength, rivuletPace, rivuletTravel, Runners } from './runners'
 import { applySheet, looksLikeRubber } from './sheet'
 
 const reliefSize = 1024
@@ -139,7 +139,9 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
       let clear = true
       for (let d = 0; clear && d <= lead + 0.035; d += 0.006) clear = clearOfSlots(p.clone().addScaledVector(down, d), 0.009)
       if (!clear || !clearOfSlots(head.clone().addScaledVector(down, 0.08), 0.02)) continue
-      rows.push({ p, head, score: -0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.15 * runBlur - 1.5 * centre + (p.y - aim.y) })
+      let laidClear = 1
+      for (let d = 0.006; d <= laidLength; d += 0.006) if (!clearOfSlots(p.clone().addScaledVector(down, -d), 0.006)) laidClear = 0
+      rows.push({ p, head, score: laidClear - 1 - 0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.15 * runBlur - 1.5 * centre + (p.y - aim.y) })
     }
   })
   rows.sort((x, y) => y.score - x.score)

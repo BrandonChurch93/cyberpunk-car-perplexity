@@ -37,6 +37,8 @@ const edgeCell = 0.02
 const foldCos = Math.cos(THREE.MathUtils.degToRad(60))
 /** Radiance ceiling on what the lens reads behind it, inside half float range. */
 const transmissionCeiling = 30000
+/** Curvature radius of a run or a hanging drop in meters, which spreads the light faces it mirrors. */
+const plainCurvature = 0.002
 
 class EdgeGrid {
   private readonly cells = new Map<string, number[]>()
@@ -503,6 +505,21 @@ const lensFragment = /* glsl */ `
 }
 `
 
+// Runs and hanging drops mirror each light face sharp at its own place, as the caps do.
+const plainGlint = /* glsl */ `
+#ifdef USE_ENVMAP
+{
+  mat3 toWorld = transpose(mat3(viewMatrix));
+  vec3 pW = cameraPosition + toWorld * (-vViewPosition);
+  vec3 nW = normalize(toWorld * normal);
+  vec3 vW = normalize(cameraPosition - pW);
+  float fresnel = 0.02 + 0.98 * pow(1.0 - clamp(dot(nW, vW), 0.0, 1.0), 5.0);
+  vec3 sharp = emitterGlint(pW, nW, vW, 0.02, ${plainCurvature.toFixed(4)});
+  totalEmissiveRadiance += max(sharp - fresnel * getIBLRadiance(normalize(-vViewPosition), normal, 0.02), vec3(0.0));
+}
+#endif
+`
+
 const defocusPars = /* glsl */ `
 uniform float surfFocus;
 uniform float surfCocScale;
@@ -540,7 +557,9 @@ function dropMaterial(uniforms: Record<string, THREE.IUniform>, box: BoxUniforms
         shader.fragmentShader = f
         withEmitters(shader)
       } else {
-        shader.fragmentShader = insertAfter('uniform float surfDiag;\nuniform vec3 surfDiagColor;\n' + shader.fragmentShader, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(surfDiagColor, 1.0); }')
+        let f = insertAfter('uniform float surfDiag;\nuniform vec3 surfDiagColor;\n' + shader.fragmentShader, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(surfDiagColor, 1.0); }')
+        shader.fragmentShader = insertAfter(f, '#include <lights_physical_fragment>', plainGlint)
+        withEmitters(shader)
       }
     },
   })

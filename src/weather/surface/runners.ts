@@ -53,6 +53,10 @@ const trailAcross = 9
 const trailNeck = 0.03
 /** A creeping drop keeps its neck in proportion to its speed, but never shorter than this share of the full neck. */
 const creepNeck = 0.15
+/** Earlier runners laid a channel this long above the start, which the hero follows down when it lets go. */
+export const laidLength = 0.18
+/** Half width and height of the laid channel in meters, from its pinches to its swells. */
+const laidChannel = { width: [0.0012, 0.0024], height: [0.0006, 0.001] }
 
 interface Tri {
   a: THREE.Vector3
@@ -92,6 +96,7 @@ export class Runners {
   private active = false
   private pace = 1
   private neck = trailNeck
+  private laid = 0
 
   /** `start` is where the rivulet waits on the panel, the point the macro focus rests on. */
   constructor(private readonly vehicle: VehicleModule, private readonly material: THREE.Material, plain: THREE.Material, start: THREE.Vector3, private readonly format: FormatSpec) {
@@ -149,7 +154,7 @@ export class Runners {
     const random = stream('surface trail beads')
     const length = Math.max(0, this.path.length - 1) * pathStep
     const stations: number[] = []
-    for (let at = this.neck * 0.5; at < length && stations.length < 220; at += random.range(0.0026, 0.0048)) stations.push(at)
+    for (let at = this.laid + this.neck * 0.5; at < length && stations.length < 220; at += random.range(0.0026, 0.0048)) stations.push(at)
     this.trailBeads = new THREE.InstancedMesh(capTemplate(100, 5, 12), this.material, Math.max(1, stations.length))
     this.trailBeads.layers.set(layers.cameraOnly)
     this.trailBeads.frustumCulled = false
@@ -194,22 +199,32 @@ export class Runners {
       }
       return { p: out, n: n.clone() }
     }
-    let { p, n } = project(start)
-    const g = new THREE.Vector3(0, -1, 0)
-    for (let i = 0; i < pathSteps; i++) {
-      this.path.push(p.clone())
-      this.pathNormals.push(n.clone())
-      const down = g.clone().addScaledVector(n, -g.dot(n))
-      if (down.lengthSq() < 1e-8) break
-      down.normalize()
-      const side = new THREE.Vector3().crossVectors(n, down).normalize()
-      const wander = 0.35 * Math.sin(i * 0.21 + 1.3) * Math.sin(i * 0.057) + 0.25 * (hash01(i >> 3, 77) - 0.5)
-      const step = down.multiplyScalar(pathStep).addScaledVector(side, wander * pathStep)
-      const next = project(p.clone().add(step))
-      if (next.p.distanceTo(p) < pathStep * 0.2) break
-      p = next.p
-      n = next.n
+    const walk = (from: { p: THREE.Vector3; n: THREE.Vector3 }, steps: number, sign: number, salt: number) => {
+      const out: Array<{ p: THREE.Vector3; n: THREE.Vector3 }> = []
+      let { p, n } = from
+      const g = new THREE.Vector3(0, -sign, 0)
+      for (let i = 0; i < steps; i++) {
+        out.push({ p: p.clone(), n: n.clone() })
+        const down = g.clone().addScaledVector(n, -g.dot(n))
+        if (down.lengthSq() < 1e-8) break
+        down.normalize()
+        const side = new THREE.Vector3().crossVectors(n, down).normalize()
+        const wander = 0.35 * Math.sin(i * 0.21 + 1.3 + salt) * Math.sin(i * 0.057 + salt) + 0.25 * (hash01(i >> 3, 77 + salt) - 0.5)
+        const next = project(p.clone().add(down.multiplyScalar(pathStep).addScaledVector(side, wander * pathStep)))
+        if (next.p.distanceTo(p) < pathStep * 0.2) break
+        p = next.p
+        n = next.n
+      }
+      return out
     }
+    const at = project(start)
+    const above = walk(at, Math.round(laidLength / pathStep) + 1, -1, 3).reverse()
+    const below = walk(at, pathSteps, 1, 0)
+    for (const q of [...above.slice(0, -1), ...below]) {
+      this.path.push(q.p)
+      this.pathNormals.push(q.n)
+    }
+    this.laid = Math.max(0, above.length - 1) * pathStep
   }
 
   /** The path as `count` points with their distance along it in w, and a sphere around all of them. */
@@ -288,8 +303,11 @@ export class Runners {
     const tilt = new THREE.Vector3()
     for (let i = from; i <= to && i < this.path.length; i++) {
       const behind = THREE.MathUtils.clamp((s - i * pathStep) / this.neck, 0, 1)
-      const width = THREE.MathUtils.lerp(0.0011, headRadius * 0.62, 1 - behind * behind)
-      const height = THREE.MathUtils.lerp(0.0006, headRadius * 0.34, 1 - behind)
+      // The laid channel swells and pinches along its length; between it and the neck the hero has left only a line of drops.
+      const swell = 0.5 + 0.5 * Math.sin(i * 0.11 + 0.7) * Math.sin(i * 0.037 + 2.1)
+      const laid = i * pathStep <= this.laid ? 1 : 0
+      const width = THREE.MathUtils.lerp(laid * THREE.MathUtils.lerp(laidChannel.width[0], laidChannel.width[1], swell), headRadius * 0.62, 1 - behind * behind)
+      const height = THREE.MathUtils.lerp(laid * THREE.MathUtils.lerp(laidChannel.height[0], laidChannel.height[1], swell), headRadius * 0.34, 1 - behind)
       const p = this.path[i]
       const n = this.pathNormals[i]
       const side = this.sideAt(i * pathStep)
@@ -513,7 +531,7 @@ export class Runners {
 
   /** Distance traveled along the path at time t. */
   travel(t: number): number {
-    return Math.min(rivuletTravel(t, this.pace), Math.max(0, (this.path.length - 1) * pathStep))
+    return Math.min(this.laid + rivuletTravel(t, this.pace), Math.max(0, (this.path.length - 1) * pathStep))
   }
 
   beginSample(t: number): void {
@@ -526,15 +544,14 @@ export class Runners {
       const n = this.normalAt(s)
       const down = this.downAt(s)
       const side = new THREE.Vector3().crossVectors(down, n).normalize()
-      const moving = s > 0 ? 1.6 : 1.1
+      const moving = s > this.laid ? 1.6 : 1.1
       p.addScaledVector(down, -r * (moving - 1) * 0.5)
       m.makeBasis(down.clone().multiplyScalar(r * moving), n.clone().multiplyScalar(capHeight(r, 100)), side.multiplyScalar(r)).setPosition(p)
       this.runner.setMatrixAt(0, m)
       this.runner.instanceMatrix.needsUpdate = true
       const steps = Math.floor(s / pathStep)
-      const from = Math.max(0, Math.floor((s - this.neck) / pathStep))
-      this.shapeTrail(s, from, steps, r)
-      this.trail.geometry.setDrawRange(from * (trailAcross - 1) * 6, Math.max(0, steps - 1 - from) * (trailAcross - 1) * 6)
+      this.shapeTrail(s, 0, steps, r)
+      this.trail.geometry.setDrawRange(0, Math.max(0, steps - 1) * (trailAcross - 1) * 6)
       let beads = 0
       for (let i = 0; i < this.trailBeadAt.length; i++) if (this.trailBeadAt[i] < s - this.neck) beads = i + 1
       this.trailBeads.count = beads

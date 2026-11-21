@@ -516,7 +516,8 @@ float surfGlint = 0.0;
     float sinRise = sin(min(rise, 1.5));
     vec3 dir = normalize(ahead * cos(min(rise, 1.5)) + nV * sinRise);
     float coat = 0.04 + 0.96 * pow(1.0 - sinRise, 5.0);
-    surfLensCol = 0.9 * coat * max(getIBLRadiance(dir, dir, 0.45), emitterGlintF0(surfWorldPos, surfToWorld(dir), surfToWorld(dir), 0.45, -1.0, vec3(1.0)));
+    // Each unresolved bead sends a compact light out over its whole exit cone, as the resolved lens does once R is under a pixel.
+    surfLensCol = 0.9 * coat * max(getIBLRadiance(dir, dir, 0.45), emitterGlintF0(surfWorldPos, surfToWorld(dir), surfToWorld(dir), 1.0, -1.0, vec3(1.0)));
   }
   #endif
   float eyeD = length(cameraPosition - surfWorldPos);
