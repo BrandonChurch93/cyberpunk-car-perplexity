@@ -175,15 +175,15 @@ export function mirror(S: Surface, map: SurfaceMap, spec: MirrorSpec = mirrorSpe
     return { p: addScaled(S(a, b), q, h), n: q }
   }
   const [rz, ry] = spec.root
-  const L = 0.046
-  const Hh = 0.023
+  const L = 0.056
+  const Hh = 0.028
   const foot2 = even(roundCorners([[-L, -Hh * 0.8], [L, -Hh], [L * 0.9, Hh], [-L * 0.85, Hh * 0.85]], [0.016, 0.016, 0.018, 0.018], 8), 48)
-  const H = 0.009
-  const rf = 0.007
+  const H = 0.015
+  const rf = 0.009
   const levels: [number, number][] = [[0, -0.003], [0, 0]]
   for (let k = 1; k <= 5; k++) {
     const a = (k / 5) * (Math.PI / 2)
-    levels.push([rf * (1 - Math.cos(a)), rf * 0 + H * 0.78 * Math.sin(a)])
+    levels.push([rf * (1 - Math.cos(a)), H * 0.78 * Math.sin(a)])
   }
   levels.push([rf * 1.9, H * 0.94], [rf * 3.2, H])
   const ringsB = levels.map(([d, h]) => inset(foot2, d).map((q) => on(rz + q[0], ry + q[1], h).p))
@@ -225,7 +225,7 @@ export function mirror(S: Surface, map: SurfaceMap, spec: MirrorSpec = mirrorSpe
   const up = norm(cross(along, cross([0, 0, 1], along)))
   const stalk = new MeshBuilder()
   const ease = (x: number): number => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x))
-  sweep(stalk, path, path.map(() => up), roundRect(0.012, 0.036, 0.0055, 4), false, (t) => 1 - 0.22 * t + 0.55 * (1 - ease(t / 0.22)) ** 2 + 0.4 * ease((t - 0.8) / 0.2) ** 2)
+  sweep(stalk, path, path.map(() => up), roundRect(0.016, 0.038, 0.007, 4), false, (t) => 1 - 0.22 * t + 0.55 * (1 - ease(t / 0.22)) ** 2 + 0.4 * ease((t - 0.8) / 0.2) ** 2)
   const parts = [base, orient(gasket.geometry()), orient(stalk.geometry())]
   const all = mergeGeometries(parts.map((g) => {
     for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k)
