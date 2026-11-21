@@ -1,22 +1,36 @@
 import * as THREE from 'three'
 import type { VehicleModule } from '../vehicle'
-import { emitterUniforms, maxEmitters, type EmitterUniforms, type GlintEmitter } from './emitters-glsl'
+import { emitterUniforms, maxEmitters, waterF0, type EmitterUniforms, type GlintEmitter } from './emitters-glsl'
 import { atmosphere } from './haze'
-import { layers } from './contract'
+import { layers, type FilmLight } from './contract'
 import { lampSources } from './reflect/lamps'
 
 export * from './emitters-glsl'
 
 export interface Emitter extends GlintEmitter {
   id: string
+  /** Rects of one fixture. A rank keeps only a few of each so a row of identical fittings cannot fill the table. */
+  group?: string
+  /** A face of one of the world's area FilmLights, the keys of the film. Always in the table. */
+  key?: boolean
+  /** Lettering or a sign face: what reads as a coloured point in the paint even when white practicals outshine it. */
+  sign?: boolean
 }
 
-/** A face as wide as this is split along that side so an animated wall keeps its colour regions. */
+export const perGroup = 2
+export const lampSlots = 4
+export const signSlots = 6
+const signName = /lettering|sign face/
+/** Rects ranked by their raw score before the occlusion rays are cast. */
+export const visibilityShortlist = 96
+
+/** A face this big on both sides is split 2x2 so an animated wall keeps its colour regions. A strip stays one rect. */
 export const splitLength = 8
 const tile = 8
 const atlasColumns = 32
 const minRadiance = 1e-4
 const rayInset = 0.02
+const overlayTolerance = 0.02
 const rayPoints: ReadonlyArray<readonly [number, number]> = [[0, 0], [-0.6, -0.6], [0.6, -0.6], [-0.6, 0.6], [0.6, 0.6]]
 export const visibilityLift = 0.5
 
@@ -24,19 +38,88 @@ export function luminance(c: THREE.Color): number {
   return 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b
 }
 
-export function emitterScore(e: Emitter, focus: THREE.Vector3): number {
-  const area = 4 * e.u.clone().cross(e.v).length()
-  return luminance(e.radiance) * area * e.visibility / Math.max(e.center.distanceToSquared(focus), 1)
+/** Solid angle of the rect seen from `at`, with the cosine of the face toward `at`. */
+export function solidAngle(e: GlintEmitter, at: THREE.Vector3): number {
+  const n = e.u.clone().cross(e.v)
+  const area = 4 * n.length()
+  const toE = e.center.clone().sub(at)
+  const d2 = Math.max(toE.lengthSq(), 1e-6)
+  const facing = Math.max(0, -toE.dot(n) / (Math.sqrt(d2) * Math.max(n.length(), 1e-12)))
+  return Math.min(area * facing / d2, 2 * Math.PI)
 }
 
-/** Brightest first. Ties keep id order so the table never depends on traversal or sort stability. */
-export function rankEmitters(list: readonly Emitter[], focus: THREE.Vector3, max = maxEmitters): Emitter[] {
-  return list
-    .map((e) => ({ e, score: emitterScore(e, focus) }))
-    .filter(({ score }) => score > 0 && Number.isFinite(score))
-    .sort((a, b) => b.score - a.score || (a.e.id < b.e.id ? -1 : a.e.id > b.e.id ? 1 : 0))
-    .slice(0, max)
-    .map(({ e }) => e)
+/**
+ * What the emitter puts into the reflections the camera sees on the car: radiance times its solid angle at the car,
+ * times water Fresnel at the half vector between it and the camera, so the city behind the car outranks fittings behind the camera.
+ */
+export function emitterScore(e: Emitter, focus: THREE.Vector3, eye?: THREE.Vector3): number {
+  let fresnel = 1
+  if (eye) {
+    const D = e.center.clone().sub(focus).normalize()
+    const V = eye.clone().sub(focus).normalize()
+    const H = D.add(V)
+    const c = H.lengthSq() > 1e-12 ? H.normalize().dot(V) : 0
+    fresnel = waterF0 + (1 - waterF0) * (1 - Math.min(1, Math.max(0, c))) ** 5
+  }
+  return luminance(e.radiance) * solidAngle(e, focus) * fresnel * e.visibility
+}
+
+const byScore = (a: { e: Emitter; score: number }, b: { e: Emitter; score: number }): number =>
+  b.score - a.score || (a.e.id < b.e.id ? -1 : a.e.id > b.e.id ? 1 : 0)
+
+/**
+ * Key faces first, then up to `lampSlots` lamps by radiance times area, then the best face of up to `signSlots` signs, then the rest brightest first with at most `cap` faces of one fixture.
+ * Ties keep id order so the table never depends on traversal or sort stability.
+ */
+export function rankEmitters(list: readonly Emitter[], focus: THREE.Vector3, max = maxEmitters, cap = perGroup, eye?: THREE.Vector3): Emitter[] {
+  const scored = list
+    .map((e) => ({ e, score: e.lamp ? luminance(e.radiance) * 4 * e.u.clone().cross(e.v).length() * e.visibility : emitterScore(e, focus, eye) }))
+    .filter(({ e, score }) => (score > 0 || (e.key && luminance(e.radiance) > 0)) && Number.isFinite(score))
+    .sort(byScore)
+  const kept: Emitter[] = scored.filter(({ e }) => e.key).map(({ e }) => e).slice(0, max)
+  for (const { e } of scored.filter(({ e }) => e.lamp && !e.key).slice(0, lampSlots)) if (kept.length < max) kept.push(e)
+  const signs = new Set<string>()
+  for (const { e } of scored) {
+    if (signs.size >= signSlots || kept.length >= max) break
+    if (!e.sign || e.key || e.lamp || signs.has(e.group ?? e.id)) continue
+    signs.add(e.group ?? e.id)
+    kept.push(e)
+  }
+  const taken = new Map<string, Set<string>>()
+  for (const { e } of scored) {
+    if (kept.length >= max) break
+    if (e.key || e.lamp || kept.includes(e)) continue
+    const group = e.group ?? e.id
+    const face = e.id.slice(0, Math.max(0, e.id.lastIndexOf('/'))) || e.id
+    const faces = taken.get(group) ?? new Set<string>()
+    if (!faces.has(face) && faces.size >= cap) continue
+    faces.add(face)
+    taken.set(group, faces)
+    kept.push(e)
+  }
+  return kept
+}
+
+/** Coplanar faces drawn over each other, such as lettering over its cabinet, add up into one rect. */
+export function mergeOverlays(list: readonly Emitter[]): Emitter[] {
+  const out: Emitter[] = []
+  for (const e of list) {
+    const n = e.u.clone().cross(e.v).normalize()
+    const sizes = [e.u.length(), e.v.length()].sort((x, y) => x - y)
+    const same = out.find((o) => {
+      if (o.lamp || e.lamp || o.center.distanceTo(e.center) >= overlayTolerance) return false
+      const other = [o.u.length(), o.v.length()].sort((x, y) => x - y)
+      return Math.abs(other[0] - sizes[0]) < overlayTolerance && Math.abs(other[1] - sizes[1]) < overlayTolerance && o.u.clone().cross(o.v).normalize().dot(n) > 0.99
+    })
+    if (!same) {
+      out.push({ ...e, center: e.center.clone(), radiance: e.radiance.clone() })
+      continue
+    }
+    same.radiance.add(e.radiance)
+    same.key = same.key || e.key
+    if (e.sign && !same.sign) Object.assign(same, { id: e.id, group: e.group, sign: true })
+  }
+  return out
 }
 
 export function writeEmitters(list: readonly Emitter[], uniforms: EmitterUniforms = emitterUniforms): void {
@@ -52,7 +135,7 @@ export function writeEmitters(list: readonly Emitter[], uniforms: EmitterUniform
       continue
     }
     uniforms.emitterCenter.value[i].set(e.center.x, e.center.y, e.center.z, e.visibility)
-    uniforms.emitterAxisU.value[i].set(e.u.x, e.u.y, e.u.z, 0)
+    uniforms.emitterAxisU.value[i].set(e.u.x, e.u.y, e.u.z, e.lamp ? 1 : 0)
     uniforms.emitterAxisV.value[i].set(e.v.x, e.v.y, e.v.z, 0)
     uniforms.emitterRadiance.value[i].set(e.radiance.r, e.radiance.g, e.radiance.b, 0)
   }
@@ -143,6 +226,29 @@ interface Face {
   mesh: THREE.Mesh
   width: number
   height: number
+  /** The material and placement this face's tile was last drawn with. */
+  drawn: string
+}
+
+function stateOf(value: unknown): string {
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') return String(value)
+  if (Array.isArray(value)) return `[${value.map(stateOf).join(',')}]`
+  const texture = value as THREE.Texture
+  if (texture.isTexture) return `t${texture.id}:${texture.version}`
+  const any = value as { toArray?: () => number[]; elements?: ArrayLike<number> }
+  if (any.elements) return Array.from(any.elements).join(',')
+  if (any.toArray) return any.toArray().join(',')
+  return '?'
+}
+
+/** Everything a face's draw depends on. Same state, same pixels, so the tile can be kept across frames. */
+function faceState(face: Face): string {
+  const material = face.mesh.material as THREE.Material & { uniforms?: Record<string, THREE.IUniform>; emissive?: THREE.Color; emissiveIntensity?: number; map?: THREE.Texture | null; color?: THREE.Color }
+  const parts = [material.uuid, stateOf(Object.values((material as { defines?: Record<string, unknown> }).defines ?? {})), Array.from(face.mesh.matrixWorld.elements).join(',')]
+  if (material.uniforms) for (const name of Object.keys(material.uniforms)) parts.push(name, stateOf(material.uniforms[name].value))
+  parts.push(stateOf(material.emissive), stateOf(material.emissiveIntensity), stateOf(material.map), stateOf(material.color), String(material.opacity))
+  return parts.join('|')
 }
 
 function emitsLight(material: THREE.Material): boolean {
@@ -158,7 +264,7 @@ function sceneFaces(root: THREE.Object3D): Face[] {
     if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || !(mesh.geometry instanceof THREE.PlaneGeometry)) return
     if (Array.isArray(mesh.material) || !emitsLight(mesh.material)) return
     const { width, height } = mesh.geometry.parameters
-    faces.push({ mesh, width, height })
+    faces.push({ mesh, width, height, drawn: '' })
   })
   return faces
 }
@@ -176,7 +282,8 @@ function faceRect(face: Face): { center: THREE.Vector3; u: THREE.Vector3; v: THR
 
 /** Split counts along u and v for a face of these half axes. */
 export function splitOf(u: THREE.Vector3, v: THREE.Vector3): [number, number] {
-  return [2 * u.length() >= splitLength ? 2 : 1, 2 * v.length() >= splitLength ? 2 : 1]
+  const wall = 2 * Math.min(u.length(), v.length()) >= splitLength
+  return wall ? [2, 2] : [1, 1]
 }
 
 /** Lamp rect from the lamp mesh's box: the two widest sides, facing along the lamp's light. */
@@ -198,15 +305,34 @@ function lampRect(mesh: THREE.Mesh, origin: THREE.Object3D): { center: THREE.Vec
   return { center, u, v }
 }
 
+const bodyMargin = 0.05
+
+/** The vehicle's box in its own space. */
+function vehicleBox(root: THREE.Object3D): THREE.Box3 {
+  const box = new THREE.Box3()
+  const inverse = root.matrixWorld.clone().invert()
+  const part = new THREE.Box3()
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh
+    if (!mesh.isMesh || !visibleChain(mesh)) return
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox()
+    const range = mesh.geometry.boundingBox
+    if (!range || range.isEmpty()) return
+    box.union(part.copy(range).applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverse, mesh.matrixWorld)))
+  })
+  return box.isEmpty() ? new THREE.Box3(new THREE.Vector3(), new THREE.Vector3()) : box
+}
+
 export interface EmitterTableDeps {
   renderer: THREE.WebGLRenderer
-  world: { root: THREE.Object3D }
+  world: { root: THREE.Object3D; lights?: readonly FilmLight[] }
   vehicle: Pick<VehicleModule, 'root' | 'lamps'>
 }
 
 /** The brightest emitting faces of the world and the vehicle lamps, measured as the picture draws them. */
 export function createEmitterTable({ renderer, world, vehicle }: EmitterTableDeps) {
   const faces = sceneFaces(world.root)
+  const keyParents = new Set((world.lights ?? []).filter((l) => l.kind === 'area').flatMap((l) => [l.object, l.object.parent].filter((o): o is THREE.Object3D => !!o)))
   const lamps = lampSources(vehicle)
   const rows = Math.max(1, Math.ceil(faces.length / atlasColumns))
   const atlas = new THREE.WebGLRenderTarget(atlasColumns * tile, rows * tile, {
@@ -222,11 +348,24 @@ export function createEmitterTable({ renderer, world, vehicle }: EmitterTableDep
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.25, 0.75)
   camera.layers.set(layers.scene)
   let occluders: Occluders | null = null
+  let body: THREE.Box3 | null = null
   let table: Emitter[] = []
+  let candidates: Emitter[] = []
+  let measured = 0
   const focus = new THREE.Vector3()
   const lift = new THREE.Vector3()
 
+  /** Redraws only the tiles whose face changed since it was last drawn. One readback, and none when nothing changed. */
   const measure = (): void => {
+    const stale: Array<[Face, number]> = []
+    faces.forEach((f, index) => {
+      if (!visibleChain(f.mesh) || !f.mesh.layers.isEnabled(layers.scene)) return
+      const state = faceState(f)
+      if (state === f.drawn) return
+      f.drawn = state
+      stale.push([f, index])
+    })
+    if (!stale.length) return
     const previous = renderer.getRenderTarget()
     const face = renderer.getActiveCubeFace()
     const mip = renderer.getActiveMipmapLevel()
@@ -235,13 +374,8 @@ export function createEmitterTable({ renderer, world, vehicle }: EmitterTableDep
     const shadows = renderer.shadowMap.autoUpdate
     renderer.shadowMap.autoUpdate = false
     try {
-      atlas.scissorTest = false
-      atlas.viewport.set(0, 0, atlas.width, atlas.height)
-      renderer.setRenderTarget(atlas)
       renderer.setClearColor(0x000000, 0)
-      renderer.clear(true, true, false)
-      faces.forEach((f, index) => {
-        if (!visibleChain(f.mesh) || !f.mesh.layers.isEnabled(layers.scene)) return
+      for (const [f, index] of stale) {
         const { center, u, v } = faceRect(f)
         const normal = u.clone().cross(v).normalize()
         camera.left = -u.length()
@@ -259,9 +393,15 @@ export function createEmitterTable({ renderer, world, vehicle }: EmitterTableDep
         atlas.scissor.set(x, y, tile, tile)
         atlas.scissorTest = true
         renderer.setRenderTarget(atlas)
+        renderer.clear(true, true, false)
         renderer.render(f.mesh, camera)
-      })
-      renderer.readRenderTargetPixels(atlas, 0, 0, atlas.width, atlas.height, pixels)
+      }
+      const low = Math.floor(Math.min(...stale.map(([, i]) => i)) / atlasColumns) * tile
+      const high = (Math.floor(Math.max(...stale.map(([, i]) => i)) / atlasColumns) + 1) * tile
+      const band = new Float32Array(atlas.width * (high - low) * 4)
+      renderer.readRenderTargetPixels(atlas, 0, low, atlas.width, high - low, band)
+      pixels.set(band, low * atlas.width * 4)
+      measured += stale.length
     } finally {
       atlas.scissorTest = false
       renderer.shadowMap.autoUpdate = shadows
@@ -287,11 +427,23 @@ export function createEmitterTable({ renderer, world, vehicle }: EmitterTableDep
     get table(): readonly Emitter[] {
       return table
     },
-    /** Once per frame, with every system at the frame's center time. */
-    update(): readonly Emitter[] {
+    /** Every rect measured this frame, before ranking. */
+    get candidates(): readonly Emitter[] {
+      return candidates
+    },
+    /** Tiles drawn since the table was made, for tools. */
+    get measured(): number {
+      return measured
+    },
+    /** Once per frame, with every system at the frame's center time. `eye` is the film camera. */
+    update(eye?: THREE.Vector3): readonly Emitter[] {
       world.root.updateWorldMatrix(true, true)
       vehicle.root.updateWorldMatrix(true, true)
       occluders ??= new Occluders(world.root)
+      body ??= vehicleBox(vehicle.root)
+      const centre = body.getCenter(new THREE.Vector3())
+      emitterUniforms.emitterVehicleHalf.value.copy(body.getSize(new THREE.Vector3())).multiplyScalar(0.5).addScalar(bodyMargin)
+      emitterUniforms.emitterVehicleInverse.value.copy(vehicle.root.matrixWorld).multiply(new THREE.Matrix4().makeTranslation(centre)).invert()
       focus.setFromMatrixPosition(vehicle.root.matrixWorld)
       lift.copy(focus)
       lift.y += visibilityLift
@@ -310,10 +462,20 @@ export function createEmitterTable({ renderer, world, vehicle }: EmitterTableDep
             .addScaledVector(rect.u, (2 * a + 1) / nu - 1)
             .addScaledVector(rect.v, (2 * b + 1) / nv - 1)
           radiance.multiplyScalar(airTransmittance(center.distanceTo(focus)))
-          found.push({ id: `${f.mesh.name}/${index}/${a}${b}`, center, u: u.clone(), v: v.clone(), radiance, visibility: 1 })
+          const key = !!f.mesh.parent && keyParents.has(f.mesh.parent)
+          const sign = signName.test(f.mesh.name)
+          found.push({ id: `${f.mesh.name}/${index}/${a}${b}`, group: `${f.mesh.parent?.name ?? ''}|${f.mesh.name}`, center, u: u.clone(), v: v.clone(), radiance, visibility: 1, key, sign })
         }
       })
-      for (const e of found) e.visibility = occluders.visibility(lift, e)
+      const merged = mergeOverlays(found)
+      const shortlist = new Set(merged
+        .map((e) => ({ e, score: emitterScore(e, focus, eye) }))
+        .sort(byScore)
+        .slice(0, visibilityShortlist)
+        .map(({ e }) => e))
+      for (const e of merged) e.visibility = e.key || e.sign || shortlist.has(e) ? occluders.visibility(lift, e) : 0
+      found.length = 0
+      found.push(...merged)
       lamps.forEach(({ mesh, origin }, index) => {
         const material = mesh.material as THREE.MeshStandardMaterial
         if (!visibleChain(mesh) || material.emissiveIntensity <= 0) return
@@ -321,9 +483,10 @@ export function createEmitterTable({ renderer, world, vehicle }: EmitterTableDep
         if (!rect) return
         const radiance = material.emissive.clone().multiplyScalar(material.emissiveIntensity)
         if (luminance(radiance) < minRadiance) return
-        found.push({ id: `lamp/${mesh.name}/${index}`, ...rect, radiance, visibility: 1 })
+        found.push({ id: `lamp/${mesh.name}/${index}`, ...rect, radiance, visibility: 1, lamp: true })
       })
-      table = rankEmitters(found.filter((e) => e.visibility > 0 && Number.isFinite(e.visibility)), focus)
+      candidates = found
+      table = rankEmitters(found.filter((e) => (e.key || e.visibility > 0) && Number.isFinite(e.visibility)), focus, maxEmitters, perGroup, eye)
       writeEmitters(table)
       return table
     },

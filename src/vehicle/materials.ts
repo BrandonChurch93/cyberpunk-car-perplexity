@@ -1,7 +1,8 @@
 import * as T from 'three'
 import type { PaintSpec } from '../config'
+import { withEmitters } from '../core/emitters'
 import { stream } from '../core/random'
-import { insertAfter, patchMaterial, replaceOnce } from '../materials/patch'
+import { insertAfter, insertBefore, patchMaterial, replaceOnce } from '../materials/patch'
 import type { VehicleDetail, VehicleModule } from './contract'
 
 type Material = T.MeshStandardMaterial | T.MeshPhysicalMaterial
@@ -37,7 +38,7 @@ const flakeSpecs: Record<string, FlakeSpec> = {
 const fallbackFlake: FlakeSpec = { sizeUm: 26, coverage: .4, tiltDeg: 7.5, reflectance: .8, lobeDeg: 1, binder: .5 }
 
 /** Clear coat: about 45 micrometres of clear over the base, a slight long wave in its surface, a lobe floor for compact lights. */
-const coat = { ior: 1.5, thicknessUm: 45, peelWaveMm: 2.2, peelSlopeDeg: .07, roughness: .045, directRoughness: .14, flakeRoughness: .19 }
+const coat = { ior: 1.5, thicknessUm: 45, peelWaveMm: 2.2, peelSlopeDeg: .07, roughness: .045, directRoughness: .14, flakeRoughness: .19, flakeCube: .3, flakeGlint: .115, signNear: 3, signResolved: .017 }
 
 /** Flakes are dealt per cell of at most six and at most 90 micrometres, explicit up to a few cells per pixel, then a matched smooth lobe. */
 const cellFlakes = 6
@@ -205,8 +206,38 @@ void paintFlakeDirect(const in IncidentLight light, const in vec3 n, const in ve
   reflected.directSpecular += light.color * nl * carFlakeColor * paintBinder(cl, cv) * (through * lobe / (hn2 * hn2 * 4.0 * cl * cv * carCoat.w * carCoat.w));
 }
 
+vec3 paintSigns(vec3 P, vec3 N, vec3 V, float roughness, float spread, float resolved) {
+  vec3 R = reflect(-V, N);
+  float a = roughness * roughness;
+  float s = max(sqrt(4.0 * a * a + spread * spread), 1e-5);
+  vec3 sum = vec3(0.0);
+  for (int i = 0; i < EMITTER_MAX; i++) {
+    if (i >= emitterCount) break;
+    vec3 u = emitterAxisU[i].xyz;
+    vec3 w = emitterAxisV[i].xyz;
+    vec3 toE = emitterCenter[i].xyz - P;
+    float dist = max(length(toE), 1e-4);
+    vec3 D = toE / dist;
+    float cr = dot(R, D);
+    if (dist < PAINT_SIGN_NEAR || dot(D, cross(u, w)) >= 0.0 || dot(D, N) <= 0.0 || cr <= 1e-3) continue;
+    vec3 up = u - D * dot(u, D);
+    vec3 wp = w - D * dot(w, D);
+    float lu = length(up);
+    vec3 eu = lu > 1e-6 ? up / lu : vec3(0.0);
+    vec3 wq = wp - eu * dot(wp, eu);
+    float lw = length(wq);
+    vec3 ew = lw > 1e-6 ? wq / lw : vec3(0.0);
+    float small = 1.0 - smoothstep(resolved, 2.0 * resolved, min(lu, lw) / dist);
+    float cover = emitterBox(dot(R, eu) / cr, lu / dist, s) * emitterBox(dot(R, ew) / cr, lw / dist, s);
+    sum += emitterRadiance[i].rgb * (cover * small * emitterCenter[i].w * smoothstep(0.0, 0.05, dot(D, N)));
+  }
+  return sum;
+}
+
 vec3 paintFlakeEnv(vec3 n, vec3 v) {
   float nv = saturate(dot(n, v));
+  vec3 paintWorld = (vec4(-vViewPosition - viewMatrix[3].xyz, 0.0) * viewMatrix).xyz;
+  vec3 paintEye = normalize(cameraPosition - paintWorld);
   vec3 vi = paintInside(v, n);
   float cv = max(dot(vi, n), 1e-3);
   vec3 sum = vec3(0.0);
@@ -223,15 +254,25 @@ vec3 paintFlakeEnv(vec3 n, vec3 v) {
       float co = sqrt(1.0 - tt);
       vec3 ro = t + n * co;
       vec3 mo = normalize(v + ro);
-      sum += getIBLRadiance(v, mo, PAINT_FLAKE_ROUGHNESS) * paintBinder(cr, cv) * (1.0 - F_Schlick(vec3(0.04), 1.0, co).x);
+      vec3 seen = PAINT_FLAKE_CUBE * getIBLRadiance(v, mo, PAINT_FLAKE_ROUGHNESS);
+      seen = max(seen, paintSigns(paintWorld, inverseTransformDirection(mo, viewMatrix), paintEye, PAINT_FLAKE_GLINT, 0.0, 1e9));
+      sum += seen * paintBinder(cr, cv) * (1.0 - F_Schlick(vec3(0.04), 1.0, co).x);
     }
     sum *= paintFlakeArea;
   } else {
     float sigma = sqrt(carFlakeShape.y * carFlakeShape.y + carFlakeShape.z * carFlakeShape.z);
     float alpha = min(1.0, carCoat.w * 1.4142 * sigma * (1.0 + 0.6 * (1.0 - nv)));
-    sum = carFlakeCell.w * getIBLRadiance(v, n, sqrt(alpha)) * paintBinder(cv, cv) * (1.0 - F_Schlick(vec3(0.04), 1.0, nv).x);
+    vec3 seen = PAINT_FLAKE_CUBE * getIBLRadiance(v, n, sqrt(alpha));
+    seen = max(seen, paintSigns(paintWorld, inverseTransformDirection(n, viewMatrix), paintEye, sqrt(alpha), 0.0, 1e9));
+    sum = carFlakeCell.w * seen * paintBinder(cv, cv) * (1.0 - F_Schlick(vec3(0.04), 1.0, nv).x);
   }
   return sum * carFlakeColor * (1.0 - F_Schlick(vec3(0.04), 1.0, nv).x);
+}
+
+vec3 paintCoatSigns(vec3 n, vec3 v, float roughness) {
+  vec3 p = (vec4(-vViewPosition - viewMatrix[3].xyz, 0.0) * viewMatrix).xyz;
+  float bend = length(fwidth(normalize(carNormal)));
+  return paintSigns(p, inverseTransformDirection(n, viewMatrix), inverseTransformDirection(v, viewMatrix), roughness, bend, PAINT_SIGN_RESOLVED);
 }
 
 void RE_Direct_Paint(const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
@@ -260,10 +301,11 @@ function paintStack(paint: T.MeshPhysicalMaterial, spec: PaintSpec) {
   patchMaterial(paint, {
     id: 'vehicle paint stack',
     uniforms,
-    defines: { PAINT_DIRECT_COAT: coat.directRoughness.toFixed(3), PAINT_MAX_FLAKES: 16, PAINT_FLAKE_ROUGHNESS: coat.flakeRoughness.toFixed(3) },
+    defines: { PAINT_DIRECT_COAT: coat.directRoughness.toFixed(3), PAINT_MAX_FLAKES: 16, PAINT_FLAKE_ROUGHNESS: coat.flakeRoughness.toFixed(3), PAINT_FLAKE_CUBE: coat.flakeCube.toFixed(3), PAINT_FLAKE_GLINT: coat.flakeGlint.toFixed(3), PAINT_SIGN_NEAR: coat.signNear.toFixed(3), PAINT_SIGN_RESOLVED: coat.signResolved.toFixed(4) },
     apply(shader) {
+      withEmitters(shader)
       shader.vertexShader = 'varying vec3 carLocal;\nvarying vec3 carNormal;\n' + insertAfter(shader.vertexShader, '#include <begin_vertex>', 'carLocal = position;\ncarNormal = objectNormal;')
-      let f = insertAfter(shader.fragmentShader, '#include <lights_physical_pars_fragment>', paintPars)
+      let f = insertBefore(shader.fragmentShader, 'void main() {', paintPars)
       f = insertAfter(f, '#include <color_fragment>', 'diffuseColor.rgb *= 1.0 - carFlakeCell.w * carFlakeColor;')
       f = insertAfter(f, '#include <clearcoat_normal_fragment_begin>', `
         paintSurface(normal);
@@ -281,6 +323,9 @@ function paintStack(paint: T.MeshPhysicalMaterial, spec: PaintSpec) {
       shader.fragmentShader = insertAfter(f, '#include <lights_fragment_maps>', `
         #ifdef USE_ENVMAP
           reflectedLight.indirectSpecular += paintFlakeEnv(geometryNormal, geometryViewDir);
+          #ifdef USE_CLEARCOAT
+            clearcoatRadiance = max(clearcoatRadiance, paintCoatSigns(geometryClearcoatNormal, geometryViewDir, material.clearcoatRoughness));
+          #endif
         #endif
       `)
     },

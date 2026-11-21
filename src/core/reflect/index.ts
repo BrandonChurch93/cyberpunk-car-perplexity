@@ -226,7 +226,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       renderer.setRenderTarget(destination.raw)
       renderer.setClearColor(0x000000, 1)
       renderer.clear(true, true, false)
-      emitters.withRadiance(time, () => lamps.withDeckRadiance(() => renderer.render(scene, mirror)))
+      emitters.withRadiance(time, () => lamps.withDeckRadiance(mirror.position, () => renderer.render(scene, mirror)))
       hazeCapture?.renderFarAir(renderer, destination.raw, destination.color, mirror)
     } finally {
       showDeck()
@@ -355,7 +355,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       fitTarget()
       patchAll()
       if (diagnostic === 'normals' || diagnostic === 'zebra') glints.clear()
-      else glints.update()
+      else glints.update(camera.position)
       if (diagnostic === 'normals') return
       if (diagnostic === 'zebra') {
         box.reflectBoxOn.value = 0
