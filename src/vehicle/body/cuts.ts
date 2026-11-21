@@ -5,6 +5,7 @@ import { planLines, sideLines } from './lines'
 import { noseCuts } from './nose'
 import { cornerCut, tailCuts } from './tail'
 import { dims } from './shape'
+import { dloSide, screenPlan } from '../parts/glass-lines'
 
 const archFront = { z: dims.frontHubZ, y: dims.frontTire.radius, r: 0.405 }
 const archRear = { z: dims.rearHubZ, y: dims.rearTire.radius, r: 0.43 }
@@ -160,11 +161,11 @@ export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, re
   const tail = tailCuts(rm)
   const sideWin: [number, number, number, number] = [0, 1, 0, 0.52]
   const topWin: [number, number, number, number] = [0, 1, 0.36, 1]
-  const dlo = projectCurve(mm, 'x', sideLines.glass, true, 0.008, [0, 1, 0.36, 0.64], false, 0.02)
+  const dlo = projectCurve(mm, 'x', dloSide(main), true, 0.008, [0, 1, 0.36, 0.64], false, 0.02)
   const intake = projectCurve(mm, 'x', sideLines.intake, true, 0.008, sideWin, false, 0.04)
   const upper = projectCurve(mm, 'x', sideLines.upperIntake, true, 0.006, [0, 1, 0.32, 0.645], false, 0.015)
   const door = projectCurve(mm, 'x', sideLines.door, false, 0.006, sideWin, false, 0.05)
-  const screen = projectCurve(mm, 'y', planLines.windscreen, true, 0.008, topWin, true, 0.03)
+  const screen = projectCurve(mm, 'y', screenPlan(main), true, 0.008, topWin, true, 0.03)
   const rearGlass = projectCurve(mm, 'y', planLines.rearGlass, true, 0.008, topWin, true, 0.03)
   const bay = projectCurve(mm, 'y', planLines.bay, true, 0.008, topWin, true, 0.06)
   const bonnet = onSkin(main, projectCurve(mm, 'y', planLines.bonnet, false, 0.006, topWin, false, 0.08))
