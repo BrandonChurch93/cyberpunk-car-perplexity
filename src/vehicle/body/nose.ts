@@ -21,7 +21,6 @@ const segment = (a: V3, b: V3): Curve => t => lerp3(a, b, t)
 const reflect = (p: V3): V3 => [-p[0], p[1], p[2]]
 const cheekV = frontSection.side[0].v
 const shieldV = frontSection.brow.find(k => k.name === 'vee')!.v
-const cornerV = frontSection.brow.find(k => k.name === 'corner')!.v
 const foldBottom: V3 = [...fasciaBreak[0]]
 const sectionKnots = [...frontSection.brow, ...frontSection.side.slice(1)].reverse()
 
@@ -42,10 +41,16 @@ export function fasciaDown(v: number): V3 {
 
 function edgeCurve(stations: readonly number[], points: readonly V3[]): Curve {
   return u => {
-    const i = stations.findIndex(s => s >= u)
-    if (i <= 0) return points[i === 0 ? 0 : points.length - 1]
-    if (stations[i] === u) return points[i]
-    return lerp3(points[i - 1], points[i], (u - stations[i - 1]) / (stations[i] - stations[i - 1]))
+    let a = 0, b = stations.length - 1
+    if (u <= stations[a]) return points[a]
+    if (u >= stations[b]) return points[b]
+    while (b - a > 1) {
+      const i = (a + b) >> 1
+      if (u === stations[i]) return points[i]
+      if (u > stations[i]) a = i
+      else b = i
+    }
+    return lerp3(points[a], points[b], (u - stations[a]) / (stations[b] - stations[a]))
   }
 }
 
@@ -83,29 +88,48 @@ function roundSection(p: V3, a: V3, b: V3, axis: V3, radius: number) {
   return { left, right, arc }
 }
 
+function fairDepth(border: readonly V3[]): (p: V3) => number {
+  return ([x, y]) => {
+    let depth = 0, weight = 0
+    for (let i = 0; i < border.length; i++) {
+      const a = border[i], b = border[(i + 1) % border.length]
+      const ax = a[0] - x, ay = a[1] - y, bx = b[0] - x, by = b[1] - y
+      const ra = Math.hypot(ax, ay), rb = Math.hypot(bx, by)
+      if (ra < 1e-10) return a[2]
+      if (rb < 1e-10) return b[2]
+      const cross = ax * by - ay * bx, dot = ax * bx + ay * by
+      if (Math.abs(cross) < 1e-12 && dot < 0) return mix(a[2], b[2], ra / (ra + rb))
+      const t = dot < 0 ? (ra * rb - dot) / cross : cross / (ra * rb + dot)
+      const wa = t / ra, wb = t / rb
+      depth += wa * a[2] + wb * b[2]
+      weight += wa + wb
+    }
+    return depth / weight
+  }
+}
+
 export function ruledFascia({ brow, chin, side, fold }: FasciaRails): FasciaSurface {
   const center = segment(chin(0), brow(0)), edge = segment(chin(fold), brow(fold))
   const top = (a: number) => brow(mix(fold, 1, a))
   const bottom = (a: number) => chin(mix(fold, 1, a))
   const chart = coons(bottom, top, edge, side)
-  const r = .48
-  const corner = top((shieldV - cornerV) / (shieldV - cheekV))
-  const a0 = top(0), a1 = top(1)
-  const k = (corner[0] - a0[0]) / (a1[0] - a0[0])
-  const baseDepth = (p: V3, a: V3, b: V3, t: number) => mix(a[2], b[2], t) + r * (p[1] - mix(a[1], b[1], t))
-  const hinge = (q: number) => .5 * (q + Math.hypot(q, .075))
-  const bulge = (t: number) => hinge(t - k) - mix(hinge(-k), hinge(1 - k), t)
-  const crown = (corner[2] - baseDepth(corner, a0, a1, k)) / bulge(k)
+  const depth = fairDepth([
+    ...frontSection.brow.filter(k => k.v <= shieldV).map(k => brow((1 - k.v) / (1 - cheekV))),
+    ...frontSection.side.slice(1).map(k => side(k.v / cheekV)),
+    edge(0),
+  ])
+  const correction = (p: V3, q: V3) => (q[2] - depth(q)) * Math.max(0, 1 - Math.hypot(p[0] - q[0], p[1] - q[1]) / .075) ** 3
   const cheek: Surface = (u, v) => {
     if (u === 0) return edge(v)
     if (u === 1) return side(v)
-    const p = chart(u, v), a = edge(v), b = side(v)
-    const t = (p[0] - a[0]) / (b[0] - a[0])
-    return [p[0], p[1], baseDepth(p, a, b, t) + v * crown * bulge(t)]
+    if (v === 0) return bottom(u)
+    if (v === 1) return top(u)
+    const p = chart(u, v)
+    return [p[0], p[1], depth(p) + correction(p, edge(v)) + correction(p, side(v)) + correction(p, top(u)) + correction(p, bottom(u))]
   }
   const shield: Surface = (u, v) => {
     const a = center(v), b = edge(v)
-    const t = u / fold, s = .32
+    const t = u / fold, s = .16
     const q = t / s
     const ease = (t >= s ? t - s / 2 : s * q ** 3 * (1 - q / 2)) / (1 - s / 2)
     return [mix(a[0], b[0], t), mix(a[1], b[1], ease), mix(a[2], b[2], ease)]
@@ -113,7 +137,7 @@ export function ruledFascia({ brow, chin, side, fold }: FasciaRails): FasciaSurf
   const axis1 = norm(sub(edge(1), edge(0)))
   const radius = .003
   const start = fold - .009, end = fold + .009
-  const fieldStops = [fold * .1, fold * .2, fold * .32, ...Array.from({ length: 7 }, (_, i) => mix(start, end, i / 6))]
+  const fieldStops = [fold * .08, fold * .16, ...Array.from({ length: 7 }, (_, i) => mix(start, end, i / 6))]
   const field: Surface = (u, v) => {
     const f = edge(v)
     const upper = roundSection(f, shield(fold - .001, v), cheek(.001, v), axis1, radius)
@@ -133,7 +157,7 @@ export function ruledFascia({ brow, chin, side, fold }: FasciaRails): FasciaSurf
     if (v === 1) return brow(u)
     if (u === 1) return side(v)
     const s = field(u, v)
-    return v > 0 ? addScaled(s, sub(brow(u), field(u, 1)), v ** 4) : s
+    return v > .68 ? addScaled(s, sub(brow(u), field(u, 1)), ((v - .68) / .32) ** 3) : s
   }
   return Object.assign(surface, { fieldStops })
 }
@@ -384,13 +408,15 @@ function gradeTriangles(input: PlaneTriangle[]): PlaneTriangle[] {
   const span2 = (a: V2, b: V2) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2
   const circle = (a: V2, b: V2, c: V2, d: V2) =>
     span2(a, d) * area(d, b, c) - span2(b, d) * area(d, a, c) + span2(c, d) * area(d, a, b)
-  for (let pass = 0; pass < 9; pass++) {
+  for (let pass = 0; pass < 16; pass++) {
     const edited = new Set<number>()
     for (const e of pairs()) {
       if (e.length !== 2) continue
       const [{ tri: i, a, b, c }, { tri: j, c: d }] = e
       if (edited.has(i) || edited.has(j)) continue
-      if (pass >= 3 && pass <= 5 && span2(a, b) > .075 ** 2) {
+      const width = span2(a, b)
+      if (pass >= 3 && pass <= 9 && width > .030 ** 2 &&
+        Math.min(area(a, b, c), area(b, a, d)) > .001 * Math.sqrt(width)) {
         const m: V2 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
         tris[i] = [a, m, c]
         tris[j] = [m, a, d]
@@ -402,15 +428,16 @@ function gradeTriangles(input: PlaneTriangle[]): PlaneTriangle[] {
       edited.add(i)
       edited.add(j)
     }
-    if (!edited.size && pass >= 6) break
+    if (!edited.size && pass >= 10) break
   }
   return tris
 }
 
 function triangulate(border: V2[], holes: V2[][], stops: readonly Stop[], emit: (a: V2, b: V2, c: V2) => void): void {
   const asVectors = (loop: V2[]) => loop.map(p => new Vector2(...p))
-  const tris = ShapeUtils.triangulateShape(asVectors(border), holes.map(asVectors))
   const points = [...border, ...holes.flat()]
+  const tris = ShapeUtils.triangulateShape(asVectors(border), holes.map(asVectors))
+    .filter(([a, b, c]) => Math.abs(area(points[a], points[b], points[c])) > 1e-13)
   const used = new Set(tris.flat())
   const omitted = new Map<string, number[]>()
   let start = 0
