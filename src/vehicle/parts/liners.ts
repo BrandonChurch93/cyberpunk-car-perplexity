@@ -458,8 +458,8 @@ export function archLinerParts(
 
   // Closed FrontSide wheelhouse tub: rear tub tucks tightly around the rear tire (x >= 0.635, rTight = 0.381)
   // so it stays strictly inside the wheelhouse clear of the side intake throat and clear of the exposed rear tire tread.
-  const xInner = front ? 0.5 : 0.635
-  const yFloor = Math.max(0.126, samples[samples.length - 1].p[1] + 0.002)
+  const xInner = front ? 0.5 : 0.636
+  const yFloor = front ? Math.max(0.126, samples[samples.length - 1].p[1] + 0.002) : 0.125
   const wallThick = 0.004
   const drumCols = full ? 6 : 4
   const rTight = (front ? dims.frontTire.radius : dims.rearTire.radius) + 0.026
@@ -470,47 +470,127 @@ export function archLinerParts(
     const cz = -Math.cos(s.theta)
     const sy = Math.sin(s.theta)
     const tuck = front ? 0 : smoothstep(0.05, 0.35, t)
-    const rLip = s.rCut - 0.0062
+    const rLip = s.rCut - 0.0048
     const rib =
       full && backOffset === 0
         ? 0.0024 * (0.5 - 0.5 * Math.cos(s.theta * 28)) * smoothstep(0.06, 0.22, t) * (1 - smoothstep(0.76, 0.94, t))
         : 0
     const rCore = mixRadius(rLip, Math.min(rLip, rTight), tuck) - rib
     const fillet = Math.max(0, (t - 0.8) / 0.2)
-    const rMaxArch = (front ? s.rCut - 0.0055 : Math.min(s.rCut - 0.0055, 0.4255)) + backOffset
+    const rMaxArch = (front ? s.rCut - 0.0045 : Math.min(s.rCut - 0.0045, 0.4265)) + backOffset
     const rClamped = Math.min(rMaxArch, rCore - 0.014 * fillet * fillet + backOffset)
     const x = xStart + (xInner - backOffset - xStart) * t
-    const rearCutShelf = !front && s.theta < 0.85 ? bumper + 0.006 : yFloor
+    const rearCutShelf = !front && s.theta < 0.85 ? bumper + 0.001 : yFloor
     const yMin = Math.max(rearCutShelf, yFloor)
     const y = Math.max(yMin, yc + sy * rClamped)
     const z = zc + cz * rClamped
     return [x, y, z]
   }
 
-  const innerDrumRows: V3[][] = samples.map((_, i) =>
-    Array.from({ length: drumCols }, (__, j) => drumPoint(i, j / (drumCols - 1), 0)),
-  )
-  const outerDrumRows: V3[][] = samples.map((_, i) =>
-    Array.from({ length: drumCols }, (__, j) => drumPoint(i, j / (drumCols - 1), wallThick)),
-  )
+  const rearApronRows = (backOffset: number): V3[][] => {
+    if (front) return []
+    const apronSteps = full ? 8 : 5
+    const rows: V3[][] = []
+    const zEnd = -1.945
+    const zStart = samples[0].p[2]
+    const yApron = bumper + 0.0005 + backOffset
+    for (let k = apronSteps; k >= 1; k--) {
+      const f = k / apronSteps
+      const z = zStart + (zEnd - zStart) * f
+      const shelfIdx = Math.min(rearShelf.length - 1, Math.max(0, Math.round((1 - f) * (rearShelf.length - 1))))
+      const xOuterSkin = rearShelf.length > 0 ? rearShelf[shelfIdx].p[0] : samples[0].p[0]
+      const xOut = Math.max(xInner + 0.04, xOuterSkin - 0.012 - backOffset * 0.25)
+      const xIn = z < -1.876 ? 0.602 : xInner - backOffset
+      rows.push(
+        Array.from({ length: drumCols }, (__, j) => {
+          const t = j / (drumCols - 1)
+          return [xOut + (xIn - xOut) * t, yApron, z] as V3
+        }),
+      )
+    }
+    return rows
+  }
 
-  const innerDrum = buildOrientedGrid(innerDrumRows, (i) => samples[i].radIn)
+  const apronInner = rearApronRows(0)
+  const apronOuter = rearApronRows(wallThick)
+  const innerDrumRows: V3[][] = [
+    ...apronInner,
+    ...samples.map((_, i) => Array.from({ length: drumCols }, (__, j) => drumPoint(i, j / (drumCols - 1), 0))),
+  ]
+  const outerDrumRows: V3[][] = [
+    ...apronOuter,
+    ...samples.map((_, i) => Array.from({ length: drumCols }, (__, j) => drumPoint(i, j / (drumCols - 1), wallThick))),
+  ]
+
+  const innerDrum = buildOrientedGrid(innerDrumRows, (i) =>
+    i < apronInner.length ? [0, -1, 0] : samples[i - apronInner.length].radIn,
+  )
   const outerDrum = buildOrientedGrid(outerDrumRows, (i) => {
-    const r = samples[i].radIn
+    if (i < apronOuter.length) return [0, 1, 0]
+    const r = samples[i - apronOuter.length].radIn
     return [-r[0], -r[1], -r[2]]
   })
 
-  const innerArchEdge = samples.map((_, i) => innerDrumRows[i][drumCols - 1])
+  const innerArchEdge = samples.map((_, i) => innerDrumRows[apronInner.length + i][drumCols - 1])
+  const zRearWall = -1.888
+  const yRearFloor = 0.142
   const bulkheadPts: V3[] = front
     ? [...innerArchEdge]
-    : [[xInner, 0.142, zc - 0.345], ...innerArchEdge]
+    : [
+        [xInner, yFloor, innerArchEdge[innerArchEdge.length - 1][2]],
+        [xInner, 0.132, zc - 0.18],
+        [xInner, yRearFloor, zRearWall],
+        [xInner, bumper + 0.001, zRearWall],
+        ...innerArchEdge,
+      ]
   const backBulkheadPts: V3[] = bulkheadPts.map(([x, y, z]): V3 => [x - wallThick, y, z])
   const bulkheadInner = buildPolygonCap(bulkheadPts, [1, 0, 0])
   const bulkheadOuter = buildPolygonCap(backBulkheadPts, [-1, 0, 0])
+  const bulkheadBottomPts = !front
+    ? [
+        [xInner, yRearFloor, zRearWall] as V3,
+        [xInner, 0.132, zc - 0.18] as V3,
+        [xInner, yFloor, innerArchEdge[innerArchEdge.length - 1][2]] as V3,
+      ]
+    : []
+  const bulkheadBottomOuter = bulkheadBottomPts.map(([x, y, z]): V3 => [x - wallThick, y, z])
 
-  const endCapRear = buildOrientedGrid([innerDrumRows[0], outerDrumRows[0]], () => [0, -1, 0])
+  const extraRearParts: THREE.BufferGeometry[] = []
+  if (!front) {
+    extraRearParts.push(buildOrientedGrid([bulkheadBottomPts, bulkheadBottomOuter], () => [0, -1, 0]))
+    const zStepClose = -1.877
+    const xStepIn = 0.602
+    const stepFront: V3[][] = [
+      [
+        [xStepIn, yRearFloor, zStepClose],
+        [xInner, yRearFloor, zStepClose],
+      ],
+      [
+        [xStepIn, bumper + 0.001, zStepClose],
+        [xInner, bumper + 0.001, zStepClose],
+      ],
+    ]
+    const stepBack: V3[][] = stepFront.map((row) => row.map(([x, y, z]): V3 => [x, y, z - wallThick]))
+    extraRearParts.push(
+      buildOrientedGrid(stepFront, () => [0, 0, 1]),
+      buildOrientedGrid(stepBack, () => [0, 0, -1]),
+      buildOrientedGrid([stepFront[0], stepBack[0]], () => [0, -1, 0]),
+      buildOrientedGrid(
+        [
+          [stepFront[0][0], stepFront[1][0]],
+          [stepBack[0][0], stepBack[1][0]],
+        ],
+        () => [-1, 0, 0],
+      ),
+    )
+    const outerApronIn = innerDrumRows.slice(0, apronInner.length + 1).map((r) => r[0])
+    const outerApronOut = outerDrumRows.slice(0, apronOuter.length + 1).map((r) => r[0])
+    extraRearParts.push(buildOrientedGrid([outerApronIn, outerApronOut], () => [1, 0, 0]))
+  }
+
+  const endCapRear = buildOrientedGrid([innerDrumRows[0], outerDrumRows[0]], () => [0, 0, -1])
   const endCapFront = buildOrientedGrid(
-    [innerDrumRows[samples.length - 1], outerDrumRows[samples.length - 1]],
+    [innerDrumRows[innerDrumRows.length - 1], outerDrumRows[outerDrumRows.length - 1]],
     () => [0, -1, 0],
   )
 
@@ -521,6 +601,7 @@ export function archLinerParts(
     bulkheadOuter,
     endCapRear,
     endCapFront,
+    ...extraRearParts,
   ])
 
   return { lip, liner }

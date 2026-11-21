@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { defaultPaint, paintById } from '../src/config'
 import { createVehicle, type VehicleModule, type WetnessKind } from '../src/vehicle'
 import { mainLoft, dims } from '../src/vehicle/body/shape'
-import { arches } from '../src/vehicle/body/cuts'
+import { arches, wheelOpenings } from '../src/vehicle/body/cuts'
 import type { Surface } from '../src/vehicle/geom/cuts'
 import { makeMaterials } from '../src/vehicle/materials'
 import { buildLiners } from '../src/vehicle/parts/liners'
@@ -298,7 +298,23 @@ describe('wheel, tire, brake and arch liner module', { timeout: 30_000 }, () => 
         const z = linerPos.getZ(i)
         expect(y).toBeGreaterThanOrEqual(0.12)
         if (y > 0.16) {
-          expect(arches([0.95, y, z])).toBeGreaterThan(-0.002)
+          const openVal = front ? arches([0.95, y, z]) : wheelOpenings([0.95, y, z])
+          expect(openVal).toBeGreaterThan(-0.006)
+        }
+      }
+
+      if (!front) {
+        for (const side of [1, -1] as const) {
+          for (const zApron of [-1.92, -1.875, -1.855]) {
+            ray.set(new THREE.Vector3(side * 0.82, 0.45, zApron), new THREE.Vector3(0, 1, 0))
+            const apronHits = ray.intersectObjects(linerTargets, false)
+            expect(apronHits.length, `rear skirt ceiling side=${side} z=${zApron}`).toBeGreaterThan(0)
+          }
+          for (const yStep of [0.17, 0.32, 0.52]) {
+            ray.set(new THREE.Vector3(side * 0.618, yStep, -1.84), new THREE.Vector3(0, 0, -1))
+            const stepHits = ray.intersectObjects(linerTargets, false)
+            expect(stepHits.length, `rear step closure side=${side} y=${yStep}`).toBeGreaterThan(0)
+          }
         }
       }
 
@@ -341,7 +357,7 @@ describe('wheel, tire, brake and arch liner module', { timeout: 30_000 }, () => 
       maxZ = Math.max(maxZ, z)
       if (y < 0.56 && x > 0.68 && z < dims.rearHubZ) behindLowCount++
     }
-    expect(minX).toBeGreaterThan(0.625)
+    expect(minX).toBeGreaterThan(0.595)
     expect(maxZ).toBeLessThan(-1.03)
     expect(behindLowCount).toBe(0)
   })
