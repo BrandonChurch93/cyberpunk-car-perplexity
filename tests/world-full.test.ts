@@ -111,9 +111,13 @@ describe('full roof world', () => {
     expect(world.lights).toHaveLength(8)
   })
 
-  it('keeps the Hotel sign clear of foreground facade trim in both hero formats', () => {
+  it('keeps only the rooftop Vapor Sill Hotel cabinet and clears facade trim in both hero formats', () => {
     world.root.updateMatrixWorld(true)
     const cabinet = world.root.getObjectByName('hotel rooftop cabinet')!
+    const bladeSigns = world.root.getObjectByName('supported commercial blade signs')!
+    expect(bladeSigns.getObjectByName('VAPOR SILL HOTEL')).toBeUndefined()
+    expect(cabinet.getObjectByName('rooftop frame steel leg')).toBeDefined()
+    expect(world.signs.filter(s => s === 'VAPOR SILL HOTEL')).toHaveLength(1)
     const face = cabinet.getObjectByName('recessed sign face') as THREE.Mesh<THREE.PlaneGeometry>
     const { width,height } = face.geometry.parameters
     const time = config.film.heroFrameSeconds
