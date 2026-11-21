@@ -1278,7 +1278,7 @@ describe('full roof world', () => {
     expect(world.root.getObjectByName('zoned middle-distance fire stairs, gutters and condenser racks')).toBeDefined()
     expect(triangles).toBeGreaterThan(120_000)
     expect(triangles).toBeLessThan(500_000)
-    expect(world.signs.filter(s => config.signage.invented.includes(s)).sort()).toEqual(['BRINESCALE SUSHI', 'SHUTTER HUSH CLUB', 'VAPOR SILL HOTEL'])
+    expect(world.signs.filter(s => config.signage.invented.includes(s)).sort()).toEqual(['BRINESCALE SUSHI', 'ORBITAL DINER', 'SALT MOTH', 'SHUTTER HUSH CLUB', 'VAPOR SILL HOTEL'])
   })
 
   it('rakes the grille from the parapet and tracks the wheel boom without leaking either cue into the seam', () => {
