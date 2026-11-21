@@ -80,7 +80,8 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const roof = group(root, 'hero parapet and near deck layout')
   const { heroWall, zinc, heroStripe, tar } = materials
   const wallZ = -10.025, wallDepth = .34
-  const warmOpal = new THREE.Color(24.6,22.0,17.7)
+  const westOpal = new THREE.Color(44.2,39.0,31.5)
+  const eastOpal = new THREE.Color(29.8,26.5,21.9)
   washHeroParapet(heroWall,wallZ+wallDepth*.5,(approvedHeroSources as readonly Source[]).filter(source=>source.onWall))
   const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.035,.039,.048), roughness: .54, metalness: .59 })
   const oxidizedAluminum = new THREE.MeshStandardMaterial({ color: new THREE.Color(.033,.038,.041), roughness: .61, metalness: .38 })
@@ -537,12 +538,13 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   markerRow('east outer glass cyan markers',[52.6,5.3,-150.948],[.48,1.26,.12],1.36,13,[.056,.85,1.59],scale.outerEast)
   box(roof, 'hero full span concrete parapet', [0, .525, wallZ], [29, 1.05, wallDepth], heroWall)
   box(roof, 'hero concrete wall cap', [0, 1.047, -10.02], [29, .048, .377], heroWall)
-  box(roof, 'hero full span steel top rail', [0, 1.228, -10.015], [29, .034, .052], zinc)
+  box(roof, 'hero full span steel top rail', [0, 1.228, -10.015], [29, .044, .063], frame)
   box(roof, 'hero steel intermediate rail', [0, 1.145, -10.015], [29, .020, .032], zinc)
   deckTrim.parapet(roof)
   for (let i = -6; i <= 6; i++) {
     box(roof, 'hero rail post', [i * 2.35, 1.149, -10.015], [.057, .178, .057], zinc)
     box(roof, 'hero steel post mounting plate', [i * 2.35, 1.075, -10.015], [.125,.016,.112], zinc)
+    box(roof, 'hero rail socket collar', [i*2.35,1.098,-10.015], [.073,.036,.073], frame)
   }
   for (const source of approvedHeroSources as readonly Source[]) {
     const [x, , z] = source.at
@@ -587,7 +589,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const segments = source.onWall ? 1 : Math.round(height / (source.tint === 'cyan' ? .34 : .50))
       const shape = cyanApertures[source.id]
       const gain = (opalRadiance[source.id] ?? 1)*(shape?.[1] ?? 1)
-      const opal = fixtureOpal(source.onWall ? warmOpal.clone() : color.clone().multiplyScalar(gain),segments,shape!==undefined)
+      const opal = fixtureOpal(source.onWall ? (x < 0 ? westOpal : eastOpal) : color.clone().multiplyScalar(gain),segments,shape!==undefined)
       plate(housing, 'weather-sealed opal face', source.scale ? offset(opal,-4) : opal, [0,0,.002], width*(shape?.[0] ?? 1),height)
       if (!source.onWall) for (const fraction of [-.40,-.17,.17,.40]) {
         const horizontal = width > height

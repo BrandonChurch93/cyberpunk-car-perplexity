@@ -20,6 +20,18 @@ export function washHeroParapet(material: THREE.MeshStandardMaterial, faceZ: num
         uniform float parapetFace;
         uniform vec4 parapetStrip[${strips.length}];
       `)
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <roughnessmap_fragment>', /* glsl */ `
+        float formX = wallP.x/2.35;
+        float panelCut = abs(fract(formX+.5)-.5);
+        float panelJoint = 1.0-smoothstep(.005,.016+fwidth(formX)*.56,panelCut);
+        float shutterStep = roofNoise(vec2(floor(formX+.5),7.6));
+        float flow = roofNoise(vec2(wallP.x*13.8+shutterStep*.43,wallP.y*.84));
+        float seep = roofNoise(vec2(wallP.x*5.1,wallP.y*2.8));
+        float hangingRunoff = smoothstep(.40,.78,flow*.69+seep*.31)*smoothstep(.05,.65,1.044-wallP.y);
+        float baseSoak = (1.0-smoothstep(.045,.32,wallP.y))*(.43+.57*roofNoise(wallP*vec2(6.1,11.7)));
+        diffuseColor.rgb *= max(.45,1.015+.18*(shutterStep-.5)-.20*panelJoint-.25*hangingRunoff-.14*baseSoak);
+        roughnessFactor = clamp(roughnessFactor-.095*hangingRunoff-.07*baseSoak,.48,1.0);
+      `)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <lights_fragment_end>', /* glsl */ `
         float wallDepth = dot(vRoofWorld.xz, parapetFront);
         float frontWall = smoothstep(parapetFace-.077,parapetFace-.005,wallDepth);
@@ -28,15 +40,16 @@ export function washHeroParapet(material: THREE.MeshStandardMaterial, faceZ: num
           vec4 strip = parapetStrip[i];
           vec2 stripDelta = wallP-strip.xy;
           float down = max(0.0,-stripDelta.y);
-          float breadth = 0.12+down*.72;
-          float across = max(abs(stripDelta.x)-strip.w*.72,0.0)/breadth;
+          bool west = strip.x<0.0;
+          float breadth = (west ? .18 : .13)+down*(west ? .97 : .79);
+          float across = max(abs(stripDelta.x)-strip.w*.85,0.0)/breadth;
           float beam = exp(-across*across);
-          float foot = 1.0/(1.0+down*down*26.0);
+          float foot = 1.0/(1.0+down*down*(west ? 17.0 : 23.0));
           float cutoff = 1.0-smoothstep(-.028,.055,stripDelta.y);
-          float bank = strip.x<0.0 ? 1.64 : 1.21;
+          float bank = west ? 2.71 : 1.47;
           splash += bank*beam*foot*cutoff*(1.0+.42*smoothstep(.015,.11,down))*strip.z;
         }
-        reflectedLight.indirectDiffuse += diffuseColor.rgb*vec3(8.8,7.0,4.65)*splash*frontWall;
+        reflectedLight.indirectDiffuse += diffuseColor.rgb*vec3(9.3,7.7,5.2)*splash*frontWall;
       `)
     },
   })
