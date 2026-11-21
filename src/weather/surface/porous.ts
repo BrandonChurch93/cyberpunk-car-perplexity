@@ -192,9 +192,12 @@ const porousFragment = /* glsl */ `
 
   float surfDamp = clamp(surfWet + surfFringe * 0.6, 0.0, 1.0);
   float surfStain = 0.6 * surfNoise2(surfXZ / 0.35 + 9.0, 41u) + 0.4 * surfNoise2(surfXZ / 0.09 + 2.0, 42u);
-  float surfDark = mix(1.0, mix(0.9, mix(0.38, 0.8, surfStain) * mix(0.92, 1.08, surfAgg), surfPorosity), surfDamp);
+  float surfDark = mix(1.0, mix(0.9, mix(0.3, 0.7, surfStain) * mix(0.92, 1.08, surfAgg), surfPorosity), surfDamp);
   surfDark *= mix(1.0, 0.82, surfFringe);
   surfDark *= mix(1.0, mix(0.85, 0.65, smoothstep(0.0, 3.0, surfDepth)), surfWater * mix(0.3, 1.0, surfPorosity));
+  float surfNv = clamp(dot(surfToView(vec3(0.0, 1.0, 0.0)), normalize(vViewPosition)), 0.0, 1.0);
+  float surfExit = 1.0 - (0.02 + 0.98 * pow(1.0 - surfNv, 5.0));
+  surfDark *= mix(1.0, surfExit * surfExit, max(surfWater, 0.7 * surfDamp));
   float surfL = surfLuma(diffuseColor.rgb);
   diffuseColor.rgb = max(mix(vec3(surfL), diffuseColor.rgb, 1.0 + 0.15 * surfDamp), 0.0) * surfDark;
   float surfRoughWet = mix(0.18, 0.32, smoothstep(0.35, 0.75, surfAgg));
