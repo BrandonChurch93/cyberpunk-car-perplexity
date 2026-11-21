@@ -29,8 +29,8 @@ export interface BeadLayer {
 export const beadLayers: BeadLayer[] = [
   { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.55, steep: 0.35, lobes: 1, sparse: 0.6, dense: 1.3, hang: 0 },
   { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.72, steep: 0.45, lobes: 1, sparse: 0.3, dense: 1.25, hang: 0 },
-  { cellMm: 10, minMm: 1.6, maxMm: 5.4, flat: 0.75, steep: 0.28, lobes: 1, sparse: 0.3, dense: 1.3, hang: 0.4 },
-  { cellMm: 44, minMm: 8, maxMm: 20, flat: 0.42, steep: 0.06, lobes: 2, sparse: 0.1, dense: 2.4, hang: 1.2 },
+  { cellMm: 7.5, minMm: 1.5, maxMm: 3.6, flat: 0.85, steep: 0.3, lobes: 1, sparse: 0.5, dense: 1.8, hang: 0.4 },
+  { cellMm: 36, minMm: 5, maxMm: 16, flat: 1.0, steep: 0.06, lobes: 2, sparse: 0.1, dense: 2.4, hang: 1.2 },
 ]
 
 /**
@@ -416,8 +416,20 @@ float surfGlint = 0.0;
       float meanA = surfCapHeight(meanR * cell) / (meanR * cell);
       float side = 1.0 + 0.5 * meanA * cotE;
       screenCover += fill * 3.14159 * meanR * meanR * side;
-      surfGlint += fill * 0.25 * meanR * meanR * side;
-      surfLensW += fill * 0.25 * meanR * meanR * side * 12.566371 * surfLensExit(meanA, surfSinE);
+      // The drops a pixel holds are a Poisson count, not the mean: a fixed grid near the pixel's footprint carries the spread.
+      float lod = log2(max(pixA / cell, 1.0));
+      float l0 = floor(lod);
+      float count = 0.0;
+      for (int k = 0; k < 2; k++) {
+        float g = cell * exp2(l0 + float(k));
+        vec3 rh = surfHash3(ivec3(ivec2(floor(uv / g)), 211 + 8 * i + k), salt);
+        float expect = max(fill * (g / cell) * (g / cell), 1e-4);
+        float z = sqrt(-2.0 * log(max(rh.x, 1e-6))) * cos(6.2831853 * rh.y);
+        count += (k == 0 ? 1.0 - (lod - l0) : lod - l0) * max(0.0, expect + sqrt(expect) * z) / expect;
+      }
+      float pointsHere = fill * 0.25 * meanR * meanR * side * count;
+      surfGlint += pointsHere;
+      surfLensW += pointsHere * 12.566371 * surfLensExit(meanA, surfSinE);
       continue;
     }
     ivec2 c = ivec2(floor(uv / cell));
@@ -627,9 +639,9 @@ material.specularColor *= 1.0 - surfLensOpen;
   // Unresolved drops cover part of the pixel: the coat between them stays sharp, and their own light comes back as glint.
   material.clearcoat *= 1.0 - 0.5 * surfMist * (1.0 - surfBeadOut);
   material.clearcoatRoughness = mix(material.clearcoatRoughness, min(material.clearcoatRoughness, 0.03), surfLane);
-  material.clearcoatRoughness = sqrt(sqrt(pow(material.clearcoatRoughness, 4.0) + 2.0 * surfCoatVar));
+  material.clearcoatRoughness = sqrt(sqrt(pow(material.clearcoatRoughness, 4.0) + 2.0 * surfCoatVar * (1.0 - surfBeadOut)));
 #else
-  material.roughness = sqrt(sqrt(pow(material.roughness, 4.0) + 2.0 * surfCoatVar));
+  material.roughness = sqrt(sqrt(pow(material.roughness, 4.0) + 2.0 * surfCoatVar * (1.0 - surfBeadOut)));
   material.roughness = mix(material.roughness, surfBeadRough, surfBeadOut);
 #endif
 `
