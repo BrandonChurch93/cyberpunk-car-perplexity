@@ -238,7 +238,17 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const pz = wz+d*.50
       const riser = group(tower,'billboard upper media riser')
       const [wingX,wingZ] = [wx-w*.63,pz-7.2]
-      box(riser,'screen tower upper service skybridge',[49,332,pz-13.0],[208,25.6,25.0],shell)
+      const bridge = group(riser,'screen tower upper service skybridge',[49,332,pz-.50])
+      box(bridge,'skybridge structural shell',[0,0,-12.5],[208,25.6,25.0],shell)
+      box(bridge,'bridge observation gallery glazing frame',[-90,-.6,.28],[25.5,16.4,.56],frame)
+      for (const [row,y] of [-5.8,-.2,5.4].entries()) {
+        for (const [col,x] of [-98.6,-90,-81.4].entries()) {
+          if ((row+col*2)%4===2) continue
+          practical.opal(bridge,'high bridge window bay',[x,y,.79],[5.5,3.45],
+            row===0 ? [3.3,2.15,1.28] : [.58,2.72,4.13],1)
+        }
+      }
+      practical.cabinet(bridge,'high bridge service sign',[-76,9.3,.78],[15.2,3.45],[7.3,3.15,.69],'24H')
       box(riser,'skybridge east abutment',[148,332,pz+6.0],[15,25.6,20.3],shell)
       box(riser,'upper advertising wing',[wingX,438,wingZ],[w*.82,214,14.4],shell)
       for (const [j,cy] of [347,428,508].entries()) {

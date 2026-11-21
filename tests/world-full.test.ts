@@ -4,6 +4,7 @@ import { config, frameCount } from '../src/config'
 import { candelaPerUnit, type FrameContext, type SampleContext } from '../src/core/contract'
 import { apertureRadius, applyLens } from '../src/core/lens'
 import { LightRig } from '../src/core/lights'
+import { quality } from '../src/core/reflect'
 import { cameraAt } from '../src/director/shots'
 import { patchesOf } from '../src/materials/patch'
 import { createVehicle } from '../src/vehicle'
@@ -234,22 +235,43 @@ describe('full roof world', () => {
     }
     expect(min).toBeGreaterThan(.10)
     const probe = new THREE.Vector3(0,.6,0)
-    const visible = (name: string, aperture: string) => {
-      const fixture = required(name)
+    const visible = (fixture: THREE.Object3D, aperture: string) => {
       const face = fixture.getObjectByName(aperture)!
       const ray = face.getWorldPosition(new THREE.Vector3()).sub(probe)
       const caster = new THREE.Raycaster(probe,ray.clone().normalize(),0,ray.length()+.02)
-      expect(caster.intersectObject(world.root,true)[0]?.object,name).toBe(face)
+      expect(caster.intersectObject(world.root,true)[0]?.object,fixture.name).toBe(face)
       return ray.normalize()
     }
     for (let i=1;i<=3;i++) {
-      const ray = visible('upper magenta violet screen '+i,'animated magenta violet tiles')
+      const ray = visible(required('upper magenta violet screen '+i),'animated magenta violet tiles')
       expect(ray.y).toBeGreaterThan(.40)
       expect(ray.z).toBeLessThan(0)
     }
-    const macro = visible('northwest animated LED wall','animated magenta violet tiles')
+    const bridge = required('screen tower upper service skybridge')
+    const bridgeEmitters = bridge.children.filter(o => o.name === 'high bridge window bay' || o.name === 'high bridge service sign')
+    expect(bridgeEmitters).toHaveLength(7)
+    for (const fixture of bridgeEmitters) {
+      const aperture = fixture.name === 'high bridge service sign' ? 'diffusing cabinet face' : 'sealed opal aperture'
+      const ray = visible(fixture,aperture)
+      const azimuth = THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))
+      expect(azimuth).toBeGreaterThan(-153)
+      expect(azimuth).toBeLessThan(-147)
+      expect(ray.y).toBeGreaterThan(.54)
+      expect(ray.y).toBeLessThan(.62)
+      const face = fixture.getObjectByName(aperture) as THREE.Mesh
+      face.geometry.computeBoundingBox()
+      const { min, max } = face.geometry.boundingBox!
+      const slope = (x: number,y: number,axis: 'x' | 'y') => {
+        const corner = face.localToWorld(new THREE.Vector3(x,y,0)).sub(probe)
+        return corner[axis]/corner.z
+      }
+      const edge = quality.review.captureSize*.5
+      expect(Math.abs(slope(min.x,0,'x')-slope(max.x,0,'x'))*edge).toBeGreaterThan(2)
+      expect(Math.abs(slope(0,min.y,'y')-slope(0,max.y,'y'))*edge).toBeGreaterThan(1.8)
+    }
+    const macro = visible(required('northwest animated LED wall'),'animated magenta violet tiles')
     expect(THREE.MathUtils.radToDeg(Math.atan2(macro.x,macro.z))).toBeCloseTo(-49,0)
-    expect(visible('recessed amber service sign','diffusing cabinet face').z).toBeLessThan(0)
+    expect(visible(required('recessed amber service sign'),'diffusing cabinet face').z).toBeLessThan(0)
     const tiles = riser.getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
     const getFlow = (timeSeconds: number) => {
       world.beginFrame({ frame: { timeSeconds } } as FrameContext)
