@@ -3,7 +3,7 @@ import type { Surface } from '../geom/cuts'
 import { toGeometry } from '../geom/mesh'
 import { tessellate, type TessOptions, type TessResult, type TrimFn } from '../geom/tessellate'
 import { cross, norm, sub, type V3 } from '../geom/vec'
-import { arches, makeCuts, paintTrim, type BodyCuts } from './cuts'
+import { arches, gapHalf, gapRoll, makeCuts, paintTrim, type BodyCuts } from './cuts'
 import { frontFace } from './nose'
 import { rearFace } from './tail'
 import { mainLoft } from './shape'
@@ -44,8 +44,10 @@ export function offsetSurface(S: Surface, t: number): Surface {
   }
 }
 
-/** Walls along every trimmed edge, running inward from the surface by `depth`. */
-export function flange(parts: TessResult[], depth: number): TessResult {
+/** Walls along every trimmed edge, running inward from the surface by `depth`. With `roll`, the edge first turns
+ * down over a quarter round of that radius, so the lip catches a highlight; the wall then stands that far into the
+ * opening. */
+export function flange(parts: TessResult[], depth: number, roll?: (p: V3) => number): TessResult {
   const out: TessResult = { positions: [], normals: [], uvs: [], indices: [], boundaries: [] }
   const push = (p: V3, n: V3): number => {
     out.positions.push(p[0], p[1], p[2])
@@ -53,12 +55,12 @@ export function flange(parts: TessResult[], depth: number): TessResult {
     out.uvs.push(0, 0)
     return out.positions.length / 3 - 1
   }
+  const steps = roll ? 4 : 0
   for (const t of parts) {
     for (const b of t.boundaries) {
       const n = b.points.length
       if (n < 2) continue
-      const top: number[] = []
-      const bot: number[] = []
+      const rings: number[][] = Array.from({ length: steps + 2 }, () => [])
       for (let i = 0; i < n; i++) {
         const p = b.points[i]
         const nn = b.normals[i]
@@ -66,13 +68,31 @@ export function flange(parts: TessResult[], depth: number): TessResult {
         const c = b.points[Math.min(n - 1, i + 1)]
         const tg = norm(sub(c, a))
         const h = norm(cross(tg, nn))
-        top.push(push(p, norm([nn[0] + h[0], nn[1] + h[1], nn[2] + h[2]])))
-        bot.push(push([p[0] - nn[0] * depth, p[1] - nn[1] * depth, p[2] - nn[2] * depth], h))
+        if (!roll) {
+          rings[0].push(push(p, norm([nn[0] + h[0], nn[1] + h[1], nn[2] + h[2]])))
+          rings[1].push(push([p[0] - nn[0] * depth, p[1] - nn[1] * depth, p[2] - nn[2] * depth], h))
+          continue
+        }
+        const r = Math.min(roll(p), depth / 2)
+        for (let k = 0; k <= steps; k++) {
+          const th = (k / steps) * (Math.PI / 2)
+          const s1 = Math.sin(th)
+          const c1 = 1 - Math.cos(th)
+          rings[k].push(push(
+            [p[0] + h[0] * r * s1 - nn[0] * r * c1, p[1] + h[1] * r * s1 - nn[1] * r * c1, p[2] + h[2] * r * s1 - nn[2] * r * c1],
+            norm([nn[0] * Math.cos(th) + h[0] * s1, nn[1] * Math.cos(th) + h[1] * s1, nn[2] * Math.cos(th) + h[2] * s1]),
+          ))
+        }
+        rings[steps + 1].push(push([p[0] + h[0] * r - nn[0] * depth, p[1] + h[1] * r - nn[1] * depth, p[2] + h[2] * r - nn[2] * depth], h))
       }
       const m = b.closed ? n : n - 1
-      for (let i = 0; i < m; i++) {
-        const j = (i + 1) % n
-        out.indices.push(top[i], bot[i], bot[j], top[i], bot[j], top[j])
+      for (let k = 0; k + 1 < rings.length; k++) {
+        const top = rings[k]
+        const bot = rings[k + 1]
+        for (let i = 0; i < m; i++) {
+          const j = (i + 1) % n
+          out.indices.push(top[i], bot[i], bot[j], top[i], bot[j], top[j])
+        }
       }
     }
   }
@@ -95,7 +115,11 @@ export function buildBody(q: BodyQuality): BodyGeometry {
     run(front, faceGrid, paintTrim(cuts.front)),
     run(rear, faceGrid, paintTrim(cuts.rear)),
   ]
-  paint.push(flange(paint, 0.014))
+  // Openings roll over 4 mm. Shut gaps roll over 2 mm from paint edges cut 4 mm off the line, so the gap between the
+  // two walls stays 4 mm.
+  const gapRoll = 0.002
+  const nearGap = (p: V3): boolean => [cuts.main, cuts.front, cuts.rear].some((c) => c.gaps.some((g) => g.distance(p, 0.02) < gapHalf + gapRoll + 0.001))
+  paint.push(flange(paint, 0.014, (p) => (nearGap(p) ? gapRoll : 0.004)))
   // The eye is a real opening for the front module's lens, not glass in the body.
   const inner = -0.014
   // The backing is open wherever the skin has an opening (glass, bay, intakes, eyes, ducts, outlets), so every opening

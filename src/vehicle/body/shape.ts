@@ -89,8 +89,9 @@ export const keyLines = {
   // The wing ridge over the front arch, then one straight shoulder from the door to the rear hub, then the deck edge
   // falling straight to the tail. Crisp end to end.
   shoulder: line([
-    [2.08, 0.8, 0.615],
-    [1.95, 0.9, 0.665],
+    [2.14, 0.8, 0.598],
+    [2.03, 0.88, 0.645],
+    [1.9, 0.93, 0.69],
     [1.8, 0.95, 0.722],
     [1.6, 0.975, 0.78],
     [1.4, 0.982, 0.805],
@@ -109,8 +110,11 @@ export const keyLines = {
   ]),
   // The bonnet's outer crease, straight from the bonnet corner to the A-pillar base, then the pillar, the roof rail and
   // the deck edge falling straight to the tail.
+  // It starts on the bonnet's front edge, invisible, and comes in crisp at the bonnet corner.
   rail: line([
-    [2.15, 0.51, 0.548],
+    [2.33, 0.52, 0.488],
+    [2.24, 0.512, 0.52],
+    [2.15, 0.51, 0.55],
     [1.9, 0.586, 0.62],
     [1.6, 0.678, 0.701],
     [1.4, 0.739, 0.756],
@@ -131,8 +135,11 @@ export const keyLines = {
   ]),
   // The bonnet's inner crease, straight from the bonnet corner to the windscreen base; it dies under the glass and
   // carries on as a smooth line over the roof and deck.
+  // It starts at the outer end of the V, invisible, and comes in crisp at the bonnet corner.
   inner: line([
-    [2.173, 0.474, 0.502],
+    [2.378, 0.36, 0.432],
+    [2.28, 0.42, 0.474],
+    [2.173, 0.474, 0.515],
     [1.9, 0.399, 0.592],
     [1.6, 0.315, 0.691],
     [1.513, 0.29, 0.72],
@@ -153,9 +160,10 @@ export const keyLines = {
   ]),
   // The center line: the bonnet one straight rising line from the nose tip to the windscreen base, the screen raked a
   // little steeper, the roof, the deck.
-  // The ridge blend at the V tip rounds the corner back by about 21 mm, so the key line starts that far ahead.
+  // The ridge blend at the V tip rounds the corner back by about 16 mm, and the deck tip's by about 5 mm, so the key
+  // line runs that far past each end.
   center: line([
-    [zFront + 0.021, 0, 0.408],
+    [zFront + 0.0165, 0, 0.408],
     [2.2, 0, 0.505],
     [1.9, 0, 0.604],
     [1.5, 0, 0.736],
@@ -176,9 +184,12 @@ export const keyLines = {
     [-1.8, 0, 0.93],
     [-2.1, 0, 0.905],
     [-2.3, 0, 0.893],
-    [zRear, 0, 0.885],
+    [zRear - 0.0045, 0, 0.885],
   ]),
 }
+
+/** u at which a key line reaches z. */
+const uz = (k: ReadonlyArray<readonly [number, number, number, number]>, z: number): number => uAt(z, k[0][3], k[k.length - 1][3])
 
 /** Crease radius: small and even everywhere, so every edge catches a highlight. */
 const edge = 0.004
@@ -189,23 +200,39 @@ export const mainDef: LoftDef = {
     { pts: keyLines.sill, round: 0.006, sharp: 1 },
     { pts: keyLines.crease, round: edge, sharp: 1 },
     { pts: keyLines.shoulder, round: edge, sharp: 1 },
-    { pts: keyLines.rail, round: [[0, edge], [0.2, edge], [0.26, 0.008], [1, 0.008]], sharp: 1 },
+    // Ahead of the bonnet corner the bonnet's two creases are only guides: the bonnet and wing top meet the front edge
+    // as one surface, and the creases come in over the last few centimeters before the corner. The inner one keeps a
+    // short crisp kink where the level V of the front edge turns up over the eye, dying out tangent behind it.
+    {
+      pts: keyLines.rail,
+      monotone: true,
+      round: edge,
+      sharp: [[0, 0], [uz(keyLines.rail, 2.24), 0], [uz(keyLines.rail, 2.16), 1], [1, 1]],
+    },
     // Crisp along the bonnet, dying out tangent under the windscreen.
-    { pts: keyLines.inner, round: [[0, edge], [0.18, edge], [0.24, 0.08], [1, 0.08]], sharp: [[0, 1], [0.18, 1], [0.24, 0], [1, 0]] },
+    {
+      pts: keyLines.inner,
+      monotone: true,
+      round: [[0, edge], [uz(keyLines.inner, 1.477), edge], [uz(keyLines.inner, 1.255), 0.08], [1, 0.08]],
+      sharp: [[0, 1], [uz(keyLines.inner, 2.36), 1], [uz(keyLines.inner, 2.33), 0], [uz(keyLines.inner, 2.27), 0], [uz(keyLines.inner, 2.18), 1], [uz(keyLines.inner, 1.477), 1], [uz(keyLines.inner, 1.255), 0], [1, 0]],
+    },
     // Along the bonnet the two flat center facets meet at a blended ridge, so the leading edge is a straight V.
     { pts: keyLines.center, round: [[0, 0.08], [0.17, 0.08], [0.24, 0.15], [1, 0.15]], sharp: [[0, 1], [0.17, 1], [0.24, 0], [1, 0]] },
   ],
   segs: [
     { bulgeA: 0.08 },
-    { bulgeA: -0.06 },
+    // The lower flank: a shallow hollow, scooped deep behind the front wheel and on through the door into the intake.
+    { bulgeA: [[0, -0.06], [0.27, -0.06], [0.34, -0.3], [0.54, -0.3], [0.62, -0.06], [1, -0.06]] },
     // The upper flank: a plane.
     { bulgeA: [[0, 0.06], [0.2, 0.03], [0.3, 0.02], [1, 0.02]] },
-    // Wing top: a flat facet. Side glass: curved. Deck flank: nearly flat.
-    { bulgeA: [[0, 0], [0.17, 0], [0.27, 0.12], [0.72, 0.12], [0.84, 0.03], [1, 0.03]] },
-    // Bonnet side facet: flat. Roof and deck: crowned.
-    { bulgeA: [[0, 0], [0.17, 0], [0.27, 0.12], [1, 0.08]] },
-    // Bonnet center: a flat facet each side. Roof and deck: crowned.
-    { bulgeA: [[0, 0], [0.17, 0], [0.27, 0.08], [1, 0.08]] },
+    // Wing top: a flat facet over the arch crown. Pillar side and side glass: one flat plane leaning in. Deck flank:
+    // nearly flat.
+    { bulgeA: [[0, 0], [0.225, 0], [0.3, 0.03], [1, 0.03]] },
+    // Bonnet side facet, then the windscreen's outer part: flat, meeting the side glass at the A-pillar ridge. Roof:
+    // nearly flat. Deck: a little crowned.
+    { bulgeA: [[0, 0], [0.17, 0], [0.27, 0.02], [0.55, 0.03], [0.7, 0.06], [1, 0.06]] },
+    // Bonnet center, then the windscreen's middle: flat facets. Roof and deck: a little crowned.
+    { bulgeA: [[0, 0], [0.17, 0], [0.27, 0.02], [0.55, 0.03], [0.7, 0.06], [1, 0.06]] },
   ],
   vAt: [0, 0.1, 0.22, 0.4, 0.6, 0.78, 1],
   mirrorTop: true,

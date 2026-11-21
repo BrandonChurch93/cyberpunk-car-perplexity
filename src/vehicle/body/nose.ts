@@ -1,60 +1,96 @@
 import type { Loft } from '../geom/loft'
-import { coons, polyline, type Curve } from '../geom/coons'
-import { projectCurve, type SurfaceCurve, type SurfaceMap } from '../geom/cuts'
-import type { V3 } from '../geom/vec'
+import { projectCurve, smin, type SurfaceCurve, type SurfaceMap } from '../geom/cuts'
+import { mix, type V3 } from '../geom/vec'
 import type { Cuts } from './cuts'
 import { elev, map } from './lines'
-import { dims } from './shape'
 
-// The nose and cheeks: the face below the bonnet's leading edge, its outlines and its openings.
-// Its top and outer edges are the main loft's first section, so it meets the bonnet and wings without a step.
-
-/** The nose below the bonnet's leading edge, from the center line (a = 0) to the corner (a = 1), splitter (b = 0) to the edge (b = 1). */
 export function frontFace(loft: Loft): (a: number, b: number) => V3 {
-  const vK3 = loft.vAt[3]
-  const corner0 = loft.at(0, 0)
+  const split = loft.vAt[3]
+  const base = loft.at(0, 0)
+  const cheek = loft.at(0, split)
   const tip = loft.at(0, 1)
-  const top: Curve = (a) => loft.at(0, 1 - a * (1 - vK3))
-  const right: Curve = (b) => loft.at(0, vK3 * b)
-  const left = polyline([
-    [0, 0.15, dims.halfLength - 0.004],
-    [0, 0.2, dims.halfLength - 0.03],
-    [0, 0.3, dims.halfLength - 0.08],
-    [0, 0.39, dims.halfLength - 0.06],
-    [0, tip[1], tip[2]],
-  ])
-  const bottom = polyline([
-    [0, 0.15, dims.halfLength - 0.004],
-    [0.43, 0.15, 2.37],
-    [0.61, 0.15, 2.27],
-    [0.75, 0.15, 2.18],
-    [0.84, 0.15, 2.08],
-    [0.9, 0.15, 1.95],
-    corner0,
-  ])
-  return coons(bottom, top, left, right)
+  const setback = .042
+  const centerZ = tip[2] - setback
+  const rise = setback / (tip[1] - base[1])
+  const hub = lines.drlLower[0]
+  const upper = lines.drlUpper[0], lower = lines.drlLower.at(-1)!, stem = lines.drlStem.at(-1)!
+  const upperSlope = (upper[0] - hub[0]) / (upper[1] - hub[1])
+  const lowerSlope = (lower[0] - hub[0]) / (hub[1] - lower[1])
+  const stemSlope = (stem[1] - hub[1]) / (stem[0] - hub[0])
+  const angle = .45
+  const outerHigh = -angle * (1 + lowerSlope * stemSlope) / (lowerSlope + upperSlope)
+  const outerLow = outerHigh + angle * stemSlope
+  const cutsAt = (x: number, y: number) => {
+    const dx = x - hub[0], dy = y - hub[1]
+    return [-angle * (dy - stemSlope * dx), outerLow * (dx + lowerSlope * dy)]
+  }
+  const shieldWidth = (y: number) => .17 + .49 * (y - base[1])
+  const intakeSweep = (centerZ + Math.min(0, ...cutsAt(base[0], base[1])) - base[2]) / (base[0] - shieldWidth(base[1]))
+  const baseZ = (x: number, y: number) => {
+    const shield = centerZ + rise * (y - base[1])
+    const intake = shield - intakeSweep * (x - shieldWidth(y))
+    const [top, cheek] = cutsAt(x, y)
+    return smin(shield, smin(intake, smin(intake + top, intake + cheek, .0026), .0026), .0035)
+  }
+  const cheekResidual = cheek[2] - baseZ(cheek[0], cheek[1])
+  const railAt = (a: number) => loft.at(0, mix(1, split, a))
+  const count = 14
+  const residuals = Array.from({ length: count + 1 }, (_, i) => {
+    let lo = 0, hi = 1
+    const x = cheek[0] * i / count
+    for (let j = 0; j < 20; j++) {
+      const m = (lo + hi) / 2
+      if (railAt(m)[0] < x) lo = m
+      else hi = m
+    }
+    const [px, y, z] = railAt(i === 0 ? 0 : i === count ? 1 : (lo + hi) / 2)
+    return z - baseZ(px, y)
+  })
+  const residualAt = (i: number): number => i < 0 ? 2 * residuals[0] - residuals[1]
+    : i > count ? 2 * residuals[count] - residuals[count - 1] : residuals[i]
+  const sweep = (x: number) => {
+    const q = count * x / cheek[0], i = Math.min(count - 1, Math.floor(q)), t = q - i
+    const a = residualAt(i - 1), b = residualAt(i), c = residualAt(i + 1), d = residualAt(i + 2)
+    return ((1 - t) ** 3 * a + (4 - 6 * t * t + 3 * t ** 3) * b
+      + (1 + 3 * t + 3 * t * t - 3 * t ** 3) * c + t ** 3 * d) / 6
+  }
+  return (a, b) => {
+    if (a === 1) return loft.at(0, split * b)
+    const rail = railAt(a)
+    if (b === 1) return rail
+    const side = loft.at(0, split * b)
+    const station = rail[0] / cheek[0]
+    const along = station * station
+    const x = mix(station * base[0], rail[0], b) + along * (side[0] - mix(base[0], cheek[0], b))
+    const y = mix(base[1], rail[1], b) + along * (side[1] - mix(base[1], cheek[1], b))
+    const top = rail[2] - baseZ(rail[0], rail[1])
+    const broad = sweep(rail[0])
+    const outer = side[2] - baseZ(side[0], side[1]) - cheekResidual * b
+    // The broad sweep carries the fit without dragging every bonnet crease across the fascia.
+    return [x, y, baseZ(x, y) + broad * b + (top - broad) * b ** 6 * (7 - 6 * b) + outer * along * along]
+  }
 }
 
-/** Front elevation outlines, left half. */
+const junction: [number, number] = [192, 445]
+
 export const lines = {
-  eye: map(elev, [[193, 374], [270, 386], [345, 398], [353, 406], [346, 415], [270, 417], [205, 419], [188, 400]]),
-  outerIntake: map(elev, [[212, 486], [320, 484], [430, 480], [560, 470], [500, 545], [450, 618], [330, 620], [228, 620], [204, 560]]),
+  eye: map(elev, [[193, 374], [254, 386], [318, 397], [328, 406], [320, 415], [254, 417], [205, 419], [189, 400]]),
+  outerIntake: map(elev, [[218, 490], [318, 490], [424, 480], [481, 469], [461, 522], [416, 615], [329, 620], [235, 620], [208, 557]]),
   centerIntake: map(elev, [[575, 520], [745, 520], [745, 612], [600, 612], [570, 570]]),
-  drlUpper: map(elev, [[146, 328], [168, 385], [192, 445]]),
-  drlLower: map(elev, [[192, 445], [170, 520], [148, 598], [196, 636]]),
-  drlStem: map(elev, [[192, 445], [300, 458], [425, 466]]),
+  drlUpper: map(elev, [[172, 382], junction]),
+  drlLower: map(elev, [junction, [158, 608]]),
+  drlStem: map(elev, [junction, [387, 461]]),
 }
 
-/** Openings and bands in the nose. Curve IDs eye, outer, center, drlU, drlL and drlS are the front module's interface. */
 export function noseCuts(fm: SurfaceMap): { cuts: Cuts; curves: Record<'eye' | 'outer' | 'center' | 'drlU' | 'drlL' | 'drlS', SurfaceCurve> } {
-  const eye = projectCurve(fm, 'z', lines.eye, true, 0.005, undefined, false, 0.012)
-  const outer = projectCurve(fm, 'z', lines.outerIntake, true, 0.006, undefined, false, 0.03)
-  const center = projectCurve(fm, 'z', lines.centerIntake, true, 0.006, undefined, true, 0.03)
+  const eye = projectCurve(fm, 'z', lines.eye, true, 0.005, undefined, false, 0.009)
+  const outer = projectCurve(fm, 'z', lines.outerIntake, true, 0.006, undefined, false, 0.02)
+  const center = projectCurve(fm, 'z', lines.centerIntake, true, 0.006, undefined, true, 0.02)
   const drlU = projectCurve(fm, 'z', lines.drlUpper, false, 0.004, undefined, false, 0.01)
   const drlL = projectCurve(fm, 'z', lines.drlLower, false, 0.004, undefined, false, 0.01)
   const drlS = projectCurve(fm, 'z', lines.drlStem, false, 0.004, undefined, false, 0.01)
   return {
-    cuts: { holes: [{ c: eye, inset: 0 }, { c: outer, inset: 0 }, { c: center, inset: 0 }], gaps: [], glass: [eye], bands: [{ c: drlU, half: 0.011 }, { c: drlL, half: 0.011 }, { c: drlS, half: 0.011 }] },
+    cuts: { holes: [{ c: eye, inset: 0 }, { c: outer, inset: 0 }, { c: center, inset: 0 }], gaps: [], glass: [], bands: [{ c: drlU, half: 0.011 }, { c: drlL, half: 0.011 }, { c: drlS, half: 0.011 }] },
     curves: { eye, outer, center, drlU, drlL, drlS },
   }
 }

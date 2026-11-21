@@ -221,7 +221,7 @@ function guide(map: SurfaceMap, curves: SurfaceCurve[], half: number, depth: num
 }
 
 function splitter(S: Surface, full: boolean): T.BufferGeometry {
-  const count = full ? 72 : 36, end = S(0, 0)[2] - .001
+  const count = full ? 72 : 36, end = Math.max(S(0, 0)[2], S(0, 1)[2]) - .001
   const positions = Array.from({ length: 2 * count + 1 }, (_, i) => {
     const u = (i - count) / count
     const [x, y, z] = S(Math.abs(u), 0)
