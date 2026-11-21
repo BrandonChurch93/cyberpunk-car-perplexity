@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { config } from '../../config'
+import { withEmitters, waterF0 } from '../../core/emitters'
 import { filmLightsGlsl } from '../../core/lights'
 import { insertAfter, insertBefore, patchMaterial } from '../../materials/patch'
 import { surfaceCommonGlsl, surfaceVaryingsGlsl, surfaceVertexGlsl } from './glsl'
@@ -555,7 +556,9 @@ float surfGlint = 0.0;
           }
           float lensRough = max(0.12, mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, R)));
           surfLensOpen = shaded * smoothstep(0.0, 0.08, 1.0 - surfHit.r);
-          totalEmissiveRadiance += surfLensOpen * carry * getIBLRadiance(o, o, lensRough);
+          vec3 oW = surfToWorld(o);
+          // The cube holds the signs blurred; where one sits inside the exit cone its sharp face replaces it.
+          totalEmissiveRadiance += surfLensOpen * carry * max(getIBLRadiance(o, o, lensRough), emitterGlintF0(surfWorldPos, oW, oW, lensRough, R, vec3(1.0)));
         }
       }
     }
@@ -571,6 +574,13 @@ float surfGlint = 0.0;
     #else
       normal = normalize(mix(normal, dropView, shaded));
     #endif
+    #ifdef USE_ENVMAP
+      vec3 vV = -normalize(vViewPosition);
+      float capRough = min(max(mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, surfHit.radius)), 0.045), 1.0);
+      float fw = ${waterF0} + ${(1 - waterF0).toFixed(2)} * pow(1.0 - clamp(dot(dropView, vV), 0.0, 1.0), 5.0);
+      vec3 sharp = emitterGlint(surfWorldPos, surfToWorld(dropView), surfToWorld(vV), capRough, surfHit.radius);
+      totalEmissiveRadiance += shaded * max(sharp - fw * getIBLRadiance(vV, dropView, capRough), vec3(0.0));
+    #endif
   }
   if (w > 0.0 && surfHit.radius > 0.0007) {
     vec3 nW = surfToWorld(toView * n);
@@ -581,6 +591,22 @@ float surfGlint = 0.0;
       vec3 e = filmLightAt(i, surfWorldPos, toLight);
       float facing = dot(nW, toLight);
       if (facing <= 0.0) continue;
+      vec3 tl = toLight - nW * facing;
+      vec3 rel = (vec4(toView * (-surfHit.offset), 0.0) * viewMatrix).xyz;
+      vec3 focus = -tl * surfHit.radius * 0.45;
+      float s = length(rel - focus) / (surfHit.radius * 0.32);
+      caustic += e * facing * exp(-s * s) * 2.2;
+    }
+    for (int i = 0; i < EMITTER_MAX; i++) {
+      if (i >= emitterCount) break;
+      vec3 face = cross(emitterAxisU[i].xyz, emitterAxisV[i].xyz);
+      vec3 toE = emitterCenter[i].xyz - surfWorldPos;
+      float d2 = max(dot(toE, toE), 1e-6);
+      vec3 toLight = toE * inversesqrt(d2);
+      float front = -dot(toLight, face);
+      float facing = dot(nW, toLight);
+      if (front <= 0.0 || facing <= 0.0) continue;
+      vec3 e = emitterRadiance[i].rgb * emitterCenter[i].w * min(4.0 * front / d2, 6.2831853);
       vec3 tl = toLight - nW * facing;
       vec3 rel = (vec4(toView * (-surfHit.offset), 0.0) * viewMatrix).xyz;
       vec3 focus = -tl * surfHit.radius * 0.45;
@@ -615,6 +641,10 @@ float surfGlint = 0.0;
       float open = mix(0.3, 1.0, smoothstep(-0.3, 0.1, dot(-vV, nV)));
       glint += ${sphereFresnel.toFixed(4)} * around + ${rimFresnel.toFixed(3)} * open * getIBLRadiance(vV, across, 0.35);
     #endif
+    // Per unit glint weight a bead returns E F for each sign; the mean Fresnel share is already in the cube terms above.
+    float eyeD = length(cameraPosition - surfWorldPos);
+    float unit = 2.0 * eyeD * emitterPixelAngle;
+    glint += max(emitterBead(surfWorldPos, nW, vW, unit, eyeD, emitterPixelAngle) - emitterBeadF0(surfWorldPos, nW, vW, unit, eyeD, emitterPixelAngle, vec3(${sphereFresnel.toFixed(4)}), -1.0), vec3(0.0));
     totalEmissiveRadiance += glint * surfGlint * (1.0 - surfLane);
   }
   #ifdef USE_ENVMAP
@@ -628,7 +658,7 @@ float surfGlint = 0.0;
     float sinRise = sin(min(rise, 1.5));
     vec3 dir = normalize(ahead * cos(min(rise, 1.5)) + nV * sinRise);
     float coat = 0.04 + 0.96 * pow(1.0 - sinRise, 5.0);
-    totalEmissiveRadiance += 0.9 * coat * surfLensW * (1.0 - surfLane) * getIBLRadiance(dir, dir, 0.45);
+    totalEmissiveRadiance += 0.9 * coat * surfLensW * (1.0 - surfLane) * max(getIBLRadiance(dir, dir, 0.45), emitterGlintF0(surfWorldPos, surfToWorld(dir), surfToWorld(dir), 0.45, -1.0, vec3(1.0)));
   }
   #endif
   surfBeadOut = shaded;
@@ -641,7 +671,7 @@ float surfGlint = 0.0;
 
 // Three's own floor on roughness is applied before this chunk; a tighter lobe under a compact light blows up into fireflies.
 const beadsSpecular = /* glsl */ `
-surfBeadRough = min(max(surfBeadRough, 0.045) + geometryRoughness, 1.0);
+surfBeadRough = min(max(surfBeadRough, 0.045), 1.0);
 material.specularColor *= 1.0 - surfLensOpen;
 #ifdef USE_CLEARCOAT
   material.clearcoat *= 1.0 - 0.6 * surfHalo * (1.0 - surfBeadOut);
@@ -670,6 +700,7 @@ export function applyBeads(material: THREE.Material, uniforms: Uniforms, bead: B
       f = insertAfter(f, '#include <lights_physical_fragment>', beadsSpecular)
       f = insertBefore(f, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { outgoingLight = surfDiagOut.rgb; }')
       shader.fragmentShader = f
+      withEmitters(shader)
     },
   })
 }
