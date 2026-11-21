@@ -1,7 +1,9 @@
 import * as THREE from 'three'
+import { insertAfter, patchMaterial } from '../../materials/patch'
 import type { VehicleModule } from '../../vehicle'
 
 const guideDeckRadiance = 0.28
+const guideDeckArm = { fraction: 0.95, height: [0.29, 0.48], lateral: [0.06, 0.28] }
 
 function portAimName(meshName: string): string | undefined {
   const side = meshName.endsWith(' right') ? 'right' : 'left'
@@ -33,11 +35,30 @@ export function probeLamps(vehicle: Pick<VehicleModule, 'root' | 'lamps'>) {
   const entries: Array<{ source: THREE.Mesh; emitter: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> }> = []
   const mirrorApertures = new Map<string, THREE.Mesh>()
   const guides = new Set<THREE.MeshStandardMaterial>()
+  const lateral = { value: 0 }
+  const eyeLocal = new THREE.Vector3()
   for (const { mesh: node, origin, beamIndex } of lampSources(vehicle)) {
     const side = node.name.endsWith(' right') ? 'right' : 'left'
     if (origin.name.startsWith('front running guide')) {
       mirrorApertures.set(`vehicle-glow-front-${side}`, node)
       guides.add(node.material)
+      patchMaterial(node.material, {
+        id: 'deck-guide-arm',
+        uniforms: { reflectGuideLateral: lateral },
+        apply(shader) {
+          shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec2 vDeckGuide;')
+          shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', 'vDeckGuide = position.xy;')
+          shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', `
+            varying vec2 vDeckGuide;
+            uniform float reflectGuideLateral;
+          `)
+          shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
+            float guideAngle = smoothstep(${guideDeckArm.lateral.join(', ')}, sign(vDeckGuide.x) * reflectGuideLateral);
+            totalEmissiveRadiance *= 1.0 - ${guideDeckArm.fraction} * guideAngle
+              * smoothstep(${guideDeckArm.height.join(', ')}, vDeckGuide.y);
+          `)
+        },
+      })
     }
     if (beamIndex >= 0) mirrorApertures.set(`vehicle-beam-${beamIndex}`, node)
     const material = node.material.clone()
@@ -54,12 +75,16 @@ export function probeLamps(vehicle: Pick<VehicleModule, 'root' | 'lamps'>) {
   return {
     root,
     mirrorApertures,
-    withDeckRadiance(draw: () => void) {
+    withDeckRadiance(eye: THREE.Vector3, draw: () => void) {
       const restore = Array.from(guides, material => [material, material.emissiveIntensity] as const)
+      const prior = lateral.value
+      vehicle.root.worldToLocal(eyeLocal.copy(eye))
+      lateral.value = eyeLocal.x / Math.max(Math.hypot(eyeLocal.x, eyeLocal.z), 1e-6)
       for (const [material, intensity] of restore) material.emissiveIntensity = intensity * guideDeckRadiance
       try {
         draw()
       } finally {
+        lateral.value = prior
         for (const [material, intensity] of restore) material.emissiveIntensity = intensity
       }
     },

@@ -157,7 +157,8 @@ it('tracks the ported guides, projector dies and tail through real lamp stages a
   const guide = probe.mirrorApertures.get('vehicle-glow-front-left')!.material as THREE.MeshStandardMaterial
   const die = probe.mirrorApertures.get('vehicle-beam-0')!.material as THREE.MeshStandardMaterial
   const before = [guide.emissiveIntensity, die.emissiveIntensity]
-  probe.withDeckRadiance(() => {
+  expect(patchesOf(guide)).toContain('deck-guide-arm')
+  probe.withDeckRadiance(new THREE.Vector3(3, -.8, 8), () => {
     expect(guide.emissiveIntensity).toBeGreaterThan(0)
     expect(guide.emissiveIntensity).toBeLessThan(before[0])
     expect(die.emissiveIntensity).toBe(before[1])
