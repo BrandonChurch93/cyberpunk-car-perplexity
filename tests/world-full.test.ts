@@ -492,6 +492,40 @@ describe('full roof world', () => {
     expect(world.signs).toContain('HOTEL')
   })
 
+  it('mounts the left shopfront signs and narrows the cyan optics without changing the rig footprint', () => {
+    const format = config.formats.master
+    const t = config.film.heroFrameSeconds
+    const lens = new THREE.PerspectiveCamera()
+    const center = new THREE.Vector3()
+    world.root.updateMatrixWorld(true)
+    applyLens(lens,cameraAt(t,format,anchors),format.width,format.height,{pixel:[0,0],aperture:[0,0]},1)
+    for (const [id,parent,low] of [
+      ['west vertical tailor blade','hero left edge tower volume',false],
+      ['west cyan arcade shopfront','hero near west garage bay volume',true],
+      ['middle cyan noodle shopfront','hero middle west distance volume',true],
+      ['low magenta bar shopfront','hero bar tower volume',true],
+    ] as const) {
+      const fixture = world.root.getObjectByName(id)!
+      expect(fixture.parent?.name).toBe(parent)
+      const face = fixture.getObjectByName('diffusing cabinet face')!
+      const ndc = face.getWorldPosition(center).project(lens)
+      const y = (1-ndc.y)*.5
+      expect(y).toBeGreaterThan(low ? .39 : 0)
+      expect(y).toBeLessThan(low ? .44 : .10)
+      const ray = new THREE.Raycaster()
+      ray.setFromCamera(new THREE.Vector2(ndc.x,ndc.y),lens)
+      expect(ray.intersectObject(world.root,true)[0]?.object.parent?.name).toBe(id)
+    }
+    const rise = approvedHeroSourceSurvey().find(source=>source.id==='cyan garage rise')!
+    const optic = world.root.getObjectByName(rise.id)?.getObjectByName('weather-sealed opal face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    expect(optic.geometry.parameters.width*rise.scale).toBeLessThan(rise.size[0]*.72)
+    expect(optic.material.uniforms.shaped?.value).toBe(1)
+    world.beginFrame({ frame: { timeSeconds: t } } as FrameContext)
+    const wideFootprint = world.lights.find(light=>light.id===rise.id)?.size
+    world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
+    expect(wideFootprint).toEqual(rise.size)
+  })
+
   it('shows the stacked accent cabinets from both hero cameras', () => {
     const point = new THREE.Vector3()
     for (const name of ['stacked amber arcade cabinet','stacked amber noodle cabinet']) {
