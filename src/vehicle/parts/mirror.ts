@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { surfaceNormal } from '../body/body'
 import { orient } from './cabin'
 import type { Surface, SurfaceMap } from '../geom/cuts'
@@ -88,6 +89,10 @@ function solid(rings: V3[][], c: V3): THREE.BufferGeometry {
     const t = THREE.ShapeUtils.triangulateShape(ring.map((p) => new THREE.Vector2(p[0], p[1])), [])
     for (const [x, y, z] of t) tri(ring[x], ring[y], ring[z])
   }
+  return indexed(pos)
+}
+
+function indexed(pos: number[]): THREE.BufferGeometry {
   const keys = new Map<string, number>()
   const verts: number[] = []
   const index: number[] = []
@@ -164,18 +169,67 @@ export function mirror(S: Surface, map: SurfaceMap, spec: MirrorSpec = mirrorSpe
   const [u, v] = map.invert('x', spec.root[0], spec.root[1])
   const foot = S(u, v)
   const n = surfaceNormal(S, u, v)
+  const on = (z: number, y: number, h: number): { p: V3; n: V3 } => {
+    const [a, b] = map.invert('x', z, y)
+    const q = surfaceNormal(S, a, b)
+    return { p: addScaled(S(a, b), q, h), n: q }
+  }
+  const [rz, ry] = spec.root
+  const L = 0.046
+  const Hh = 0.023
+  const foot2 = even(roundCorners([[-L, -Hh * 0.8], [L, -Hh], [L * 0.9, Hh], [-L * 0.85, Hh * 0.85]], [0.016, 0.016, 0.018, 0.018], 8), 48)
+  const H = 0.009
+  const rf = 0.007
+  const levels: [number, number][] = [[0, -0.003], [0, 0]]
+  for (let k = 1; k <= 5; k++) {
+    const a = (k / 5) * (Math.PI / 2)
+    levels.push([rf * (1 - Math.cos(a)), rf * 0 + H * 0.78 * Math.sin(a)])
+  }
+  levels.push([rf * 1.9, H * 0.94], [rf * 3.2, H])
+  const ringsB = levels.map(([d, h]) => inset(foot2, d).map((q) => on(rz + q[0], ry + q[1], h).p))
+  const top = on(rz, ry, H + 0.0015).p
+  const below = addScaled(foot, n, -0.05)
+  const posB: number[] = []
+  const triB = (a: V3, b: V3, c: V3): void => {
+    const e = cross(sub(b, a), sub(c, a))
+    if (Math.hypot(e[0], e[1], e[2]) < 1e-14) return
+    const mid: V3 = [(a[0] + b[0] + c[0]) / 3 - below[0], (a[1] + b[1] + c[1]) / 3 - below[1], (a[2] + b[2] + c[2]) / 3 - below[2]]
+    posB.push(...(dot(e, mid) >= 0 ? [...a, ...b, ...c] : [...a, ...c, ...b]))
+  }
+  const mB = foot2.length
+  for (let k = 0; k + 1 < ringsB.length; k++) {
+    for (let j = 0; j < mB; j++) {
+      const jn = (j + 1) % mB
+      triB(ringsB[k][j], ringsB[k][jn], ringsB[k + 1][jn])
+      triB(ringsB[k][j], ringsB[k + 1][jn], ringsB[k + 1][j])
+    }
+  }
+  const last = ringsB[ringsB.length - 1]
+  for (let j = 0; j < mB; j++) triB(last[j], last[(j + 1) % mB], top)
+  const base = indexed(posB)
+
+  const gasket = new MeshBuilder()
+  const gp = foot2.map((q) => on(rz + q[0], ry + q[1], 0.0006))
+  sweep(gasket, gp.map((g) => g.p), gp.map((g) => g.n), roundRect(0.0042, 0.0034, 0.0016, 3), true)
+
   const tv = new THREE.Vector3(cx - w * 0.45, cy - h + 0.03, zb + 0.02).applyMatrix4(turn)
   const tip: V3 = [tv.x, tv.y, tv.z]
-  const start = addScaled(foot, n, -0.016)
+  const start = addScaled(top, n, -0.006)
   const path: V3[] = []
   const bow = addScaled(addScaled(foot, n, 0.07), [0, 1, 0], 0.03)
-  for (let i = 0; i <= 10; i++) {
-    const t = i / 10
+  for (let i = 0; i <= 16; i++) {
+    const t = i / 16
     path.push(lerp3(lerp3(start, bow, t), lerp3(bow, tip, t), t))
   }
   const along = norm(sub(tip, start))
   const up = norm(cross(along, cross([0, 0, 1], along)))
   const stalk = new MeshBuilder()
-  sweep(stalk, path, path.map(() => up), roundRect(0.01, 0.034, 0.0045, 3), false, (t) => 1 - 0.25 * t)
-  return { head: hg, glass: gg, stalk: orient(stalk.geometry()) }
+  const ease = (x: number): number => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x))
+  sweep(stalk, path, path.map(() => up), roundRect(0.012, 0.036, 0.0055, 4), false, (t) => 1 - 0.22 * t + 0.55 * (1 - ease(t / 0.22)) ** 2 + 0.4 * ease((t - 0.8) / 0.2) ** 2)
+  const parts = [base, orient(gasket.geometry()), orient(stalk.geometry())]
+  const all = mergeGeometries(parts.map((g) => {
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k)
+    return g
+  }))
+  return { head: hg, glass: gg, stalk: all }
 }
