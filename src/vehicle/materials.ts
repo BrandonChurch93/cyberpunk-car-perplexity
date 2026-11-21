@@ -25,10 +25,12 @@ interface FlakeSpec {
   lobeDeg: number
   /** How strongly the pigmented binder around the flakes tints them, at normal incidence. */
   binder: number
+  /** How far the flake colour is taken toward the paint's flake hue; the rest reflects the light it faces. */
+  tint?: number
 }
 
 const flakeSpecs: Record<string, FlakeSpec> = {
-  'black-pearl': { sizeUm: 22, coverage: .035, tiltDeg: 4, reflectance: .45, lobeDeg: 1, binder: .25 },
+  'black-pearl': { sizeUm: 28, coverage: .025, tiltDeg: 8, reflectance: .65, lobeDeg: 1, binder: .25, tint: .5 },
   'ember-orange': { sizeUm: 30, coverage: .42, tiltDeg: 7, reflectance: .82, lobeDeg: 1, binder: .85 },
   'liquid-silver': { sizeUm: 34, coverage: .55, tiltDeg: 6.5, reflectance: .9, lobeDeg: 1, binder: .35 },
 }
@@ -49,7 +51,7 @@ function flakeUniforms(spec: PaintSpec) {
   const base = new T.Color(spec.base)
   const peak = Math.max(base.r, base.g, base.b, 1e-4)
   return {
-    color: new T.Color(spec.flake).multiplyScalar(f.reflectance),
+    color: new T.Color(1, 1, 1).lerp(new T.Color(spec.flake), f.tint ?? 1).multiplyScalar(f.reflectance),
     binder: new T.Vector4(base.r / peak, base.g / peak, base.b / peak, f.binder),
     shape: new T.Vector4(density, T.MathUtils.degToRad(f.tiltDeg), T.MathUtils.degToRad(f.lobeDeg), radius),
     cell: new T.Vector4(Math.min(cellLimit, Math.sqrt(cellFlakes / density)), explicitUntil[0], explicitUntil[1], f.coverage),

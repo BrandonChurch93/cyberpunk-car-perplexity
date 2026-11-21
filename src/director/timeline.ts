@@ -49,7 +49,7 @@ export const events = {
   engineStop: finale.start + 1,
   engineStopped: finale.start + 1.8,
   lampsOffStart: finale.start + 2,
-  lampsOffEnd: finale.start + 4,
+  lampsOffEnd: finale.start + 5.2,
   pullStart: finale.start + 0.3,
   pullEnd: finale.end,
 }

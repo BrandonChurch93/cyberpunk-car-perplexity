@@ -3,6 +3,7 @@ import { replaceOnce, patchMaterial } from '../materials/patch'
 import type { FilmLight } from './contract'
 
 export const maxFilmLights = 16
+export const projectorHalfAngle = THREE.MathUtils.degToRad(23)
 const maxFilmShadows = 8
 const areaAngle = THREE.MathUtils.degToRad(84)
 const areaConeCos = Math.cos(areaAngle)
@@ -44,7 +45,7 @@ interface FilmShadowUniforms {
 const compactBeamGlsl = /* glsl */ `
 float filmCompactBeamFalloff(vec3 emission, vec3 axis, vec3 up) {
   float above = dot(emission, normalize(up - axis * dot(up, axis)));
-  return smoothstep(-0.185, -0.06, above) * (1.0 - smoothstep(0.032, 0.068, above));
+  return smoothstep(-0.330, -0.125, above) * (1.0 - smoothstep(0.032, 0.068, above));
 }
 `
 
