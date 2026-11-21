@@ -106,11 +106,14 @@ function outline(curve: SurfaceCurve, acrossCenter = false): T.Vector3[] {
 }
 
 function face(outer: T.Vector3[], depth = 0): T.BufferGeometry {
-  const contour = outer.map(p => new T.Vector2(p.x, p.y))
+  // Triangulate at GPU precision so nearly collinear stations cannot fold after packing.
+  const contour = outer.map(p => new T.Vector2(Math.fround(p.x), Math.fround(p.y)))
   const b = new MeshBuilder()
   for (const p of outer) b.vertex([p.x, p.y, p.z - depth], [0, 0, 1])
-  for (const [a, c, d] of T.ShapeUtils.triangulateShape(contour, [])) b.tri(a, c, d)
-  // Earcut can omit collinear contour stations that the adjoining strip still needs.
+  for (const [a, c, d] of T.ShapeUtils.triangulateShape(contour, [])) {
+    const p = contour[a], q = contour[c], r = contour[d]
+    if ((q.x - p.x) * (r.y - p.y) > (r.x - p.x) * (q.y - p.y)) b.tri(a, c, d)
+  }
   const g = compactSurface(b.geometry())
   g.computeVertexNormals()
   return g
