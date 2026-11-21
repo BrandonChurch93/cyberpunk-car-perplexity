@@ -87,8 +87,8 @@ export function buildBody(q: BodyQuality): BodyGeometry {
   const base = { maxEdge: q.maxEdge, maxAngle: q.maxAngle, tolerance: q.tolerance, minEdge: 0.0012, edgeLength: q.edgeLength }
   const mainGrid = { us: steps(40), vs: [...loft.vAt] }
   const faceGrid = { us: steps(8), vs: steps(8) }
-  const run = (S: Surface, grid: Pick<TessOptions, 'us' | 'vs'>, trim?: TrimFn, coarse = 1): TessResult =>
-    tessellate(S, { ...base, maxEdge: base.maxEdge * coarse, tolerance: base.tolerance * coarse, edgeLength: base.edgeLength * coarse, ...grid, trim })
+  const run = (S: Surface, grid: Pick<TessOptions, 'us' | 'vs'>, trim?: TrimFn, coarse = 1, normal?: TessOptions['normal']): TessResult =>
+    tessellate(S, { ...base, maxEdge: base.maxEdge * coarse, tolerance: base.tolerance * coarse, edgeLength: base.edgeLength * coarse, ...grid, trim, normal })
   const paint = [
     run(main, mainGrid, paintTrim(cuts.main, arches)),
     run(front, faceGrid, paintTrim(cuts.front)),
@@ -103,6 +103,10 @@ export function buildBody(q: BodyQuality): BodyGeometry {
     return (u, v, p) => Math.max(arches(p), -g(u, v, p))
   }
   const bayTrim: TrimFn = (u, v, p) => Math.max(noGlass(cuts.main)(u, v, p), -cuts.curves.bay.signed(u, v, p, 0.3) - 0.02)
-  const shell = [run(offsetSurface(main, inner), mainGrid, bayTrim, 3), run(offsetSurface(front, inner), faceGrid, undefined, 3), run(offsetSurface(rear, inner), faceGrid, undefined, 3)]
+  // The backing shell is the paint pushed inward. It keeps the paint's normal: the offset folds on itself where a crease
+  // is tighter than the offset, and its own tangents vanish there.
+  const backing = (S: Surface, grid: Pick<TessOptions, 'us' | 'vs'>, trim?: TrimFn): TessResult =>
+    run(offsetSurface(S, inner), grid, trim, 3, (u, v) => surfaceNormal(S, u, v))
+  const shell = [backing(main, mainGrid, bayTrim), backing(front, faceGrid), backing(rear, faceGrid)]
   return { paint: toGeometry(paint, true), glass: toGeometry(glass, true), shell: toGeometry(shell, true), cuts, surfaces: { main, front, rear } }
 }
