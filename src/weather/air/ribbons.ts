@@ -505,7 +505,7 @@ export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLig
     { key: 'distance', layer: 3, density: 0.56, fine: 5.1, size: new THREE.Vector3(Math.max(deckSpan.x, 96), 20.5, Math.max(deckSpan.y, 96)), fade: [17.4, 25, 43, 61], gain: 3.0 },
     { key: 'beam', layer: 1, density: 76, fine: 7.0, size: new THREE.Vector3(12, 3.2, 14), fade: [1.05, 2.15, 9, 13], gain: 2.45, local: true },
     { key: 'paint', layer: 0, density: 930, fine: 7.8, size: new THREE.Vector3(1.75, 2.15, 1.75), fade: [0.28, 0.45, 0.76, 0.92], gain: 0.92, paint: true },
-    { key: 'beam-grain', layer: 1, density: 510, fine: 11, size: new THREE.Vector3(7.6, 1.65, 7.9), fade: [3.25, 4.55, 11.2, 15.8], gain: 1.08, local: true, hero: 'beam' },
+    { key: 'beam-grain', layer: 1, density: 660, fine: 11, size: new THREE.Vector3(7.6, 1.65, 7.9), fade: [3.25, 4.55, 11.2, 15.8], gain: 1.08, local: true, hero: 'beam' },
     { key: 'media-grain', layer: 2, density: 81, fine: 11, size: new THREE.Vector3(12, 4.8, 7.6), fade: [6.1, 7.2, 10.4, 13.4], gain: 1.0, hero: 'media' },
   ]
   return specs.map(({ key, layer, density, fine, size, fade, gain, local, paint, hero }) => {
