@@ -45,16 +45,18 @@ export class CellDrops {
     const corners: THREE.Matrix4[] = []
     const nodes: THREE.Matrix4[] = []
     const seenNodes = new Set<string>()
+    const seenBars = new Set<string>()
+    const bar = Math.max(pitch - 2 * cells[0].apothem, 0.0004)
     const basis = (q: THREE.Vector2, lift: number, r: number, h: number) => m.clone().makeBasis(along.clone().multiplyScalar(r), n.clone().multiplyScalar(h), across.clone().multiplyScalar(r)).setPosition(world(q, lift))
     for (const cell of cells) {
       const radius = (2 * cell.apothem) / Math.sqrt(3)
       const roll = random.next()
-      if (roll < 0.45) {
+      if (roll < 0.22) {
         const ranked = Array.from({ length: 6 }, (_, k) => corner + (k * Math.PI) / 3)
           .map((a) => ({ a, d: Math.cos(a) * down2.x + Math.sin(a) * down2.y + random.range(-0.6, 0.6) }))
           .sort((x, y) => y.d - x.d)
         const a = ranked[0].a
-        const r = random.range(0.0016, 0.0028)
+        const r = random.range(0.0011, 0.0019)
         const q = cell.center.clone().add(new THREE.Vector2(Math.cos(a), Math.sin(a)).multiplyScalar(radius - 0.55 * r))
         corners.push(basis(q, -0.0003, r, capHeight(r, 100)))
       }
@@ -64,9 +66,23 @@ export class CellDrops {
         const key = `${Math.round(q.x / 0.001)},${Math.round(q.y / 0.001)}`
         if (seenNodes.has(key)) continue
         seenNodes.add(key)
-        if (random.next() > 0.22) continue
-        const r = random.range(0.0006, 0.0011)
+        if (random.next() > 0.5) continue
+        const r = random.range(0.0007, 0.0011)
         nodes.push(basis(q, 0, r, capHeight(r, 100)))
+      }
+      for (let k = 0; k < 6; k++) {
+        const a = corner + Math.PI / 6 + (k * Math.PI) / 3
+        const dir = new THREE.Vector2(Math.cos(a), Math.sin(a))
+        const mid = cell.center.clone().addScaledVector(dir, pitch / 2)
+        const key = `${Math.round(mid.x / 0.001)},${Math.round(mid.y / 0.001)}`
+        if (seenBars.has(key)) continue
+        seenBars.add(key)
+        const tangent = new THREE.Vector2(-dir.y, dir.x)
+        for (let j = Math.floor(random.range(0, 2.6)); j > 0; j--) {
+          const r = Math.min(random.range(0.0005, 0.0009), 0.6 * bar)
+          const q = mid.clone().addScaledVector(tangent, random.range(-0.4, 0.4) * radius).addScaledVector(dir, random.range(-0.25, 0.25) * bar)
+          nodes.push(basis(q, 0, r, capHeight(r, 100)))
+        }
       }
     }
     const instanced = (geometry: THREE.BufferGeometry, material: THREE.Material, list: THREE.Matrix4[]) => {
