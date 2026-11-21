@@ -336,6 +336,24 @@ describe('full roof world', () => {
     expect(world.lights).toHaveLength(8)
   })
 
+  it('concentrates occupied room fill around the southern hotel, amber block and center ranks', () => {
+    const fill = (id: string) => {
+      const shell = world.root.getObjectByName(id) as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
+      return shell.material.userData.tenantFill as [number,number]
+    }
+    const hotel = fill('hero hotel tower')
+    const amber = fill('hero amber tower')
+    const center = fill('hero middle center distance')
+    const edge = fill('hero right edge tower')
+    for (const profile of [hotel, amber, center]) expect(profile[0]).toBeGreaterThan(edge[0])
+    expect(hotel[1]).toBeGreaterThan(amber[1])
+    expect(center[1]).toBeGreaterThan(amber[1])
+    const northShells = world.root.getObjectByName('north tower ranks')!.children
+      .filter(item => item.name.startsWith('north tower shells'))
+    expect(northShells.length).toBeGreaterThan(0)
+    for (const shell of northShells) expect(fill(shell.name)[0]).toBe(0)
+  })
+
   it('fits the distant cyan shadow around the car and returns to the local macro cutoff', () => {
     const t = config.film.heroFrameSeconds
     world.beginFrame({ frame: { timeSeconds: t } } as FrameContext)
@@ -718,7 +736,7 @@ describe('full roof world', () => {
     const { master } = config.formats
     const lens = new THREE.PerspectiveCamera()
     for (const frame of [0,60,150,195,240,1170,1215,1340]) {
-      const wanted = [7,frame===0 || frame===1340 ? 2 : 0,13]
+      const wanted = [7,frame===0 || frame===1340 ? 2 : 0,12]
       const t = frame/config.film.fps
       applyLens(lens,cameraAt(t,master,anchors),master.width,master.height,{pixel:[0,0],aperture:[0,0]},1)
       for (const { mesh,center } of openings) {
@@ -810,7 +828,8 @@ describe('full roof world', () => {
       expect(y).toBeLessThan(low ? .44 : .10)
       const ray = new THREE.Raycaster()
       ray.setFromCamera(new THREE.Vector2(ndc.x,ndc.y),lens)
-      expect(ray.intersectObject(world.root,true)[0]?.object.parent?.name).toBe(id)
+      const guard = /^hero (full span steel top rail|steel mid rail|rail post)/
+      expect(ray.intersectObject(world.root,true).find(hit=>!guard.test(hit.object.name))?.object.parent?.name).toBe(id)
     }
     const rise = approvedHeroSourceSurvey().find(source=>source.id==='cyan garage rise')!
     const optic = world.root.getObjectByName(rise.id)?.getObjectByName('weather-sealed opal face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>

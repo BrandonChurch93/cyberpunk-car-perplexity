@@ -1,0 +1,96 @@
+{
+  "files": [
+    {
+      "file": "set-A-01.png",
+      "shows": "frame at 6.50 s, beat 2 of 8 (wake), wide frame"
+    },
+    {
+      "file": "set-B-01.png",
+      "shows": "full size detail of the frame at 6.50 s, centered on the paint, 540 x 540 from left 859, top 182"
+    },
+    {
+      "file": "set-B-02.png",
+      "shows": "full size detail of the frame at 6.50 s, centered on the wheel, 540 x 540 from left 1002, top 404"
+    },
+    {
+      "file": "set-B-03.png",
+      "shows": "full size detail of the frame at 6.50 s, centered on the lamp, 540 x 540 from left 816, top 343"
+    },
+    {
+      "file": "set-B-04.png",
+      "shows": "full size detail of the frame at 6.50 s, centered on the detail and exhaust, 540 x 540 from left 1036, top 167"
+    },
+    {
+      "file": "set-B-05.png",
+      "shows": "full size detail of the frame at 6.50 s, centered on the glass, 609 x 609 from left 680, top 156"
+    },
+    {
+      "file": "set-B-06.png",
+      "shows": "full size detail of the frame at 6.50 s, upper left region, 640 x 540 from left 0, top 0"
+    },
+    {
+      "file": "set-B-07.png",
+      "shows": "full size detail of the frame at 6.50 s, upper center region, 640 x 540 from left 640, top 0"
+    },
+    {
+      "file": "set-B-08.png",
+      "shows": "full size detail of the frame at 6.50 s, upper right region, 640 x 540 from left 1280, top 0"
+    },
+    {
+      "file": "set-B-09.png",
+      "shows": "full size detail of the frame at 6.50 s, lower left region, 640 x 540 from left 0, top 540"
+    },
+    {
+      "file": "set-B-10.png",
+      "shows": "full size detail of the frame at 6.50 s, lower center region, 640 x 540 from left 640, top 540"
+    },
+    {
+      "file": "set-B-11.png",
+      "shows": "full size detail of the frame at 6.50 s, lower right region, 640 x 540 from left 1280, top 540"
+    },
+    {
+      "file": "set-A-02.png",
+      "shows": "frame at 12.00 s, beat 3 of 8 (paint), wide frame"
+    },
+    {
+      "file": "set-B-12.png",
+      "shows": "full size detail of the frame at 12.00 s, centered on the paint, 1400 x 1080 from left 258, top 0"
+    },
+    {
+      "file": "set-B-13.png",
+      "shows": "full size detail of the frame at 12.00 s, upper left region, 640 x 540 from left 0, top 0"
+    },
+    {
+      "file": "set-B-14.png",
+      "shows": "full size detail of the frame at 12.00 s, upper center region, 640 x 540 from left 640, top 0"
+    },
+    {
+      "file": "set-B-15.png",
+      "shows": "full size detail of the frame at 12.00 s, upper right region, 640 x 540 from left 1280, top 0"
+    },
+    {
+      "file": "set-B-16.png",
+      "shows": "full size detail of the frame at 12.00 s, lower left region, 640 x 540 from left 0, top 540"
+    },
+    {
+      "file": "set-B-17.png",
+      "shows": "full size detail of the frame at 12.00 s, lower center region, 640 x 540 from left 640, top 540"
+    },
+    {
+      "file": "set-B-18.png",
+      "shows": "full size detail of the frame at 12.00 s, lower right region, 640 x 540 from left 1280, top 540"
+    },
+    {
+      "file": "set-C-01.png",
+      "shows": "target look for beat 2 of 8 (wake)"
+    },
+    {
+      "file": "set-C-02.png",
+      "shows": "target look for beat 3 of 8 (paint)"
+    },
+    {
+      "file": "set-D-01.txt",
+      "shows": "written observations for every element in frame"
+    }
+  ]
+}

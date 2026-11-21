@@ -25,7 +25,7 @@ function exercise(three: typeof THREE, Rig: typeof LightRig, View: typeof Ribbon
   }], 1)
   const view = new View()
   const ribbon = view.makeMesh(rig.uniforms, geometry(new Float32Array([0.03, 0.70, 0, 0.0024]), new Float32Array([1, 3.2, 6.2, 0.4])), 1, {
-    fade: [0.1, 0.8, 10, 14], gain: 2.0, size: new three.Vector3(8, 3.2, 8), center: new three.Vector3(),
+    fade: [0.1, 0.8, 35, 40], gain: 2.0, size: new three.Vector3(8, 3.2, 8), center: new three.Vector3(),
   })
   scene.add(facade, ribbon)
   const camera = new three.PerspectiveCamera(45, 1, 0.05, 100)
@@ -62,12 +62,17 @@ function exercise(three: typeof THREE, Rig: typeof LightRig, View: typeof Ribbon
   emitter.position.z = -2
   const nearWall = capture(true)
   const nearSky = capture(false)
+  camera.position.z = secondary.position.z = state.position.z = 30
+  camera.updateMatrixWorld(true)
+  secondary.updateMatrixWorld(true)
+  const distantWall = capture(true)
+  const distantSecondary = capture(true, secondary)
   target.dispose()
   renderer.dispose()
-  return { farWall, farSky, wallAgain, secondaryWall, secondarySky, nearWall, nearSky }
+  return { farWall, farSky, wallAgain, secondaryWall, secondarySky, nearWall, nearSky, distantWall, distantSecondary }
 }
 
-it('cuts distant fill on open sky without cutting nearby lights, opaque backdrops or secondary cameras', async () => {
+it('cuts distant fill on sky and resolves individual drops only in the closer air', async () => {
   const id = '/air-sky-entry.js'
   const app = await createServer({
     configFile: false,
@@ -97,7 +102,7 @@ it('cuts distant fill on open sky without cutting nearby lights, opaque backdrop
       const errors: string[] = []
       page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
       await page.goto(new URL('air-sky-test', app.resolvedUrls!.local[0]).href)
-      const { farWall, farSky, wallAgain, secondaryWall, secondarySky, nearWall, nearSky }: ReturnType<typeof exercise> = await page.evaluate(`import("${id}").then(module => module.run())`)
+      const { farWall, farSky, wallAgain, secondaryWall, secondarySky, nearWall, nearSky, distantWall, distantSecondary }: ReturnType<typeof exercise> = await page.evaluate(`import("${id}").then(module => module.run())`)
       expect(errors).toEqual([])
       expect(farWall).toBeGreaterThan(0.001)
       expect(farSky / farWall).toBeCloseTo(0.04, 4)
@@ -106,6 +111,8 @@ it('cuts distant fill on open sky without cutting nearby lights, opaque backdrop
       expect(secondarySky).toBeCloseTo(secondaryWall, 6)
       expect(nearWall).toBeGreaterThan(0.001)
       expect(nearSky).toBeCloseTo(nearWall, 6)
+      expect(distantSecondary).toBeGreaterThan(0.00001)
+      expect(distantWall).toBe(0)
     } finally {
       await browser.close()
     }

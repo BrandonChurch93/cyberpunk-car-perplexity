@@ -12,6 +12,8 @@ export const NIGHT_NEGATIVE = {
   chromaHoldFull: 1.6,
 } as const
 
+export const PRINT_TOE = 0.005
+
 const { toe, shoulder, foot, shoulderJoin: join, shoulderFalloff: falloff, blackFloor, chromaHold, chromaHoldFrom, chromaHoldFull } = NIGHT_NEGATIVE
 const joinNumerator = join * (join + toe)
 const joinDenominator = join * (join + shoulder) + foot
@@ -54,6 +56,7 @@ vec3 grade(vec3 x) {
   float low = (1.0 - smoothstep(0.005, 0.065, y));
   x = mix(x, vec3(y), 0.09 * low);
   x += low * smoothstep(0.002, 0.018, y) * vec3(-0.0005, 0.0, 0.0009);
+  x *= y / (y + ${PRINT_TOE});
   return x + (1.0 - y) * smoothstep(0.35, 0.85, y) * vec3(0.016, 0.004, -0.014);
 }
 

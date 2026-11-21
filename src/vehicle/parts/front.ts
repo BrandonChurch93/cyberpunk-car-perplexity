@@ -211,15 +211,20 @@ function radiatorSeat(throat: T.Vector3[]): T.BufferGeometry {
 function cover(loop: T.Vector3[], map: SurfaceMap, full: boolean): T.BufferGeometry {
   const center = average(loop), count = full ? 12 : 6
   const edgeDepth = loop.map(p => p.z - .002 - map.S(...fasciaUV(map, p.x, p.y))[2])
-  const rows = Array.from({ length: count }, (_, i) => {
-    const t = (count - i) / count
-    return loop.map((p, j) => {
-      const q = center.clone().lerp(p, t)
-      q.z = map.S(...fasciaUV(map, q.x, q.y))[2] + T.MathUtils.lerp(-.004, edgeDepth[j], t * t)
-      return q
-    })
-  })
-  return merged([grid(rows, false, true), face(rows.at(-1)!)])
+  const sag = [1, .97, ...Array.from({ length: count - 1 }, (_, i) => (count - i - 1) / count)]
+  const b = new MeshBuilder()
+  b.grid(sag.length, loop.length, (i, j) => {
+    const t = sag[i], p = loop[j]
+    const q = center.clone().lerp(p, t)
+    q.z = map.S(...fasciaUV(map, q.x, q.y))[2] + T.MathUtils.lerp(-.004, edgeDepth[j], t * t)
+    return { p: q.toArray(), n: [0, 0, 0], u: q.x, v: q.y }
+  }, true)
+  const base = (sag.length - 1) * loop.length
+  const cap = b.vertex([center.x, center.y, map.S(...fasciaUV(map, center.x, center.y))[2] - .004], [0, 0, 0], center.x, center.y)
+  for (let j = 0; j < loop.length; j++) b.tri(base + j, base + (j + 1) % loop.length, cap)
+  const g = compactSurface(b.geometry())
+  g.computeVertexNormals()
+  return g
 }
 
 function guide(map: SurfaceMap, radius: number, depth: number, rise: number): T.BufferGeometry {
@@ -492,11 +497,11 @@ function splitter(S: Surface, full: boolean): T.BufferGeometry {
 }
 
 export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials, full: boolean) {
-  const add = (name: string, g: T.BufferGeometry, material: T.Material, pair = false) => {
+  const add = (name: string, g: T.BufferGeometry, material: T.Material, pair = false, target = parent) => {
     const install = (name: string, geometry: T.BufferGeometry) => {
       const mesh = new T.Mesh(geometry, material)
       mesh.name = name
-      parent.add(mesh)
+      target.add(mesh)
     }
     install(name, compactSurface(g))
     if (pair) install(name + ' right', mirrorGeometry(g))
@@ -561,14 +566,17 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   drl.clearcoatRoughness = .16
   drl.emissiveIntensity = 0
   bladeOptics(drl)
+  const guideAssembly = new T.Group()
+  guideAssembly.name = 'front Y light assemblies'
+  parent.add(guideAssembly)
   const slot = fasciaReturn(map, 'slot')?.map(vector)
   if (slot) {
     const low = slot.map(p => p.clone().addScaledVector(forward, -.014))
     const flip = signedArea(slot) < 0
-    add('front Y guide seat', merged([grid([slot, low], flip, true), face(flip ? [...low].reverse() : low)]), m.housing, true)
+    add('front Y guide seat', merged([grid([slot, low], flip, true), face(flip ? [...low].reverse() : low)]), m.housing, true, guideAssembly)
   }
-  add('front Y guide bezel', guide(map, guideWidth.seat, .0045, .0003), m.housing, true)
-  add('front Y running guide', guide(map, guideWidth.lens, -.0004, .00032), drl, true)
+  add('front Y guide bezel', guide(map, guideWidth.seat, .0045, .0003), m.housing, true, guideAssembly)
+  add('front Y running guide', guide(map, guideWidth.lens, -.0004, .00032), drl, true, guideAssembly)
   emit('front running guide', vector(drlL.p[0]).addScaledVector(forward, .008), false, drl, 3.99)
   const beam = tag(m.beamLens.clone(), 'none')
   beam.emissive.setHex(0xe4f3ff)

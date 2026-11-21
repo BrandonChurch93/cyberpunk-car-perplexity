@@ -1,0 +1,36 @@
+{
+  "files": [
+    {
+      "file": "set-A-01.png",
+      "shows": "the target"
+    },
+    {
+      "file": "set-B-01.png",
+      "shows": "the current frame, at 6.50 s"
+    },
+    {
+      "file": "set-C-01.png",
+      "shows": "the near deck, target, the same area in both"
+    },
+    {
+      "file": "set-D-01.png",
+      "shows": "the near deck, current frame, the same area in both"
+    },
+    {
+      "file": "set-C-02.png",
+      "shows": "the sign groups, the left group beside the right group, target, the same area in both"
+    },
+    {
+      "file": "set-D-02.png",
+      "shows": "the sign groups, the left group beside the right group, current frame, the same area in both"
+    },
+    {
+      "file": "set-C-03.png",
+      "shows": "the sky with the billboard, target, the same area in both"
+    },
+    {
+      "file": "set-D-03.png",
+      "shows": "the sky with the billboard, current frame, the same area in both"
+    }
+  ]
+}

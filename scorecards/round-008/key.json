@@ -1,0 +1,1661 @@
+{
+  "round": 8,
+  "phase": 3,
+  "paint": "black-pearl",
+  "detail": "full",
+  "tier": "as the brief asks",
+  "sheetCells": "16x9, 1920 x 1080",
+  "split": 10,
+  "buildHash": "b3ee2e7eb94cd2cb",
+  "critics": {
+    "C1": {
+      "folder": "c1",
+      "files": {
+        "set-A-01.png": {
+          "what": "judged frame f00195-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00195-16x9-final-beauty-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "judged": true,
+            "frame": 195
+          }
+        },
+        "set-A-02.png": {
+          "what": "judged frame f00360-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00360-16x9-final-beauty-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "judged": true,
+            "frame": 360
+          }
+        },
+        "set-A-03.png": {
+          "what": "control kc28ce3a0 (paint-water) for judged crop anchor-paint of f00195-16x9-final-beauty-black-pearl-full: paint anchor at 10.26 m, projected radius 83 px. Shows vehicle paint 40% at 6.3 to 7.5 m, world animated magenta violet mural 24% at 458.7 to 468.3 m, vehicle glass-screen 12% at 7.4 to 7.6 m, world hero tower setback glass wing 8% at 500.1 to 501.7 m, world LED wall sealed stile 8% at 471.3 to 472.8 m, vehicle mirror-head-left 4% at 7.3 m, vehicle tire 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/reference/cache/controls/scout-b/scout-b-04.jpg",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "control": "kc28ce3a0",
+            "category": "paint-water",
+            "pairedWith": "judged crop anchor-paint of f00195-16x9-final-beauty-black-pearl-full: paint anchor at 10.26 m, projected radius 83 px. Shows vehicle paint 40% at 6.3 to 7.5 m, world animated magenta violet mural 24% at 458.7 to 468.3 m, vehicle glass-screen 12% at 7.4 to 7.6 m, world hero tower setback glass wing 8% at 500.1 to 501.7 m, world LED wall sealed stile 8% at 471.3 to 472.8 m, vehicle mirror-head-left 4% at 7.3 m, vehicle tire 4% at 6.6 m"
+          }
+        },
+        "set-A-04.png": {
+          "what": "control k7bf51682 (neon-wet-street-night) for judged frame f00195-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/reference/cache/controls/neon-a/neon-11020117.jpg",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "control": "k7bf51682",
+            "category": "neon-wet-street-night",
+            "pairedWith": "judged frame f00195-16x9-final-beauty-black-pearl-full"
+          }
+        },
+        "set-A-05.png": {
+          "what": "control kb91307ea (paint-water) for judged crop grid-r1c1 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 56% at 0.8 to 1.1 m, world south slab 44% at 3.8 to 4.3 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/reference/cache/controls/scout-b/scout-b-03.jpg",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "control": "kb91307ea",
+            "category": "paint-water",
+            "pairedWith": "judged crop grid-r1c1 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 56% at 0.8 to 1.1 m, world south slab 44% at 3.8 to 4.3 m"
+          }
+        },
+        "set-A-06.png": {
+          "what": "judged crop anchor-paint of f00360-16x9-final-beauty-black-pearl-full: paint anchor at 0.75 m, projected radius 2276 px. Shows vehicle paint 92% at 0.6 to 1.1 m, world parking bay stripes 8% at 4.1 to 4.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/anchor-paint.png",
+          "width": 1400,
+          "height": 1080,
+          "meta": {
+            "judged": true,
+            "frame": 360,
+            "crop": "anchor-paint"
+          }
+        },
+        "set-A-07.png": {
+          "what": "control kf37d995d (paint-water) for judged crop anchor-paint of f00360-16x9-final-beauty-black-pearl-full: paint anchor at 0.75 m, projected radius 2276 px. Shows vehicle paint 92% at 0.6 to 1.1 m, world parking bay stripes 8% at 4.1 to 4.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/reference/cache/controls/scout-b/scout-b-02.jpg",
+          "width": 1400,
+          "height": 1080,
+          "meta": {
+            "control": "kf37d995d",
+            "category": "paint-water",
+            "pairedWith": "judged crop anchor-paint of f00360-16x9-final-beauty-black-pearl-full: paint anchor at 0.75 m, projected radius 2276 px. Shows vehicle paint 92% at 0.6 to 1.1 m, world parking bay stripes 8% at 4.1 to 4.2 m"
+          }
+        },
+        "set-A-08.png": {
+          "what": "control k794ff923 (front-wheel) for judged crop anchor-wheel of f00195-16x9-final-beauty-black-pearl-full: wheel anchor at 6.90 m, projected radius 139 px. Shows vehicle paint 32% at 6.4 to 9.4 m, world south slab 32% at 5.5 to 7.6 m, vehicle glass-screen 8% at 7.3 to 7.4 m, vehicle glass 8% at 7.5 to 8.5 m, vehicle tire 8% at 6.8 to 6.9 m, vehicle front radiator fins 4% at 6.5 m, vehicle hub-bowl 4% at 7.0 m, world iron rim 4% at 5.5 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/reference/cache/controls/scout-b/scout-b-09.jpg",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "control": "k794ff923",
+            "category": "front-wheel",
+            "pairedWith": "judged crop anchor-wheel of f00195-16x9-final-beauty-black-pearl-full: wheel anchor at 6.90 m, projected radius 139 px. Shows vehicle paint 32% at 6.4 to 9.4 m, world south slab 32% at 5.5 to 7.6 m, vehicle glass-screen 8% at 7.3 to 7.4 m, vehicle glass 8% at 7.5 to 8.5 m, vehicle tire 8% at 6.8 to 6.9 m, vehicle front radiator fins 4% at 6.5 m, vehicle hub-bowl 4% at 7.0 m, world iron rim 4% at 5.5 m"
+          }
+        },
+        "set-A-09.png": {
+          "what": "judged crop anchor-paint of f00195-16x9-final-beauty-black-pearl-full: paint anchor at 10.26 m, projected radius 83 px. Shows vehicle paint 40% at 6.3 to 7.5 m, world animated magenta violet mural 24% at 458.7 to 468.3 m, vehicle glass-screen 12% at 7.4 to 7.6 m, world hero tower setback glass wing 8% at 500.1 to 501.7 m, world LED wall sealed stile 8% at 471.3 to 472.8 m, vehicle mirror-head-left 4% at 7.3 m, vehicle tire 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-paint.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "judged": true,
+            "frame": 195,
+            "crop": "anchor-paint"
+          }
+        },
+        "set-A-10.png": {
+          "what": "judged crop anchor-wheel of f00195-16x9-final-beauty-black-pearl-full: wheel anchor at 6.90 m, projected radius 139 px. Shows vehicle paint 32% at 6.4 to 9.4 m, world south slab 32% at 5.5 to 7.6 m, vehicle glass-screen 8% at 7.3 to 7.4 m, vehicle glass 8% at 7.5 to 8.5 m, vehicle tire 8% at 6.8 to 6.9 m, vehicle front radiator fins 4% at 6.5 m, vehicle hub-bowl 4% at 7.0 m, world iron rim 4% at 5.5 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-wheel.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "judged": true,
+            "frame": 195,
+            "crop": "anchor-wheel"
+          }
+        },
+        "set-A-11.png": {
+          "what": "judged crop grid-r1c1 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 56% at 0.8 to 1.1 m, world south slab 44% at 3.8 to 4.3 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r1c1.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "judged": true,
+            "frame": 360,
+            "crop": "grid-r1c1"
+          }
+        },
+        "set-A-12.png": {
+          "what": "control k844f420f (paint-water) for judged frame f00360-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/reference/cache/controls/scout-b/scout-b-08.jpg",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "control": "k844f420f",
+            "category": "paint-water",
+            "pairedWith": "judged frame f00360-16x9-final-beauty-black-pearl-full"
+          }
+        }
+      }
+    },
+    "C2": {
+      "folder": "c2",
+      "files": {
+        "set-A-01.png": {
+          "what": "f00195-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00195-16x9-final-beauty-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 195,
+            "diag": "beauty"
+          }
+        },
+        "set-B-01.png": {
+          "what": "crop anchor-paint of f00195-16x9-final-beauty-black-pearl-full: paint anchor at 10.26 m, projected radius 83 px. Shows vehicle paint 40% at 6.3 to 7.5 m, world animated magenta violet mural 24% at 458.7 to 468.3 m, vehicle glass-screen 12% at 7.4 to 7.6 m, world hero tower setback glass wing 8% at 500.1 to 501.7 m, world LED wall sealed stile 8% at 471.3 to 472.8 m, vehicle mirror-head-left 4% at 7.3 m, vehicle tire 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-paint.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 859,
+              "top": 182,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-B-02.png": {
+          "what": "crop anchor-wheel of f00195-16x9-final-beauty-black-pearl-full: wheel anchor at 6.90 m, projected radius 139 px. Shows vehicle paint 32% at 6.4 to 9.4 m, world south slab 32% at 5.5 to 7.6 m, vehicle glass-screen 8% at 7.3 to 7.4 m, vehicle glass 8% at 7.5 to 8.5 m, vehicle tire 8% at 6.8 to 6.9 m, vehicle front radiator fins 4% at 6.5 m, vehicle hub-bowl 4% at 7.0 m, world iron rim 4% at 5.5 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-wheel.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-wheel",
+            "rect": {
+              "left": 1002,
+              "top": 404,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-B-03.png": {
+          "what": "crop anchor-lamp of f00195-16x9-final-beauty-black-pearl-full: lamp anchor at 6.30 m, projected radius 85 px. Shows vehicle paint 32% at 6.3 to 8.3 m, vehicle glass-screen 24% at 7.0 to 8.1 m, world south slab 20% at 6.4 to 6.5 m, vehicle spoke-recess 8% at 7.1 m, world hero tower setback glass wing 4% at 499.8 m, vehicle front clear contoured eye lens 4% at 6.3 m, vehicle front outer duct returns 4% at 6.4 m, vehicle front radiator fins 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-lamp.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-lamp",
+            "rect": {
+              "left": 816,
+              "top": 343,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-B-04.png": {
+          "what": "crop anchor-detail of f00195-16x9-final-beauty-black-pearl-full: detail anchor at 9.27 m, projected radius 46 px; exhaust anchor at 10.65 m, projected radius 85 px. Shows world animated magenta violet mural 24% at 460.0 to 470.4 m, vehicle paint 20% at 6.4 to 8.2 m, vehicle glass-screen 8% at 7.4 to 7.5 m, world hero full span steel top rail 8% at 18.7 to 18.9 m, vehicle tire 8% at 9.3 to 9.4 m, world LED wall weather return 4% at 486.6 m, world warm office window panes 4% at 518.7 m, sky 4%, world sealed metal housings 4% at 517.2 m, vehicle glass 4% at 8.0 m, vehicle liner-front-left 4% at 6.9 m, vehicle arch-lip-front-left 4% at 7.2 m, vehicle rim-barrel 4% at 7.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-detail.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-detail",
+            "rect": {
+              "left": 1036,
+              "top": 167,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-B-05.png": {
+          "what": "crop anchor-glass of f00195-16x9-final-beauty-black-pearl-full: glass point at 7.57 m, projected radius 203 px. Shows vehicle paint 32% at 6.2 to 7.3 m, world animated magenta violet mural 16% at 462.7 to 469.7 m, vehicle glass-screen 12% at 7.3 to 7.6 m, world hero tower setback glass wing 8% at 500.4 to 502.3 m, world hero screen tower 8% at 478.0 to 479.8 m, world c9 center exchange stairs 4% at 653.3 m, world folded weatherproof cabinet 4% at 579.8 m, world hero concrete wall cap 4% at 18.4 m, vehicle front outer duct returns 4% at 6.6 m, vehicle front radiator fins 4% at 6.5 m, vehicle tire 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-glass.png",
+          "width": 609,
+          "height": 609,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-glass",
+            "rect": {
+              "left": 680,
+              "top": 156,
+              "width": 609,
+              "height": 609
+            }
+          }
+        },
+        "set-B-06.png": {
+          "what": "crop grid-r1c1 of f00195-16x9-final-beauty-black-pearl-full: Shows world hero left edge tower 28% at 546.9 to 557.2 m, world hero full span concrete parapet 20% at 18.5 to 19.3 m, sky 12%, world hero near west garage bay 8% at 528.5 to 529.8 m, world weather-sealed opal face 8% at 520.6 to 522.0 m, world hero middle west distance 8% at 679.3 to 681.0 m, world sealed metal housing 4% at 548.8 m, world folded coping band 4% at 531.8 m, world folded weatherproof cabinet 4% at 524.4 m, world penthouse coping 4% at 712.1 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/grid-r1c1.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "grid-r1c1",
+            "rect": {
+              "left": 0,
+              "top": 0,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-07.png": {
+          "what": "crop grid-r1c2 of f00195-16x9-final-beauty-black-pearl-full: Shows world animated magenta violet mural 32% at 462.8 to 474.5 m, sky 24%, world c9 center clock stack 12% at 663.9 to 668.5 m, vehicle glass-screen 12% at 7.1 to 7.5 m, world hero far west distance 8% at 805.1 to 808.5 m, world hero bar tower 4% at 580.7 m, vehicle paint 4% at 7.8 m, vehicle glass-seal-1 4% at 7.1 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/grid-r1c2.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "grid-r1c2",
+            "rect": {
+              "left": 640,
+              "top": 0,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-08.png": {
+          "what": "crop grid-r1c3 of f00195-16x9-final-beauty-black-pearl-full: Shows world rainwater jamb 20% at 518.0 to 521.8 m, world animated magenta violet mural 16% at 458.4 to 464.1 m, world hero amber tower 16% at 520.0 to 526.2 m, world hero near east garage bay 12% at 514.7 to 518.6 m, world hero full span concrete parapet 12% at 18.8 to 19.3 m, world recessed sign face 8% at 510.9 to 512.5 m, world folded coping band 4% at 792.4 m, world outer east relay shaft 4% at 772.3 m, vehicle mirror-head-left 4% at 7.3 m, vehicle paint 4% at 9.0 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/grid-r1c3.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "grid-r1c3",
+            "rect": {
+              "left": 1280,
+              "top": 0,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-09.png": {
+          "what": "crop grid-r2c1 of f00195-16x9-final-beauty-black-pearl-full: Shows world south slab 76% at 4.1 to 11.0 m, world hero full span concrete parapet 16% at 18.7 to 19.3 m, vehicle paint 4% at 6.9 m, vehicle front outer duct returns right 4% at 7.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/grid-r2c1.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "grid-r2c1",
+            "rect": {
+              "left": 0,
+              "top": 540,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-10.png": {
+          "what": "crop grid-r2c2 of f00195-16x9-final-beauty-black-pearl-full: Shows world south slab 60% at 4.1 to 6.9 m, vehicle paint 32% at 6.2 to 6.8 m, vehicle front outer duct returns 4% at 6.5 m, vehicle front radiator cores 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/grid-r2c2.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "grid-r2c2",
+            "rect": {
+              "left": 640,
+              "top": 540,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-11.png": {
+          "what": "crop grid-r2c3 of f00195-16x9-final-beauty-black-pearl-full: Shows world south slab 72% at 4.1 to 11.0 m, vehicle paint 12% at 7.5 to 8.8 m, world hero full span concrete parapet 12% at 18.8 to 19.3 m, vehicle diffuser-left 4% at 9.0 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/grid-r2c3.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "grid-r2c3",
+            "rect": {
+              "left": 1280,
+              "top": 540,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-A-02.png": {
+          "what": "f00360-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00360-16x9-final-beauty-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 360,
+            "diag": "beauty"
+          }
+        },
+        "set-B-12.png": {
+          "what": "crop anchor-paint of f00360-16x9-final-beauty-black-pearl-full: paint anchor at 0.75 m, projected radius 2276 px. Shows vehicle paint 92% at 0.6 to 1.1 m, world parking bay stripes 8% at 4.1 to 4.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/anchor-paint.png",
+          "width": 1400,
+          "height": 1080,
+          "meta": {
+            "frame": 360,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 258,
+              "top": 0,
+              "width": 1400,
+              "height": 1080
+            }
+          }
+        },
+        "set-B-13.png": {
+          "what": "crop grid-r1c1 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 56% at 0.8 to 1.1 m, world south slab 44% at 3.8 to 4.3 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r1c1.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 360,
+            "crop": "grid-r1c1",
+            "rect": {
+              "left": 0,
+              "top": 0,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-14.png": {
+          "what": "crop grid-r1c2 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 92% at 0.8 to 1.2 m, world south slab 8% at 4.3 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r1c2.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 360,
+            "crop": "grid-r1c2",
+            "rect": {
+              "left": 640,
+              "top": 0,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-15.png": {
+          "what": "crop grid-r1c3 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 100% at 0.8 to 1.1 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r1c3.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 360,
+            "crop": "grid-r1c3",
+            "rect": {
+              "left": 1280,
+              "top": 0,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-16.png": {
+          "what": "crop grid-r2c1 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 100% at 0.6 to 0.8 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r2c1.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 360,
+            "crop": "grid-r2c1",
+            "rect": {
+              "left": 0,
+              "top": 540,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-17.png": {
+          "what": "crop grid-r2c2 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 100% at 0.6 to 0.7 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r2c2.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 360,
+            "crop": "grid-r2c2",
+            "rect": {
+              "left": 640,
+              "top": 540,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-18.png": {
+          "what": "crop grid-r2c3 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 100% at 0.5 to 0.7 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r2c3.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 360,
+            "crop": "grid-r2c3",
+            "rect": {
+              "left": 1280,
+              "top": 540,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-C-01.png": {
+          "what": "key frame /home/user/workspace/cyberpunk-car-perplexity/reference/approved/hero.jpg",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/reference/approved/hero.jpg",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "beat": "wake"
+          }
+        },
+        "set-C-02.png": {
+          "what": "key frame /home/user/workspace/cyberpunk-car-perplexity/reference/keyframes/03-paint.jpg",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/reference/keyframes/03-paint.jpg",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "beat": "paint"
+          }
+        },
+        "set-D-01.txt": {
+          "what": "board observations: Wet asphalt and concrete at night under colored light; Puddles in rain; Rooftop car park decks; Rain lit from behind; Rain hitting hard surfaces; Neon and LED signage in rain and haze; A dense city at night in rain; Night automotive photography and film; Wet metal, wet rubber, wet painted steel; Water on glossy coated paint, macro",
+          "source": "reference/BOARD.md"
+        }
+      }
+    },
+    "C3": {
+      "folder": "c3",
+      "files": {
+        "set-A-01.png": {
+          "what": "f00195-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00195-16x9-final-beauty-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 195,
+            "diag": "beauty"
+          }
+        },
+        "set-B-01.png": {
+          "what": "crop anchor-paint of f00195-16x9-final-beauty-black-pearl-full: paint anchor at 10.26 m, projected radius 83 px. Shows vehicle paint 40% at 6.3 to 7.5 m, world animated magenta violet mural 24% at 458.7 to 468.3 m, vehicle glass-screen 12% at 7.4 to 7.6 m, world hero tower setback glass wing 8% at 500.1 to 501.7 m, world LED wall sealed stile 8% at 471.3 to 472.8 m, vehicle mirror-head-left 4% at 7.3 m, vehicle tire 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-paint.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 859,
+              "top": 182,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-B-02.png": {
+          "what": "crop anchor-wheel of f00195-16x9-final-beauty-black-pearl-full: wheel anchor at 6.90 m, projected radius 139 px. Shows vehicle paint 32% at 6.4 to 9.4 m, world south slab 32% at 5.5 to 7.6 m, vehicle glass-screen 8% at 7.3 to 7.4 m, vehicle glass 8% at 7.5 to 8.5 m, vehicle tire 8% at 6.8 to 6.9 m, vehicle front radiator fins 4% at 6.5 m, vehicle hub-bowl 4% at 7.0 m, world iron rim 4% at 5.5 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-wheel.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-wheel",
+            "rect": {
+              "left": 1002,
+              "top": 404,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-B-03.png": {
+          "what": "crop anchor-lamp of f00195-16x9-final-beauty-black-pearl-full: lamp anchor at 6.30 m, projected radius 85 px. Shows vehicle paint 32% at 6.3 to 8.3 m, vehicle glass-screen 24% at 7.0 to 8.1 m, world south slab 20% at 6.4 to 6.5 m, vehicle spoke-recess 8% at 7.1 m, world hero tower setback glass wing 4% at 499.8 m, vehicle front clear contoured eye lens 4% at 6.3 m, vehicle front outer duct returns 4% at 6.4 m, vehicle front radiator fins 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-lamp.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-lamp",
+            "rect": {
+              "left": 816,
+              "top": 343,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-B-04.png": {
+          "what": "crop anchor-detail of f00195-16x9-final-beauty-black-pearl-full: detail anchor at 9.27 m, projected radius 46 px; exhaust anchor at 10.65 m, projected radius 85 px. Shows world animated magenta violet mural 24% at 460.0 to 470.4 m, vehicle paint 20% at 6.4 to 8.2 m, vehicle glass-screen 8% at 7.4 to 7.5 m, world hero full span steel top rail 8% at 18.7 to 18.9 m, vehicle tire 8% at 9.3 to 9.4 m, world LED wall weather return 4% at 486.6 m, world warm office window panes 4% at 518.7 m, sky 4%, world sealed metal housings 4% at 517.2 m, vehicle glass 4% at 8.0 m, vehicle liner-front-left 4% at 6.9 m, vehicle arch-lip-front-left 4% at 7.2 m, vehicle rim-barrel 4% at 7.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-detail.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-detail",
+            "rect": {
+              "left": 1036,
+              "top": 167,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-B-05.png": {
+          "what": "crop anchor-glass of f00195-16x9-final-beauty-black-pearl-full: glass point at 7.57 m, projected radius 203 px. Shows vehicle paint 32% at 6.2 to 7.3 m, world animated magenta violet mural 16% at 462.7 to 469.7 m, vehicle glass-screen 12% at 7.3 to 7.6 m, world hero tower setback glass wing 8% at 500.4 to 502.3 m, world hero screen tower 8% at 478.0 to 479.8 m, world c9 center exchange stairs 4% at 653.3 m, world folded weatherproof cabinet 4% at 579.8 m, world hero concrete wall cap 4% at 18.4 m, vehicle front outer duct returns 4% at 6.6 m, vehicle front radiator fins 4% at 6.5 m, vehicle tire 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-glass.png",
+          "width": 609,
+          "height": 609,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-glass",
+            "rect": {
+              "left": 680,
+              "top": 156,
+              "width": 609,
+              "height": 609
+            }
+          }
+        },
+        "set-B-06.png": {
+          "what": "crop grid-r1c1 of f00195-16x9-final-beauty-black-pearl-full: Shows world hero left edge tower 28% at 546.9 to 557.2 m, world hero full span concrete parapet 20% at 18.5 to 19.3 m, sky 12%, world hero near west garage bay 8% at 528.5 to 529.8 m, world weather-sealed opal face 8% at 520.6 to 522.0 m, world hero middle west distance 8% at 679.3 to 681.0 m, world sealed metal housing 4% at 548.8 m, world folded coping band 4% at 531.8 m, world folded weatherproof cabinet 4% at 524.4 m, world penthouse coping 4% at 712.1 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/grid-r1c1.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "grid-r1c1",
+            "rect": {
+              "left": 0,
+              "top": 0,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-07.png": {
+          "what": "crop grid-r1c2 of f00195-16x9-final-beauty-black-pearl-full: Shows world animated magenta violet mural 32% at 462.8 to 474.5 m, sky 24%, world c9 center clock stack 12% at 663.9 to 668.5 m, vehicle glass-screen 12% at 7.1 to 7.5 m, world hero far west distance 8% at 805.1 to 808.5 m, world hero bar tower 4% at 580.7 m, vehicle paint 4% at 7.8 m, vehicle glass-seal-1 4% at 7.1 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/grid-r1c2.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "grid-r1c2",
+            "rect": {
+              "left": 640,
+              "top": 0,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-08.png": {
+          "what": "crop grid-r1c3 of f00195-16x9-final-beauty-black-pearl-full: Shows world rainwater jamb 20% at 518.0 to 521.8 m, world animated magenta violet mural 16% at 458.4 to 464.1 m, world hero amber tower 16% at 520.0 to 526.2 m, world hero near east garage bay 12% at 514.7 to 518.6 m, world hero full span concrete parapet 12% at 18.8 to 19.3 m, world recessed sign face 8% at 510.9 to 512.5 m, world folded coping band 4% at 792.4 m, world outer east relay shaft 4% at 772.3 m, vehicle mirror-head-left 4% at 7.3 m, vehicle paint 4% at 9.0 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/grid-r1c3.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "grid-r1c3",
+            "rect": {
+              "left": 1280,
+              "top": 0,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-09.png": {
+          "what": "crop grid-r2c1 of f00195-16x9-final-beauty-black-pearl-full: Shows world south slab 76% at 4.1 to 11.0 m, world hero full span concrete parapet 16% at 18.7 to 19.3 m, vehicle paint 4% at 6.9 m, vehicle front outer duct returns right 4% at 7.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/grid-r2c1.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "grid-r2c1",
+            "rect": {
+              "left": 0,
+              "top": 540,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-10.png": {
+          "what": "crop grid-r2c2 of f00195-16x9-final-beauty-black-pearl-full: Shows world south slab 60% at 4.1 to 6.9 m, vehicle paint 32% at 6.2 to 6.8 m, vehicle front outer duct returns 4% at 6.5 m, vehicle front radiator cores 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/grid-r2c2.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "grid-r2c2",
+            "rect": {
+              "left": 640,
+              "top": 540,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-11.png": {
+          "what": "crop grid-r2c3 of f00195-16x9-final-beauty-black-pearl-full: Shows world south slab 72% at 4.1 to 11.0 m, vehicle paint 12% at 7.5 to 8.8 m, world hero full span concrete parapet 12% at 18.8 to 19.3 m, vehicle diffuser-left 4% at 9.0 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/grid-r2c3.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "grid-r2c3",
+            "rect": {
+              "left": 1280,
+              "top": 540,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-A-02.png": {
+          "what": "f00360-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00360-16x9-final-beauty-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 360,
+            "diag": "beauty"
+          }
+        },
+        "set-B-12.png": {
+          "what": "crop anchor-paint of f00360-16x9-final-beauty-black-pearl-full: paint anchor at 0.75 m, projected radius 2276 px. Shows vehicle paint 92% at 0.6 to 1.1 m, world parking bay stripes 8% at 4.1 to 4.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/anchor-paint.png",
+          "width": 1400,
+          "height": 1080,
+          "meta": {
+            "frame": 360,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 258,
+              "top": 0,
+              "width": 1400,
+              "height": 1080
+            }
+          }
+        },
+        "set-B-13.png": {
+          "what": "crop grid-r1c1 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 56% at 0.8 to 1.1 m, world south slab 44% at 3.8 to 4.3 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r1c1.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 360,
+            "crop": "grid-r1c1",
+            "rect": {
+              "left": 0,
+              "top": 0,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-14.png": {
+          "what": "crop grid-r1c2 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 92% at 0.8 to 1.2 m, world south slab 8% at 4.3 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r1c2.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 360,
+            "crop": "grid-r1c2",
+            "rect": {
+              "left": 640,
+              "top": 0,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-15.png": {
+          "what": "crop grid-r1c3 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 100% at 0.8 to 1.1 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r1c3.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 360,
+            "crop": "grid-r1c3",
+            "rect": {
+              "left": 1280,
+              "top": 0,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-16.png": {
+          "what": "crop grid-r2c1 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 100% at 0.6 to 0.8 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r2c1.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 360,
+            "crop": "grid-r2c1",
+            "rect": {
+              "left": 0,
+              "top": 540,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-17.png": {
+          "what": "crop grid-r2c2 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 100% at 0.6 to 0.7 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r2c2.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 360,
+            "crop": "grid-r2c2",
+            "rect": {
+              "left": 640,
+              "top": 540,
+              "width": 640,
+              "height": 540
+            }
+          }
+        },
+        "set-B-18.png": {
+          "what": "crop grid-r2c3 of f00360-16x9-final-beauty-black-pearl-full: Shows vehicle paint 100% at 0.5 to 0.7 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/grid-r2c3.png",
+          "width": 640,
+          "height": 540,
+          "meta": {
+            "frame": 360,
+            "crop": "grid-r2c3",
+            "rect": {
+              "left": 1280,
+              "top": 540,
+              "width": 640,
+              "height": 540
+            }
+          }
+        }
+      }
+    },
+    "C4": {
+      "folder": "c4",
+      "files": {
+        "set-A-01.png": {
+          "what": "f00195-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00195-16x9-final-beauty-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 195,
+            "diag": "beauty"
+          }
+        },
+        "set-B-01.png": {
+          "what": "crop anchor-paint of f00195-16x9-final-beauty-black-pearl-full: paint anchor at 10.26 m, projected radius 83 px. Shows vehicle paint 40% at 6.3 to 7.5 m, world animated magenta violet mural 24% at 458.7 to 468.3 m, vehicle glass-screen 12% at 7.4 to 7.6 m, world hero tower setback glass wing 8% at 500.1 to 501.7 m, world LED wall sealed stile 8% at 471.3 to 472.8 m, vehicle mirror-head-left 4% at 7.3 m, vehicle tire 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-paint.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 859,
+              "top": 182,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-B-02.png": {
+          "what": "crop anchor-wheel of f00195-16x9-final-beauty-black-pearl-full: wheel anchor at 6.90 m, projected radius 139 px. Shows vehicle paint 32% at 6.4 to 9.4 m, world south slab 32% at 5.5 to 7.6 m, vehicle glass-screen 8% at 7.3 to 7.4 m, vehicle glass 8% at 7.5 to 8.5 m, vehicle tire 8% at 6.8 to 6.9 m, vehicle front radiator fins 4% at 6.5 m, vehicle hub-bowl 4% at 7.0 m, world iron rim 4% at 5.5 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-wheel.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-wheel",
+            "rect": {
+              "left": 1002,
+              "top": 404,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-B-03.png": {
+          "what": "crop anchor-lamp of f00195-16x9-final-beauty-black-pearl-full: lamp anchor at 6.30 m, projected radius 85 px. Shows vehicle paint 32% at 6.3 to 8.3 m, vehicle glass-screen 24% at 7.0 to 8.1 m, world south slab 20% at 6.4 to 6.5 m, vehicle spoke-recess 8% at 7.1 m, world hero tower setback glass wing 4% at 499.8 m, vehicle front clear contoured eye lens 4% at 6.3 m, vehicle front outer duct returns 4% at 6.4 m, vehicle front radiator fins 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-lamp.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-lamp",
+            "rect": {
+              "left": 816,
+              "top": 343,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-B-04.png": {
+          "what": "crop anchor-detail of f00195-16x9-final-beauty-black-pearl-full: detail anchor at 9.27 m, projected radius 46 px; exhaust anchor at 10.65 m, projected radius 85 px. Shows world animated magenta violet mural 24% at 460.0 to 470.4 m, vehicle paint 20% at 6.4 to 8.2 m, vehicle glass-screen 8% at 7.4 to 7.5 m, world hero full span steel top rail 8% at 18.7 to 18.9 m, vehicle tire 8% at 9.3 to 9.4 m, world LED wall weather return 4% at 486.6 m, world warm office window panes 4% at 518.7 m, sky 4%, world sealed metal housings 4% at 517.2 m, vehicle glass 4% at 8.0 m, vehicle liner-front-left 4% at 6.9 m, vehicle arch-lip-front-left 4% at 7.2 m, vehicle rim-barrel 4% at 7.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-detail.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-detail",
+            "rect": {
+              "left": 1036,
+              "top": 167,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-B-05.png": {
+          "what": "crop anchor-glass of f00195-16x9-final-beauty-black-pearl-full: glass point at 7.57 m, projected radius 203 px. Shows vehicle paint 32% at 6.2 to 7.3 m, world animated magenta violet mural 16% at 462.7 to 469.7 m, vehicle glass-screen 12% at 7.3 to 7.6 m, world hero tower setback glass wing 8% at 500.4 to 502.3 m, world hero screen tower 8% at 478.0 to 479.8 m, world c9 center exchange stairs 4% at 653.3 m, world folded weatherproof cabinet 4% at 579.8 m, world hero concrete wall cap 4% at 18.4 m, vehicle front outer duct returns 4% at 6.6 m, vehicle front radiator fins 4% at 6.5 m, vehicle tire 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-beauty-black-pearl-full/anchor-glass.png",
+          "width": 609,
+          "height": 609,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-glass",
+            "rect": {
+              "left": 680,
+              "top": 156,
+              "width": 609,
+              "height": 609
+            }
+          }
+        },
+        "set-A-02.png": {
+          "what": "f00360-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00360-16x9-final-beauty-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 360,
+            "diag": "beauty"
+          }
+        },
+        "set-B-06.png": {
+          "what": "crop anchor-paint of f00360-16x9-final-beauty-black-pearl-full: paint anchor at 0.75 m, projected radius 2276 px. Shows vehicle paint 92% at 0.6 to 1.1 m, world parking bay stripes 8% at 4.1 to 4.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-beauty-black-pearl-full/anchor-paint.png",
+          "width": 1400,
+          "height": 1080,
+          "meta": {
+            "frame": 360,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 258,
+              "top": 0,
+              "width": 1400,
+              "height": 1080
+            }
+          }
+        },
+        "set-C-01.png": {
+          "what": "f00195-16x9-final-clay-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00195-16x9-final-clay-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 195,
+            "diag": "clay"
+          }
+        },
+        "set-D-01.png": {
+          "what": "crop anchor-paint of f00195-16x9-final-clay-black-pearl-full: paint anchor at 10.26 m, projected radius 83 px. Shows vehicle paint 40% at 6.3 to 7.5 m, world animated magenta violet mural 24% at 458.7 to 468.3 m, vehicle glass-screen 12% at 7.4 to 7.6 m, world hero tower setback glass wing 8% at 500.1 to 501.7 m, world LED wall sealed stile 8% at 471.3 to 472.8 m, vehicle mirror-head-left 4% at 7.3 m, vehicle tire 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-clay-black-pearl-full/anchor-paint.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 859,
+              "top": 182,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-D-02.png": {
+          "what": "crop anchor-wheel of f00195-16x9-final-clay-black-pearl-full: wheel anchor at 6.90 m, projected radius 139 px. Shows vehicle paint 32% at 6.4 to 9.4 m, world south slab 32% at 5.5 to 7.6 m, vehicle glass-screen 8% at 7.3 to 7.4 m, vehicle glass 8% at 7.5 to 8.5 m, vehicle tire 8% at 6.8 to 6.9 m, vehicle front radiator fins 4% at 6.5 m, vehicle hub-bowl 4% at 7.0 m, world iron rim 4% at 5.5 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-clay-black-pearl-full/anchor-wheel.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-wheel",
+            "rect": {
+              "left": 1002,
+              "top": 404,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-D-03.png": {
+          "what": "crop anchor-lamp of f00195-16x9-final-clay-black-pearl-full: lamp anchor at 6.30 m, projected radius 85 px. Shows vehicle paint 32% at 6.3 to 8.3 m, vehicle glass-screen 24% at 7.0 to 8.1 m, world south slab 20% at 6.4 to 6.5 m, vehicle spoke-recess 8% at 7.1 m, world hero tower setback glass wing 4% at 499.8 m, vehicle front clear contoured eye lens 4% at 6.3 m, vehicle front outer duct returns 4% at 6.4 m, vehicle front radiator fins 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-clay-black-pearl-full/anchor-lamp.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-lamp",
+            "rect": {
+              "left": 816,
+              "top": 343,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-D-04.png": {
+          "what": "crop anchor-detail of f00195-16x9-final-clay-black-pearl-full: detail anchor at 9.27 m, projected radius 46 px; exhaust anchor at 10.65 m, projected radius 85 px. Shows world animated magenta violet mural 24% at 460.0 to 470.4 m, vehicle paint 20% at 6.4 to 8.2 m, vehicle glass-screen 8% at 7.4 to 7.5 m, world hero full span steel top rail 8% at 18.7 to 18.9 m, vehicle tire 8% at 9.3 to 9.4 m, world LED wall weather return 4% at 486.6 m, world warm office window panes 4% at 518.7 m, sky 4%, world sealed metal housings 4% at 517.2 m, vehicle glass 4% at 8.0 m, vehicle liner-front-left 4% at 6.9 m, vehicle arch-lip-front-left 4% at 7.2 m, vehicle rim-barrel 4% at 7.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-clay-black-pearl-full/anchor-detail.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-detail",
+            "rect": {
+              "left": 1036,
+              "top": 167,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-D-05.png": {
+          "what": "crop anchor-glass of f00195-16x9-final-clay-black-pearl-full: glass point at 7.57 m, projected radius 203 px. Shows vehicle paint 32% at 6.2 to 7.3 m, world animated magenta violet mural 16% at 462.7 to 469.7 m, vehicle glass-screen 12% at 7.3 to 7.6 m, world hero tower setback glass wing 8% at 500.4 to 502.3 m, world hero screen tower 8% at 478.0 to 479.8 m, world c9 center exchange stairs 4% at 653.3 m, world folded weatherproof cabinet 4% at 579.8 m, world hero concrete wall cap 4% at 18.4 m, vehicle front outer duct returns 4% at 6.6 m, vehicle front radiator fins 4% at 6.5 m, vehicle tire 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-clay-black-pearl-full/anchor-glass.png",
+          "width": 609,
+          "height": 609,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-glass",
+            "rect": {
+              "left": 680,
+              "top": 156,
+              "width": 609,
+              "height": 609
+            }
+          }
+        },
+        "set-C-02.png": {
+          "what": "f00360-16x9-final-clay-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00360-16x9-final-clay-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 360,
+            "diag": "clay"
+          }
+        },
+        "set-D-06.png": {
+          "what": "crop anchor-paint of f00360-16x9-final-clay-black-pearl-full: paint anchor at 0.75 m, projected radius 2276 px. Shows vehicle paint 92% at 0.6 to 1.1 m, world parking bay stripes 8% at 4.1 to 4.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-clay-black-pearl-full/anchor-paint.png",
+          "width": 1400,
+          "height": 1080,
+          "meta": {
+            "frame": 360,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 258,
+              "top": 0,
+              "width": 1400,
+              "height": 1080
+            }
+          }
+        },
+        "set-E-01.png": {
+          "what": "f00195-16x9-final-zebra-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00195-16x9-final-zebra-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 195,
+            "diag": "zebra"
+          }
+        },
+        "set-F-01.png": {
+          "what": "crop anchor-paint of f00195-16x9-final-zebra-black-pearl-full: paint anchor at 10.26 m, projected radius 83 px. Shows vehicle paint 40% at 6.3 to 7.5 m, world animated magenta violet mural 24% at 458.7 to 468.3 m, vehicle glass-screen 12% at 7.4 to 7.6 m, world hero tower setback glass wing 8% at 500.1 to 501.7 m, world LED wall sealed stile 8% at 471.3 to 472.8 m, vehicle mirror-head-left 4% at 7.3 m, vehicle tire 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-zebra-black-pearl-full/anchor-paint.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 859,
+              "top": 182,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-F-02.png": {
+          "what": "crop anchor-wheel of f00195-16x9-final-zebra-black-pearl-full: wheel anchor at 6.90 m, projected radius 139 px. Shows vehicle paint 32% at 6.4 to 9.4 m, world south slab 32% at 5.5 to 7.6 m, vehicle glass-screen 8% at 7.3 to 7.4 m, vehicle glass 8% at 7.5 to 8.5 m, vehicle tire 8% at 6.8 to 6.9 m, vehicle front radiator fins 4% at 6.5 m, vehicle hub-bowl 4% at 7.0 m, world iron rim 4% at 5.5 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-zebra-black-pearl-full/anchor-wheel.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-wheel",
+            "rect": {
+              "left": 1002,
+              "top": 404,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-F-03.png": {
+          "what": "crop anchor-lamp of f00195-16x9-final-zebra-black-pearl-full: lamp anchor at 6.30 m, projected radius 85 px. Shows vehicle paint 32% at 6.3 to 8.3 m, vehicle glass-screen 24% at 7.0 to 8.1 m, world south slab 20% at 6.4 to 6.5 m, vehicle spoke-recess 8% at 7.1 m, world hero tower setback glass wing 4% at 499.8 m, vehicle front clear contoured eye lens 4% at 6.3 m, vehicle front outer duct returns 4% at 6.4 m, vehicle front radiator fins 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-zebra-black-pearl-full/anchor-lamp.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-lamp",
+            "rect": {
+              "left": 816,
+              "top": 343,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-F-04.png": {
+          "what": "crop anchor-detail of f00195-16x9-final-zebra-black-pearl-full: detail anchor at 9.27 m, projected radius 46 px; exhaust anchor at 10.65 m, projected radius 85 px. Shows world animated magenta violet mural 24% at 460.0 to 470.4 m, vehicle paint 20% at 6.4 to 8.2 m, vehicle glass-screen 8% at 7.4 to 7.5 m, world hero full span steel top rail 8% at 18.7 to 18.9 m, vehicle tire 8% at 9.3 to 9.4 m, world LED wall weather return 4% at 486.6 m, world warm office window panes 4% at 518.7 m, sky 4%, world sealed metal housings 4% at 517.2 m, vehicle glass 4% at 8.0 m, vehicle liner-front-left 4% at 6.9 m, vehicle arch-lip-front-left 4% at 7.2 m, vehicle rim-barrel 4% at 7.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-zebra-black-pearl-full/anchor-detail.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-detail",
+            "rect": {
+              "left": 1036,
+              "top": 167,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-F-05.png": {
+          "what": "crop anchor-glass of f00195-16x9-final-zebra-black-pearl-full: glass point at 7.57 m, projected radius 203 px. Shows vehicle paint 32% at 6.2 to 7.3 m, world animated magenta violet mural 16% at 462.7 to 469.7 m, vehicle glass-screen 12% at 7.3 to 7.6 m, world hero tower setback glass wing 8% at 500.4 to 502.3 m, world hero screen tower 8% at 478.0 to 479.8 m, world c9 center exchange stairs 4% at 653.3 m, world folded weatherproof cabinet 4% at 579.8 m, world hero concrete wall cap 4% at 18.4 m, vehicle front outer duct returns 4% at 6.6 m, vehicle front radiator fins 4% at 6.5 m, vehicle tire 4% at 6.6 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00195-16x9-final-zebra-black-pearl-full/anchor-glass.png",
+          "width": 609,
+          "height": 609,
+          "meta": {
+            "frame": 195,
+            "crop": "anchor-glass",
+            "rect": {
+              "left": 680,
+              "top": 156,
+              "width": 609,
+              "height": 609
+            }
+          }
+        },
+        "set-E-02.png": {
+          "what": "f00360-16x9-final-zebra-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00360-16x9-final-zebra-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 360,
+            "diag": "zebra"
+          }
+        },
+        "set-F-06.png": {
+          "what": "crop anchor-paint of f00360-16x9-final-zebra-black-pearl-full: paint anchor at 0.75 m, projected radius 2276 px. Shows vehicle paint 92% at 0.6 to 1.1 m, world parking bay stripes 8% at 4.1 to 4.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00360-16x9-final-zebra-black-pearl-full/anchor-paint.png",
+          "width": 1400,
+          "height": 1080,
+          "meta": {
+            "frame": 360,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 258,
+              "top": 0,
+              "width": 1400,
+              "height": 1080
+            }
+          }
+        },
+        "set-C-03.png": {
+          "what": "f01060-16x9-final-clay-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f01060-16x9-final-clay-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 1060,
+            "diag": "clay"
+          }
+        },
+        "set-D-07.png": {
+          "what": "crop anchor-paint of f01060-16x9-final-clay-black-pearl-full: paint anchor at 4.51 m, projected radius 132 px; exhaust anchor at 3.60 m, projected radius 176 px. Shows vehicle paint 24% at 3.4 to 4.2 m, world solid mullions, slotted balconies, room contents and escape rails 12% at 68.0 to 69.1 m, world building mass 8% at 61.4 to 63.4 m, vehicle diffuser-fin-right 8% at 3.8 to 3.9 m, world animated magenta violet media tiles 4% at 126.9 m, world north tower shells hotel 250 4% at 199.3 m, world seamed metal upper cladding 4% at 75.9 m, world animated magenta violet tiles 4% at 73.5 m, world weathered cladding panels and spandrels 4% at 70.1 m, world market media podium 4% at 75.1 m, world screen maintenance lower seat 4% at 72.2 m, vehicle outlet-lip-left 4% at 3.5 m, vehicle outlet-pipe-left 4% at 3.6 m, vehicle outlet-lip-right 4% at 3.8 m, vehicle diffuser-wall-left 4% at 3.9 m, vehicle diffuser-mesh-right 4% at 3.9 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f01060-16x9-final-clay-black-pearl-full/anchor-paint.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 1060,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 1059,
+              "top": 218,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-D-08.png": {
+          "what": "crop anchor-wheel of f01060-16x9-final-clay-black-pearl-full: wheel anchor at 6.59 m, projected radius 102 px; lamp anchor at 7.39 m, projected radius 51 px. Shows world south slab 36% at 2.6 to 6.1 m, vehicle tire 16% at 3.8 to 6.5 m, vehicle paint 12% at 3.7 to 4.7 m, world weathered cladding panels and spandrels 8% at 53.6 to 55.4 m, world solid concrete 8% at 24.2 to 24.3 m, world ceiling reflected through tenant glass 4% at 53.1 m, world diffusing cabinet face 4% at 142.2 m, world selected recessed glazing 4% at 70.0 m, world north tower shells curtain 150 4% at 141.2 m, vehicle arch-lip-front-left 4% at 7.0 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f01060-16x9-final-clay-black-pearl-full/anchor-wheel.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 1060,
+            "crop": "anchor-wheel",
+            "rect": {
+              "left": 209,
+              "top": 476,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-D-09.png": {
+          "what": "crop anchor-detail of f01060-16x9-final-clay-black-pearl-full: detail anchor at 4.78 m, projected radius 62 px. Shows vehicle paint 24% at 3.4 to 3.7 m, world building mass 20% at 58.2 to 136.7 m, vehicle tire 12% at 3.8 to 3.9 m, world solid mullions, slotted balconies, room contents and escape rails 8% at 57.3 to 58.3 m, vehicle diffuser-wall-left 8% at 3.8 to 3.9 m, world lightwell backing fixed into core 4% at 133.9 m, world zoned middle-distance fire stairs, gutters and condenser racks 4% at 122.3 m, world animated magenta violet media tiles 4% at 126.4 m, world weathered cladding panels and spandrels 4% at 56.0 m, vehicle tail-optic-left 4% at 3.5 m, vehicle tail-housing-left 4% at 3.4 m, vehicle diffuser-mesh-left 4% at 3.8 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f01060-16x9-final-clay-black-pearl-full/anchor-detail.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 1060,
+            "crop": "anchor-detail",
+            "rect": {
+              "left": 609,
+              "top": 212,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-D-10.png": {
+          "what": "crop anchor-glass of f01060-16x9-final-clay-black-pearl-full: glass point at 6.74 m, projected radius 159 px. Shows vehicle paint 24% at 3.5 to 5.8 m, vehicle tire 16% at 3.8 to 3.9 m, world building mass 8% at 58.2 to 59.5 m, vehicle tail-optic-left 8% at 3.4 to 3.5 m, vehicle diffuser-wall-left 8% at 3.5 to 3.8 m, vehicle diffuser-fin-left 8% at 3.6 to 3.7 m, world diffusing cabinet face 4% at 144.7 m, world solid mullions, slotted balconies, room contents and escape rails 4% at 58.1 m, world weathered cladding panels and spandrels 4% at 56.0 m, world north tower shells curtain 150 4% at 144.0 m, vehicle arch-lip-rear-left 4% at 3.4 m, vehicle sidewall-relief 4% at 3.8 m, vehicle cabin-trim 4% at 5.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f01060-16x9-final-clay-black-pearl-full/anchor-glass.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 1060,
+            "crop": "anchor-glass",
+            "rect": {
+              "left": 499,
+              "top": 326,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-C-04.png": {
+          "what": "f00000-16x9-final-clay-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00000-16x9-final-clay-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 0,
+            "diag": "clay"
+          }
+        },
+        "set-D-11.png": {
+          "what": "crop anchor-paint of f00000-16x9-final-clay-black-pearl-full: paint anchor at 13.06 m, projected radius 65 px. Shows vehicle paint 32% at 9.1 to 11.7 m, world animated magenta violet mural 24% at 462.3 to 472.5 m, vehicle glass-screen 12% at 10.2 to 10.6 m, world extruded curtain wall fins 8% at 502.5 to 504.0 m, world hero screen tower 8% at 480.5 to 481.9 m, vehicle glass 4% at 10.5 m, vehicle spoke-web 4% at 9.8 m, vehicle rim-barrel 4% at 9.9 m, world south slab 4% at 12.0 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00000-16x9-final-clay-black-pearl-full/anchor-paint.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 0,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 824,
+              "top": 198,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-D-12.png": {
+          "what": "crop anchor-wheel of f00000-16x9-final-clay-black-pearl-full: wheel anchor at 9.70 m, projected radius 99 px. Shows world south slab 40% at 6.4 to 9.3 m, world hero screen tower 12% at 480.5 to 483.7 m, vehicle paint 12% at 9.2 to 10.9 m, vehicle glass-screen 8% at 9.7 to 9.8 m, sky 4%, world rainwater jamb 4% at 485.6 m, vehicle liner-front-left 4% at 9.8 m, vehicle tire 4% at 12.2 m, vehicle front outer duct returns 4% at 9.3 m, vehicle hub-bowl 4% at 9.7 m, vehicle disc 4% at 12.3 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00000-16x9-final-clay-black-pearl-full/anchor-wheel.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 0,
+            "crop": "anchor-wheel",
+            "rect": {
+              "left": 913,
+              "top": 363,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-D-13.png": {
+          "what": "crop anchor-lamp of f00000-16x9-final-clay-black-pearl-full: lamp anchor at 9.10 m, projected radius 59 px. Shows world south slab 24% at 7.3 to 11.3 m, vehicle paint 20% at 9.1 to 10.6 m, world animated magenta violet mural 12% at 463.8 to 473.3 m, vehicle glass-screen 12% at 10.1 to 10.6 m, vehicle tire 8% at 9.5 m, vehicle front rolled splitter 8% at 9.1 to 9.2 m, world c9 center clock stack 4% at 666.8 m, world hero violet tower 4% at 655.7 m, vehicle glass 4% at 11.1 m, vehicle front clear contoured eye lens 4% at 9.1 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00000-16x9-final-clay-black-pearl-full/anchor-lamp.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 0,
+            "crop": "anchor-lamp",
+            "rect": {
+              "left": 779,
+              "top": 318,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-D-14.png": {
+          "what": "crop anchor-detail of f00000-16x9-final-clay-black-pearl-full: detail anchor at 12.07 m, projected radius 35 px; exhaust anchor at 13.45 m, projected radius 67 px. Shows world animated magenta violet mural 24% at 461.6 to 471.5 m, vehicle paint 20% at 9.2 to 10.2 m, world hero amber tower 12% at 543.2 to 546.3 m, world hero screen tower 8% at 482.1 to 484.6 m, vehicle glass-screen 8% at 10.3 to 10.4 m, world screen tower secondary red service markers 4% at 480.1 m, vehicle glass 4% at 10.9 m, vehicle intake-throat-left 4% at 11.6 m, world hero full span concrete parapet 4% at 21.5 m, vehicle front outer duct returns 4% at 9.3 m, vehicle tire 4% at 12.3 m, world south slab 4% at 12.7 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00000-16x9-final-clay-black-pearl-full/anchor-detail.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 0,
+            "crop": "anchor-detail",
+            "rect": {
+              "left": 957,
+              "top": 189,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-D-15.png": {
+          "what": "crop anchor-glass of f00000-16x9-final-clay-black-pearl-full: glass point at 10.37 m, projected radius 148 px. Shows vehicle paint 24% at 9.1 to 9.5 m, world animated magenta violet mural 16% at 466.5 to 472.6 m, vehicle glass-screen 12% at 10.1 to 10.5 m, world hero tower setback glass wing 8% at 502.8 to 504.1 m, world rainwater jamb 8% at 479.6 to 480.9 m, vehicle front rolled splitter 8% at 9.2 m, world c9 center exchange stairs 4% at 654.5 m, world hero bar tower 4% at 617.9 m, vehicle mirror-head-right 4% at 10.8 m, vehicle glass 4% at 10.3 m, vehicle spoke-web 4% at 9.8 m, vehicle spoke-recess 4% at 9.8 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00000-16x9-final-clay-black-pearl-full/anchor-glass.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 0,
+            "crop": "anchor-glass",
+            "rect": {
+              "left": 710,
+              "top": 209,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-E-03.png": {
+          "what": "f01060-16x9-final-zebra-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f01060-16x9-final-zebra-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 1060,
+            "diag": "zebra"
+          }
+        },
+        "set-F-07.png": {
+          "what": "crop anchor-paint of f01060-16x9-final-zebra-black-pearl-full: paint anchor at 4.51 m, projected radius 132 px; exhaust anchor at 3.60 m, projected radius 176 px. Shows vehicle paint 24% at 3.4 to 4.2 m, world solid mullions, slotted balconies, room contents and escape rails 12% at 68.0 to 69.1 m, world building mass 8% at 61.4 to 63.4 m, vehicle diffuser-fin-right 8% at 3.8 to 3.9 m, world animated magenta violet media tiles 4% at 126.9 m, world north tower shells hotel 250 4% at 199.3 m, world seamed metal upper cladding 4% at 75.9 m, world animated magenta violet tiles 4% at 73.5 m, world weathered cladding panels and spandrels 4% at 70.1 m, world market media podium 4% at 75.1 m, world screen maintenance lower seat 4% at 72.2 m, vehicle outlet-lip-left 4% at 3.5 m, vehicle outlet-pipe-left 4% at 3.6 m, vehicle outlet-lip-right 4% at 3.8 m, vehicle diffuser-wall-left 4% at 3.9 m, vehicle diffuser-mesh-right 4% at 3.9 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f01060-16x9-final-zebra-black-pearl-full/anchor-paint.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 1060,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 1059,
+              "top": 218,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-F-08.png": {
+          "what": "crop anchor-wheel of f01060-16x9-final-zebra-black-pearl-full: wheel anchor at 6.59 m, projected radius 102 px; lamp anchor at 7.39 m, projected radius 51 px. Shows world south slab 36% at 2.6 to 6.1 m, vehicle tire 16% at 3.8 to 6.5 m, vehicle paint 12% at 3.7 to 4.7 m, world weathered cladding panels and spandrels 8% at 53.6 to 55.4 m, world solid concrete 8% at 24.2 to 24.3 m, world ceiling reflected through tenant glass 4% at 53.1 m, world diffusing cabinet face 4% at 142.2 m, world selected recessed glazing 4% at 70.0 m, world north tower shells curtain 150 4% at 141.2 m, vehicle arch-lip-front-left 4% at 7.0 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f01060-16x9-final-zebra-black-pearl-full/anchor-wheel.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 1060,
+            "crop": "anchor-wheel",
+            "rect": {
+              "left": 209,
+              "top": 476,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-F-09.png": {
+          "what": "crop anchor-detail of f01060-16x9-final-zebra-black-pearl-full: detail anchor at 4.78 m, projected radius 62 px. Shows vehicle paint 24% at 3.4 to 3.7 m, world building mass 20% at 58.2 to 136.7 m, vehicle tire 12% at 3.8 to 3.9 m, world solid mullions, slotted balconies, room contents and escape rails 8% at 57.3 to 58.3 m, vehicle diffuser-wall-left 8% at 3.8 to 3.9 m, world lightwell backing fixed into core 4% at 133.9 m, world zoned middle-distance fire stairs, gutters and condenser racks 4% at 122.3 m, world animated magenta violet media tiles 4% at 126.4 m, world weathered cladding panels and spandrels 4% at 56.0 m, vehicle tail-optic-left 4% at 3.5 m, vehicle tail-housing-left 4% at 3.4 m, vehicle diffuser-mesh-left 4% at 3.8 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f01060-16x9-final-zebra-black-pearl-full/anchor-detail.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 1060,
+            "crop": "anchor-detail",
+            "rect": {
+              "left": 609,
+              "top": 212,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-F-10.png": {
+          "what": "crop anchor-glass of f01060-16x9-final-zebra-black-pearl-full: glass point at 6.74 m, projected radius 159 px. Shows vehicle paint 24% at 3.5 to 5.8 m, vehicle tire 16% at 3.8 to 3.9 m, world building mass 8% at 58.2 to 59.5 m, vehicle tail-optic-left 8% at 3.4 to 3.5 m, vehicle diffuser-wall-left 8% at 3.5 to 3.8 m, vehicle diffuser-fin-left 8% at 3.6 to 3.7 m, world diffusing cabinet face 4% at 144.7 m, world solid mullions, slotted balconies, room contents and escape rails 4% at 58.1 m, world weathered cladding panels and spandrels 4% at 56.0 m, world north tower shells curtain 150 4% at 144.0 m, vehicle arch-lip-rear-left 4% at 3.4 m, vehicle sidewall-relief 4% at 3.8 m, vehicle cabin-trim 4% at 5.2 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f01060-16x9-final-zebra-black-pearl-full/anchor-glass.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 1060,
+            "crop": "anchor-glass",
+            "rect": {
+              "left": 499,
+              "top": 326,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-E-04.png": {
+          "what": "f00000-16x9-final-zebra-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00000-16x9-final-zebra-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 0,
+            "diag": "zebra"
+          }
+        },
+        "set-F-11.png": {
+          "what": "crop anchor-paint of f00000-16x9-final-zebra-black-pearl-full: paint anchor at 13.06 m, projected radius 65 px. Shows vehicle paint 32% at 9.1 to 11.7 m, world animated magenta violet mural 24% at 462.3 to 472.5 m, vehicle glass-screen 12% at 10.2 to 10.6 m, world extruded curtain wall fins 8% at 502.5 to 504.0 m, world hero screen tower 8% at 480.5 to 481.9 m, vehicle glass 4% at 10.5 m, vehicle spoke-web 4% at 9.8 m, vehicle rim-barrel 4% at 9.9 m, world south slab 4% at 12.0 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00000-16x9-final-zebra-black-pearl-full/anchor-paint.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 0,
+            "crop": "anchor-paint",
+            "rect": {
+              "left": 824,
+              "top": 198,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-F-12.png": {
+          "what": "crop anchor-wheel of f00000-16x9-final-zebra-black-pearl-full: wheel anchor at 9.70 m, projected radius 99 px. Shows world south slab 40% at 6.4 to 9.3 m, world hero screen tower 12% at 480.5 to 483.7 m, vehicle paint 12% at 9.2 to 10.9 m, vehicle glass-screen 8% at 9.7 to 9.8 m, sky 4%, world rainwater jamb 4% at 485.6 m, vehicle liner-front-left 4% at 9.8 m, vehicle tire 4% at 12.2 m, vehicle front outer duct returns 4% at 9.3 m, vehicle hub-bowl 4% at 9.7 m, vehicle disc 4% at 12.3 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00000-16x9-final-zebra-black-pearl-full/anchor-wheel.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 0,
+            "crop": "anchor-wheel",
+            "rect": {
+              "left": 913,
+              "top": 363,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-F-13.png": {
+          "what": "crop anchor-lamp of f00000-16x9-final-zebra-black-pearl-full: lamp anchor at 9.10 m, projected radius 59 px. Shows world south slab 24% at 7.3 to 11.3 m, vehicle paint 20% at 9.1 to 10.6 m, world animated magenta violet mural 12% at 463.8 to 473.3 m, vehicle glass-screen 12% at 10.1 to 10.6 m, vehicle tire 8% at 9.5 m, vehicle front rolled splitter 8% at 9.1 to 9.2 m, world c9 center clock stack 4% at 666.8 m, world hero violet tower 4% at 655.7 m, vehicle glass 4% at 11.1 m, vehicle front clear contoured eye lens 4% at 9.1 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00000-16x9-final-zebra-black-pearl-full/anchor-lamp.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 0,
+            "crop": "anchor-lamp",
+            "rect": {
+              "left": 779,
+              "top": 318,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-F-14.png": {
+          "what": "crop anchor-detail of f00000-16x9-final-zebra-black-pearl-full: detail anchor at 12.07 m, projected radius 35 px; exhaust anchor at 13.45 m, projected radius 67 px. Shows world animated magenta violet mural 24% at 461.6 to 471.5 m, vehicle paint 20% at 9.2 to 10.2 m, world hero amber tower 12% at 543.2 to 546.3 m, world hero screen tower 8% at 482.1 to 484.6 m, vehicle glass-screen 8% at 10.3 to 10.4 m, world screen tower secondary red service markers 4% at 480.1 m, vehicle glass 4% at 10.9 m, vehicle intake-throat-left 4% at 11.6 m, world hero full span concrete parapet 4% at 21.5 m, vehicle front outer duct returns 4% at 9.3 m, vehicle tire 4% at 12.3 m, world south slab 4% at 12.7 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00000-16x9-final-zebra-black-pearl-full/anchor-detail.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 0,
+            "crop": "anchor-detail",
+            "rect": {
+              "left": 957,
+              "top": 189,
+              "width": 540,
+              "height": 540
+            }
+          }
+        },
+        "set-F-15.png": {
+          "what": "crop anchor-glass of f00000-16x9-final-zebra-black-pearl-full: glass point at 10.37 m, projected radius 148 px. Shows vehicle paint 24% at 9.1 to 9.5 m, world animated magenta violet mural 16% at 466.5 to 472.6 m, vehicle glass-screen 12% at 10.1 to 10.5 m, world hero tower setback glass wing 8% at 502.8 to 504.1 m, world rainwater jamb 8% at 479.6 to 480.9 m, vehicle front rolled splitter 8% at 9.2 m, world c9 center exchange stairs 4% at 654.5 m, world hero bar tower 4% at 617.9 m, vehicle mirror-head-right 4% at 10.8 m, vehicle glass 4% at 10.3 m, vehicle spoke-web 4% at 9.8 m, vehicle spoke-recess 4% at 9.8 m",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/crops/f00000-16x9-final-zebra-black-pearl-full/anchor-glass.png",
+          "width": 540,
+          "height": 540,
+          "meta": {
+            "frame": 0,
+            "crop": "anchor-glass",
+            "rect": {
+              "left": 710,
+              "top": 209,
+              "width": 540,
+              "height": 540
+            }
+          }
+        }
+      }
+    },
+    "C8": {
+      "folder": "c8",
+      "files": {
+        "set-A-01.png": {
+          "what": "f00195-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00195-16x9-final-beauty-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 195
+          }
+        },
+        "set-A-02.png": {
+          "what": "f00360-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00360-16x9-final-beauty-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "frame": 360
+          }
+        },
+        "set-B-01.png": {
+          "what": "f00195-9x16-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00195-9x16-final-beauty-black-pearl-full.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 195
+          }
+        },
+        "set-B-02.png": {
+          "what": "f00360-9x16-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00360-9x16-final-beauty-black-pearl-full.png",
+          "width": 787,
+          "height": 1400,
+          "meta": {
+            "frame": 360
+          }
+        }
+      }
+    },
+    "C9": {
+      "folder": "c9",
+      "files": {
+        "set-A-01.png": {
+          "what": "approved image reference/approved/hero.jpg",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/reference/approved/hero.jpg",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "role": "target"
+          }
+        },
+        "set-B-01.png": {
+          "what": "f00195-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/stills/f00195-16x9-final-beauty-black-pearl-full.png",
+          "width": 1400,
+          "height": 788,
+          "meta": {
+            "role": "current",
+            "frame": 195
+          }
+        },
+        "set-C-01.png": {
+          "what": "match crop deck of the approved image",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/match/round-008/deck-C.png",
+          "width": 1400,
+          "height": 347,
+          "meta": {
+            "area": "deck",
+            "role": "target",
+            "parts": [
+              {
+                "left": 0,
+                "top": 0.56,
+                "width": 1,
+                "height": 0.44
+              }
+            ]
+          }
+        },
+        "set-D-01.png": {
+          "what": "match crop deck of f00195-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/match/round-008/deck-D.png",
+          "width": 1400,
+          "height": 347,
+          "meta": {
+            "area": "deck",
+            "role": "current frame",
+            "parts": [
+              {
+                "left": 0,
+                "top": 0.56,
+                "width": 1,
+                "height": 0.44
+              }
+            ]
+          }
+        },
+        "set-C-02.png": {
+          "what": "match crop signs of the approved image",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/match/round-008/signs-C.png",
+          "width": 1204,
+          "height": 471,
+          "meta": {
+            "area": "signs",
+            "role": "target",
+            "parts": [
+              {
+                "left": 0,
+                "top": 0.04,
+                "width": 0.36,
+                "height": 0.5
+              },
+              {
+                "left": 0.64,
+                "top": 0.04,
+                "width": 0.36,
+                "height": 0.5
+              }
+            ]
+          }
+        },
+        "set-D-02.png": {
+          "what": "match crop signs of f00195-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/match/round-008/signs-D.png",
+          "width": 1204,
+          "height": 471,
+          "meta": {
+            "area": "signs",
+            "role": "current frame",
+            "parts": [
+              {
+                "left": 0,
+                "top": 0.04,
+                "width": 0.36,
+                "height": 0.5
+              },
+              {
+                "left": 0.64,
+                "top": 0.04,
+                "width": 0.36,
+                "height": 0.5
+              }
+            ]
+          }
+        },
+        "set-C-03.png": {
+          "what": "match crop sky of the approved image",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/match/round-008/sky-C.png",
+          "width": 1070,
+          "height": 414,
+          "meta": {
+            "area": "sky",
+            "role": "target",
+            "parts": [
+              {
+                "left": 0.22,
+                "top": 0,
+                "width": 0.64,
+                "height": 0.44
+              }
+            ]
+          }
+        },
+        "set-D-03.png": {
+          "what": "match crop sky of f00195-16x9-final-beauty-black-pearl-full",
+          "source": "/home/user/workspace/cyberpunk-car-perplexity/out/work/match/round-008/sky-D.png",
+          "width": 1070,
+          "height": 414,
+          "meta": {
+            "area": "sky",
+            "role": "current frame",
+            "parts": [
+              {
+                "left": 0.22,
+                "top": 0,
+                "width": 0.64,
+                "height": 0.44
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

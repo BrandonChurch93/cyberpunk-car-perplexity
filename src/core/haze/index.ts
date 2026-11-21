@@ -60,6 +60,7 @@ export const atmosphere = {
   projectorDeckHitHeight: [0.022, 0.095],
   projectorDeckRaySlope: [0.119, 0.161],
   projectorDeckFacing: [0.22, 0.65],
+  foregroundDeckScatterPath: [7.2, 8.7],
   projectorDeckScatterHeight: [0.30, 0.57],
   projectorDeckScatterLoss: 0.75,
   projectorDeckExtinctionLoss: 0.55,
@@ -338,13 +339,15 @@ vec2 clipCone(vec2 segment, vec3 eyeFromLight, vec3 ray, vec3 axis, float cutoff
   return segment;
 }
 
-float frontDeckWeight(vec3 hit, vec3 ray, float wakeGain) {
-  if (wakeGain <= 0.0 || frontProjectorIndex < 0 || frontProjectorIndex >= filmLightCount) return 0.0;
-  if (filmLightShape[frontProjectorIndex].w < 0.5) return 0.0;
-  if (any(lessThan(hit.xz, deckBounds.xy)) || any(greaterThan(hit.xz, deckBounds.zw))) return 0.0;
+vec2 frontDeckWeights(vec3 hit, vec3 ray, float distance, float wakeGain) {
+  if (wakeGain <= 0.0 || frontProjectorIndex < 0 || frontProjectorIndex >= filmLightCount) return vec2(0.0);
+  if (filmLightShape[frontProjectorIndex].w < 0.5) return vec2(0.0);
+  if (any(lessThan(hit.xz, deckBounds.xy)) || any(greaterThan(hit.xz, deckBounds.zw))) return vec2(0.0);
   float frontView = smoothstep(${atmosphere.projectorDeckFacing.join(', ')}, dot(-ray, filmLightAxis[frontProjectorIndex].xyz));
-  return (1.0 - smoothstep(${atmosphere.projectorDeckHitHeight.join(', ')}, abs(hit.y)))
-    * smoothstep(${atmosphere.projectorDeckRaySlope.join(', ')}, -ray.y) * frontView * wakeGain;
+  float deck = (1.0 - smoothstep(${atmosphere.projectorDeckHitHeight.join(', ')}, abs(hit.y))) * frontView * wakeGain;
+  float slope = smoothstep(${atmosphere.projectorDeckRaySlope.join(', ')}, -ray.y);
+  float localPath = 1.0 - smoothstep(${atmosphere.foregroundDeckScatterPath.join(', ')}, distance);
+  return deck * vec2(slope, max(slope, localPath));
 }
 
 vec4 scatterToDepth(vec2 uv, float depth) {
@@ -355,10 +358,10 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   vec3 origin = cameraWorld[3].xyz;
   vec3 hit = origin + far * ray;
   float wakeGain = cameraWake ? smoothstep(${atmosphere.projectorWakeFocus.join(', ')}, focusDistance) : 0.0;
-  float frontDeck = frontDeckWeight(hit, ray, wakeGain);
-  // Air carries local light scatter along the short foreground deck paths.
-  float localScatterWeight = 1.0 - frontDeck;
-  float deckAir = 1.0 - ${atmosphere.projectorDeckExtinctionLoss} * frontDeck;
+  vec2 frontDeck = frontDeckWeights(hit, ray, far, wakeGain);
+  // The short deck path hands off scatter to Air without changing extinction.
+  float localScatterWeight = 1.0 - frontDeck.y;
+  float deckAir = 1.0 - ${atmosphere.projectorDeckExtinctionLoss} * frontDeck.x;
   vec2 footprint = deckInterval(origin, ray);
   vec2 layer = layerInterval(origin, ray, footprint);
   float layerDepth = deckAir * layerOpticalDepth(origin.y, ray.y, layer, far);
@@ -487,7 +490,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
           projectorPhase(cosine) * ${atmosphere.projectorScatterFraction},
           projectorSuspendedPhase(cosine) * wing
         ) * onset + body);
-        inScatter *= 1.0 - ${atmosphere.projectorDeckScatterLoss} * frontDeck
+        inScatter *= 1.0 - ${atmosphere.projectorDeckScatterLoss} * frontDeck.y
           * (1.0 - smoothstep(${atmosphere.projectorDeckScatterHeight.join(', ')}, p.y));
         if (opening > 0.0) {
           float span = smoothstep(${atmosphere.projectorOpeningReach.slice(0, 2).join(', ')}, distanceToLight)
