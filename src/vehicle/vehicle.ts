@@ -8,10 +8,13 @@ import { dims } from './body/shape'
 import { mirrorGeometry } from './geom/mesh'
 import { smoothstep, type V3 } from './geom/vec'
 import { bay } from './parts/bay'
-import { diffuser, floor, liner, mirror } from './parts/chassis'
+import { diffuser, floor, liner } from './parts/chassis'
+import { mirror } from './parts/mirror'
 import { exhaust, guide } from './parts/lamps'
 import { buildFront } from './parts/front'
 import { buildWheel, type WheelSpec } from './parts/wheel'
+import { glazing } from './parts/glass'
+import { cabin } from './parts/cabin'
 import { makeMaterials, type Materials } from './materials'
 
 /**
@@ -103,7 +106,20 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   void full
   const body = buildBody({ maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, edgeLength: 0.007 })
   add(sprung, body.paint, m.paint, 'paint')
-  add(sprung, body.glass, m.glass, 'glass')
+  const tess = { ...body.grids.main, maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, minEdge: 0.0012, edgeLength: 0.007 }
+  const side = glazing(body.surfaces.main, [body.cuts.curves.dlo, body.cuts.curves.rearGlass], tess)
+  const screen = glazing(body.surfaces.main, [body.cuts.curves.screen], tess)
+  add(sprung, side.panes, m.glass, 'glass')
+  add(sprung, screen.panes, m.windscreen, 'glass-screen')
+  for (const [i, g] of [side, screen].entries()) {
+    add(sprung, g.edges, m.glassEdge, `glass-edge-${i}`)
+    add(sprung, g.seals, m.seal, `glass-seal-${i}`)
+  }
+  const cab = cabin()
+  add(sprung, cab.leather, m.leather, 'cabin-seats')
+  add(sprung, cab.trim, m.cabinTrim, 'cabin-trim')
+  add(sprung, cab.carbon, m.cabinCarbon, 'cabin-carbon')
+  add(sprung, cab.screens, m.screen, 'cabin-screens')
   add(sprung, body.shell, m.shell, 'inner')
   const { cuts } = body
   const S = body.surfaces
@@ -136,7 +152,7 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   addPair(df.fins, m.carbon, 'diffuser-fin')
   addPair(liner(dims.frontHubZ, dims.frontTire.radius, 0.415, 0.5, 0.99), m.under, 'liner-front')
   addPair(liner(dims.rearHubZ, dims.rearTire.radius, 0.44, 0.5, 1.01), m.under, 'liner-rear')
-  const mr = mirror()
+  const mr = mirror(body.surfaces.main, body.cuts.maps.main)
   addPair(mr.head, m.paint, 'mirror-head')
   addPair(mr.glass, m.mirror, 'mirror-glass')
   addPair(mr.stalk, m.matte, 'mirror-stalk')
@@ -257,7 +273,7 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
 
 /** Scale that brings the body shell (paint, glass and backing) to the factory length, width and height. Parts fitted to it do not change it. */
 function fitScale(sprung: THREE.Object3D): V3 {
-  const shell = new Set(['paint', 'glass', 'inner'])
+  const shell = new Set(['paint', 'inner'])
   const box = new THREE.Box3()
   const p = new THREE.Vector3()
   sprung.updateWorldMatrix(true, true)
