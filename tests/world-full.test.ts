@@ -562,6 +562,12 @@ describe('full roof world', () => {
     world.root.updateMatrixWorld(true)
     const required = (id: string, parent: THREE.Object3D = world.root) => parent.getObjectByName(id)!
     const bounds = (object: THREE.Object3D) => new THREE.Box3().setFromObject(object)
+    const floodBank = required('rear service flood bank')
+    const floodPole = floodBank.parent!
+    const collar = bounds(required('worklight bolted base collar',floodPole))
+    expect(collar.intersectsBox(bounds(required('pole base plate',floodPole)))).toBe(true)
+    expect(collar.intersectsBox(bounds(required('tapered steel post',floodPole)))).toBe(true)
+    expect(bounds(required('worklight bracket plate',floodBank)).intersectsBox(bounds(required('worklight mast socket',floodPole)))).toBe(true)
     const ramp = required('west ramp luminous barrier')
     const extension = required('precast ramp barrier extension',ramp)
     const channel = required('recessed barrier lighting channel',ramp)

@@ -578,6 +578,7 @@ function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE
   mast.position.y = 4.18
   pole.position.set(-3.9,0,12.3)
   for (const child of [...pole.children]) if (/opaque lamp head|unlit lamp diffuser|luminaire cross arm/.test(child.name)) child.removeFromParent()
+  block(pole, 'worklight bolted base collar', metal, [0,.211,0], [.26,.108,.26])
   block(pole, 'worklight mast socket', metal, [0,8.08,0], [.24,.41,.26])
   const rack = new THREE.Group()
   rack.name = 'rear service flood bank'
