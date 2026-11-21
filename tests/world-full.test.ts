@@ -822,6 +822,40 @@ describe('full roof world', () => {
     expect(wideFootprint).toEqual(rise.size)
   })
 
+  it('projects stepped facade ledges from the tower shells and shields the amber opal apertures', () => {
+    const names = ['hero left edge tower','hero hotel tower','hero near west garage bay','hero amber tower','hero near east garage bay']
+    const model = new THREE.Matrix4(), p = new THREE.Vector3(), size = new THREE.Vector3()
+    for (const name of names) {
+      const tower = world.root.getObjectByName(name+' volume')!
+      const wall = tower.getObjectByName(name) as THREE.Mesh<THREE.BoxGeometry>
+      const ledges = tower.getObjectByName('projecting slab noses') as THREE.InstancedMesh
+      const returns = tower.getObjectByName('inset spandrel returns') as THREE.InstancedMesh
+      const bounds = wall.geometry.parameters
+      const front = wall.position.z+bounds.depth*.5
+      expect(wall.getWorldPosition(p).length()).toBeGreaterThan(350)
+      expect(ledges.count).toBeGreaterThanOrEqual(10)
+      expect(returns.count).toBe(ledges.count)
+      for (let i=0;i<ledges.count;i++) {
+        ledges.getMatrixAt(i,model)
+        p.setFromMatrixPosition(model)
+        size.setFromMatrixScale(model)
+        expect(p.z-size.z*.5).toBeLessThan(front)
+        expect(p.z+size.z*.5).toBeGreaterThan(front+.45)
+        expect(Math.abs(p.x-wall.position.x)+size.x*.5).toBeLessThan(bounds.width*.5)
+        expect(p.y+size.y*.5).toBeLessThan(wall.position.y+bounds.height*.5-2)
+      }
+    }
+    for (const id of ['right amber facade sail','amber garage rise','amber garage return']) {
+      const source = approvedHeroSourceSurvey().find(source=>source.id===id)!
+      const optic = world.root.getObjectByName(id)?.getObjectByName('weather-sealed opal face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+      expect(optic.geometry.parameters.width*source.scale).toBeLessThan(source.size[0]*.9)
+      expect(optic.material.uniforms.gap?.value).toBeGreaterThan(.06)
+    }
+    const rise = world.lights.find(light=>light.id==='amber garage rise')!
+    expect(rise.size).toEqual(approvedHeroSourceSurvey().find(source=>source.id===rise.id)!.size)
+    expect(world.lights).toHaveLength(8)
+  })
+
   it('shows metric warm office floors and mounted right facade markers at the hero', () => {
     const tower = world.root.getObjectByName('hero amber tower volume')!
     const shell = tower.getObjectByName('hero amber tower') as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>

@@ -37,6 +37,19 @@ const cyanApertures: Readonly<Partial<Record<string,readonly [width: number, gai
   'left cyan facade sail': [.81,1.54],
   'cyan garage rise': [.56,1.38], 'cyan garage return': [.38,1.60], 'cyan hotel facade strip': [.74,1.56],
 }
+const amberLouvres: Readonly<Partial<Record<string,readonly [width: number, gain: number, gap: number]>>> = {
+  'right amber facade sail': [.89,.90,.070],
+  'amber garage rise': [.75,.90,.091], 'amber garage return': [.77,.94,.102],
+}
+const facadeSections: Readonly<Partial<Record<string,readonly (readonly [
+  offset: number, span: number, drop: number, levels: number, projection: number,
+])[]>>> = {
+  'hero left edge tower': [[-.18,.58,7.9,9,1.02],[.287,.29,2.6,8,.62]],
+  'hero hotel tower': [[-.19,.43,5.8,6,.94],[.25,.37,10.3,5,.74]],
+  'hero near west garage bay': [[-.16,.60,5.2,5,1.27],[.27,.29,8.1,5,.79]],
+  'hero amber tower': [[-.18,.50,12.4,6,1.16],[.24,.39,26.7,5,.77]],
+  'hero near east garage bay': [[-.13,.68,6.9,6,.95],[.33,.22,11.3,5,.67]],
+}
 
 export const approvedHeroSources = [
   { id: 'left cyan facade sail', at: [-11.76, 6.42, -29.40], size: [.139, 11.05], tint: 'cyan', scale: scale.leftBlade },
@@ -85,6 +98,10 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.035,.039,.048), roughness: .54, metalness: .59 })
   const oxidizedAluminum = new THREE.MeshStandardMaterial({ color: new THREE.Color(.033,.038,.041), roughness: .61, metalness: .38 })
   const charcoalConcrete = new THREE.MeshStandardMaterial({ color: new THREE.Color(.054,.052,.049), roughness: .83, metalness: .06 })
+  const slabNose = oxidizedAluminum.clone()
+  slabNose.emissive.setRGB(.024,.033,.044)
+  const spandrelReturn = charcoalConcrete.clone()
+  spandrelReturn.emissive.setRGB(.017,.023,.032)
   const glass = new THREE.MeshStandardMaterial({ color: new THREE.Color(.025,.027,.039), roughness: .33, metalness: .22 })
   const distantGlass = glass.clone()
   const offset = <T extends THREE.Material>(mat: T, units: number): T => {
@@ -227,6 +244,34 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     const facade = facadeOf(name,index)
     const shell = towerSurface(name, level, facade, screenReflection, spillAt(name),layer,distance)
     groundedBox(tower,name,x,top,z,width,depth,shell,k)
+    const sections = facadeSections[name]
+    if (sections) {
+      const relief = group(tower,'layered facade spandrels')
+      const floors = sections.reduce((n,section)=>n+section[3],0)
+      const geo = new THREE.BoxGeometry(1,1,1)
+      const ledges = new THREE.InstancedMesh(geo,slabNose,floors)
+      const returns = new THREE.InstancedMesh(geo,spandrelReturn,floors)
+      ledges.name = 'projecting slab noses'
+      returns.name = 'inset spandrel returns'
+      const pz = wz+d*.5
+      const datum = name === 'hero left edge tower' ? Math.min(112,wy) : wy
+      const model = new THREE.Matrix4()
+      let slot = 0
+      for (const [offset,span,drop,n,projection] of sections) {
+        for (let row=0;row<n;row++) {
+          const px = wx+offset*w, py = datum-drop-row*(facade==='concrete' ? 6.63 : 7.49)
+          const lip = (row%3===0 ? .59 : .39)*(facade==='concrete' ? 1.22 : 1)
+          ledges.setMatrixAt(slot,model.makeScale(span*w,lip,projection).setPosition(px,py,pz+projection*.31))
+          returns.setMatrixAt(slot++,model.makeScale(span*w*.97,.35+lip*.53,.37).setPosition(px,py-.53,pz+.10))
+        }
+      }
+      for (const details of [ledges,returns]) {
+        details.instanceMatrix.needsUpdate = true
+        details.computeBoundingBox()
+        details.computeBoundingSphere()
+        relief.add(details)
+      }
+    }
     deckTrim.tower(tower,name,wx,wz+d*.5,w)
     box(tower,'folded coping band',[wx,wy-.52,wz],[w+.28,1.5,d+.28],frame)
     if (w > 9 && index !== 6) {
@@ -593,9 +638,10 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const sail = source.id === 'left cyan facade sail'
       const segments = sail ? 14 : source.onWall ? 1 : Math.round(height / (source.tint === 'cyan' ? .34 : .50))
       const shape = cyanApertures[source.id]
-      const gain = (opalRadiance[source.id] ?? 1)*(shape?.[1] ?? 1)
-      const opal = fixtureOpal(source.onWall ? (x < 0 ? westOpal : eastOpal) : color.clone().multiplyScalar(gain),segments,shape!==undefined,sail ? .13 : 0)
-      plate(housing, 'weather-sealed opal face', source.scale ? offset(opal,-4) : opal, [0,0,.002], width*(shape?.[0] ?? 1),height)
+      const louvre = amberLouvres[source.id]
+      const gain = (opalRadiance[source.id] ?? 1)*(shape?.[1] ?? louvre?.[1] ?? 1)
+      const opal = fixtureOpal(source.onWall ? (x < 0 ? westOpal : eastOpal) : color.clone().multiplyScalar(gain),segments,shape!==undefined,sail ? .13 : louvre?.[2] ?? 0)
+      plate(housing, 'weather-sealed opal face', source.scale ? offset(opal,-4) : opal, [0,0,.002], width*(shape?.[0] ?? louvre?.[0] ?? 1),height)
       if (!source.onWall) for (const fraction of [-.40,-.17,.17,.40]) {
         const horizontal = width > height
         box(housing, 'opal rail standoff', [horizontal ? fraction*width : 0,horizontal ? 0 : fraction*height,-.184],
