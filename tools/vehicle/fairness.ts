@@ -46,8 +46,15 @@ const out = ensureDir(join(workDir, 'vehicle', 'fairness', label))
 // body is redrawn. A point goes to the first panel whose test passes.
 type Panel = { name: string; test: (p: T.Vector3, n: T.Vector3) => boolean }
 const loadHubs = async () => {
+  // The kept body keeps its sizes in body/shape.ts; older bodies exported the hubs from body.ts.
+  const shape = '../../src/vehicle/body/shape.ts'
+  const legacy = '../../src/vehicle/body.ts'
   try {
-    const body = await import('../../src/vehicle/body.ts') as { frontHub?: number; rearHub?: number }
+    const { dims } = await import(shape) as { dims?: { frontHubZ?: number; rearHubZ?: number } }
+    if (typeof dims?.frontHubZ === 'number' && typeof dims.rearHubZ === 'number') return { front: dims.frontHubZ, rear: dims.rearHubZ }
+  } catch { /* fall through */ }
+  try {
+    const body = await import(legacy) as { frontHub?: number; rearHub?: number }
     if (typeof body.frontHub === 'number' && typeof body.rearHub === 'number') return { front: body.frontHub, rear: body.rearHub }
   } catch { /* fall through */ }
   return { front: 1.285, rear: -1.494 }
