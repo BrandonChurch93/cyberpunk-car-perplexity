@@ -134,6 +134,7 @@ uniform vec2 uFocusAperture;
 uniform vec2 uLensShift;
 uniform float uFilmView;
 uniform bool uSkyDepthEnabled;
+uniform bool uMacro;
 uniform float uPaint;
 uniform float uHero;
 uniform vec3 uOpticalEye;
@@ -148,6 +149,7 @@ flat out vec3 vBeamTrace;
 flat out vec2 vGlint;
 flat out float vSkyKeep;
 flat out vec4 vDropFlashes;
+flat out vec2 vMacroFlashWeight;
 
 ${scatter}
 
@@ -171,12 +173,20 @@ vec3 veilHighlights(vec3 peak, float weight) {
   return peak * (scale * mix(1.0, 0.69, weight));
 }
 
+float macroFocus(float depth, vec2 normal, vec2 focal, float longSide) {
+  float offset = abs(depth - uFocus);
+  float width = length(normal * uFocusAperture * focal) * offset / (uFocus * depth * longSide);
+  return (1.0 - smoothstep(0.019, 0.062, offset)) * (1.0 - smoothstep(0.00068, 0.00155, width));
+}
+
 void main() {
   vec3 p = aDrop.xyz;
   vec3 direction = aMotion.xyz;
   vec3 delta = 0.5 * direction;
   float amount = aMotion.w;
   gl_Position = vec4(3.0, 3.0, 3.0, 1.0);
+  bool macroFlash = uMacro && uPaint > 0.5;
+  if (macroFlash && aMotion.w < 0.64) return;
   if (uLayer >= 0.0) {
     float tau = 6.28318530718;
     float slant = ${worldRainMotion.slant} + aMotion.w * ${worldRainMotion.variation};
@@ -252,13 +262,29 @@ void main() {
   if (all(equal(radiance + flash, vec3(0.0)))) return;
   float gain = uLayer < 0.0 ? (mist ? 1.0 : 0.64) : uGain * depthGain;
   float paintDefocus = smoothstep(0.10, 0.34, abs(depth / uFocus - 1.0));
-  if (paint > 0.5 && paint < 1.5) gain *= mix(2.9, 0.21, paintDefocus);
+  if (!uMacro && paint > 0.5 && paint < 1.5) gain *= mix(2.9, 0.21, paintDefocus);
   float coverage = min(1.0, diameter * 0.39894228 / sigmaSide) * min(1.0, max(len, diameter) / (1.35 * sigmaEnd));
   float longSide = max(uViewport.x, uViewport.y);
   float frameTravel = len / longSide;
   vGlint = vec2(-1.0, 1.0);
   vDropFlashes = vec4(0.0);
-  if (strata) {
+  vMacroFlashWeight = vec2(0.0);
+  if (macroFlash) {
+    float phase = 6.28318530718 * (uPhase * floor(79.0 * uDuration * pow(0.001 / aDrop.w, 1.5) + 0.5) + aMotion.w);
+    vec2 pulse = vec2(0.26 + 0.17 * sin(phase), 0.72 + 0.16 * sin(phase + 2.3 + aMotion.w));
+    vec2 pulseDepth = mix(vec2(ca.w), vec2(cb.w), pulse);
+    vec2 progress = pulse * cb.w / pulseDepth;
+    vMacroFlashWeight = vec2(macroFocus(pulseDepth.x, normal, pixelFocal, longSide),
+      macroFocus(pulseDepth.y, normal, pixelFocal, longSide) * smoothstep(0.81, 0.97, aMotion.w) * 0.72);
+    if (max(vMacroFlashWeight.x, vMacroFlashWeight.y) <= 0.0) return;
+    float flashTime = mix(0.00032, 0.00063, aMotion.w);
+    vDropFlashes = vec4(0.0, progress * len, length(vec2(sigmaEnd, len * flashTime / uShutter)));
+  } else if (uMacro) {
+    vec2 focusCoc = uFocusAperture * abs(1.0 - depth / uFocus) * pixelFocal / depth;
+    float opticalWidth = length(normal * focusCoc) / longSide;
+    gain *= 0.32 * smoothstep(0.0013, 0.0038, opticalWidth);
+    sigmaSide = max(sigmaSide, 0.0025 * longSide);
+  } else if (strata) {
     vec2 focusCoc = uFocusAperture * abs(1.0 - depth / uFocus) * pixelFocal / depth;
     float opticalWidth = length(normal * focusCoc) / longSide;
     float diffuse = smoothstep(0.00085, 0.0026, opticalWidth);
@@ -319,6 +345,8 @@ void main() {
 
 const fragment = /* glsl */ `
 uniform bool uSkyDepthEnabled;
+uniform bool uMacro;
+uniform float uPaint;
 uniform sampler2D uSkyDepth;
 flat in vec2 vHead;
 flat in vec2 vTail;
@@ -331,6 +359,7 @@ flat in vec3 vBeamTrace;
 flat in vec2 vGlint;
 flat in float vSkyKeep;
 flat in vec4 vDropFlashes;
+flat in vec2 vMacroFlashWeight;
 out vec4 outColor;
 
 void main() {
@@ -363,7 +392,16 @@ void main() {
   if (uSkyDepthEnabled && texelFetch(uSkyDepth, ivec2(gl_FragCoord.xy), 0).r >= 1.0) {
     beamTrace *= mix(0.04, 1.0, vSkyKeep);
   }
-  outColor = vec4(vRadiance * (envelope * profile * beamTrace), 0.0);
+  if (uMacro) {
+    if (uPaint > 0.5) {
+      vec2 glints = (x - vDropFlashes.yz) / vDropFlashes.w;
+      float pulse = dot(exp(-0.5 * glints * glints), vMacroFlashWeight);
+      vec3 flash = min(vRadiance * 8.0, vec3(0.22));
+      outColor = vec4(flash * (exp(-0.5 * across * across) * min(1.0, pulse)), 0.0);
+    } else {
+      outColor = vec4(min(vRadiance * 1.8, vec3(0.075)) * (envelope * profile * beamTrace), 0.0);
+    }
+  } else outColor = vec4(vRadiance * (envelope * profile * beamTrace), 0.0);
 }
 `
 
@@ -435,6 +473,7 @@ export class RibbonView {
       uLensShift: { value: new THREE.Vector2() },
       uFilmView: { value: 0 },
       uSkyDepthEnabled: { value: false },
+      uMacro: { value: false },
       uSkyDepth: { value: null as THREE.DepthTexture | null },
       uPaint: { value: 0 },
       uHero: { value: 0 },
@@ -471,6 +510,8 @@ export class RibbonView {
       uniform.uFilmView.value = s && camera === s.camera ? 1 : 0
       uniform.uSkyDepth.value = uniform.uFilmView.value && layer >= 0 && !field?.local ? this.skyDepth.capture(renderer) : null
       uniform.uSkyDepthEnabled.value = uniform.uSkyDepth.value !== null
+      uniform.uMacro.value = this.paint && uniform.uFilmView.value > 0.5 && layer >= 0
+      material.blendSrc = uniform.uMacro.value ? THREE.DstColorFactor : THREE.OneFactor
       uniform.uPaint.value = this.paint && uniform.uFilmView.value ? field?.paint ? 1 : layer === -1 ? 2 : 0 : 0
       uniform.uHero.value = this.hero && uniform.uFilmView.value ? field?.hero === 'media' ? 3 : field?.hero ? 2 : 1 : 0
       uniform.uAperture.value.set(0, 0)
