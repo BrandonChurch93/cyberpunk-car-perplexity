@@ -1,5 +1,6 @@
 import * as T from 'three'
 import { lampThresholds } from '../../director/timeline'
+import { insertAfter, patchMaterial } from '../../materials/patch'
 import type { BodyCuts } from '../body/cuts'
 import { fasciaReturn, fasciaThroat, fasciaUV, guideProfile, guideWidth } from '../body/nose'
 import type { VehicleModule, WetnessKind } from '../contract'
@@ -7,12 +8,11 @@ import type { Surface, SurfaceCurve, SurfaceMap } from '../geom/cuts'
 import { MeshBuilder, mirrorGeometry } from '../geom/mesh'
 import type { V2, V3 } from '../geom/vec'
 import { floorY } from './diffuser'
-import { forward, guideOptics, projectorOptics, projectorParts } from './front-optics'
+import { forward, projectorOptics, projectorParts } from './front-optics'
 
 type FrontMaterials = Pick<import('../materials').Materials, 'housing' | 'mesh' | 'carbon' | 'drl' | 'beamLens'> & {
   optics?: T.Material
   projector?: T.Material
-  brushed?: T.Material
   reflector?: T.Material
   tag?: (material: T.Material, wetness: WetnessKind) => T.Material
 }
@@ -221,35 +221,126 @@ function cover(loop: T.Vector3[], map: SurfaceMap, full: boolean): T.BufferGeome
   return merged([grid(rows, false, true), face(rows.at(-1)!)])
 }
 
-function guide(map: SurfaceMap, radius: number, depth: number, crown: number): T.BufferGeometry {
+function guide(map: SurfaceMap, radius: number, depth: number, rise: number): T.BufferGeometry {
   const arms = guideProfile(radius)
-  const point = ([x, y]: V2, rise = 0) => new T.Vector3(x, y, map.S(...fasciaUV(map, x, y))[2] - depth + rise)
+  const point = ([x, y]: V2, lift = 0): V3 => [x, y, map.S(...fasciaUV(map, x, y))[2] - depth + lift]
   const blend = (a: V2, b: V2, t: number): V2 => [T.MathUtils.lerp(a[0], b[0], t), T.MathUtils.lerp(a[1], b[1], t)]
-  const across = (a: V2, b: V2, bulge: number) => Array.from({ length: 5 }, (_, j) => {
-    const t = j / 4
-    return point(blend(a, b, t), bulge * (4 * t * (1 - t)))
-  })
-  const parts = [face(arms.flatMap(({ base }) => across(...base, 0).slice(0, -1)))]
+  const section = [0, .14, .4, .6, .86, 1]
+  const builder = new MeshBuilder()
+  const hub = arms.map(a => a.base[0]).reduce<V2>((a, b) => [a[0] + b[0] / 3, a[1] + b[1] / 3], [0, 0])
+  const center = builder.vertex(point(hub, rise), [0, 0, 1], -.08, .5)
   for (const { base: [a, b], tip, cap } of arms) {
-    const c = cap[0], d = cap.at(-1)!
-    const mid = blend(a, b, .5)
-    const count = Math.max(2, Math.ceil(Math.hypot(tip[0] - mid[0], tip[1] - mid[1]) / .007))
-    const rows = Array.from({ length: count + 1 }, (_, i) => {
-      const t = i / count
-      return across(blend(a, c, t), blend(b, d, t), crown * Math.min(1, 4 * t))
-    })
-    parts.push(grid(rows, true))
-    const builder = new MeshBuilder()
-    const axis = Math.hypot(tip[0] - mid[0], tip[1] - mid[1])
-    const inside = builder.vertex(point(blend(mid, tip, 1 + .4 * radius / axis), .8 * crown).toArray(), [0, 0, 1])
-    const ring = [...cap.map(q => point(q)), ...rows.at(-1)!.slice(1, -1).reverse()]
-    const ids = ring.map(q => builder.vertex(q.toArray(), [0, 0, 1]))
-    for (let i = 0; i < ids.length; i++) builder.tri(inside, ids[i], ids[(i + 1) % ids.length])
-    const g = builder.geometry()
-    g.computeVertexNormals()
-    parts.push(g)
+    const end = blend(tip, cap[6], .56)
+    const length = Math.hypot(end[0] - hub[0], end[1] - hub[1])
+    const taper = Math.min(.33, .029 / length)
+    const count = Math.max(4, Math.ceil(length / .004))
+    const first = builder.pos.length / 3
+    builder.grid(count, section.length, (i, j) => {
+      const u = i / count, v = section[j]
+      const width = Math.min(1, (1 - u) / taper)
+      const c = blend(blend(a, b, .5), end, u)
+      const p = blend(blend(a, cap[0], u), blend(b, cap.at(-1)!, u), v)
+      const mid = blend(blend(a, cap[0], u), blend(b, cap.at(-1)!, u), .5)
+      const xy: V2 = [c[0] + width * (p[0] - mid[0]), c[1] + width * (p[1] - mid[1])]
+      const deck = j === 0 || j === section.length - 1 ? 0 : rise
+      return { p: point(xy, deck * width * Math.min(1, 8 * u)), n: [0, 0, 1], u, v }
+    }, false, true)
+    const apex = builder.vertex(point(end), [0, 0, 1], 1, .5)
+    const last = first + (count - 1) * section.length
+    for (let j = 0; j < section.length - 1; j++) {
+      builder.tri(center, first + j, first + j + 1)
+      builder.tri(last + j, apex, last + j + 1)
+    }
   }
-  return merged(parts)
+  const g = builder.geometry()
+  g.computeVertexNormals()
+  return g
+}
+
+function bladeOptics(material: T.MeshPhysicalMaterial): void {
+  patchMaterial(material, {
+    id: 'front-prism-blade',
+    apply(shader) {
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec2 vBladeUV;')
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', 'vBladeUV = uv;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'varying vec2 vBladeUV;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
+        float bladeU = clamp(vBladeUV.x, 0.0, 1.0);
+        float bladeEdge = abs(2.0 * vBladeUV.y - 1.0);
+        float aperture = 1.0 - smoothstep(0.64, 0.94, bladeEdge);
+        float core = 1.0 - smoothstep(0.16, 0.62, bladeEdge);
+        float ribPhase = bladeU * 23.0 - 0.34 * bladeEdge;
+        float ribs = pow(max(0.0, cos(PI2 * ribPhase)), 3.0)
+          * (1.0 - smoothstep(0.24, 0.66, fwidth(ribPhase)));
+        float source = 0.25 + 0.67 * exp(-5.8 * bladeU) + 0.29 * exp(-11.0 * abs(bladeU - 0.68));
+        float outline = 1.0 - 0.87 * smoothstep(0.82, 1.0, bladeU);
+        float facing = gl_FrontFacing ? max(0.0, dot(normal, normalize(vViewPosition))) : 0.0;
+        diffuseColor.rgb *= 0.12 + aperture * (0.51 + 0.14 * ribs);
+        totalEmissiveRadiance *= source * outline * facing * aperture * (0.16 + 1.19 * core + 0.32 * ribs);
+      `)
+    },
+  })
+}
+
+function reflectorReturns(g: T.BufferGeometry): T.BufferGeometry {
+  if (!(g instanceof T.LatheGeometry) || !g.index) throw new Error('Expected an indexed projector reflector')
+  const points = g.parameters.points
+  const wall: number[] = [], steps: number[] = []
+  for (let i = 0; i < g.index.count; i += 6) {
+    const j = (i / 6) % (points.length - 1)
+    const destination = points[j + 1].x < points[j].x && points[j + 1].y > points[j].y ? steps : wall
+    for (let k = 0; k < 6; k++) destination.push(g.index.getX(i + k))
+  }
+  const returns = g.clone().setIndex(steps)
+  g.setIndex(wall)
+  compactSurface(returns).computeVertexNormals()
+  return returns
+}
+
+function projectorTurn(center: T.Vector3, axis: T.Vector3, radius: number, full: boolean, profile: readonly V2[]): T.BufferGeometry {
+  const rotation = new T.Quaternion().setFromUnitVectors(forward, axis)
+  return new T.LatheGeometry(profile.map(([r, z]) => new T.Vector2(radius * r, z)), full ? 80 : 32)
+    .rotateX(Math.PI / 2).scale(1, .84, 1).applyQuaternion(rotation).translate(...center.toArray())
+}
+
+function projectorFront(center: T.Vector3, axis: T.Vector3, radius: number, full: boolean) {
+  const intervals = full ? 24 : 12
+  const apex = -.0043 + radius * .235
+  const shoulder = apex - radius * .30
+  const dome = Array.from({ length: intervals + 1 }, (_, i): V2 => {
+    const a = Math.PI * .5 * (1 - i / intervals)
+    return [Math.max(1e-5, .913 * Math.sin(a)), shoulder + (apex - shoulder) * Math.cos(a)]
+  })
+  const lens = projectorTurn(center, axis, radius, full, [[.920, shoulder - .0011], [.925, shoulder - .0003], ...dome])
+  const shroud = projectorTurn(center, axis, radius, full, [[1.063, -.005], [1.080, -.0026], [1.077, -.0004],
+    [1.058, .0013], [1.028, .0020], [1.006, .0011]])
+  const rim = projectorTurn(center, axis, radius, full, [[1.006, .0011], [.991, .00155], [.967, .00155],
+    [.943, .0001], [.928, -.002], [.919, shoulder - .00055], [.900, shoulder - .0007], [.875, -.007]])
+  return { lens, shroud, rim }
+}
+
+function lensPickup(material: T.Material, flux: T.IUniform<number>): void {
+  patchMaterial(material, {
+    id: 'front-projector-internal-pickup',
+    uniforms: { projectorFlux: flux },
+    apply(shader) {
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'uniform float projectorFlux;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
+        float lensAngle = max(0.0, dot(normal, normalize(vViewPosition)));
+        float lensGlint = exp(-59.0 * (1.0 - lensAngle));
+        totalEmissiveRadiance += projectorFlux * lensGlint * vec3(0.85, 0.94, 1.0);
+      `)
+    },
+  })
+}
+
+function lensRetainers(center: T.Vector3, axis: T.Vector3, radius: number): T.BufferGeometry {
+  const rotation = new T.Quaternion().setFromUnitVectors(forward, axis)
+  return merged(Array.from({ length: 4 }, (_, i) =>
+    new T.BoxGeometry(radius * .14, radius * .045, .00055)
+      .translate(0, radius * .978, .00165)
+      .rotateZ((i + .5) * Math.PI / 2)
+      .scale(1, .84, 1).applyQuaternion(rotation).translate(...center.toArray())))
 }
 
 function splitter(S: Surface, full: boolean): T.BufferGeometry {
@@ -329,8 +420,12 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
 
   const lensMaterial = m.optics ?? tag(new T.MeshPhysicalMaterial({ color: 0xc1c7cd, roughness: .06, transmission: 1, ior: 1.46, thickness: .003, side: T.FrontSide }), 'beads')
   const projector = m.projector ?? tag(new T.MeshPhysicalMaterial({ color: 0xbec6d0, roughness: .09, transmission: .96, ior: 1.51, thickness: .007 }), 'none')
-  const brushed = m.brushed ?? tag(new T.MeshStandardMaterial({ color: 0x9ca4ae, metalness: .9, roughness: .26 }), 'none')
+  const lensFlux = { value: 0 }
+  lensPickup(projector, lensFlux)
+  const rimMetal = tag(new T.MeshStandardMaterial({ color: 0xbac0c6, metalness: .74, roughness: .24,
+    envMapIntensity: .60, emissive: 0xe2f0ff, emissiveIntensity: 0 }), 'none')
   const reflector = m.reflector ?? tag(new T.MeshStandardMaterial({ color: 0xc4c9ce, metalness: 1, roughness: .11 }), 'none')
+  const facetReturn = tag(new T.MeshStandardMaterial({ color: 0x626262, metalness: .71, roughness: .32 }), 'none')
   const bowl = outline(eye)
   const pocket = pocketAt('eye', .092, .94, -.95)
   add('front eye housing returns', pocket.wall, m.housing, true)
@@ -339,17 +434,20 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   add('front clear contoured eye lens', cover(signedArea(coverRing) < 0 ? coverRing.reverse() : coverRing, map, full), lensMaterial, true)
   const drl = tag(m.drl.clone(), 'none')
   drl.emissive.setHex(0xe5f3ff)
-  drl.color.setHex(0x939ca1)
-  drl.roughness = .28
+  drl.color.setHex(0x7e868a)
+  drl.roughness = .22
+  drl.clearcoat = .26
+  drl.clearcoatRoughness = .16
   drl.emissiveIntensity = 0
-  guideOptics(drl, [cuts.curves.drlU, drlL, cuts.curves.drlS], guideWidth.lens)
+  bladeOptics(drl)
   const slot = fasciaReturn(map, 'slot')?.map(vector)
   if (slot) {
     const low = slot.map(p => p.clone().addScaledVector(forward, -.014))
     const flip = signedArea(slot) < 0
     add('front Y guide seat', merged([grid([slot, low], flip, true), face(flip ? [...low].reverse() : low)]), m.housing, true)
-  } else add('front Y guide seat', guide(map, guideWidth.seat, .019, 0), m.housing, true)
-  add('front Y running guide', guide(map, guideWidth.lens, -.001, .001), drl, true)
+  }
+  add('front Y guide bezel', guide(map, guideWidth.seat, .0045, .0003), m.housing, true)
+  add('front Y running guide', guide(map, guideWidth.lens, -.0004, .00032), drl, true)
   emit('front running guide', vector(drlL.p[0]).addScaledVector(forward, .008), false, drl, 3.99)
   const beam = tag(m.beamLens.clone(), 'none')
   beam.emissive.setHex(0xe4f3ff)
@@ -359,7 +457,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   beam.emissiveIntensity = 0
   projectorOptics(beam)
   const eyeBox = new T.Box3().setFromPoints(bowl)
-  const [cases, collars, bowls, lenses, dies] = Array.from({ length: 5 }, () => [] as T.BufferGeometry[])
+  const [cases, shrouds, collars, bowls, rings, retainers, lenses, dies] = Array.from({ length: 8 }, () => [] as T.BufferGeometry[])
   for (const [along, maxRadius, intensity] of [[.46, .029, 170], [.76, .023, 80]]) {
     const x = T.MathUtils.lerp(eyeBox.min.x, eyeBox.max.x, along)
     const ys: number[] = []
@@ -374,16 +472,24 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
     const axis = new T.Vector3(.51, .12, .851).normalize()
     const p = seat.clone().addScaledVector(forward, -.022)
     const parts = projectorParts(p, axis, r, full)
+    const trim = projectorFront(p, axis, r, full)
+    parts.collar.dispose()
+    parts.lens.dispose()
     cases.push(parts.casework)
-    collars.push(parts.collar)
+    shrouds.push(trim.shroud)
+    collars.push(trim.rim)
+    rings.push(reflectorReturns(parts.bowl))
     bowls.push(parts.bowl)
-    lenses.push(parts.lens)
+    retainers.push(lensRetainers(p, axis, r))
+    lenses.push(trim.lens)
     dies.push(parts.source)
     emit('main beam projector', seat.addScaledVector(forward, .022), true, beam, intensity)
   }
-  add('front projector casings', merged(cases), m.housing, true)
-  add('front machined projector collars', merged(collars), brushed, true)
+  add('front projector casings', merged([...cases, ...shrouds]), m.housing, true)
+  add('front machined projector collars', merged(collars), rimMetal, true)
+  add('front projector lens retainers', merged(retainers), m.housing, true)
   add('front faceted projector reflector bowls', merged(bowls), reflector, true)
+  add('front projector reflector step returns', merged(rings), facetReturn, true)
   add('front convex projector lenses', merged(lenses), projector, true)
   for (const [i, g] of dies.entries()) add('front projector LED dies ' + i, g, beam, true)
 
@@ -395,6 +501,8 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
       for (const l of lamps) l.level = l.beam ? level : running
       drl.emissiveIntensity = 144 * running
       beam.emissiveIntensity = 260 * level
+      lensFlux.value = 2.2 * level
+      rimMetal.emissiveIntensity = .74 * level
     },
   }
 }
