@@ -124,7 +124,7 @@ function sweepLoop(f: Frame, loop: Array<{ c: V2; n: V2 }>, base: number, prof: 
 function disk(f: Frame, loop: Array<{ c: V2; n: V2 }>, base: number, d: number, s0: number, s1: number, cx: number): MeshBuilder {
   const centre = (s: number): V3[] => loop.map(() => at(f, cx, 0, s))
   const ring = (s: number): V3[] => loop.map((e) => at(f, e.c[0] + e.n[0] * (base + d), e.c[1] + e.n[1] * (base + d), s))
-  return solid([centre(s0), ring(s0), ring(s1), centre(s1)], [true, true, true, true])
+  return solid([centre(s0), ring(s0), ring(s1), centre(s1)], [true, true, true, true], false)
 }
 
 /**

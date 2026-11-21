@@ -241,5 +241,5 @@ function reflector(rm: SurfaceMap, slot: SurfaceCurve): MeshBuilder {
   }
   rows.push(mid(s1))
   sharp.push(true)
-  return solid(rows, sharp)
+  return solid(rows, sharp, false)
 }
