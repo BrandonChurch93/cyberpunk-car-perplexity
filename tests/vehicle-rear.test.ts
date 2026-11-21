@@ -300,7 +300,7 @@ describe('rear module', () => {
     }
   }, 60000)
 
-  it('keeps the guide behind the lamp front tip and closes the quarter seam end there with a return', () => {
+  it('keeps the guide behind the lamp front tip and opens the quarter seam end into the lamp gap above a return', () => {
     const tip = new THREE.Vector3(0.8803, 0.81, -2.0476)
     const t = new THREE.Vector3(...seamSpec.t).normalize()
     const pos = tl.guide.getAttribute('position')
@@ -317,6 +317,13 @@ describe('rear module', () => {
     }
     expect(near).toBeGreaterThan(8)
     expect(deep).toBeGreaterThan(0.011)
+    let shallow = Infinity
+    for (let i = 0; i < h.count; i++) {
+      const q = new THREE.Vector3().fromBufferAttribute(h, i)
+      const o = q.clone().sub(tip)
+      if (Math.abs(o.dot(t)) < 0.001 && o.length() < 0.004) shallow = Math.min(shallow, o.length())
+    }
+    expect(shallow).toBeGreaterThan(0.003)
   })
 
   it('keeps every bay part under the deck and inside the opening', () => {
