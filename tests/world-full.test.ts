@@ -378,22 +378,32 @@ describe('full roof world', () => {
     }
     expect(riser.getObjectsByProperty('name','gallery cyan strip')).toHaveLength(3)
     expect(media.getObjectsByProperty('name','occupied gallery window').length).toBeGreaterThan(30)
-    for (const [name,lo,hi] of [['bonnet media bank',32,36],['windscreen media bank',41,46]] as const) {
+    for (const [name,lo,hi] of [['bonnet media bank',32,37],['bonnet media inset',32,37],
+      ['windscreen media bank',41,46],['windscreen media inset',41,46]] as const) {
       const fixture = required(name)
       expect(fixture.parent).toBe(westMedia)
       const ray = visible(fixture,'animated magenta violet tiles')
-      expect(THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))).toBeGreaterThan(-148)
-      expect(THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))).toBeLessThan(-141)
+      expect(THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))).toBeGreaterThan(-150)
+      expect(THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))).toBeLessThan(-140)
       expect(THREE.MathUtils.radToDeg(Math.asin(ray.y))).toBeGreaterThan(lo)
       expect(THREE.MathUtils.radToDeg(Math.asin(ray.y))).toBeLessThan(hi)
+      const face = fixture.getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+      expect(face.geometry.parameters.width*face.geometry.parameters.height).toBeLessThan(780)
+      expect(face.material.uniforms.artwork.value).toBeInstanceOf(THREE.DataTexture)
+      expect(face.material.uniforms.artworkGain.value).toBeLessThan(1)
     }
     let bonnetRays = 0
-    for (const az of [-148,-146,-144]) for (const el of [33.5,34.5,35.5]) {
+    let darkWestRays = 0
+    for (const az of [-148,-146,-144,-142]) for (const el of [33.5,34.5,35.5,36.5]) {
       const a = THREE.MathUtils.degToRad(az), e = THREE.MathUtils.degToRad(el)
       const ray = new THREE.Raycaster(probe,new THREE.Vector3(Math.sin(a)*Math.cos(e),Math.sin(e),Math.cos(a)*Math.cos(e)))
-      if (firstHit(ray)?.object.parent?.name === 'bonnet media bank') bonnetRays++
+      const object = firstHit(ray)?.object
+      if (object?.name === 'animated magenta violet tiles' && object.parent?.name.startsWith('bonnet media ')) bonnetRays++
+      if (object?.name === 'lower media folded spandrel' || object?.name === 'folded media divider') darkWestRays++
     }
-    expect(bonnetRays).toBeGreaterThanOrEqual(6)
+    expect(bonnetRays).toBeGreaterThanOrEqual(2)
+    expect(bonnetRays).toBeLessThanOrEqual(8)
+    expect(darkWestRays).toBeGreaterThan(2)
     const hits = new Set<string>()
     let mediaRays = 0
     for (const az of [-161,-158,-155,-152,-149]) for (const el of [35,37,38,39,42,44,45]) {

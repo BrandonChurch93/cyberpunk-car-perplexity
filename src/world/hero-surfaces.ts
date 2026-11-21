@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { config } from '../config'
 import { stream } from '../core/random'
 import { insertAfter, patchMaterial } from '../materials/patch'
+import { muralPainting, pictureLookup } from './mural-picture'
 
 const opalVertex = /* glsl */ `
   varying vec2 face;
@@ -220,10 +221,10 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   return mat
 }
 
-type MuralProfile = { violet?: THREE.Color; offset?: number; banded?: number; travel?: number; laps?: number; relief?: number; picture?: boolean }
+type MuralProfile = { violet?: THREE.Color; offset?: number; banded?: number; travel?: number; laps?: number; relief?: number; picture?: boolean; artworkGain?: number }
 
 export function billboardMural(width: number, height: number, magenta: THREE.Color, profile: MuralProfile = {}) {
-  const { violet = new THREE.Color(.165,.061,2.39), offset = 0, banded = 0, travel = .071, laps = 1, relief = 0, picture = false } = profile
+  const { violet = new THREE.Color(.165,.061,2.39), offset = 0, banded = 0, travel = .071, laps = 1, relief = 0, picture = false, artworkGain = 0 } = profile
   const shade = new THREE.Color()
   const uniforms = {
     flow: { value: new THREE.Vector2(1,0) }, pixelCount: { value: new THREE.Vector2(width / .041, height / .041) },
@@ -231,15 +232,18 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
     cabinetSalt: { value: stream('world/hero/mural modules').range(0,61) },
     magenta: { value: magenta }, violet: { value: violet }, banded: { value: banded },
     travel: { value: travel }, relief: { value: relief }, picture: { value: Number(picture) },
+    artwork: { value: artworkGain > 0 ? muralPainting() : null }, artworkGain: { value: artworkGain },
   }
   const material = new THREE.ShaderMaterial({
     uniforms, toneMapped: false, vertexShader: opalVertex,
     fragmentShader: /* glsl */ `
       varying vec2 face;
       uniform vec2 flow, pixelCount, cabinetCount;
-      uniform float cabinetSalt, banded, travel, relief, picture;
+      uniform float cabinetSalt, banded, travel, relief, picture, artworkGain;
+      uniform sampler2D artwork;
       uniform vec3 magenta, violet;
       ${noise}
+      ${pictureLookup}
       void main() {
         vec2 p=face-.5+flow*travel;
         float billow=field(p*2.05+vec2(.73,1.48));
@@ -270,7 +274,10 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
         float cap=smoothstep(.0,.13,face.y)*(1.0-smoothstep(.91,.996,face.y));
         led=mix(led,led*.81+vec3(.83,.44,1.27),banded*lightwell*.66);
         level*=mix(1.0,.065+.935*lightwell*cap,banded);
-        if (picture>0.0) {
+        if (artworkGain>0.0) {
+          led=muralPicture(artwork,face,flow,travel)*artworkGain;
+          level=tile*mix(1.0,.68+.32*diode,pixelAA)*mix(1.0,.12+.88*lightwell*cap,banded);
+        } else if (picture>0.0) {
           vec2 cloud=(face-.5)*vec2(1.0,.84)+flow*travel*.31;
           vec2 warp=vec2(field(cloud*3.47+vec2(3.3,.8)),field(cloud*3.29+vec2(-.6,4.4)))-.5;
           vec2 q=cloud+warp*.36;
