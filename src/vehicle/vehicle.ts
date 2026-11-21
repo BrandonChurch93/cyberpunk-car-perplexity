@@ -108,7 +108,7 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
     for (const [i, x] of pair(g).entries()) add(sprung, x, mat, `${name}-${i ? 'right' : 'left'}`)
   }
 
-  const body = buildBody({ maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, edgeLength: 0.012 })
+  const body = buildBody({ maxEdge: 0.04, maxAngle: 0.06, tolerance: 0.0025, edgeLength: 0.012 })
   add(sprung, body.paint, m.paint, 'paint')
   const tess = { ...body.grids.main, maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, minEdge: 0.0012, edgeLength: 0.012 }
   const side = glazing(body.surfaces.main, [body.cuts.curves.dlo, body.cuts.curves.rearGlass], tess)

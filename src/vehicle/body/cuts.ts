@@ -1,5 +1,5 @@
-import { projectCurve, smax, SurfaceMap, type Surface, type SurfaceCurve } from '../geom/cuts'
-import type { V3 } from '../geom/vec'
+import { projectCurve, smax, SurfaceCurve, SurfaceMap, type Surface } from '../geom/cuts'
+import type { V2, V3 } from '../geom/vec'
 import { gapCut } from './gaps'
 import { planLines, sideLines } from './lines'
 import { noseCuts } from './nose'
@@ -29,6 +29,88 @@ function arch(p: V3, a: { z: number; y: number; r: number }): number {
   const facet = Math.cos(3 * (th - Math.PI / 2))
   const R = a.r * (1 - 0.018 * facet)
   return R - r
+}
+
+/** Where each tail lamp wraps the body corner onto the main skin, metres. At the tail edge (u = 1) it spans the
+ * lens's own outer end; it runs forward round the corner to |x| = `outX` and closes there in a round end. */
+export const lampWrap = { top: 0.868, bottom: 0.748, endTop: 0.842, endBottom: 0.778, outX: 0.85 }
+
+/** A hole that runs off the main skin's tail edge: its stretch along u = 1 is the skin's own edge, not a trim line. */
+class TailEdgeHole extends SurfaceCurve {
+  private readonly segs: Array<[V3, V3]> = []
+  constructor(S: Surface, uv: V2[]) {
+    super(S, uv, true)
+    for (let i = 0; i < uv.length; i++) {
+      const j = (i + 1) % uv.length
+      if (!(uv[i][0] > 1 - 1e-6 && uv[j][0] > 1 - 1e-6)) this.segs.push([this.p[i], this.p[j]])
+    }
+  }
+
+  override inside(u: number, v: number): boolean {
+    return super.inside(Math.min(u, 1 - 1e-6), v)
+  }
+
+  override distance(q: V3, cap = 1): number {
+    let best = cap
+    for (const [a, b] of this.segs) {
+      const ab: V3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+      const l2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2]
+      const t = l2 > 0 ? Math.min(1, Math.max(0, ((q[0] - a[0]) * ab[0] + (q[1] - a[1]) * ab[1] + (q[2] - a[2]) * ab[2]) / l2)) : 0
+      best = Math.min(best, Math.hypot(q[0] - a[0] - ab[0] * t, q[1] - a[1] - ab[1] * t, q[2] - a[2] - ab[2] * t))
+    }
+    return best
+  }
+}
+
+/** The lamp wrap on the main skin: its top and bottom edges run at constant height steps from the tail edge to the
+ * end, sampled in u, each height turned into v at that u. */
+function lampWrapHole(S: Surface): SurfaceCurve {
+  const vAtY = (u: number, y: number): number => {
+    let lo = 0.22
+    let hi = 0.4
+    for (let i = 0; i < 40; i++) {
+      const m = (lo + hi) / 2
+      if (S(u, m)[1] < y) lo = m
+      else hi = m
+    }
+    return (lo + hi) / 2
+  }
+  const mid = (lampWrap.endTop + lampWrap.endBottom) / 2
+  let lo = 0.9
+  let hi = 1
+  for (let i = 0; i < 40; i++) {
+    const m = (lo + hi) / 2
+    if (S(m, vAtY(m, mid))[0] > lampWrap.outX) lo = m
+    else hi = m
+  }
+  const uEnd = (lo + hi) / 2
+  const n = 24
+  const ease = (t: number): number => t * t * (3 - 2 * t)
+  const top: V2[] = []
+  const bottom: V2[] = []
+  // The end round spans the end height in u as a half circle in (arc length, y); a short run of u stands in for it.
+  const zAt = (u: number): number => S(u, vAtY(u, mid))[2]
+  const r = (lampWrap.endTop - lampWrap.endBottom) / 2
+  let uR = uEnd
+  for (let i = 0; i < 40 && zAt(uR) - zAt(uEnd) < r; i++) uR -= 0.0005
+  for (let i = 0; i <= n; i++) {
+    const t = i / n
+    const u = 1 - (1 - uR) * t
+    const e = ease(t)
+    top.push([u, vAtY(u, lampWrap.top + (lampWrap.endTop - lampWrap.top) * e)])
+    bottom.push([u, vAtY(u, lampWrap.bottom + (lampWrap.endBottom - lampWrap.bottom) * e)])
+  }
+  const end: V2[] = []
+  for (let i = 1; i < 12; i++) {
+    const a = Math.PI / 2 - (i / 12) * Math.PI
+    const y = mid + r * Math.sin(a)
+    // March forward from uR by the half circle's depth at this height.
+    const depth = r * Math.cos(a)
+    let u = uR
+    for (let k = 0; k < 200 && zAt(u) - zAt(uR) < depth; k++) u -= 0.0001
+    end.push([u, vAtY(u, y)])
+  }
+  return new TailEdgeHole(S, [...top, ...end, ...bottom.reverse()])
 }
 
 export interface Cuts {
@@ -67,6 +149,7 @@ export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, re
   const bay = projectCurve(mm, 'y', planLines.bay, true, 0.008, topWin, true, 0.06)
   const bonnet = projectCurve(mm, 'y', planLines.bonnet, false, 0.006, topWin, false, 0.08)
   const wing = projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08)
+  const lampWrapCut = lampWrapHole(main)
   const mainCuts: Cuts = {
     holes: [
       { c: dlo, inset: 0 },
@@ -75,6 +158,7 @@ export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, re
       { c: bay, inset: 0 },
       { c: intake, inset: 0 },
       { c: upper, inset: 0 },
+      { c: lampWrapCut, inset: 0 },
     ],
     gaps: [door, bonnet, wing],
     glass: [dlo, screen, rearGlass],
@@ -87,7 +171,7 @@ export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, re
     front: nose.cuts,
     rear: tail.cuts,
     maps: { main: mm, front: fm, rear: rm },
-    curves: { dlo, intake, upper, door, screen, rearGlass, bay, bonnet, wing, ...nose.curves, ...tail.curves },
+    curves: { dlo, intake, upper, door, screen, rearGlass, bay, bonnet, wing, lampWrap: lampWrapCut, ...nose.curves, ...tail.curves },
   }
 }
 
