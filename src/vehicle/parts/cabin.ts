@@ -10,6 +10,25 @@ export interface Cabin {
   screens: THREE.BufferGeometry
 }
 
+/**
+ * Unwelds a mesh and maps each triangle in metres onto the plane its own face normal faces most, so the carbon weave has a
+ * tangent frame with u and v well apart on every face; the welded box projection mixes planes across rounded corners.
+ */
+function faceMapped(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const out = g.toNonIndexed()
+  const P = out.getAttribute('position')
+  const uv = out.getAttribute('uv')
+  for (let i = 0; i < P.count; i += 3) {
+    const e1 = [0, 1, 2].map((k) => P.getComponent(i + 1, k) - P.getComponent(i, k))
+    const e2 = [0, 1, 2].map((k) => P.getComponent(i + 2, k) - P.getComponent(i, k))
+    const n = [Math.abs(e1[1] * e2[2] - e1[2] * e2[1]), Math.abs(e1[2] * e2[0] - e1[0] * e2[2]), Math.abs(e1[0] * e2[1] - e1[1] * e2[0])]
+    const [a, b] = n[0] >= n[1] && n[0] >= n[2] ? [2, 1] : n[1] >= n[2] ? [0, 2] : [0, 1]
+    for (let j = i; j < i + 3; j++) uv.setXY(j, P.getComponent(j, a), P.getComponent(j, b))
+  }
+  g.dispose()
+  return out
+}
+
 /** Winds every triangle to face the way its vertex normals point. */
 export function orient(g: THREE.BufferGeometry): THREE.BufferGeometry {
   const P = g.getAttribute('position')
@@ -57,9 +76,11 @@ const rounded = (x: number, y: number, w: number, h: number, r: number): V2[] =>
 
 function seat(leather: MeshBuilder, trim: MeshBuilder, x: number): void {
   const cushion: V2[] = [[0.27, 0.2], [0.28, 0.33], [0.2, 0.35], [-0.12, 0.3], [-0.22, 0.29], [-0.22, 0.2]]
-  const back: V2[] = [[-0.16, 0.27], [-0.31, 0.83], [-0.3, 0.96], [-0.36, 1.0], [-0.44, 0.97], [-0.45, 0.82], [-0.3, 0.24]]
+  const back: V2[] = [[-0.16, 0.27], [-0.315, 0.85], [-0.36, 0.88], [-0.44, 0.87], [-0.45, 0.82], [-0.3, 0.24]]
+  const headrest: V2[] = [[-0.315, 0.84], [-0.3, 0.96], [-0.36, 1.0], [-0.43, 0.97], [-0.44, 0.84]]
   slab(leather, cushion, x - 0.17, x + 0.17)
   slab(leather, back, x - 0.15, x + 0.15)
+  slab(leather, headrest, x - 0.095, x + 0.095)
   const bolster: V2[] = [[-0.1, 0.27], [-0.25, 0.8], [-0.36, 0.83], [-0.42, 0.78], [-0.3, 0.22]]
   const thigh: V2[] = [[0.25, 0.2], [0.27, 0.38], [0.15, 0.4], [-0.2, 0.34], [-0.2, 0.2]]
   for (const s of [-1, 1]) {
@@ -144,5 +165,5 @@ export function cabin(): Cabin {
   seat(leather, trim, 0.37)
   seat(leather, trim, -0.37)
   steering(leather, carbon, [0.37, 0.64, 0.4], norm([0, 0.42, -1]))
-  return { leather: orient(leather.geometry()), trim: orient(trim.geometry()), carbon: orient(carbon.geometry()), screens: orient(screens.geometry()) }
+  return { leather: orient(leather.geometry()), trim: orient(trim.geometry()), carbon: faceMapped(orient(carbon.geometry())), screens: orient(screens.geometry()) }
 }

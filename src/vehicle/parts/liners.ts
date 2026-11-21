@@ -425,13 +425,13 @@ export function buildLiners(sprung: THREE.Group, main: Surface, m: LinerMaterial
   const lodTag = full ? 'full' : 'blockout'
   const archLipMat = tag(
     new THREE.MeshPhysicalMaterial({
-      color: full ? 0x131720 : 0x3b3f46,
-      metalness: 0.18,
-      roughness: full ? 0.18 : 0.34,
-      clearcoat: full ? 0.92 : 0.32,
-      clearcoatRoughness: 0.054,
+      color: full ? 0x111317 : 0x3b3f46,
+      metalness: 0.16,
+      roughness: full ? 0.2 : 0.34,
+      clearcoat: full ? 0.88 : 0.32,
+      clearcoatRoughness: 0.058,
       specularIntensity: 1.0,
-      envMapIntensity: 1.48,
+      envMapIntensity: 1.3,
     }),
     'sheet',
   )
@@ -439,18 +439,18 @@ export function buildLiners(sprung: THREE.Group, main: Surface, m: LinerMaterial
     baseCurv: 0.045,
     coatCurv: 0.038,
     coatF0: waterF0 + 0.024,
-    gain: 2.25,
+    gain: 2.15,
   })
 
   const linerMat = tag(
     new THREE.MeshPhysicalMaterial({
-      color: full ? 0x171b23 : 0x2a2d33,
-      metalness: 0.08,
-      roughness: full ? 0.31 : 0.62,
-      clearcoat: full ? 0.88 : 0.28,
-      clearcoatRoughness: 0.076,
+      color: full ? 0x141619 : 0x2a2d33,
+      metalness: 0.06,
+      roughness: full ? 0.36 : 0.62,
+      clearcoat: full ? 0.6 : 0.28,
+      clearcoatRoughness: 0.095,
       specularIntensity: 0.96,
-      envMapIntensity: 1.46,
+      envMapIntensity: 1.1,
     }),
     'sheet',
   )

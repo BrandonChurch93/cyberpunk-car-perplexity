@@ -44,19 +44,30 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   const facadeTint = /left edge|hotel tower|parking tower|west garage|west distance/.test(id)
     ? new THREE.Color(.72,1.03,1.12) : /right edge|amber tower|east garage/.test(id) ? new THREE.Color(1.15,1.00,.87) :
       new THREE.Color(.96,.98,1.08)
-  const reflectedVeil = /east|outer skyline/.test(id) && layer !== 'near'
-    ? new THREE.Color(.030,.038,.068) : new THREE.Color(.014,.015,.024)
+  const centerBank = /middle (west|center) distance|far (center|central|inner west)|center (exchange|clock|fluted|kiln|upper|communication|distant)|rear middle|hero (violet|bar) tower|tower setback glass wing/.test(id)
+  const reflectedVeil = centerBank
+    ? layer === 'near' ? new THREE.Color(.025,.018,.026) : new THREE.Color(.190,.126,.163)
+    : layer === 'near' ? new THREE.Color(0,0,0)
+      : /east|outer skyline/.test(id) ? new THREE.Color(.030,.038,.068) : new THREE.Color(.014,.015,.024)
   const west = /left edge|hotel tower|parking tower|west garage|west distance|c9 west/.test(id)
-  const windowContrast = (layer === 'near' ? .64 : layer === 'middle' ? .57 : .39) * (west ? .79 : 1)
+  const westOffices = Number(/left edge|hotel tower|parking tower|west garage/.test(id))
+  const eastFrontage = /amber tower|east garage/.test(id)
+  const garageReturn = Number(id === 'hero near west garage bay')
+  const shadowWash = centerBank
+    ? layer === 'near' ? new THREE.Color(.106,.075,.117).multiplyScalar(id.includes('glass wing') ? 1.42 : 1) : new THREE.Color(.115,.084,.129)
+    : new THREE.Color(.175,.138,.184).multiplyScalar(garageReturn)
+  const roomPhotometry = new THREE.Vector3(westOffices,eastFrontage ? .72 : 1,eastFrontage ? .80 : 1)
+  const windowContrast = (layer === 'near' ? .87 : layer === 'middle' ? .72 : .48) * (west ? 1.08 : 1)
   const stripFloors = /left edge|west garage/.test(id)
-  const claddingShade = id === 'hero amber tower' ? .71 : 1
-  const tenantGate = layer === 'near' ? new THREE.Vector3(.115,.428,.785) : layer === 'middle'
-    ? new THREE.Vector3(.143,.477,.833) : new THREE.Vector3(.20,.550,.913)
-  const windowTail = layer === 'far' ? 0 : west ? 31
+  const amberRisers = id === 'hero amber tower'
+  const claddingShade = amberRisers ? .71 : 1
+  const tenantGate = layer === 'near' ? new THREE.Vector3(.078,.46,.73) : layer === 'middle'
+    ? new THREE.Vector3(.11,.50,.78) : new THREE.Vector3(.16,.57,.84)
+  const windowTail = layer === 'far' ? 0 : west ? 98+8*westOffices
     : /amber tower|right edge|east garage/.test(id) ? 29
     : /screen tower|bar tower|center exchange|center clock|center fluted/.test(id) ? 32 : 12
   const spill = (i: number) => spills[i] ?? { point: new THREE.Vector3(), size: new THREE.Vector2(1,1), color: new THREE.Color(0,0,0) }
-  const prefix = 'varying vec2 wallUv, wallUnit; varying vec3 wallPoint, wallNormal, wallTangent; varying float wallSide;'
+  const prefix = 'varying vec2 wallUv, wallUnit, wallFacing; varying vec3 wallPoint, wallNormal, wallTangent; varying float wallSide;'
   const mat = new THREE.MeshStandardMaterial({
     color: new THREE.Color(level*.14,level*.16,level*.20).multiplyScalar(claddingShade),
     roughness: facade === 'concrete' ? .79 : facade === 'hotel' ? .58 : .39,
@@ -78,7 +89,8 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
       shellLuma: { value: level }, whiteBalance: { value: whiteBalance },
       paneHalfWidth: { value: paneHalfWidth }, litOpening: { value: litOpening },
       facadeTint: { value: facadeTint }, reflectedVeil: { value: reflectedVeil }, windowTail: { value: windowTail }, claddingShade: { value: claddingShade },
-      windowContrast: { value: windowContrast },
+      shadowWash: { value: shadowWash }, garageReturn: { value: garageReturn }, roomPhotometry: { value: roomPhotometry },
+      windowContrast: { value: windowContrast }, amberRisers: { value: Number(amberRisers) }, westGlaze: { value: Number(west && layer === 'near') },
       mechanicalPitch: { value: mechanicalPitch }, distanceLayer: { value: layer === 'near' ? 0 : layer === 'middle' ? 1 : 2 },
       stripFloors: { value: stripFloors ? 1 : 0 }, tenantGate: { value: tenantGate },
       screenPoint: { value: screen.point }, screenNormal: { value: screen.normal }, screenSize: { value: screen.size },
@@ -92,6 +104,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
       shader.vertexShader = insertAfter(shader.vertexShader, '#include <project_vertex>', /* glsl */ `
         wallUv=vec2(mix(position.x,position.z,abs(normal.x)),position.y);
         wallUnit=uv;
+        wallFacing=max(normal.xz,vec2(0.0));
         wallSide=1.0-abs(normal.y);
         wallPoint=(modelMatrix*vec4(position,1.0)).xyz;
         wallNormal=normalize(mat3(modelMatrix)*normal);
@@ -100,8 +113,8 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', /* glsl */ `
         ${prefix}
         uniform vec2 bay, roomDepthMeters, litOpening;
-        uniform float salt, facadeFamily, shellLuma, whiteBalance, mechanicalPitch, distanceLayer, stripFloors, windowTail, windowContrast, paneHalfWidth, claddingShade;
-        uniform vec3 screenPoint,screenNormal,facadeTint,reflectedVeil,screenSpill,tenantGate;
+        uniform float salt, facadeFamily, shellLuma, whiteBalance, mechanicalPitch, distanceLayer, stripFloors, windowTail, windowContrast, paneHalfWidth, claddingShade, amberRisers, westGlaze, garageReturn;
+        uniform vec3 screenPoint,screenNormal,facadeTint,reflectedVeil,screenSpill,tenantGate,shadowWash,roomPhotometry;
         uniform vec3 spillPoint[2],spillTint[2];
         uniform vec2 screenSize,spillSize[2];
         uniform sampler2D screenInk;
@@ -159,20 +172,26 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         float banded=1.0-step(.5,abs(facadeFamily-2.0));
         float curtain=1.0-max(concrete,max(banded,hotel));
         float district=field(vec2(roomCell.x/(tenantWidth*1.44),roomCell.y*.164)+vec2(salt,salt*.63));
-        float tenantOn=smoothstep(tenantGate.y-.05,tenantGate.y+.17,mix(suite,tenantStack,.75));
+        float tenantOn=step(tenantGate.y+mix(.14,-.12,district),mix(suite,tenantStack,.61));
         float floorBlock=hash21(vec2(floor((roomCell.y+salt*.41)/(hotel>0.0?5.0:7.0)),salt*1.83));
-        float occupied=step(tenantGate.x,floorState)*max(tenantOn*step(.16,roomId)*smoothstep(.25,.61,district),step(.986,roomId)*.72);
-        float broadTenant=smoothstep(tenantGate.z+.024*hotel,.99,floorState)*smoothstep(.37,.68,tenantStack);
+        float occupied=step(tenantGate.x,floorState)*max(tenantOn*step(.14,roomId),step(.968,roomId));
+        float broadTenant=step(tenantGate.z+.024*hotel,floorState)*step(.40,tenantStack)*step(.22,roomId);
         float mechanical=1.0-step(1.0,mod(roomCell.y+floor(salt),mechanicalPitch));
         float podium=(1.0-smoothstep(.56,.74,wallUnit.y));
         float accentRun=stripFloors*podium*step(.79,stack)*step(.28,suite);
-        float lamp=max(occupied,broadTenant)*(1.0-mechanical)*mix(.19,1.0,smoothstep(.15,.46,floorBlock));
+        float occupiedWest=roomPhotometry.x*step(.76,floorState)*step(.65,tenantStack)*step(.42,roomId)*step(.52,suite)*(1.0-accentRun)*(1.0-mechanical);
+        float warmRiser=0.0, riserOpen=0.0;
+        if (amberRisers>0.0) {
+          warmRiser=hash21(vec2(floor(roomCell.x*.48),salt+36.8));
+          riserOpen=step(.27,warmRiser)*step(.38,roomId)*step(.10,floorState);
+        }
+        float lamp=max(max(occupied,broadTenant),riserOpen)*(1.0-mechanical)*mix(.56,1.0,smoothstep(.12,.54,floorBlock));
         float lobby=smoothstep(.71,.96,suite)*(1.0-smoothstep(.10,.27,wallUnit.y))*(.24+.76*tenantOn);
         float curtainBand=smoothstep(.74,.91,floorState)*smoothstep(.48,.84,district);
         vec2 width=vec2(paneHalfWidth,.325-.046*banded-.025*concrete);
         float glass=wallSide*windowMask(pane-vec2(.5,.55),width,glazingAA);
         float aperture=wallSide*windowMask(pane-vec2(.5,.583),litOpening,lightAA);
-        float mullion=1.0-(.53-.24*concrete)*windowMask(pane-vec2(.5,.55),vec2(.017,.36),aa);
+        float mullion=1.0-(.69-.32*concrete)*windowMask(pane-vec2(.5,.55),vec2(.024,.36),aa);
         vec3 toEye=normalize(cameraPosition-wallPoint);
         float faceOn=max(dot(toEye,wallNormal),.08);
         vec2 viewSlope=vec2(dot(toEye,wallTangent),toEye.y)/faceOn;
@@ -185,20 +204,23 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         float blind=.27-.12*slats*slatAA;
         float roomLight=mix(.46,mix(interior(pane,viewSlope,aa,roomDepth,roomTintId,roomId),blind,blindHalf),surfaceDetail);
         float spandrel=1.0-smoothstep(.093,.117+aa.y,abs(pane.y-.105));
-        float sill=wallSide*(1.0-smoothstep(.016,.026+aa.y,abs(pane.y-.216)));
+        float sill=wallSide*(1.0-smoothstep(.023,.045+aa.y,abs(pane.y-.216)));
         float pilaster=windowMask(vec2(fract(pane.x+.5)-.5,pane.y-.5),vec2(.025+.045*concrete,.499),aa);
         float rib=wallSide*windowMask(vec2(fract((roomCell.x+pane.x)*.25+.5)-.58,pane.y-.5),vec2(.024+.012*curtain,.499),aa);
+        float unlitWest=westGlaze*(1.0-.83*lamp)*(.31+.69*glass);
         float wallMeasure=min(wallUnit.x,1.0-wallUnit.x);
         float corner=wallSide*(1.0-smoothstep(.008,.022+fwidth(wallUnit.x),wallMeasure));
         float panelGrain=field(wallUv*vec2(.89,.61)+salt);
         float panelPatina=field(wallUv*vec2(.21,.035)+salt*1.43);
-        diffuseColor.rgb*=max(.12,.68+.19*panelGrain+.22*panelPatina+(.29*banded-.26)*spandrel-.37*pilaster-.30*rib-.55*glass-.38*mechanical+.38*corner);
+        diffuseColor.rgb*=max(.12,.68+.19*panelGrain+.22*panelPatina+(.29*banded-.26)*spandrel-.37*pilaster-.30*rib-.55*glass-.38*mechanical+.38*corner)*(1.0-.22*unlitWest);
       `)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', /* glsl */ `
-        vec3 tungsten=mix(vec3(1.28,.61,.23),vec3(1.10,.91,.67),clamp(mix(roomTintId,tenantStack,.22)+(whiteBalance-.31),0.0,1.0));
+        vec3 tungsten=mix(vec3(1.23,.66,.31),vec3(1.04,.92,.73),clamp(mix(roomTintId,tenantStack,.22)+(whiteBalance-.31),0.0,1.0));
         vec3 roomTint=mix(tungsten,vec3(.48,.75,1.16),smoothstep(.91,.98,roomId));
         roomTint=mix(roomTint,vec3(1.07,.23,.65),step(.989,suite));
         roomTint=mix(roomTint,vec3(.042,.69,1.16),accentRun*.68);
+        vec3 riserTint=mix(vec3(1.62,.102,.066),vec3(1.24,.57,.19),smoothstep(.58,.70,warmRiser));
+        roomTint=mix(roomTint,riserTint,riserOpen*(.78+.16*roomTintId));
         vec3 reflected=reflect(-toEye,wallNormal);
         float brightSky=smoothstep(.005,.235,reflected.y);
         float citySheen=pow(max(0.0,dot(reflected,normalize(vec3(.27,.12,.95)))),3.0);
@@ -223,8 +245,8 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         }
         float envelope=.18+.13*distanceLayer+.31*shellLuma;
         float skyStain=smoothstep(.25,.91,wallUnit.y);
-        vec3 farVeil=reflectedVeil*(distanceLayer*.5)*(.78+.22*skyStain);
-        float panelReflectance=max(.12,.47+.25*panelPatina+.13*panelGrain-.22*spandrel-.33*mechanical-.32*rib-.22*glass);
+        vec3 farVeil=reflectedVeil*max(.48,distanceLayer*.5)*(.78+.22*skyStain);
+        float panelReflectance=max(.12,.54+.23*panelPatina+.12*panelGrain-.24*spandrel-.33*mechanical-.30*rib-.34*glass-.17*pilaster);
         vec3 toScreen=screenPoint-wallPoint;
         float screenReach=sqrt(screenSize.x*screenSize.y)*1.36;
         vec3 muralDistance=toScreen*vec3(1.0,.71,1.0)/screenReach;
@@ -233,17 +255,30 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         vec3 districtBounce=mix(vec3(.28,.26,.33),screenSpill,.46)*muralBounce*muralBounce*muralFacing*.24;
         float rank=distanceLayer*.5;
         vec3 cityBounce=mix(vec3(.074,.078,.092)*facadeTint,vec3(.064,.062,.087),rank);
-        cityBounce*=claddingShade*(.64+.45*panelReflectance+.22*sqrt(faceOn))*(.84+.16*skyStain);
+        cityBounce*=claddingShade*(.54+.56*panelReflectance+.22*sqrt(faceOn))*(.84+.16*skyStain);
         vec3 spill=signGlow*(.19+.12*glass)+districtBounce*(.72+.52*panelReflectance);
-        totalEmissiveRadiance+=wallSide*(claddingShade*envelope*skyGlass*panelReflectance+farVeil+cityBounce+spill);
-        totalEmissiveRadiance+=(sill+pilaster*.32+corner*.44)*skyGlass*(.33+.16*floorState)*(.52+.59*curtain+.35*banded);
-        float lampRadiance=.21+1.23*exposure*exposure+mix(9.6,3.5,rank)*pow(exposure,11.0)+.39*windowTail*pow(exposure,17.0);
+        vec3 baseGlow=(claddingShade*envelope*skyGlass*panelReflectance+cityBounce+spill)*(1.0-.21*unlitWest)+farVeil;
+        float baseLuma=dot(baseGlow,vec3(.2126,.7152,.0722));
+        float shadow=(1.0-smoothstep(.053,mix(.146,.192,garageReturn),baseLuma))*(1.0-.71*lamp);
+        float receive=mix(1.0,max(wallFacing.x,wallFacing.y*smoothstep(.77,.99,wallUnit.x)),garageReturn);
+        float spillCompression=mix(1.0,roomPhotometry.z,smoothstep(.105,.260,baseLuma));
+        baseGlow=baseGlow*spillCompression+shadowWash*shadow*receive*(.75+.33*panelReflectance)*(1.0-.35*mechanical-.21*rib);
+        totalEmissiveRadiance+=wallSide*baseGlow;
+        totalEmissiveRadiance+=(sill+pilaster*.14+corner*.44)*skyGlass*(.53+.19*floorState)*(.52+.59*curtain+.35*banded);
+        float lampRadiance=.46+1.64*exposure*exposure+mix(10.8,3.9,rank)*pow(exposure,10.0)+.39*windowTail*pow(exposure,17.0)+riserOpen*(.53+1.4*exposure);
+        float roomCompression=mix(roomPhotometry.y,1.0,smoothstep(.86,.99,exposure));
+        lampRadiance*=roomCompression*(1.0-.30*roomPhotometry.x*(1.0-smoothstep(.77,.98,exposure)));
         roomTint=mix(roomTint,vec3(.66,.65,.83),rank*.48);
         vec3 litRoom=roomTint*lamp*lampRadiance*roomLight*windowContrast;
         vec3 subpixelRooms=mix(vec3(.126,.104,.092),vec3(.082,.085,.112),rank)*(1.0-mechanical);
         totalEmissiveRadiance+=glass*(.28+.75*curtain+.28*banded)*
-          (claddingShade*skyGlass*(.23+(1.0-faceOn)*.35)+screenGlass*screenMirror*.37)*(1.0-.59*mechanical);
+          (claddingShade*skyGlass*(.23+(1.0-faceOn)*.35)+screenGlass*screenMirror*.37)*(1.0-.59*mechanical)*(1.0-.25*unlitWest);
         totalEmissiveRadiance+=aperture*mullion*mix(subpixelRooms,litRoom,surfaceDetail);
+        vec2 officeHalf=min(width,litOpening*vec2(1.15,.97));
+        float office=wallSide*windowMask(pane-vec2(.5,.583),officeHalf,lightAA);
+        vec3 officeTint=mix(vec3(1.0,.80,.54),vec3(1.0,.96,.86),smoothstep(.52,.91,tenantStack));
+        totalEmissiveRadiance+=officeTint*office*mullion*occupiedWest*surfaceDetail*
+          (12.0+46.0*exposure*exposure)*(.56+.44*roomLight);
         totalEmissiveRadiance+=wallSide*roomTint*(lobby*.12+curtainBand*.086)*(1.0-mechanical)*
           (1.0-smoothstep(.13,.25+lightAA.y,abs(pane.y-.56)));
       `)
@@ -387,21 +422,24 @@ export function signGlass(glyphs: THREE.Texture, tint: THREE.Color, width: numbe
   })
 }
 
-export function fixtureOpal(color: THREE.Color, segments: number, shaped = false): THREE.ShaderMaterial {
+export function fixtureOpal(color: THREE.Color, segments: number, shaped = false, gap = 0): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     toneMapped: false, vertexShader: opalVertex,
-    uniforms: { tint: { value: color }, segments: { value: segments }, shaped: { value: Number(shaped) } },
+    uniforms: { tint: { value: color }, segments: { value: segments }, shaped: { value: Number(shaped) }, gap: { value: gap } },
     fragmentShader: /* glsl */ `
       varying vec2 face;
       uniform vec3 tint;
-      uniform float segments, shaped;
+      uniform float segments, shaped, gap;
       void main() {
         vec2 d=abs(face-.5);
         float rim=1.0-smoothstep(.42,.51,max(d.x,d.y));
         float seam=1.0;
+        float shutter=1.0;
         if (segments>1.0) {
           float t=face.y*segments;
-          seam=.085+.915*smoothstep(.026,.098+fwidth(t),abs(fract(t+.5)-.5));
+          float joint=abs(fract(t+.5)-.5);
+          seam=.085+.915*smoothstep(.026,.098+fwidth(t),joint);
+          if (gap>0.0) shutter=mix(.019,1.0,smoothstep(gap,gap+min(.065,.017+fwidth(t)),joint));
         }
         float diffusion=.74+.26*cos((face.x-.5)*2.4);
         vec3 lens=tint*diffusion;
@@ -412,7 +450,7 @@ export function fixtureOpal(color: THREE.Color, segments: number, shaped = false
           lens=(tint*(.28+.35*shoulder+.35*core)+tint.b*vec3(.081,.048,0.0)*core)*feed;
           seam=.61+.39*seam;
         }
-        gl_FragColor=vec4(lens*(.12+.88*rim)*seam,1);
+        gl_FragColor=vec4(lens*(.12+.88*rim)*seam*shutter,1);
       }
     `,
   })

@@ -3,6 +3,7 @@ import { FullscreenPass, passMaterial } from '../fullscreen'
 import { filmLightsGlsl, filmLightsShadowGlsl } from '../lights'
 import type { StageDeps, StagePart } from '../parts'
 import { streamSeed } from '../random'
+import { createSignAir, signAirGlsl } from './signs'
 
 export const atmosphere = {
   uniformExtinction: 0.0045,
@@ -51,7 +52,7 @@ export const atmosphere = {
   projectorWakeFraction: 0.27,
   projectorWakeSlope: [-0.062, -0.012, 0.17, 0.24],
   projectorWakeScatter: [0.53, 0.54],
-  projectorOpeningFraction: 0.085,
+  projectorOpeningFraction: 0.17,
   projectorOpeningAngle: [0.58, 0.86],
   projectorOpeningHeight: [-0.12, -0.045],
   projectorOpeningReach: [0.14, 0.32, 0.97, 1.40],
@@ -301,6 +302,10 @@ float densityAt(float t, float y, vec2 layer, float cityStart) {
   return density;
 }
 
+#ifdef SIGN_AIR
+${signAirGlsl}
+#endif
+
 vec2 clipCone(vec2 segment, vec3 eyeFromLight, vec3 ray, vec3 axis, float cutoff) {
   float axialOrigin = dot(eyeFromLight, axis);
   float axialRay = dot(ray, axis);
@@ -351,6 +356,8 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   vec3 hit = origin + far * ray;
   float wakeGain = cameraWake ? smoothstep(${atmosphere.projectorWakeFocus.join(', ')}, focusDistance) : 0.0;
   float frontDeck = frontDeckWeight(hit, ray, wakeGain);
+  // Air carries local light scatter along the short foreground deck paths.
+  float localScatterWeight = 1.0 - frontDeck;
   float deckAir = 1.0 - ${atmosphere.projectorDeckExtinctionLoss} * frontDeck;
   vec2 footprint = deckInterval(origin, ray);
   vec2 layer = layerInterval(origin, ray, footprint);
@@ -363,6 +370,9 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   vec3 airlight = nearAirlight * (1.0 - exp(-airDepth));
   airlight += exp(-airDepth - layerDepth) * cityRadiance(origin, ray, cityStart, far, cityLayers);
   vec3 radiance = airlight * foregroundScatter(far * 0.5);
+  #ifdef SIGN_AIR
+  radiance += scatterSigns(origin, ray, far, cityStart, layerDepth);
+  #endif
   vec2 pixel = floor(uv * vec2(textureSize(sceneDepth, 0)));
   float pixelNoise = fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
   for (int i = 0; i < MAX_FILM_LIGHTS; i++) {
@@ -424,7 +434,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
         float close = 1.0 - smoothstep(1.0, 3.0, sourceDistance / shape.y);
         strength *= 1.0 + 1.1 * sourceChroma * close;
       }
-      radiance += color.rgb * glow * angular * exp(-glowDepth) * falloff * falloff * strength
+      radiance += (distantArea ? 1.0 : localScatterWeight) * color.rgb * glow * angular * exp(-glowDepth) * falloff * falloff * strength
         * densityAt(tGlow, glowPoint.y, layer, cityStart) * phase(dot(ray, glowDirection) / glowDistance, anisotropy) * foregroundScatter(tGlow);
       continue;
     }
@@ -485,7 +495,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
           receive = mix(receiver, 1.0, opening * span * smoothstep(${atmosphere.projectorOpeningClearance.join(', ')}, clearance));
         }
       } else {
-        inScatter = densityAt(t, p.y, layer, cityStart) * phase(cosine, anisotropy) * scatterFraction;
+        inScatter = localScatterWeight * densityAt(t, p.y, layer, cityStart) * phase(cosine, anisotropy) * scatterFraction;
       }
       radiance += light * (visible * weight * inScatter * receive
         * exp(-opticalDepth) * foregroundScatter(t) * projectorGain);
@@ -495,7 +505,9 @@ vec4 scatterToDepth(vec2 uv, float depth) {
 }
 `
 
-const integrate = scattering + /* glsl */ `
+const cameraScattering = '#define SIGN_AIR\n' + scattering
+
+const integrate = cameraScattering + /* glsl */ `
 void main() {
   ivec2 size = textureSize(sceneDepth, 0);
   ivec2 pixel = ((ivec2(gl_FragCoord.xy) * 2 + 1) * size) / (2 * coarseResolution);
@@ -504,7 +516,7 @@ void main() {
 }
 `
 
-const composite = scattering + /* glsl */ `
+const composite = cameraScattering + /* glsl */ `
 float eyeDepth(float d) {
   return 1.0 / (inverseProjection[2].w * (d * 2.0 - 1.0) + inverseProjection[3].w);
 }
@@ -650,7 +662,7 @@ export function createHazeCapture(domain: HazeDomain) {
 
 export type HazeCapture = ReturnType<typeof createHazeCapture>
 
-export function createHaze({ rig, world }: HazeDomain): StagePart {
+export function createHaze({ rig, world }: HazeDomain & { world: { root?: THREE.Object3D } }): StagePart {
   const coarse = new THREE.WebGLRenderTarget(1, 1, {
     type: THREE.HalfFloatType,
     minFilter: THREE.NearestFilter,
@@ -658,7 +670,8 @@ export function createHaze({ rig, world }: HazeDomain): StagePart {
     depthBuffer: false,
     generateMipmaps: false,
   })
-  const uniforms = hazeUniforms({ rig, world }, coarse.texture)
+  const signs = createSignAir(world.root)
+  const uniforms = { ...hazeUniforms({ rig, world }, coarse.texture), ...signs.uniforms }
   uniforms.cameraWake.value = true
   // The rig places the vehicle projectors directly after the world lights.
   uniforms.frontProjectorIndex.value = world.lights?.length ?? -1
@@ -681,6 +694,7 @@ export function createHaze({ rig, world }: HazeDomain): StagePart {
         uniforms.deckBounds.value.set(min.x, min.y, max.x, max.y)
         uniforms.sampleJitter.value.set(...sample.misc)
         uniforms.focusDistance.value = state.focusDistance
+        signs.update(camera)
         integratePass.render(renderer, coarse)
         compositePass.render(renderer, output)
       },

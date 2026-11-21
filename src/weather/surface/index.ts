@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { circleScale, pupilIsActive } from '../../core/bokeh/pupil'
 import { config, type FormatSpec } from '../../config'
 import type { FrameContext, SampleContext, SceneSystem, WetnessKind } from '../../core/contract'
+import { probeHeight } from '../../core/reflect'
 import { cameraAt } from '../../director/shots'
 import { beatById, events, stateAt } from '../../director/timeline'
 import type { WeatherDeps } from '../contract'
@@ -12,18 +13,17 @@ import { DropGeometry, geometryAngle, geometryRange } from './drop-geometry'
 import { applyPorous, type Uniforms } from './porous'
 import { heroBasin, SyntheticRelief, type Basin } from './relief'
 import { type ExtraImpact, RippleField } from './ripples'
-import { rivuletPace, rivuletTravel, Runners } from './runners'
+import { laidLength, rivuletPace, rivuletTravel, Runners } from './runners'
 import { applySheet, looksLikeRubber } from './sheet'
 
 const reliefSize = 1024
-// Mirrors the capture height in core/reflect, which keeps it private.
-const reflectProbeHeight = 0.6
 const shakeStart = events.engineStart + 0.15
 const refill = { start: beatById('return').start + 3, end: config.film.durationSeconds - 1 }
 
-/** Contact angle by material class. Opaque coated parts bead like waxed paint. Transparent parts are coated polycarbonate and glass. */
+/** Contact angle by material class. Opaque coated parts bead like waxed paint. Clear parts are coated polycarbonate and glass. */
 function beadClass(material: THREE.Material, index: number): BeadClass {
-  return { contactDegrees: material.transparent ? 70 : 100, salt: 101 + 17 * index }
+  const clear = material.transparent || ((material as THREE.MeshPhysicalMaterial).transmission ?? 0) > 0
+  return { contactDegrees: clear ? 70 : 100, salt: 101 + 17 * index }
 }
 
 function vehicleMeshes(root: THREE.Object3D, wanted: Map<THREE.Material, BeadClass>): Array<{ mesh: THREE.Mesh; bead: BeadClass }> {
@@ -139,7 +139,9 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
       let clear = true
       for (let d = 0; clear && d <= lead + 0.035; d += 0.006) clear = clearOfSlots(p.clone().addScaledVector(down, d), 0.009)
       if (!clear || !clearOfSlots(head.clone().addScaledVector(down, 0.08), 0.02)) continue
-      rows.push({ p, head, score: -0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.15 * runBlur - 1.5 * centre + (p.y - aim.y) })
+      let laidClear = 1
+      for (let d = 0.006; d <= laidLength; d += 0.006) if (!clearOfSlots(p.clone().addScaledVector(down, -d), 0.006)) laidClear = 0
+      rows.push({ p, head, score: laidClear - 1 - 0.6 * n.y + 0.5 * (1 - Math.abs(down.dot(forward))) - 0.5 * blur - 0.15 * runBlur - 1.5 * centre + (p.y - aim.y) })
     }
   })
   rows.sort((x, y) => y.score - x.score)
@@ -293,7 +295,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       cells.beginFrame(cam.position)
       drops.box.reflectBoxMin.value.copy(world.reflectionBox.min)
       drops.box.reflectBoxMax.value.copy(world.reflectionBox.max)
-      drops.box.reflectProbe.value.setFromMatrixPosition(vehicle.root.matrixWorld).y += reflectProbeHeight
+      drops.box.reflectProbe.value.setFromMatrixPosition(vehicle.root.matrixWorld).y += probeHeight
       drops.box.reflectBoxOn.value = 1
       const extra: ExtraImpact[] = runners.impacts(frameStart - 0.6, frameStart + shutter)
       ripples.update(frameStart, frameStart + shutter, center, extra)

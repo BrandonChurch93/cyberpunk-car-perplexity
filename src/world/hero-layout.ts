@@ -24,29 +24,41 @@ type Source = { id: string; at: Tuple; size: readonly [number, number]; tint: Ti
 type RoofMaterials = ReturnType<typeof finishRoof>['materials']
 const screenTowerFront = -30.01
 const amberTowerFront = -30.40
-const hotelRoof = 6.52
+const hotelRoof = 5.80
 export const heroScreenMount = { at: [2.94,5.09,-29.80], yaw: -.32, scale: scale.screen*.972 } as const
-const signRadiance: Readonly<Record<string,number>> = { HOTEL: 4.1, PARKING: 3.0, BAR: 4.2, '24H': 3.4, OPEN: 4.1, EXIT: 2.7 }
+const signRadiance: Readonly<Record<string,number>> = { HOTEL: 6.5, PARKING: 5.6, BAR: 7.0, '24H': 3.4, OPEN: 4.1, EXIT: 3.4 }
 const opalRadiance: Readonly<Record<string,number>> = {
-  'left cyan facade sail': 2.3, 'left cyan secondary strip': 2.25,
-  'cyan garage rise': 2.7, 'cyan garage return': 4.0, 'cyan hotel facade strip': 3.7,
+  'left cyan facade sail': 2.7,
+  'cyan garage rise': 1.6, 'cyan garage return': 2.4, 'cyan hotel facade strip': 2.4,
   'violet mid distance blade': 4.8,
   'right amber facade sail': 2.8, 'amber garage rise': 2.65, 'amber garage return': 4.15,
 }
 const cyanApertures: Readonly<Partial<Record<string,readonly [width: number, gain: number]>>> = {
-  'left cyan facade sail': [.83,1.54], 'left cyan secondary strip': [.62,1.48],
-  'cyan garage rise': [.69,1.38], 'cyan garage return': [.43,1.60], 'cyan hotel facade strip': [.82,1.56],
+  'left cyan facade sail': [.81,1.54],
+  'cyan garage rise': [.56,1.38], 'cyan garage return': [.38,1.60], 'cyan hotel facade strip': [.74,1.56],
+}
+const amberLouvres: Readonly<Partial<Record<string,readonly [width: number, gain: number, gap: number]>>> = {
+  'right amber facade sail': [.89,.90,.070],
+  'amber garage rise': [.75,.90,.091], 'amber garage return': [.77,.94,.102],
+}
+const facadeSections: Readonly<Partial<Record<string,readonly (readonly [
+  offset: number, span: number, drop: number, levels: number, projection: number,
+])[]>>> = {
+  'hero left edge tower': [[-.18,.58,7.9,9,1.02],[.287,.29,2.6,8,.62]],
+  'hero hotel tower': [[-.19,.43,5.8,6,.94],[.25,.37,10.3,5,.74]],
+  'hero near west garage bay': [[-.16,.60,5.2,5,1.27],[.27,.29,8.1,5,.79]],
+  'hero amber tower': [[-.18,.50,12.4,6,1.16],[.24,.39,26.7,5,.77]],
+  'hero near east garage bay': [[-.13,.68,6.9,6,.95],[.33,.22,11.3,5,.67]],
 }
 
 export const approvedHeroSources = [
   { id: 'left cyan facade sail', at: [-11.76, 6.42, -29.40], size: [.139, 11.05], tint: 'cyan', scale: scale.leftBlade },
-  { id: 'left cyan secondary strip', at: [-12.03, 5.56, -29.38], size: [.16, 9.76], tint: 'cyan', scale: scale.leftBlade },
-  { id: 'cyan garage rise', at: [-8.88, 3.80, -25.23], size: [.26, 2.67], tint: 'cyan', scale: scale.westFrontage },
-  { id: 'cyan garage return', at: [-6.92, 3.61, -25.23], size: [.19, 2.84], tint: 'cyan', scale: scale.westFrontage },
-  { id: 'hotel rooftop cabinet', at: [-9.59, hotelRoof+.395, -32.10], size: [2.65, .86], tint: 'cyan', text: 'HOTEL', scale: scale.hotel },
-  { id: 'white parking blade', at: [-9.93, 3.47, -26.35], size: [.78, 4.34], tint: 'white', text: 'PARKING', scale: scale.parking },
-  { id: 'cyan hotel facade strip', at: [-8.43, 3.13, -25.23], size: [.07, 4.52], tint: 'cyan', scale: scale.westFrontage },
-  { id: 'far cyan bar cabinet', at: [-6.10, 4.01, -43.40], size: [2.57, 1.45], tint: 'cyan', text: 'BAR', scale: scale.bar },
+  { id: 'cyan garage rise', at: [-8.88, 3.55, -25.23], size: [.26, 2.16], tint: 'cyan', scale: scale.westFrontage },
+  { id: 'cyan garage return', at: [-6.92, 3.40, -25.23], size: [.19, 2.42], tint: 'cyan', scale: scale.westFrontage },
+  { id: 'hotel rooftop cabinet', at: [-9.48, hotelRoof+.425, -32.10], size: [2.03, .66], tint: 'cyan', text: 'HOTEL', scale: scale.hotel },
+  { id: 'white parking blade', at: [-9.93, 3.20, -26.35], size: [.61, 3.43], tint: 'white', text: 'PARKING', scale: scale.parking },
+  { id: 'cyan hotel facade strip', at: [-8.43, 2.74, -25.23], size: [.07, 3.72], tint: 'cyan', scale: scale.westFrontage },
+  { id: 'far cyan bar cabinet', at: [-6.10, 4.01, -43.40], size: [1.98, 1.11], tint: 'cyan', text: 'BAR', scale: scale.bar },
   { id: 'violet mid distance blade', at: [-1.48, 5.38, -31.64], size: [.44, 2.58], tint: 'violet', scale: scale.screen },
   { id: 'magenta violet tower screen', ...heroScreenMount, size: [5.08,5.18], tint: 'magenta' },
   { id: 'magenta upper service ribbon', at: [2.62, 15.79, -30.02], size: [3.22, .37], tint: 'magenta', scale: scale.screen },
@@ -56,7 +68,7 @@ export const approvedHeroSources = [
   { id: 'right amber facade sail', at: [13.00, 3.17, -30.20], size: [.098, 3.14], tint: 'amber', scale: scale.rightBlade },
   { id: 'amber garage rise', at: [7.24, 3.51, -17.61], size: [.23, 2.64], tint: 'amber', scale: scale.eastFrontage },
   { id: 'amber garage return', at: [7.76, 3.31, -17.61], size: [.12, 2.23], tint: 'amber', scale: scale.eastFrontage },
-  { id: 'amber parapet exit', at: [5.45, 1.30, -9.76], size: [1.16, .41], tint: 'amber', text: 'EXIT' },
+  { id: 'amber parapet exit', at: [5.35, 1.257, -9.76], size: [.90, .32], tint: 'amber', text: 'EXIT' },
   { id: 'left warm parapet strip', at: [-5.83, .623, -9.83], size: [.72, .051], tint: 'strip', onWall: true },
   { id: 'right warm parapet strip', at: [5.35, .58, -9.83], size: [.76, .044], tint: 'strip', onWall: true },
 ] as const satisfies readonly Source[]
@@ -86,6 +98,10 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.035,.039,.048), roughness: .54, metalness: .59 })
   const oxidizedAluminum = new THREE.MeshStandardMaterial({ color: new THREE.Color(.033,.038,.041), roughness: .61, metalness: .38 })
   const charcoalConcrete = new THREE.MeshStandardMaterial({ color: new THREE.Color(.054,.052,.049), roughness: .83, metalness: .06 })
+  const slabNose = oxidizedAluminum.clone()
+  slabNose.emissive.setRGB(.024,.033,.044)
+  const spandrelReturn = charcoalConcrete.clone()
+  spandrelReturn.emissive.setRGB(.017,.023,.032)
   const glass = new THREE.MeshStandardMaterial({ color: new THREE.Color(.025,.027,.039), roughness: .33, metalness: .22 })
   const distantGlass = glass.clone()
   const offset = <T extends THREE.Material>(mat: T, units: number): T => {
@@ -115,7 +131,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     muralSpill.multiplyScalar(.68)
   })
   const washes = [
-    ['left edge','left cyan facade sail','left cyan secondary strip'],
+    ['left edge','left cyan facade sail'],
     ['hotel tower','hotel rooftop cabinet'],
     ['parking tower','white parking blade','cyan hotel facade strip'],
     ['west garage','cyan garage rise','cyan garage return'],
@@ -170,8 +186,8 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const towers = [
     ['hero left edge tower', -33.25, -75.2, 16.1, 3.3, 99.8, .069, scale.leftEdge],
     ['hero hotel tower', -9.67, -32.25, 3.15, 3.90, hotelRoof, .127, scale.hotel],
-    ['hero parking tower', -9.98, -26.52, .94, 2.43, 5.78, .092, scale.parking],
-    ['hero near west garage bay', -7.83, -25.40, 2.78, 4.15, 5.07, .079, scale.westFrontage],
+    ['hero parking tower', -9.98, -26.52, .94, 2.43, 5.08, .092, scale.parking],
+    ['hero near west garage bay', -7.83, -25.40, 2.78, 4.15, 4.69, .079, scale.westFrontage],
     ['hero bar tower', -6.01, -43.56, 2.80, 5.37, 4.92, .103, scale.bar],
     ['hero violet tower', -1.86, -47.28, 1.87, 4.14, 8.74, .097, 11.7],
     ['hero screen tower', 2.78, screenTowerFront, 6.16, 3.90, 12.59, .106, scale.screen],
@@ -214,7 +230,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const edgeRust = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.13,.54,.13), toneMapped: false })
   const crownCyan = new THREE.MeshBasicMaterial({ color: new THREE.Color(.17,1.03,1.57), toneMapped: false })
   const crownViolet = new THREE.MeshBasicMaterial({ color: new THREE.Color(.62,.27,1.36), toneMapped: false })
-  const safetyRed = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.1,.052,.079), toneMapped: false })
+  const safetyRed = new THREE.MeshBasicMaterial({ color: new THREE.Color(9.4,.31,.39), toneMapped: false })
   const towerBladeWords = new Map([[5,'24H'],[12,'HOTEL'],[14,'OPEN'],[19,'BAR'],[21,'KARAOKE']])
   const centerAccent = new THREE.Color(1.68,.14,.76)
   const centerOpal = new THREE.MeshBasicMaterial({ color: centerAccent, toneMapped: false })
@@ -228,6 +244,34 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     const facade = facadeOf(name,index)
     const shell = towerSurface(name, level, facade, screenReflection, spillAt(name),layer,distance)
     groundedBox(tower,name,x,top,z,width,depth,shell,k)
+    const sections = facadeSections[name]
+    if (sections) {
+      const relief = group(tower,'layered facade spandrels')
+      const floors = sections.reduce((n,section)=>n+section[3],0)
+      const geo = new THREE.BoxGeometry(1,1,1)
+      const ledges = new THREE.InstancedMesh(geo,slabNose,floors)
+      const returns = new THREE.InstancedMesh(geo,spandrelReturn,floors)
+      ledges.name = 'projecting slab noses'
+      returns.name = 'inset spandrel returns'
+      const pz = wz+d*.5
+      const datum = name === 'hero left edge tower' ? Math.min(112,wy) : wy
+      const model = new THREE.Matrix4()
+      let slot = 0
+      for (const [offset,span,drop,n,projection] of sections) {
+        for (let row=0;row<n;row++) {
+          const px = wx+offset*w, py = datum-drop-row*(facade==='concrete' ? 6.63 : 7.49)
+          const lip = (row%3===0 ? .59 : .39)*(facade==='concrete' ? 1.22 : 1)
+          ledges.setMatrixAt(slot,model.makeScale(span*w,lip,projection).setPosition(px,py,pz+projection*.31))
+          returns.setMatrixAt(slot++,model.makeScale(span*w*.97,.35+lip*.53,.37).setPosition(px,py-.53,pz+.10))
+        }
+      }
+      for (const details of [ledges,returns]) {
+        details.instanceMatrix.needsUpdate = true
+        details.computeBoundingBox()
+        details.computeBoundingSphere()
+        relief.add(details)
+      }
+    }
     deckTrim.tower(tower,name,wx,wz+d*.5,w)
     box(tower,'folded coping band',[wx,wy-.52,wz],[w+.28,1.5,d+.28],frame)
     if (w > 9 && index !== 6) {
@@ -274,7 +318,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
         box(tower,'offset concrete roof shaft',[px,wy+hatch*.5,pz],[w*.195,hatch,d*.37],charcoalConcrete)
         box(tower,'shaft angled overrun cap',[px,wy+hatch+.28,pz],[w*.206,.57,d*.39],oxidizedAluminum)
         for (const dx of [-.27,0,.27]) {
-          box(tower,'shielded red crown lens',[px+w*.195*dx,wy+hatch*.74,pz+d*.188],[.49,.28,.16],safetyRed)
+          box(tower,'shielded red crown lens',[px+w*.195*dx,wy+hatch*.81,pz+d*.188],[.58,.34,.16],safetyRed)
         }
       }
       if ([5,12,13,14,18,19,20,22,23].includes(index)) {
@@ -288,7 +332,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
         const py = wy+crownH, arm = index === 19 ? 11.9 : index === 5 ? 4.4 : index === 12 || flat ? 2.26 : crownH*.67+3.0
         box(tower,'rooftop riser mast',[wx+w*.07,py+arm*.5,wz-d*.10],[.32,arm,.32],frame)
         box(tower,'rooftop mast crossbar',[wx+w*.07,py+arm*.71,wz-d*.10],[arm*.51,.13,.12],zinc)
-        box(tower,'mast obstruction lens',[wx+w*.07,py+arm,wz-d*.10],[.52,.46,.52],safetyRed)
+        box(tower,'mast obstruction lens',[wx+w*.07,py+arm,wz-d*.10],[.62,.51,.59],safetyRed)
       }
       for (const side of [-1,1]) {
         const px = wx+side*w*.27
@@ -298,7 +342,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
           const py = wy+crownH
           const mastX = wx+w*(.08+side*.235)
           box(tower,'aviation beacon mount',[mastX,py+1.25,wz-d*.14],[.23,2.5,.23],frame)
-          box(tower,'aviation beacon lens',[mastX,py+2.53,wz-d*.14],[.69,.40,.69],safetyRed)
+          box(tower,'aviation beacon lens',[mastX,py+2.53,wz-d*.14],[.78,.51,.69],safetyRed)
         }
       }
     }
@@ -307,11 +351,17 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       box(tower,id,[px,py,pz+.35],[breadth,length,.11],face)
       if (edge) box(tower,id+' return',[px+breadth*.5+.25,py,pz],[.12,length,.47],face)
     }
+    if (index === 11 || index === 13 || index === 19) {
+      const pz = wz+d*.50, c = index === 13 ? crownViolet : edgePink
+      const accentY = wy*(index === 19 ? .82 : .72)
+      box(tower,'setback tenant accent channel',[wx-w*.19,accentY,pz+.14],[w*.44,1.35,.49],frame)
+      box(tower,'setback tenant accent opal',[wx-w*.19,accentY,pz+.42],[w*.37,.66,.095],c)
+    }
     if (index === 0) {
       const pz = wz+d*.5
-      for (const [fraction,breadth] of [[.405,.66],[.485,.83]]) {
-        addRail('full height cyan cornice',wx+w*fraction,(wy+streetY)*.5,pz,wy-streetY-.92,edgeCyan,true,breadth)
-      }
+      const x = wx+w*.445, y = (wy+streetY)*.5, length = wy-streetY-.92
+      box(tower,'dashed cornice metal channel',[x,y,pz],[1.19,length+.71,.64],frame)
+      plate(tower,'dashed cyan cornice',fixtureOpal(new THREE.Color(.07,4.1,6.3),23,false,.23),[x,y,pz+.337],.69,length)
       const base = 77, crownW = 9.4
       box(tower,'left upper service setback',[wx+w*.5+crownW*.19,(wy+base)*.5,wz-d*.04],[crownW,wy-base,d*.73],shell)
       box(tower,'left wing folded floor lip',[wx+w*.5+crownW*.19,base-.28,wz-d*.04],[crownW+.2,.56,d*.75],frame)
@@ -585,11 +635,13 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       light.colorAt = mural.colorAt
       light.level = mural.level
     } else if (!source.text) {
-      const segments = source.onWall ? 1 : Math.round(height / (source.tint === 'cyan' ? .34 : .50))
+      const sail = source.id === 'left cyan facade sail'
+      const segments = sail ? 14 : source.onWall ? 1 : Math.round(height / (source.tint === 'cyan' ? .34 : .50))
       const shape = cyanApertures[source.id]
-      const gain = (opalRadiance[source.id] ?? 1)*(shape?.[1] ?? 1)
-      const opal = fixtureOpal(source.onWall ? (x < 0 ? westOpal : eastOpal) : color.clone().multiplyScalar(gain),segments,shape!==undefined)
-      plate(housing, 'weather-sealed opal face', source.scale ? offset(opal,-4) : opal, [0,0,.002], width*(shape?.[0] ?? 1),height)
+      const louvre = amberLouvres[source.id]
+      const gain = (opalRadiance[source.id] ?? 1)*(shape?.[1] ?? louvre?.[1] ?? 1)
+      const opal = fixtureOpal(source.onWall ? (x < 0 ? westOpal : eastOpal) : color.clone().multiplyScalar(gain),segments,shape!==undefined,sail ? .13 : louvre?.[2] ?? 0)
+      plate(housing, 'weather-sealed opal face', source.scale ? offset(opal,-4) : opal, [0,0,.002], width*(shape?.[0] ?? louvre?.[0] ?? 1),height)
       if (!source.onWall) for (const fraction of [-.40,-.17,.17,.40]) {
         const horizontal = width > height
         box(housing, 'opal rail standoff', [horizontal ? fraction*width : 0,horizontal ? 0 : fraction*height,-.184],
@@ -597,7 +649,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       }
     }
     if (source.id === 'amber parapet exit') {
-      for (const dx of [-.39, .39]) {
+      for (const dx of [-.34*width, .34*width]) {
         box(roof, 'steel wayfinding upright', [x + dx, .98, z - .23], [.073, .41, .12], zinc)
         box(housing, 'exit housing mount heel', [dx, -.11, -.16], [.12,.12,.26], frame)
       }
@@ -612,13 +664,13 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const textWidth = width * (exit ? .56 : .98), textHeight = height*.962
       const glyphs = labels(allowed,'World Condensed',rows,textWidth/textHeight)
       if (glyphs) {
-        const letters = signGlass(glyphs,color,textWidth,textHeight,allowed==='PARKING',radiance)
-        plate(housing,`opal lettering ${allowed}`,source.scale ? offset(letters,-5) : letters,[exit ? -.16 : 0,0,.010+setback],textWidth,textHeight)
+        const letters = signGlass(glyphs,color,textWidth,textHeight,false,radiance)
+        plate(housing,`opal lettering ${allowed}`,source.scale ? offset(letters,-5) : letters,[exit ? -.138*width : 0,0,.010+setback],textWidth,textHeight)
       }
       if (exit) {
         const led = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(radiance), toneMapped: false })
-        box(housing, 'wayfinding arrow stem', [.293,.0,.012], [.244,.026,.005], led)
-        for (const dir of [-1,1]) box(housing, 'wayfinding arrow head', [.386,dir*.038,.012], [.108,.025,.005],led).rotation.z = -dir*Math.PI/4
+        box(housing, 'wayfinding arrow stem', [.253*width,0,.012], [.211*width,.063*height,.005], led)
+        for (const dir of [-1,1]) box(housing, 'wayfinding arrow head', [.333*width,dir*.093*height,.012], [.093*width,.061*height,.005],led).rotation.z = -dir*Math.PI/4
       } else if (allowed === 'HOTEL') {
         for (const dir of [-1,1]) box(housing, 'rooftop sign pedestal', [dir*width*.34,-.637,-.25], [.13,.42,.32], zinc)
       } else {

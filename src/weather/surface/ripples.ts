@@ -105,20 +105,22 @@ float surfRingVar;
  * Slope of one ring packet at distance r from its center. deep: 1 on standing water, 0 on a thin film. Wave detail finer than
  * foot meters is filtered out of the slope and its energy goes to surfRingVar, so distant rings still break the reflection.
  */
-float surfRing(float r, float age, float diameterMm, float deep, float foot) {
-  float life = mix(0.5, 1.0, deep) * SURF_RING_LIFE;
+float surfRing(float r, float age, float diameterMm, float deep, float foot, float radialFoot) {
+  float life = mix(0.8, 1.0, deep) * SURF_RING_LIFE;
   if (age <= 0.0 || age > life) return 0.0;
-  float lambda = mix(0.0055, 0.0085 + 0.0016 * diameterMm, deep);
-  float width = mix(1.6, 3.8, deep) * lambda;
+  float lambda = mix(0.018, min(0.018 + 0.0018 * diameterMm, 0.027), deep);
+  float width = mix(1.3, 4.0, deep * smoothstep(1.0, 4.0, diameterMm)) * lambda;
   float front = 0.002 + 0.0006 * diameterMm + SURF_RING_SPEED * age;
   float s = front - r;
   if (s < -0.6 * lambda || s > width) return 0.0;
   float envelope = smoothstep(-0.6 * lambda, 0.25 * lambda, s) * (1.0 - smoothstep(0.35 * width, width, s));
   float wave = lambda * (1.0 - 0.3 * clamp(s / width, 0.0, 1.0));
-  float tau = mix(0.08, 0.2, deep);
-  float amp = mix(0.35, 1.0, deep) * 0.16 * (diameterMm / 2.0) * exp(-age / tau) * sqrt(0.02 / (front + 0.02));
+  // Bottom friction damps a wave on a film of depth h in about h * h / viscosity: a quarter second at the deck's 0.5 to 1 mm.
+  float tau = 0.2;
+  float amp = mix(0.8, 1.0, deep) * 0.16 * (diameterMm / 2.0) * exp(-age / tau) * sqrt(0.02 / (front + 0.02));
   amp *= smoothstep(life, life * 0.6, age);
-  float filt = exp(-2.0 * (foot / wave) * (foot / wave));
+  // A crest left with a third of its slope still aliases into sparkle through a sharp reflection, so the cut sits a little early.
+  float filt = exp(-4.5 * (radialFoot / wave) * (radialFoot / wave));
   float osc = amp * envelope;
   float slope = osc * filt * cos(6.2831853 * s / wave);
   surfRingVar += 0.5 * osc * osc * (1.0 - filt * filt);
@@ -134,6 +136,9 @@ float surfRing(float r, float age, float diameterMm, float deep, float foot) {
 /** Ripple slope (d height / dx, d height / dz) on the deck from the binned rain impacts and the exhaust pulses. */
 vec2 surfRipples(vec2 p, float deep, float film, float sampleOffset, float foot) {
   surfRingVar = 0.0;
+  // A crest runs across d / r, so only the footprint along the radius blurs it; on a grazing deck that is far shorter than the full footprint.
+  vec2 px = dFdx(p);
+  vec2 py = dFdy(p);
   vec2 slope = vec2(0.0);
   vec2 own = vec2(0.0);
   float weight = max(deep, film);
@@ -152,10 +157,12 @@ vec2 surfRipples(vec2 p, float deep, float film, float sampleOffset, float foot)
         vec2 d = local - e.xy;
         float r = length(d);
         if (r > 0.16) continue;
+        vec2 u = d / max(r, 1e-5);
+        float radial = min(abs(dot(px, u)) + abs(dot(py, u)), foot);
         if (e.w > SURF_OWN_WATER) {
-          own += surfRing(r, t - e.z, e.w - SURF_OWN_WATER, max(deep, 0.6), foot) * d / max(r, 1e-5);
+          own += surfRing(r, t - e.z, e.w - SURF_OWN_WATER, max(deep, 0.6), foot, radial) * u;
         } else {
-          slope += surfRing(r, t - e.z, e.w, deep, foot) * d / max(r, 1e-5);
+          slope += surfRing(r, t - e.z, e.w, deep, foot, radial) * u;
         }
       }
     }

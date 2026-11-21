@@ -29,9 +29,10 @@ export interface BeadLayer {
 }
 
 export const beadLayers: BeadLayer[] = [
-  { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.55, steep: 0.35, lobes: 1, sparse: 0.6, dense: 1.3, hang: 0 },
-  { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.72, steep: 0.45, lobes: 1, sparse: 0.3, dense: 1.25, hang: 0 },
-  { cellMm: 6.4, minMm: 1.5, maxMm: 3.1, flat: 0.85, steep: 0.3, lobes: 1, sparse: 0.55, dense: 1.9, hang: 0.4 },
+  { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.15, steep: 0.35, lobes: 1, sparse: 0.6, dense: 1.3, hang: 0 },
+  { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.3, steep: 0.45, lobes: 1, sparse: 0.3, dense: 1.25, hang: 0 },
+  { cellMm: 6.4, minMm: 1.5, maxMm: 3.1, flat: 0.9, steep: 0.3, lobes: 1, sparse: 0.4, dense: 1.8, hang: 0.4 },
+  { cellMm: 16, minMm: 2.4, maxMm: 7.6, flat: 1.1, steep: 0.1, lobes: 1, sparse: 0.3, dense: 1.5, hang: 0.3 },
   { cellMm: 36, minMm: 5, maxMm: 16, flat: 1.0, steep: 0.06, lobes: 2, sparse: 0.1, dense: 2.4, hang: 1.2 },
 ]
 
@@ -51,6 +52,8 @@ const coatFilm = [
 ]
 /** The sheet on glass creeps down the pane at this speed in meters per second, a whole number of wavelengths over the film. */
 const glassSheetSpeed = 0.06
+/** Roll waves of the draining film on glass: spacing along the fall line and width across it in meters, and their slope. */
+const glassRoll = { along: 0.04, across: 0.12, slope: 0.06 }
 const glassCycles = (w: number) => Math.max(1, Math.round((glassSheetSpeed * config.film.durationSeconds) / w))
 const runTrack = { spacing: 0.03, width: 0.004, length: 0.3, height: 0.0004 }
 /** Water held along a lower edge: a line of it on the lip and pendant drops hanging from it, spaced about two diameters apart. */
@@ -258,13 +261,10 @@ float surfValueNoise(vec2 p, int z, uint salt) {
   return a + (b - a) * u.x + (d - a + (a - b - d + e) * u.x) * u.y;
 }
 
-/** Drifts are a near-field look: from a distance the eye averages them, so the field relaxes toward its mean as the footprint grows. */
-float surfCoverFlat = 0.0;
-
 float surfCoverage(vec2 uv, int axis, uint salt) {
   int z = axis + ${coverageSalt};
   float n = 0.72 * surfValueNoise(uv / ${(coverageCm[0] / 100).toFixed(4)}, z, salt) + 0.28 * surfValueNoise(uv / ${(coverageCm[1] / 100).toFixed(4)}, z + 4, salt);
-  return mix(smoothstep(0.28, 0.72, n), 0.5, surfCoverFlat);
+  return smoothstep(0.28, 0.72, n);
 }
 
 float surfCapHeight(float radius) {
@@ -345,6 +345,13 @@ vec3 surfCoatSlope(vec3 p, vec3 n, vec3 down, float slope, float pix, float cove
     s += sheet * ${amp.toFixed(3)} * filt * g.yz;
     surfCoatVar += sheet * sheet * ${(amp * amp * 0.4).toFixed(6)} * (1.0 - filt * filt);
   }`).join('\n  ')}
+  if (glass > 0.0) {
+    // A film draining down a pane gathers into roll waves: fronts wide across the fall line, close along it, riding down with the flow.
+    vec3 g = surfGradNoiseWrap(vec2(q.x / ${glassRoll.across.toFixed(4)}, q.y / ${glassRoll.along.toFixed(4)} - flow * ${glassCycles(glassRoll.along)}.0), ${glassCycles(glassRoll.along)}, 63, salt);
+    float filt = exp(-2.0 * pow(pix / ${glassRoll.along.toFixed(4)}, 2.0));
+    s += ${glassRoll.slope.toFixed(3)} * filt * vec2(g.y * ${(glassRoll.along / glassRoll.across).toFixed(4)}, g.z);
+    surfCoatVar += ${(glassRoll.slope ** 2 * 0.4).toFixed(6)} * (1.0 - filt * filt);
+  }
   return b * s.x + a * s.y;
 }
 
@@ -466,7 +473,6 @@ float surfGlint = 0.0;
   vec3 p = surfObjPos;
   vec2 uv = axis == 0 ? p.yz : (axis == 1 ? p.zx : p.xy);
   float pix = max(length(fwidth(p)), 1e-6);
-  surfCoverFlat = 0.7 * smoothstep(0.0012, 0.004, pix);
   // At a glancing view the footprint is long and thin; a drop is judged against the pixel's area, not its longest side.
   float pixA = min(pix, 1.4142 * sqrt(max(length(cross(dFdx(p), dFdy(p))), 1e-12)));
   surfPixA = pixA;
@@ -510,7 +516,8 @@ float surfGlint = 0.0;
     float sinRise = sin(min(rise, 1.5));
     vec3 dir = normalize(ahead * cos(min(rise, 1.5)) + nV * sinRise);
     float coat = 0.04 + 0.96 * pow(1.0 - sinRise, 5.0);
-    surfLensCol = 0.9 * coat * max(getIBLRadiance(dir, dir, 0.45), emitterGlintF0(surfWorldPos, surfToWorld(dir), surfToWorld(dir), 0.45, -1.0, vec3(1.0)));
+    // Each unresolved bead sends a compact light out over its whole exit cone, as the resolved lens does once R is under a pixel.
+    surfLensCol = 0.9 * coat * max(getIBLRadiance(dir, dir, 0.45), emitterGlintF0(surfWorldPos, surfToWorld(dir), surfToWorld(dir), 1.0, -1.0, vec3(1.0)));
   }
   #endif
   float eyeD = length(cameraPosition - surfWorldPos);
@@ -670,7 +677,10 @@ float surfGlint = 0.0;
   surfGlint *= hidden;
   surfLensW *= hidden;
   float coatFar = smoothstep(${coatFade[0].toFixed(4)}, ${coatFade[1].toFixed(4)}, pix) * (1.0 - 0.7 * surfLane);
-  vec3 coatTilt = coatFar > 0.0 ? toView * surfCoatSlope(p, n, down, slope, pix, surfCoverage(uv, axis, salt), salt) * coatFar : vec3(0.0);
+  // The drifts keep their beads at any distance, but a merged sheet reads only up close: far off, a dense drift as a sheet would
+  // turn the clean coat between its drops into a broad glossy lobe under every compact light.
+  float sheetCover = mix(surfCoverage(uv, axis, salt), 0.5, 0.7 * smoothstep(0.0012, 0.004, pix));
+  vec3 coatTilt = coatFar > 0.0 ? toView * surfCoatSlope(p, n, down, slope, pix, sheetCover, salt) * coatFar : vec3(0.0);
   surfCoatVar *= coatFar * coatFar;
   coatTilt += toView * (surfRunSlope(pix) + dripTilt);
   surfCoatVar += surfRunVar;
