@@ -26,26 +26,19 @@ export const atmosphere = {
   anisotropy: 0.58,
   scatterFraction: 0.56,
   projectorAnisotropy: 0.76,
-  projectorWingAnisotropy: 0.38,
-  projectorWingFraction: 0.18,
-  projectorScatterFraction: 0.38,
+  projectorWingAnisotropy: 0.34,
+  projectorWingFraction: 0.40,
+  projectorScatterFraction: 0.58,
   projectorScatterDistance: [0.10, 0.28],
   projectorBodyAnisotropy: 0.38,
   projectorBodyScatterFraction: 0.05,
   projectorBodyDistance: [0.46, 1.38],
   projectorBodyClearance: [1.0, 2.3],
-  projectorCoreSlope: [-0.125, -0.042],
-  projectorCoreClearance: [0.30, 1.25],
-  projectorCoreBlend: 0.28,
   projectorFocus: [1.28, 2.1],
   projectorAerosolHeight: 0.29,
-  projectorMistFraction: 0.28,
-  projectorMistAnisotropy: 0.25,
-  projectorMistHeight: [0.035, 0.12],
-  projectorMistClearance: [0.25, 0.8],
-  projectorMistLowerSlope: [-0.28, -0.12],
-  projectorMistUpperSlope: [0.015, 0.065],
-  projectorMistDistance: [0.25, 0.75],
+  projectorSuspendedFraction: 0.24,
+  projectorSuspendedHeight: [0.13, 0.27, 0.50, 0.72],
+  projectorSuspendedReach: [1.12, 2.48],
 } as const
 
 const cloudSeed = (streamSeed('haze/cloud-underlight') / 4294967296 * 64).toFixed(8)
@@ -145,31 +138,21 @@ float projectorBodyPhase(float cosine, float distanceToLight, float downward, fl
 
 float projectorReceiver(vec3 hit, vec3 source, vec3 axis) {
   vec3 delta = hit - source;
-  float nearBody = 1.0 - smoothstep(1.55, 2.3, length(delta));
-  float noseDepth = 1.0 - smoothstep(0.19, 0.46, dot(delta, axis));
-  float aboveDeck = smoothstep(0.04, 0.17, hit.y);
+  float nearBody = 1.0 - smoothstep(1.6, 2.35, length(delta));
+  float noseDepth = 1.0 - smoothstep(0.31, 0.83, dot(delta, axis));
+  float aboveDeck = smoothstep(0.022, 0.092, hit.y);
   return 1.0 - nearBody * noseDepth * aboveDeck;
 }
 
-float projectorOpenCore(float slope, float clearance) {
-  // Leave a visible core in front of the receiver without fogging its surface.
-  return ${atmosphere.projectorCoreBlend} * smoothstep(${atmosphere.projectorCoreSlope.join(', ')}, slope)
-    * smoothstep(${atmosphere.projectorCoreClearance.join(', ')}, clearance);
-}
-
-float projectorDensity(float t, float height) {
+float projectorDensity(float t, float height, float distanceToLight) {
   float h = max(0.0, height);
   float taper = 1.0 - exp(-h / ${atmosphere.projectorAerosolHeight});
-  return airDensity * exp(-h / airHeight) * taper * taper * taper * taper * (1.0 - step(localAirRange, t));
-}
-
-float projectorMist(float cosine, float height, float clearance, float slope, float distanceToLight) {
-  float band = smoothstep(${atmosphere.projectorMistLowerSlope.join(', ')}, slope)
-    * (1.0 - smoothstep(${atmosphere.projectorMistUpperSlope.join(', ')}, slope));
-  return ${atmosphere.projectorMistFraction} * phase(cosine, ${atmosphere.projectorMistAnisotropy})
-    * deckDensity * exp(-max(height, 0.0) / layerHeight) * smoothstep(${atmosphere.projectorMistHeight.join(', ')}, height)
-    * smoothstep(${atmosphere.projectorMistClearance.join(', ')}, clearance) * band
-    * smoothstep(${atmosphere.projectorMistDistance.join(', ')}, distanceToLight);
+  float air = airDensity * exp(-h / airHeight) * taper * taper * taper * taper;
+  float suspended = smoothstep(${atmosphere.projectorSuspendedHeight.slice(0, 2).join(', ')}, h)
+    * (1.0 - smoothstep(${atmosphere.projectorSuspendedHeight.slice(2).join(', ')}, h));
+  float near = 1.0 - smoothstep(${atmosphere.projectorSuspendedReach.join(', ')}, distanceToLight);
+  float wake = ${atmosphere.projectorSuspendedFraction} * deckDensity * exp(-h / layerHeight) * suspended * near;
+  return (air + wake) * (1.0 - step(localAirRange, t));
 }
 
 float foregroundScatter(float t) {
@@ -423,12 +406,9 @@ vec4 scatterToDepth(vec2 uv, float depth) {
           + projectorBodyPhase(cosine, distanceToLight, dot(toLight, up), far - t)
         : phase(cosine, anisotropy) * scatterFraction;
       float density = projector
-        ? projectorDensity(t, p.y)
+        ? projectorDensity(t, p.y, distanceToLight)
         : densityAt(t, p.y, layer, cityStart);
-      float slope = dot(-toLight, up);
-      float clearance = projector ? max(receiver, projectorOpenCore(slope, far - t)) : 1.0;
-      float mist = projector ? projectorMist(cosine, p.y, far - t, slope, distanceToLight) * receiver : 0.0;
-      radiance += light * (visible * weight * (density * scatteringPhase * clearance + mist)
+      radiance += light * (visible * weight * density * scatteringPhase * receiver
         * exp(-opticalDepth) * foregroundScatter(t) * projectorGain);
     }
   }
