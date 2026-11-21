@@ -7,9 +7,12 @@ export const NIGHT_NEGATIVE = {
   shoulderJoin: 0.63,
   shoulderFalloff: 0.35,
   blackFloor: 0.00085,
+  chromaHold: 0.7,
+  chromaHoldFrom: 0.25,
+  chromaHoldFull: 1.6,
 } as const
 
-const { toe, shoulder, foot, shoulderJoin: join, shoulderFalloff: falloff, blackFloor } = NIGHT_NEGATIVE
+const { toe, shoulder, foot, shoulderJoin: join, shoulderFalloff: falloff, blackFloor, chromaHold, chromaHoldFrom, chromaHoldFull } = NIGHT_NEGATIVE
 const joinNumerator = join * (join + toe)
 const joinDenominator = join * (join + shoulder) + foot
 const joinValue = joinNumerator / joinDenominator
@@ -38,6 +41,8 @@ vec3 toneMap(vec3 x, int curve) {
     y = 1.0 - exp(-toe);
   } else {
     y = nightNegative(x);
+    vec3 held = x * (max(y.r, max(y.g, y.b)) / max(peak, 1e-6));
+    y = mix(y, held, ${chromaHold} * smoothstep(${chromaHoldFrom}, ${chromaHoldFull}, peak));
   }
   float dry = 0.22 * smoothstep(1.5, 20.0, peak) + 0.68 * smoothstep(35.0, 300.0, peak);
   y = mix(y, vec3(max(y.r, max(y.g, y.b))), dry);
