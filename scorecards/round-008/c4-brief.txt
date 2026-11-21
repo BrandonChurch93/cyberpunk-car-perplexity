@@ -1,0 +1,26 @@
+### C4 · Build quality
+
+You are told the images are computer generated.
+
+- Pack: `beauty`, `clay` and `zebra` views of the judged frames that show the vehicle or a main prop, with native-size crops.
+- Silhouettes: no straight polygon segments on any curve.
+- Surfaces: in `zebra`, stripes flow without kinks, wobbles or breaks, except at deliberate creases and panel edges.
+- Gaps between panels are even along their length.
+- Edges have thickness. Nothing is paper thin.
+- Parts that are separate objects in reality are separate geometry with a real join.
+- Everything is real-world size relative to everything else.
+- Tires flatten slightly where they meet the ground. Nothing floats and nothing intersects.
+- Score 10 when the objects read as manufactured and assembled, at macro distance, in all three views.
+
+```json
+{
+  "critic": "C3",
+  "score": 7,
+  "pass": false,
+  "issues": [
+    { "severity": "severe", "file": "set-C-04.png", "where": "lower left", "what": "the puddle reflects a sign that is not in the scene", "fix": "render the planar reflection from the real scene" }
+  ]
+}
+```
+
+- `score` is 1 to 10. `severity` is `severe`, `major` or `minor`. Issues are listed most severe first.

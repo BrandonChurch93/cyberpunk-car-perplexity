@@ -11,6 +11,7 @@ import { addApprovedHeroLayout, approvedHeroSourceSurvey } from './hero-layout'
 import { addReflectionFrontages } from './reflection-practicals'
 import { addNorthSkyline } from './north'
 import { finishRoof } from './roof-look'
+import { articulateSouthTowers } from './tower-articulation'
 
 const wake = config.beats.find(beat => beat.id === 'wake')!
 const returnShot = config.beats.find(beat => beat.id === 'return')!
@@ -42,6 +43,7 @@ export async function createFullWorld(): Promise<WorldModule> {
   const updateCity = cityPracticals(city, labels, fixtures.signs)
   detailFacades(city)
   const hero = addApprovedHeroLayout(root, labels, materials)
+  articulateSouthTowers(root)
   const survey = approvedHeroSourceSurvey()
   const district = (id: string) => {
     const { at: [x,,z] } = survey.find(source=>source.id===id)!

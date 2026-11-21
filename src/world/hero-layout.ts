@@ -6,6 +6,7 @@ import { plate, type Label } from './fixtures'
 import { group, heroCityYaw, heroDrainLayout, streetY, type Tuple } from './forms'
 import { heroFrontageDistance, heroPoint, heroScale as scale, heroSize } from './hero-scale'
 import { billboardMural, fixtureOpal, signGlass, towerSurface, type Facade, type FacadeLayer, type SignSpill } from './hero-surfaces'
+import { dressHeroSign } from './hero-signs'
 import { washHeroParapet } from './parapet-wash'
 import { reflectionPracticalBuilder } from './reflection-practicals'
 import type { finishRoof } from './roof-look'
@@ -56,7 +57,7 @@ export const approvedHeroSources = [
   { id: 'cyan garage rise', at: [-8.88, 3.55, -25.23], size: [.26, 2.16], tint: 'cyan', scale: scale.westFrontage },
   { id: 'cyan garage return', at: [-6.92, 3.40, -25.23], size: [.19, 2.42], tint: 'cyan', scale: scale.westFrontage },
   { id: 'hotel rooftop cabinet', at: [-9.48, hotelRoof+.425, -32.10], size: [2.03, .66], tint: 'cyan', text: 'HOTEL', scale: scale.hotel },
-  { id: 'white parking blade', at: [-9.93, 3.20, -26.35], size: [.61, 3.43], tint: 'white', text: 'PARKING', scale: scale.parking },
+  { id: 'white parking blade', at: [-9.93, 2.855, -26.35], size: [.61, 2.42], tint: 'white', text: 'PARKING', scale: scale.parking },
   { id: 'cyan hotel facade strip', at: [-8.43, 2.74, -25.23], size: [.07, 3.72], tint: 'cyan', scale: scale.westFrontage },
   { id: 'far cyan bar cabinet', at: [-6.10, 4.01, -43.40], size: [1.98, 1.11], tint: 'cyan', text: 'BAR', scale: scale.bar },
   { id: 'violet mid distance blade', at: [-1.48, 5.38, -31.64], size: [.44, 2.58], tint: 'violet', scale: scale.screen },
@@ -91,10 +92,10 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const city = group(root, 'hero tower layout')
   const roof = group(root, 'hero parapet and near deck layout')
   const { heroWall, zinc, heroStripe, tar } = materials
-  const wallZ = -10.025, wallDepth = .34
+  const wallZ = -10.025, wallDepth = .34, wallTop = .80, guardTop = 1.06
   const westOpal = new THREE.Color(77.5,69.0,56.2)
   const eastOpal = new THREE.Color(24.8,22.1,18.0)
-  washHeroParapet(heroWall,wallZ+wallDepth*.5,(approvedHeroSources as readonly Source[]).filter(source=>source.onWall))
+  washHeroParapet(heroWall,wallZ+wallDepth*.5,wallTop,(approvedHeroSources as readonly Source[]).filter(source=>source.onWall))
   const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.035,.039,.048), roughness: .54, metalness: .59 })
   const oxidizedAluminum = new THREE.MeshStandardMaterial({ color: new THREE.Color(.033,.038,.041), roughness: .61, metalness: .38 })
   const charcoalConcrete = new THREE.MeshStandardMaterial({ color: new THREE.Color(.054,.052,.049), roughness: .83, metalness: .06 })
@@ -586,14 +587,24 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   markerRow('far central cyan stack',[-62.2,11.7,-345.89],[.56,.88,.22],3.5,10,[.076,1.02,1.87],scale.farCentralWest)
   markerRow('middle service cyan squares',[-11.38,2.7,-59.95],[.23,.29,.08],.63,8,[.043,1.12,1.71],scale.middleWest)
   markerRow('east outer glass cyan markers',[52.6,5.3,-150.948],[.48,1.26,.12],1.36,13,[.056,.85,1.59],scale.outerEast)
-  box(roof, 'hero full span concrete parapet', [0, .525, wallZ], [29, 1.05, wallDepth], heroWall)
-  box(roof, 'hero concrete wall cap', [0, 1.047, -10.02], [29, .048, .377], heroWall)
-  box(roof, 'hero full span steel top rail', [0, 1.228, -10.015], [29, .044, .063], frame)
+  box(roof, 'hero full span concrete parapet', [0, wallTop*.5, wallZ], [29, wallTop, wallDepth], heroWall)
+  box(roof, 'hero concrete wall cap', [0, wallTop-.003, -10.02], [29, .048, .377], heroWall)
+  const pipe = (name: string, y: number, radius: number) => {
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(radius,radius,29,10),zinc)
+    rail.name = name
+    rail.rotation.z = Math.PI*.5
+    rail.position.set(0,y,-10.015)
+    roof.add(rail)
+  }
+  pipe('hero full span steel top rail',guardTop,.027)
+  pipe('hero steel mid rail',wallTop+(guardTop-wallTop)*.48,.016)
   deckTrim.parapet(roof)
   for (let i = -6; i <= 6; i++) {
-    box(roof, 'hero rail post', [i * 2.35, 1.149, -10.015], [.057, .178, .057], zinc)
-    box(roof, 'hero steel post mounting plate', [i * 2.35, 1.075, -10.015], [.125,.016,.112], zinc)
-    box(roof, 'hero rail socket collar', [i*2.35,1.098,-10.015], [.073,.036,.073], frame)
+    const rise = guardTop-wallTop
+    box(roof, 'hero rail post', [i * 2.35, wallTop+rise*.5, -10.015], [.062, rise, .062], zinc)
+    box(roof, 'hero steel post mounting plate', [i * 2.35, wallTop+.008, -10.015], [.15,.016,.13], zinc)
+    box(roof, 'hero rail post cap', [i*2.35,guardTop+.03,-10.015], [.07,.012,.07], frame)
+    for (const dx of [-.052,.052]) box(roof, 'hero post anchor nut', [i*2.35+dx,wallTop+.022,-10.015], [.022,.014,.022], frame)
   }
   for (const source of approvedHeroSources as readonly Source[]) {
     const [x, , z] = source.at
@@ -650,7 +661,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     }
     if (source.id === 'amber parapet exit') {
       for (const dx of [-.34*width, .34*width]) {
-        box(roof, 'steel wayfinding upright', [x + dx, .98, z - .23], [.073, .41, .12], zinc)
+        box(roof, 'steel wayfinding upright', [x + dx, (wallTop+1.12)*.5, z - .23], [.073, 1.12-wallTop, .12], zinc)
         box(housing, 'exit housing mount heel', [dx, -.11, -.16], [.12,.12,.26], frame)
       }
     }
@@ -659,6 +670,14 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       if (!allowed) throw new Error(`Unapproved hero layout sign: ${source.text}`)
       const rows = allowed === 'PARKING' ? [...allowed] : [allowed]
       plate(housing, 'recessed sign face', source.scale ? distantGlass : glass, [0,0,.002],width,height)
+      const dressed = dressHeroSign(housing,source.id,color,setback,box,frame,zinc,m=>source.scale ? offset(m,-5) : m)
+      if (dressed) {
+        signs.push(dressed)
+        if (allowed === 'PARKING' || allowed === '24H' || allowed === 'OPEN' || allowed === 'BAR') {
+          for (const dir of [-1,1]) box(housing, 'facade sign mount cleat', [dir*width*.34,-height*.24,-.195], [.10,.11,.30], zinc)
+        }
+        continue
+      }
       const exit = allowed === 'EXIT'
       const radiance = signRadiance[allowed] ?? 1
       const textWidth = width * (exit ? .56 : .98), textHeight = height*.962

@@ -17,6 +17,7 @@ import { buildFront } from './parts/front'
 import { buildLiners } from './parts/liners'
 import { buildWheels } from './parts/wheel'
 import { glazing } from './parts/glass'
+import { cowl } from './parts/cowl'
 import { cabin } from './parts/cabin'
 import { sideIntake, throat, upperIntake } from './parts/intake'
 import { makeMaterials, type Materials } from './materials'
@@ -122,6 +123,11 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const screen = glazing(body.surfaces.main, [body.cuts.curves.screen], tess)
   add(sprung, side.panes, m.glass, 'glass')
   add(sprung, screen.panes, m.windscreen, 'glass-screen')
+  const cw = cowl(body.surfaces.main, body.cuts.maps.main, body.cuts.curves.cowl, body.cuts.curves.screen, tess)
+  add(sprung, cw.panel, m.satin, 'cowl-panel')
+  add(sprung, cw.plenum, m.soot, 'cowl-plenum')
+  add(sprung, cw.arms, m.matte, 'wiper-arms')
+  add(sprung, cw.blades, m.seal, 'wiper-blades')
   for (const [i, g] of [side, screen].entries()) {
     add(sprung, g.edges, m.glassEdge, `glass-edge-${i}`)
     add(sprung, g.seals, m.seal, `glass-seal-${i}`)
@@ -178,6 +184,7 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const va = valance(cuts.curves.lower, cuts.maps.rear)
   addPair(va.wall, m.exhaust, 'diffuser-wall')
   addPair(va.panel, m.diffuserMesh, 'diffuser-mesh')
+  addPair(va.frame, m.bezel, 'diffuser-frame')
   buildLiners(sprung, S.main, { ...m, tag }, full)
   const mr = mirror(body.surfaces.main, body.cuts.maps.main)
   addPair(mr.head, m.paint, 'mirror-head')

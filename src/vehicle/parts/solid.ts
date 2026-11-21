@@ -71,6 +71,59 @@ export function solid(rows: V3[][], sharp: boolean[], closedRows = true, closedL
   return orient(b)
 }
 
+/**
+ * Closes a long thin loop with a strip of triangles zipped across it between its two ends, not a fan to the middle.
+ * `n` is the outward normal at each point; the winding follows it.
+ */
+export function zipCap(b: MeshBuilder, ring: V3[], n: V3[]): void {
+  const m = ring.length
+  const far = (from: number): number => {
+    let best = 0
+    let k = 0
+    for (let j = 0; j < m; j++) {
+      const d = dot(sub(ring[j], ring[from]), sub(ring[j], ring[from]))
+      if (d > best) [best, k] = [d, j]
+    }
+    return k
+  }
+  const a = far(far(0))
+  const z = far(a)
+  const chain = (dir: 1 | -1): number[] => {
+    const out = [a]
+    for (let j = a; j !== z; ) {
+      j = (j + dir + m) % m
+      out.push(j)
+    }
+    return out
+  }
+  const ids = ring.map((p, j) => b.vertex(p, n[j]))
+  const sides = [chain(1), chain(-1)]
+  const param = sides.map((c) => {
+    const s = [0]
+    for (let k = 1; k < c.length; k++) s.push(s[k - 1] + Math.hypot(...sub(ring[c[k]], ring[c[k - 1]])))
+    return s.map((v) => v / s[s.length - 1])
+  })
+  const tri = (i: number, j: number, k: number): void => {
+    if (i === j || j === k || i === k) return
+    const f = cross(sub(ring[j], ring[i]), sub(ring[k], ring[i]))
+    if (dot(f, add(add(n[i], n[j]), n[k])) >= 0) b.tri(ids[i], ids[j], ids[k])
+    else b.tri(ids[i], ids[k], ids[j])
+  }
+  let p = 0
+  let q = 0
+  const [P, Q] = sides
+  while (p < P.length - 1 || q < Q.length - 1) {
+    const stepP = q >= Q.length - 1 || (p < P.length - 1 && param[0][p + 1] <= param[1][q + 1])
+    if (stepP) {
+      tri(P[p], P[p + 1], Q[q])
+      p++
+    } else {
+      tri(P[p], Q[q + 1], Q[q])
+      q++
+    }
+  }
+}
+
 /** Flips a closed mesh whose signed volume is negative. */
 export function orient(b: MeshBuilder): MeshBuilder {
   let v = 0

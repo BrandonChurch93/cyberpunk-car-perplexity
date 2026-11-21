@@ -1,0 +1,91 @@
+{
+ "critic": "C3",
+ "score": 5,
+ "pass": false,
+ "issues": [
+  {
+   "severity": "major",
+   "file": "set-A-02.png",
+   "where": "whole panel, center",
+   "what": "the paint reads as a flat mirror or wet glass, not layered paint: the billboard reflection is an undistorted rectangle with no panel curvature, no orange peel, no flake or base coat under the clearcoat, so the 'slides and bends across the panel' look is missing",
+   "fix": "give the panel real curvature and a clearcoat-over-base shader with fine flake and slight orange peel so the reflection bends and the paint shows depth"
+  },
+  {
+   "severity": "major",
+   "file": "set-B-12.png",
+   "where": "large beads over the pink and yellow reflections (e.g. center 460-640 x 360-530, right 950-1150 x 370-640)",
+   "what": "beads are hollow, evenly lit lenses or flat dark dots: no inverted, compressed image of the billboard and signs inside them, no bright specular glint from the billboard, no dark contact rim on the paint",
+   "fix": "render beads as refractive water (IOR 1.33) with real geometry, so each one shows an inverted environment, a specular highlight from the main sources and a meniscus edge"
+  },
+  {
+   "severity": "major",
+   "file": "set-B-01.png",
+   "where": "hood crease band and windshield, center left",
+   "what": "at 6.50 s the beads are uniform white specks of the same size and spacing, like a noise texture, with no refraction or shadow, so they do not match the macro beads seen at 12.00 s",
+   "fix": "use the same bead geometry and shader in the wide shot, with varied size and spacing"
+  },
+  {
+   "severity": "major",
+   "file": "set-A-01.png",
+   "where": "front left fender and hood, x 380-620, y 360-450 (also set-B-09 top right, set-B-10 top left)",
+   "what": "the magenta reflection on the paint is broken up by a dark net or grid of lines that looks like a wireframe or tiled texture, not paint, flake or water",
+   "fix": "remove the grid pattern from the paint shader or normal map, or the bead or decal layer causing it"
+  },
+  {
+   "severity": "major",
+   "file": "set-B-03.png",
+   "where": "projector lamps above the DRLs, center left",
+   "what": "in the wake beat the projector lamps are lit white but throw no beam into the rain and no hot spot on the wet deck ahead, so the glow has no visible light output",
+   "fix": "give the lamps real emitters with volumetric beams and a lit pool on the deck, with rain streaks lit inside the beams"
+  },
+  {
+   "severity": "major",
+   "file": "set-B-05.png",
+   "where": "windshield, center",
+   "what": "the windshield is nearly opaque: there is no cabin and no view of the bright billboard behind through the glass, and it shows long pink and cyan streak reflections whose sources are not in frame",
+   "fix": "use thin tinted glass with transmission so the cabin and the background show through, and reflect the real scene sources"
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-10.png",
+   "where": "deck directly under the front bumper",
+   "what": "the deck under the splitter is a soft lit grey with no contact or ambient-occlusion darkening, so the nose looks slightly lifted off the ground",
+   "fix": "add contact shadow and occlusion under the bumper and splitter"
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-09.png",
+   "where": "cyan puddle reflection, x 160-300, y 300-380",
+   "what": "a dark diagonal blob breaks the cyan reflection and matches no object in the scene",
+   "fix": "check the water normal or displacement for a stray feature, or tie the shape to a real occluder"
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-09.png",
+   "where": "standing water, whole crop",
+   "what": "heavy rain falls but the standing water shows no impact splashes or crowns, only slow ripples",
+   "fix": "add splash crowns and ring ripples where rain hits the water"
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-17.png",
+   "where": "inside the pink reflection, x 180-330, y 110-250",
+   "what": "a pale fan of streaks rises inside the billboard reflection that the billboard itself does not show",
+   "fix": "remove the stray streak layer or match it to a real source"
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-15.png",
+   "where": "yellow and orange sign reflections",
+   "what": "the out-of-focus reflections carry a fine screen-door grid texture, and the out-of-focus beads in set-B-16 and set-B-18 sparkle with render noise",
+   "fix": "filter the emissive textures in reflection and raise samples or denoise the defocused areas"
+  },
+  {
+   "severity": "minor",
+   "file": "set-A-01.png",
+   "where": "wall and deck around the billboard, upper center",
+   "what": "the large bright magenta billboard casts almost no colored spill on the wall, deck or car roof below it",
+   "fix": "make the billboard a real area light so its magenta spill and bounce reach nearby surfaces"
+  }
+ ]
+}

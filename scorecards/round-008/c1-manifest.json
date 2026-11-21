@@ -1,0 +1,42 @@
+{
+  "files": [
+    {
+      "file": "set-A-01.png"
+    },
+    {
+      "file": "set-A-02.png"
+    },
+    {
+      "file": "set-A-03.png"
+    },
+    {
+      "file": "set-A-04.png"
+    },
+    {
+      "file": "set-A-05.png"
+    },
+    {
+      "file": "set-A-06.png"
+    },
+    {
+      "file": "set-A-07.png"
+    },
+    {
+      "file": "set-A-08.png"
+    },
+    {
+      "file": "set-A-09.png"
+    },
+    {
+      "file": "set-A-10.png"
+    },
+    {
+      "file": "set-A-11.png"
+    },
+    {
+      "file": "set-A-12.png"
+    }
+  ],
+  "oneImagePerCall": true,
+  "jurorsPerImage": 3
+}

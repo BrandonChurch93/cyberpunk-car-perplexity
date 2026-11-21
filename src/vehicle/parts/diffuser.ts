@@ -1,11 +1,11 @@
 import * as THREE from 'three'
 import { MeshBuilder } from '../geom/mesh'
-import { add, clamp, cross, norm, scale, sub, type V2, type V3 } from '../geom/vec'
+import { add, clamp, cross, dot, norm, scale, sub, type V2, type V3 } from '../geom/vec'
 import { dims, mainLoft } from '../body/shape'
 import { bumper } from '../body/tail'
 import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
-import { finish, flat, merge } from './solid'
-import { honeycomb } from './enginebay'
+import { finish, flat, merge, solid, zipCap } from './solid'
+import { honeycomb, roundLoop, roundSection } from './enginebay'
 
 /** Plate and strake thickness. Every free edge is a full round of half this. */
 export const sheet = 0.01
@@ -197,142 +197,151 @@ function centreRows(): number[] {
   return [...zs].filter((z) => z >= -2.2).sort((a, b) => b - a)
 }
 
-/** Rounds the corners of a closed polyline; `radii[i]` is the radius at point i, 0 keeps it sharp. */
-function rounded(poly: V2[], radii: number[]): V2[] {
-  const out: V2[] = []
-  const n = poly.length
-  for (let i = 0; i < n; i++) {
-    const p = poly[i]
-    const rad = radii[i]
-    if (!rad) {
-      out.push(p)
-      continue
-    }
-    const a = poly[(i - 1 + n) % n]
-    const c = poly[(i + 1) % n]
-    const la = Math.hypot(p[0] - a[0], p[1] - a[1])
-    const lc = Math.hypot(c[0] - p[0], c[1] - p[1])
-    const ia: V2 = [(p[0] - a[0]) / la, (p[1] - a[1]) / la]
-    const oc: V2 = [(c[0] - p[0]) / lc, (c[1] - p[1]) / lc]
-    const turn = Math.acos(clamp(ia[0] * oc[0] + ia[1] * oc[1], -1, 1))
-    const d = Math.min(rad * Math.tan(turn / 2), 0.9 * Math.min(la, lc))
-    const rr = d / Math.tan(turn / 2)
-    const t1: V2 = [p[0] - ia[0] * d, p[1] - ia[1] * d]
-    const left = ia[0] * oc[1] - ia[1] * oc[0] > 0 ? 1 : -1
-    const nrm: V2 = [-ia[1] * left, ia[0] * left]
-    const ctr: V2 = [t1[0] + nrm[0] * rr, t1[1] + nrm[1] * rr]
-    const a0 = Math.atan2(t1[1] - ctr[1], t1[0] - ctr[0])
-    const steps = 10
-    for (let k = 0; k <= steps; k++) {
-      const ang = a0 + left * (turn * k) / steps
-      out.push([ctr[0] + rr * Math.cos(ang), ctr[1] + rr * Math.sin(ang)])
-    }
+/** Strake section: half thickness at the root and at the free edge, and the fillet radius where it joins a plate. */
+const fin = { root: 0.004, tip: 0.0025, fillet: 0.008 } as const
+
+interface SectionPoint {
+  w: number
+  y: number
+  nw: number
+  ny: number
+}
+
+/** Left half of a concave fillet from the plate face at `y0` (going `dir` away from it) onto a blade face of half width `w`. */
+function filletArc(w: number, y0: number, f: number, dir: 1 | -1, k: number): SectionPoint[] {
+  const out: SectionPoint[] = []
+  for (let i = 0; i <= k; i++) {
+    const a = (Math.PI / 2) * (i / k)
+    out.push({ w: -(w + f - f * Math.sin(a)), y: y0 + dir * (f - f * Math.cos(a)), nw: -Math.sin(a), ny: dir * Math.cos(a) })
   }
   return out
 }
 
+/** Mirrors a left half section (listed along the loop) into the whole closed loop. */
+function mirrored(left: SectionPoint[], middle: SectionPoint[]): SectionPoint[] {
+  const right = [...left].reverse().map((q) => ({ w: -q.w, y: q.y, nw: -q.nw, ny: q.ny }))
+  return [...left, ...middle, ...right]
+}
+
+/** A fin section hanging from a plate underside at `yr`, its free edge at `yl`; the top is closed inside the plate. */
+function finSection(yr: number, yl: number): SectionPoint[] {
+  const d = yr - yl
+  const f = Math.max(0.0005, Math.min(fin.fillet, 0.4 * (d - 2 * fin.tip)))
+  const left: SectionPoint[] = [{ w: -(fin.root + f), y: yr + 0.004, nw: -Math.SQRT1_2, ny: Math.SQRT1_2 }, ...filletArc(fin.root, yr, f, -1, 6)]
+  const y1 = yr - f
+  const y2 = yl + fin.tip
+  const slope = (fin.root - fin.tip) / Math.max(1e-6, y1 - y2)
+  const l = Math.hypot(1, slope)
+  for (let i = 1; i < 6; i++) {
+    const t = i / 6
+    left.push({ w: -(fin.root + (fin.tip - fin.root) * t), y: y1 + (y2 - y1) * t, nw: -1 / l, ny: -slope / l })
+  }
+  const bottom: SectionPoint[] = []
+  for (let i = 0; i <= 10; i++) {
+    const a = Math.PI + (Math.PI * i) / 10
+    bottom.push({ w: fin.tip * Math.cos(a), y: y2 + fin.tip * Math.sin(a), nw: Math.cos(a), ny: Math.sin(a) })
+  }
+  return mirrored(left, bottom)
+}
+
+/** A blade standing on a plate top at `yb` and filleted into a ceiling underside at `yc`, closed inside both. */
+function riserSection(yb: number, yc: number): SectionPoint[] {
+  const f = fin.fillet
+  const left: SectionPoint[] = [
+    { w: -(fin.root + f), y: yb - 0.004, nw: -Math.SQRT1_2, ny: -Math.SQRT1_2 },
+    ...filletArc(fin.root, yb, f, 1, 6),
+    ...filletArc(fin.root, yc, f, -1, 6).reverse(),
+    { w: -(fin.root + f), y: yc + 0.002, nw: -Math.SQRT1_2, ny: Math.SQRT1_2 },
+  ]
+  return mirrored(left, [])
+}
+
 /**
- * One closed strake: a thin blade with a full round on every edge, its root inside the plate from the leading edge to
- * the plate's trailing edge, its foot sweeping down to the tail.
+ * Sweeps a section along z from `z0` (front) to `z1` (back) with a bullnose of radius `fin.root` at both ends,
+ * every quad between neighbouring rings, both noses closed by a strip across their last ring.
+ */
+function sweep(b: MeshBuilder, s: (typeof strakes)[number], zs: number[], section: (z: number) => SectionPoint[]): void {
+  const across: V3 = [Math.cos(s.lean), Math.sin(s.lean), 0]
+  const up: V3 = [-Math.sin(s.lean), Math.cos(s.lean), 0]
+  const nose = 5
+  const top = (80 * Math.PI) / 180
+  type Ring = { p: V3; n: V3; v: number }[]
+  const ring = (z: number, sec: SectionPoint[], phi: number, dir: number): Ring => {
+    let v = 0
+    return sec.map((q, j) => {
+      if (j > 0) v += Math.hypot(q.w - sec[j - 1].w, q.y - sec[j - 1].y)
+      const zz = z + dir * fin.root * Math.sin(phi)
+      const n2 = add(scale(across, q.nw), scale(up, q.ny))
+      const n = add(scale(n2, Math.cos(phi)), [0, 0, dir * Math.sin(phi)])
+      const g = bow(s, zz)[1]
+      return { p: strakePoint(s, [zz, q.y], q.w * Math.cos(phi)), n: norm([n[0], n[1], n[2] - g * n[0]]), v }
+    })
+  }
+  const rings: Ring[] = []
+  const first = section(zs[0])
+  for (let k = nose; k > 0; k--) rings.push(ring(zs[0], first, (top * k) / nose, 1))
+  for (const z of zs) rings.push(ring(z, section(z), 0, 0))
+  const last = section(zs[zs.length - 1])
+  for (let k = 1; k <= nose; k++) rings.push(ring(zs[zs.length - 1], last, (top * k) / nose, -1))
+  const m = rings[0].length
+  const mid = rings[Math.floor(rings.length / 2)]
+  const next = rings[Math.floor(rings.length / 2) + 1]
+  const j = 9
+  const face = cross(sub(mid[j + 1].p, mid[j].p), sub(next[j].p, mid[j].p))
+  const flip = dot(face, mid[j].n) < 0
+  b.grid(rings.length, m, (i, j) => ({ p: rings[i][j].p, n: rings[i][j].n, u: rings[i][j].p[2], v: rings[i][j].v }), true, flip)
+  zipCap(b, rings[0].map((q) => q.p), rings[0].map(() => [0, 0, 1] as V3))
+  zipCap(b, rings[rings.length - 1].map((q) => q.p), rings[rings.length - 1].map(() => [0, 0, -1] as V3))
+}
+
+/**
+ * One strake: a blade tapering to its free edge, filleted into the underside of the roof, with a rounded nose ahead
+ * and a bullnose at the tail. The inner ones carry a riser above the roof in front of the mesh, filleted into the roof
+ * and the ceiling, so the strake reads as one blade passing through.
  */
 function strake(b: MeshBuilder, s: (typeof strakes)[number]): void {
-  const midX = (y: number): number => s.x - ((y - leanAxis) / Math.cos(s.lean)) * Math.sin(s.lean)
+  const midX = (y: number): number => s.x + bow(s, fanEnd)[0] - ((y - leanAxis) / Math.cos(s.lean)) * Math.sin(s.lean)
   const root = (z: number): number => centreY(z) + sheet + 0.002
   let back = tailZ(s.x) - br
   for (let k = 0; k < 3; k++) back = tailZ(midX(root(back)) + br) - br - 0.002
   const bottom = tailZ(midX(s.exit) + br) - br
+  const end = Math.max(back, bottom) + fin.root
   const foot = s.lead - s.rake
   const low = (z: number): number => s.toe + ((s.exit - s.toe) * (foot - z)) / (foot - bottom)
-  const poly: V2[] = []
-  const radii: number[] = []
-  const n = 24
-  const m = 12
-  if (s.rise) {
-    const top = ceilingY + wallT / 2 - br + 0.001
-    const zf = Math.min(meshZ - br - 0.002, back + riseChord)
-    poly.push([zf, top], [back, top], [bottom, s.exit + br])
-    radii.push(0.004, 0.005, 0.008)
-    for (let i = 1; i < m; i++) {
-      const z = bottom + ((foot - bottom) * i) / m
-      poly.push([z, low(z) + br])
-      radii.push(0)
-    }
-    poly.push([foot, s.toe + br])
-    radii.push(0.03)
-    for (let i = 0; i <= n; i++) {
-      const z = s.lead + ((zf - s.lead) * i) / n
-      poly.push([z, root(z)])
-      radii.push(i === 0 ? 0.006 : 0)
-    }
-  } else {
-    for (let i = 0; i <= n; i++) {
-      const z = back + ((s.lead - back) * i) / n
-      poly.push([z, root(z)])
-      radii.push(i === n ? 0.006 : i === 0 ? 0.004 : 0)
-    }
-    poly.push([foot, s.toe + br])
-    radii.push(0.03)
-    for (let i = 1; i < m; i++) {
-      const z = foot + ((bottom - foot) * i) / m
-      poly.push([z, low(z) + br])
-      radii.push(0)
-    }
-    poly.push([bottom, s.exit + br])
-    radii.push(0.008)
+  const full = centreY(foot) - s.toe
+  const edge = (z: number): number => {
+    if (z <= foot) return low(z)
+    const t = (s.lead - z) / (s.lead - foot)
+    return centreY(z) - Math.max(0.016, full * Math.sqrt(Math.max(0, 1 - (1 - t) * (1 - t))))
   }
-  slab(b, dedupe(rounded(poly, radii)), s)
+  const zs: number[] = []
+  for (let i = 0; i < 16; i++) zs.push(s.lead - (s.lead - foot) * (i / 16) ** 2)
+  for (let i = 0; i <= 36; i++) zs.push(foot + ((end - foot) * i) / 36)
+  sweep(b, s, zs, (z) => finSection(centreY(z), edge(z)))
+  if (!s.rise) return
+  const plateTop = (z: number): number => centreY(z) + sheet / Math.cos(Math.atan(rise(z, centre)[1])) - 0.0005
+  const zf = Math.min(meshZ - fin.root - fin.fillet - 0.002, back + riseChord)
+  const rz: number[] = []
+  for (let i = 0; i <= 12; i++) rz.push(zf - fin.root + ((end - zf + fin.root) * i) / 12)
+  sweep(b, s, rz, (z) => riserSection(plateTop(z), ceilingY))
+}
+
+/** The inner strakes fan out toward the exit with the air, by this share of their station at the tail. */
+const fan = 0.06
+const fanEnd = -2.43
+
+/** Outboard offset of a strake's mid plane at z, and its rate along z. */
+function bow(s: (typeof strakes)[number], z: number): [number, number] {
+  if (!s.rise) return [0, 0]
+  const span = s.lead - fanEnd
+  const t = clamp((s.lead - z) / span, 0, 1)
+  return [s.x * fan * t * t, (-2 * s.x * fan * t) / span]
 }
 
 /** Places a point of a strake's plan (z, y) in the vehicle, leaning about the axis at `leanAxis`. */
 function strakePoint(s: (typeof strakes)[number], q: V2, w: number): V3 {
   const h = (q[1] - leanAxis) / Math.cos(s.lean)
-  return [s.x + w * Math.cos(s.lean) - h * Math.sin(s.lean), leanAxis + w * Math.sin(s.lean) + h * Math.cos(s.lean), q[0]]
-}
-
-function slab(b: MeshBuilder, loop: V2[], s: (typeof strakes)[number]): void {
-  const across: V3 = [Math.cos(s.lean), Math.sin(s.lean), 0]
-  const n = loop.length
-  const area = loop.reduce((acc, q, i) => acc + q[0] * loop[(i + 1) % n][1] - loop[(i + 1) % n][0] * q[1], 0)
-  const ccw = area > 0
-  const tris = THREE.ShapeUtils.triangulateShape(loop.map((q) => new THREE.Vector2(q[0], q[1])), [])
-  for (const sign of [1, -1]) {
-    const nrm = scale(across, sign)
-    const ids = loop.map((q) => b.vertex(strakePoint(s, q, sign * br), nrm, q[0], q[1]))
-    for (const [a, c, d] of tris) {
-      const [p, q, w] = [loop[a], loop[c], loop[d]]
-      const turn = (q[0] - p[0]) * (w[1] - p[1]) - (q[1] - p[1]) * (w[0] - p[0]) > 0
-      if (turn === sign < 0) b.tri(ids[a], ids[c], ids[d])
-      else b.tri(ids[a], ids[d], ids[c])
-    }
-  }
-  const k = 8
-  const rings = loop.map((q, i) => {
-    const a = loop[(i - 1 + n) % n]
-    const c = loop[(i + 1) % n]
-    const tz = c[0] - a[0]
-    const ty = c[1] - a[1]
-    const l = Math.hypot(tz, ty) || 1
-    const o: V2 = ccw ? [ty / l, -tz / l] : [-ty / l, tz / l]
-    const ids: number[] = []
-    for (let j = 0; j <= k; j++) {
-      const ang = (Math.PI * j) / k
-      const w = br * Math.cos(ang)
-      const e = br * Math.sin(ang)
-      const p = strakePoint(s, [q[0] + o[0] * e, q[1] + o[1] * e], w)
-      const base = strakePoint(s, q, 0)
-      const out = sub(strakePoint(s, [q[0] + o[0], q[1] + o[1]], 0), base)
-      ids.push(b.vertex(p, norm(add(scale(across, Math.cos(ang)), scale(norm(out), Math.sin(ang)))), q[0], q[1]))
-    }
-    return ids
-  })
-  for (let i = 0; i < n; i++) {
-    const A = rings[i]
-    const B = rings[(i + 1) % n]
-    for (let j = 0; j < k; j++) {
-      if (ccw) b.quad(A[j], B[j], B[j + 1], A[j + 1])
-      else b.quad(A[j], A[j + 1], B[j + 1], B[j])
-    }
-  }
+  return [s.x + bow(s, q[0])[0] + w * Math.cos(s.lean) - h * Math.sin(s.lean), leanAxis + w * Math.sin(s.lean) + h * Math.cos(s.lean), q[0]]
 }
 
 export interface Underbody {
@@ -377,8 +386,10 @@ const cell = 0.036
 const gauge = 0.005
 /** The dark plate behind the mesh. */
 const meshBack = 0.09
-/** The dark plate inboard of the side vent. */
-const ventBack = 0.08
+/** The satin frame round each half of the mesh: face width, how far it stands proud and sinks behind, edge round, corner radius. */
+const frameSpec = { wide: 0.018, rise: 0.008, drop: 0.006, round: 0.003, corner: 0.022, under: 0.006 } as const
+/** Where the liner's inboard wall stands behind the rear tyre. */
+const linerX = 0.636
 const wallT = 0.004
 const ceilingY = bumper + 0.002
 /** Inboard wall of the corner cavity behind the rear tyre, and how far forward it runs. */
@@ -421,10 +432,10 @@ function cornerAt(u: number, y: number): { p: V3; n: V2 } {
 
 /**
  * The open lower tail behind the bumper edge, left half: a ceiling that continues the paint flange back to a mesh set well
- * inside the body and out through the corner cut to the rear tyre, the mesh itself from the diffuser up, and an inboard
- * wall that closes the corner cavity off from the engine.
+ * inside the body and out through the corner cut to the rear tyre, a closed housing round the mesh, the mesh in a satin
+ * frame of its own, and a solid inboard wall that closes the corner cavity off from the engine and meets the liner.
  */
-export function valance(lower: SurfaceCurve, rm: SurfaceMap): { wall: THREE.BufferGeometry; panel: THREE.BufferGeometry } {
+export function valance(lower: SurfaceCurve, rm: SurfaceMap): { wall: THREE.BufferGeometry; panel: THREE.BufferGeometry; frame: THREE.BufferGeometry } {
   void lower
   const inset = 0.008
   const y = ceilingY + wallT / 2
@@ -450,22 +461,27 @@ export function valance(lower: SurfaceCurve, rm: SurfaceMap): { wall: THREE.Buff
     const z = meshZ + ((cavityFront - meshZ) * i) / 16
     sideLine.push([centreY(z) + 0.002, z])
   }
-  const ventLow = centreY(meshZ) + 0.012
-  merge(wall, flat(side, [...sideLine, [ventLow, cavityFront], [ventLow, meshZ]], [], 0, wallT))
-  const inside = { ...side, o: [innerX - ventBack, 0, 0] as V3 }
-  const zs = meshZ + meshBack + wallT
-  const inLine: V2[] = [[centreY(zs) + 0.002, zs], ...sideLine.filter(([, z]) => z > zs + 0.005)]
-  merge(wall, flat(inside, [...inLine, [ceilingY + wallT, cavityFront], [ceilingY + wallT, zs]], [], 0, wallT))
-  const yb = centreY(meshZ + meshBack) + 0.004
   const yt = ceilingY + wallT
+  merge(wall, flat(side, [...sideLine, [yt, cavityFront], [yt, meshZ]], [], 0, wallT))
+  const step = { o: [0, 0, cavityFront] as V3, ex: [1, 0, 0] as V3, ey: [0, 1, 0] as V3, ez: [0, 0, 1] as V3 }
+  const yf = centreY(cavityFront) + 0.002
+  merge(wall, flat(step, [[innerX, yf], [linerX, yf], [linerX, yt], [innerX, yt]], [], -wallT, 0))
+  const yb = centreY(meshZ + meshBack) + 0.004
   const back = { o: [0, 0, meshZ + meshBack] as V3, ex: [1, 0, 0] as V3, ey: [0, 1, 0] as V3, ez: [0, 0, 1] as V3 }
   merge(wall, flat(back, [[0, yb], [innerX + wallT, yb], [innerX + wallT, yt], [0, yt]], [], 0, wallT))
-  const ym = centreY(meshZ) + 0.004
-  const ha = (innerX + wallT) / 2
-  const hb = (yt - ym) / 2
-  const panel = honeycomb({ c: [ha, ym + hb, meshZ + meshT / 2], a: [1, 0, 0], b: [0, 1, 0], n: [0, 0, -1] }, ha, hb, cell, gauge, meshT, 0.0006, 0.006)
-  const va = (cavityFront - meshZ) / 2
-  const vb = (yt - ventLow) / 2
-  merge(panel, honeycomb({ c: [innerX + meshT / 2, ventLow + vb, meshZ + va], a: [0, 0, 1], b: [0, 1, 0], n: [1, 0, 0] }, va, vb, cell, gauge, meshT, 0.0006, 0.006))
-  return { wall: finish(wall), panel: finish(panel) }
+
+  const fs = frameSpec
+  const ym = centreY(meshZ) + sheet
+  const ha = innerX / 2
+  const hb = (ceilingY - ym) / 2
+  const f = { c: [ha, ym + hb, meshZ] as V3, a: [1, 0, 0] as V3, b: [0, 1, 0] as V3, n: [0, 0, -1] as V3 }
+  const at = (x: number, yy: number, d: number): V3 => [f.c[0] + x, f.c[1] + yy, f.c[2] - d]
+  const ia = ha - fs.wide
+  const ib = hb - fs.wide
+  const panel = honeycomb({ ...f, c: [f.c[0], f.c[1], meshZ - meshT / 2] }, ia + fs.under, ib + fs.under, cell, gauge, meshT, 0.0006, 0)
+  const loop = roundLoop(ia, ib, fs.corner - fs.wide > 0.004 ? fs.corner - fs.wide : 0.004)
+  const sec = roundSection(0, fs.wide, -fs.drop, fs.rise, fs.round)
+  const rows = sec.map(([s, d]) => loop.map((l) => at(l.p[0] + l.o[0] * s, l.p[1] + l.o[1] * s, d)))
+  const frame = solid(rows, sec.map(() => false), true, true)
+  return { wall: finish(wall), panel: finish(panel), frame: finish(frame) }
 }
