@@ -25,6 +25,14 @@ const undulation = [
   [0.62, 0.012],
 ]
 
+/** Faces of the exposed aggregate on damp crowns: wavelength in meters and slope amplitude. */
+const aggregate = [
+  [0.014, 0.15],
+  [0.0065, 0.105],
+]
+/** Roughness the film over resolved aggregate keeps between its faces. */
+const aggregateFloor = 0.12
+
 /**
  * Wind ripples on standing water under the gusting wind: wavelength in meters, slope, and how many wavelengths each octave
  * travels downwind over the film, so the pattern returns to its start. They break each mirrored source into a long broken streak.
@@ -109,6 +117,21 @@ vec3 surfNoiseGradWrap(vec2 p, int period, uint salt) {
   return vec3(mix(mix(a, b, u.x), mix(d, e, u.x), u.y), du.x * mix(b - a, e - d, u.y), du.y * mix(d - a, e - b, u.x));
 }
 
+float surfAggregateHeld;
+
+/** Slope of the wet aggregate's faces on the damp slab. Octaves the footprint resolves move their variance out of the roughness. */
+vec2 surfAggregate(vec2 p, float foot) {
+  vec2 slope = vec2(0.0);
+  surfAggregateHeld = 0.0;
+  ${aggregate.map(([w, a], i) => `{
+    vec3 n = surfNoiseGrad(p / ${w.toFixed(4)} + ${(5.3 * i).toFixed(1)}, ${71 + i}u);
+    float filt = exp(-2.0 * pow(foot / ${w.toFixed(4)}, 2.0));
+    slope += ${a.toFixed(3)} * filt * n.yz;
+    surfAggregateHeld += ${(a * a * 0.15).toFixed(6)} * filt * filt;
+  }`).join('\n  ')}
+  return slope;
+}
+
 float surfWindVar;
 
 /** Slope of the wind ripples on open water at time t. Octaves finer than the footprint add their variance to surfWindVar. */
@@ -189,6 +212,8 @@ const porousFragment = /* glsl */ `
   float surfOpen = surfDeep * surfCover;
   surfSlope += surfOpen * surfWind(surfXZ, surfFoot, surfTime);
   float surfSlopeVar = surfRingVar + surfSlab * surfSlab * surfUndulationVar + surfOpen * surfOpen * surfWindVar;
+  float surfCrown = surfUp * (1.0 - surfWater * smoothstep(0.5, 3.0, surfDepth));
+  surfSlope += surfCrown * surfAggregate(surfXZ, surfFoot);
 
   float surfDamp = clamp(surfWet + surfFringe * 0.6, 0.0, 1.0);
   float surfStain = 0.6 * surfNoise2(surfXZ / 0.35 + 9.0, 41u) + 0.4 * surfNoise2(surfXZ / 0.09 + 2.0, 42u);
@@ -203,6 +228,8 @@ const porousFragment = /* glsl */ `
   float surfRoughWet = mix(0.18, 0.32, smoothstep(0.35, 0.75, surfAgg));
   roughnessFactor = mix(roughnessFactor, min(roughnessFactor, surfRoughWet), surfDamp);
   roughnessFactor = mix(roughnessFactor, mix(0.22, 0.05, smoothstep(2.0, 8.0, surfDepth)), surfWater);
+  float surfR4 = pow(roughnessFactor, 4.0);
+  roughnessFactor = sqrt(sqrt(max(surfR4 - 2.0 * surfCrown * surfCrown * surfAggregateHeld, min(surfR4, ${(aggregateFloor ** 4).toExponential(3)}))));
   roughnessFactor = sqrt(sqrt(pow(roughnessFactor, 4.0) + 2.0 * surfSlopeVar));
   vec3 surfFlat = mix(surfN, vec3(0.0, 1.0, 0.0), surfWater);
   vec3 surfWorldN = normalize(surfFlat + vec3(-surfSlope.x, 0.0, -surfSlope.y));
