@@ -240,7 +240,7 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
     cabinetSalt: { value: stream('world/hero/mural modules').range(0,61) },
     magenta: { value: magenta }, violet: { value: violet }, banded: { value: banded },
     travel: { value: travel }, relief: { value: relief }, picture: { value: Number(picture) },
-    artwork: { value: artworkGain > 0 ? muralPainting() : null }, artworkGain: { value: artworkGain },
+    artwork: { value: artworkGain > 0 ? muralPainting(picture) : null }, artworkGain: { value: artworkGain },
   }
   const material = new THREE.ShaderMaterial({
     uniforms, toneMapped: false, vertexShader: opalVertex,
@@ -332,7 +332,7 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
       const envelope = .86 + .12 * Math.cos(phase(time))
       if (!picture) return envelope
       estimate(time)
-      return envelope*peak*artworkGain*.251
+      return envelope*peak*artworkGain*.206
     },
   }
 }
