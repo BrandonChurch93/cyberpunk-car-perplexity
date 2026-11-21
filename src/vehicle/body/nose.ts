@@ -135,8 +135,10 @@ export function ruledFascia({ brow, chin, side, fold }: FasciaRails): FasciaSurf
   const wrap = facet([browTip, outer, shoulder])
   const fields = [shield, ramp, duct, eye, wrap]
   const eyeShoulder = .044, browShoulder = .068
-  const support = (a: typeof eye, b: typeof eye, width: number) =>
-    [-1, -.5, 0, .5, 1].map(k => (p: V2) => a.depth(...p) - b.depth(...p) - width * k)
+  const support = (a: typeof eye, b: typeof eye, width: number) => {
+    const slope = Math.hypot(a.dx - b.dx, a.dy - b.dy)
+    return [-1, -.5, 0, .5, 1].map(k => (p: V2) => (a.depth(...p) - b.depth(...p) - width * k) / slope)
+  }
   const creases = [
     rolledCrease('shield center spine', centerFoot, tip, shield, { ...shield, dx: -shield.dx }),
     rolledCrease('shield-to-cheek V', split, vee, ramp, shield),
@@ -365,6 +367,8 @@ export function noseCuts(fm: SurfaceMap): { cuts: Cuts; curves: Record<'eye' | '
 const area = (a: V2, b: V2, c: V2): number => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
 type Stop = (p: V2) => number
 type PlaneTriangle = [V2, V2, V2]
+// Reuse the endpoint where a crease stop nearly grazes a fan of edges.
+const stopSnap = 1e-5
 const chartKey = (p: V2) => p.map(x => x.toFixed(10)).join(':')
 const finish = (loop: V2[]): V2[] => loop.filter((p, i) => {
   const q = loop[(i + 1) % loop.length]
@@ -392,9 +396,9 @@ function splitAt(loop: V2[], stop: Stop): [V2[], V2[]] {
   for (const [i, p] of loop.entries()) {
     const q = loop[(i + 1) % loop.length]
     const dp = stop(p), dq = stop(q)
-    if (dp <= 1e-10) a.push(p)
-    if (dp >= -1e-10) b.push(p)
-    if (dp < -1e-10 && dq > 1e-10 || dp > 1e-10 && dq < -1e-10) {
+    if (dp <= stopSnap) a.push(p)
+    if (dp >= -stopSnap) b.push(p)
+    if (dp < -stopSnap && dq > stopSnap || dp > stopSnap && dq < -stopSnap) {
       const t = dp / (dp - dq)
       const r: V2 = [mix(p[0], q[0], t), mix(p[1], q[1], t)]
       a.push(r)
@@ -407,7 +411,7 @@ function splitAt(loop: V2[], stop: Stop): [V2[], V2[]] {
 const lerp2 = (a: V2, b: V2, t: number): V2 => [mix(a[0], b[0], t), mix(a[1], b[1], t)]
 const edgeStops = (p: V2, q: V2, stops: readonly Stop[]) => stops.flatMap(stop => {
   const a = stop(p), b = stop(q)
-  return a < -1e-10 && b > 1e-10 || a > 1e-10 && b < -1e-10 ? [a / (a - b)] : []
+  return a < -stopSnap && b > stopSnap || a > stopSnap && b < -stopSnap ? [a / (a - b)] : []
 }).sort((a, b) => a - b)
 const addStops = (loop: V2[], stops: readonly Stop[]): V2[] => loop.flatMap((p, i) => {
   const q = loop[(i + 1) % loop.length]
@@ -517,8 +521,8 @@ function triangulate(border: V2[], holes: V2[][], stops: readonly Stop[], emit: 
     if (poly.length < 3) return
     if (i === stops.length) return fan(poly, band)
     const stop = stops[i], bit = 2 ** i
-    if (!poly.some(p => stop(p) < -1e-10)) return clip(poly, i + 1, band + bit)
-    if (!poly.some(p => stop(p) > 1e-10)) return clip(poly, i + 1, band)
+    if (!poly.some(p => stop(p) < -stopSnap)) return clip(poly, i + 1, band + bit)
+    if (!poly.some(p => stop(p) > stopSnap)) return clip(poly, i + 1, band)
     const [a, b] = splitAt(poly, stop)
     clip(a, i + 1, band)
     clip(b, i + 1, band + bit)
@@ -751,7 +755,8 @@ export function tessellateFascia(map: SurfaceMap, openings: Cuts['holes'], uEdge
   const numeric = fieldStops.map((u): Stop => {
     const atBrow = uEdge.reduce((best, next) => Math.abs(u - next) < Math.abs(u - best) ? next : best)
     const a = project([u, 0]), b = project([atBrow, 1])
-    return p => -area(a, b, p)
+    const span = Math.hypot(b[0] - a[0], b[1] - a[1])
+    return p => -area(a, b, p) / span
   })
   const edge = bumperEdge(map, uEdge, vEdge)
   const rail = edge.map(p => p.section.map(project))

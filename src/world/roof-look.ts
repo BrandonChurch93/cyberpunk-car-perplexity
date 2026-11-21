@@ -2,13 +2,12 @@ import * as THREE from 'three'
 import { streamSeed } from '../core/random'
 import { insertAfter, patchMaterial } from '../materials/patch'
 import type { DeckSurface } from './contract'
-import { deckJoint, heroDrain } from './deck'
+import { deckJoint } from './deck'
 import { heroCityYaw, heroDrainLayout } from './forms'
 
 const basins = [
   [0.92, 3.13, 4.12, 1.38, 0.005, -0.16],
   [0.55, 1.95, 1.45, 0.62, 0.024, -0.08],
-  [1.75, 2.6, 0.72, 0.3, 0.012, 0.36],
   [1.21, 1.64, 0.54, 0.44, 0.019, -0.31],
   [0.18, -3.71, 2.96, 1.08, 0.013, 0.31],
   [-4.8, 5.45, 1.95, 0.65, 0.008, 0.08],
@@ -19,7 +18,11 @@ const basins = [
 ] as const
 const deckSeed = streamSeed('world/deck/height') / 4294967296
 const portraitShore = new THREE.Vector2(.89, -.45).normalize()
-const heroSump = new THREE.Vector3(heroDrainLayout[0], 0, heroDrainLayout[1]).applyAxisAngle(new THREE.Vector3(0,1,0), heroCityYaw)
+/** The hero grate in deck X and Z, where the near gutter, sump and drain pool fall. */
+export const heroGrate = [
+  heroDrainLayout[0] * Math.cos(heroCityYaw) + heroDrainLayout[1] * Math.sin(heroCityYaw),
+  heroDrainLayout[1] * Math.cos(heroCityYaw) - heroDrainLayout[0] * Math.sin(heroCityYaw),
+] as const
 
 export function deckHeight(x: number, z: number): number {
   let y = 0.011 + 0.0016 * Math.sin(x * 0.86 + z * 0.41 + deckSeed * 6) + 0.0014 * Math.sin(x * -0.69 + z * 1.14)
@@ -41,12 +44,9 @@ export function deckHeight(x: number, z: number): number {
     const bottom = -.005 + .00065 * Math.sin(u * 5 - v * 4)
     y = THREE.MathUtils.lerp(Math.min(y, bottom), y, THREE.MathUtils.smoothstep(shore, .81, 1.16))
   }
-  const dx = x - heroDrain[0], dz = z - heroDrain[1]
-  const gutterU = dx * 0.94 + dz * 0.34
-  const gutterV = dz * 0.94 - dx * 0.34
-  y -= 0.0041 * Math.exp(-((gutterU / .81) ** 2 + (gutterV / .18) ** 2))
-  const nearX = x - heroSump.x, nearZ = z - heroSump.z
-  y -= .0039 * Math.exp(-(((nearX*.94-nearZ*.34)/.61)**2+((nearZ*.94+nearX*.34)/.14)**2))
+  const dx = x - heroGrate[0], dz = z - heroGrate[1]
+  const along = dx * 0.94 - dz * 0.34, across = dz * 0.94 + dx * 0.34
+  y -= 0.0041 * Math.exp(-((along / .81) ** 2 + (across / .18) ** 2)) + .0039 * Math.exp(-((along / .61) ** 2 + (across / .14) ** 2))
   const joint = Math.abs(z - deckJoint.z)
   if (joint < 0.14 && x > deckJoint.startX) y += 0.004 * (1 - joint / 0.14)
   return y
@@ -95,7 +95,7 @@ function textureMaterial(material: THREE.MeshStandardMaterial, type: Type): void
     id: `world-roof-${type}`,
     uniforms: {
       roofSeed: { value: streamSeed(`world/roof/${type}`) / 4294967296 * 37 },
-      roofDrain: { value: new THREE.Vector2(heroSump.x, heroSump.z) },
+      roofDrain: { value: new THREE.Vector2(...heroGrate) },
       wallAxis: { value: new THREE.Vector2(Math.cos(heroCityYaw),-Math.sin(heroCityYaw)) },
     },
     defines: { ['ROOF_' + type.toUpperCase()]: 1 },

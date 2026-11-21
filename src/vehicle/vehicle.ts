@@ -11,7 +11,7 @@ import { engineBay } from './parts/enginebay'
 import { mirror } from './parts/mirror'
 import { underbody, valance } from './parts/diffuser'
 import { outlets } from './parts/outlets'
-import { taillamps } from './parts/taillamps'
+import { lampGlow, taillamps } from './parts/taillamps'
 import { guide } from './parts/lamps'
 import { buildFront } from './parts/front'
 import { buildLiners } from './parts/liners'
@@ -27,7 +27,7 @@ import { makeMaterials, type Materials } from './materials'
  * closest point of the named part to that position, so every shot keeps its framing while the anchor stays on a real surface.
  */
 const filmAnchors: Record<AnchorId, { p: V3; n: V3; r: number }> = {
-  paint: { p: [-0.62, 0.976, -1.7], n: [-0.085, 0.989, -0.12], r: 0.32 },
+  paint: { p: [-0.809, 0.928, -1.947], n: [-0.736, 0.633, -0.239], r: 0.12 },
   wheel: { p: [0.9563, 0.3405, 1.2852], n: [1, 0, 0], r: 0.36 },
   lamp: { p: [0.7508, 0.5352, 2.1672], n: [0.7111, 0, 0.7031], r: 0.2 },
   detail: { p: [0.301, 1.008, -1.0389], n: [-0.2285, 0.9725, 0.0438], r: 0.16 },
@@ -152,6 +152,9 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   addPair(tl.housing, m.tailRecess, 'tail-housing')
   addPair(tl.reflector, m.retro, 'tail-reflector')
   addPair(tl.optic, m.tailInner, 'tail-optic')
+  addPair(tl.lens, m.rearOptics, 'tail-lens')
+  lampGlow(m.tail)
+  lampGlow(m.tailInner)
 
   // Front module: eyes, Y guides, projectors, ducts, grille and splitter (parts/front.ts).
   // The registry accepts any material; the front module tags its own lens, guide and die finishes.

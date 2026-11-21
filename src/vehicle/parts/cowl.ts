@@ -148,7 +148,7 @@ function screenBase(screen: SurfaceCurve, x: number): number {
 
 export function cowl(S: Surface, map: SurfaceMap, cowlCurve: SurfaceCurve, screen: SurfaceCurve, tess: Tess): Cowl {
   const normal = (u: number, v: number): V3 => surfaceNormal(S, u, v)
-  const t = { ...tess, maxEdge: Math.min(tess.maxEdge, 0.02), edgeLength: 0.004, minEdge: 0.0008 }
+  const t = { ...tess, maxEdge: Math.min(tess.maxEdge, 0.03), edgeLength: 0.006, minEdge: 0.001 }
   const panel = tessellate(offsetSurface(S, -cowlSpec.drop), {
     ...t,
     trim: (u, v, p) => Math.max(cowlCurve.signed(u, v, p, 0.3), -slotField(p)),
