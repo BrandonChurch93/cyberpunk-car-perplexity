@@ -231,14 +231,14 @@ describe('full roof world', () => {
       ranks.set(rank, (ranks.get(rank) ?? 0)+1)
       const { width, height, depth } = shell.geometry.parameters
       const pane = shell.material.userData.clearPaneWidth as number
-      expect(pane).toBeGreaterThan(.90)
-      expect(pane).toBeLessThan(1.55)
+      expect(pane).toBeGreaterThan(rank === 'near' ? .45 : .90)
+      expect(pane).toBeLessThan(rank === 'near' ? .775 : 1.55)
       expect(width).toBeGreaterThan(pane)
       if (rank !== 'near') continue
       const front = shell.localToWorld(new THREE.Vector3(0,height*.25,depth*.5))
       expect(Math.hypot(front.x-eye.x,front.z-eye.z)).toBeGreaterThan(460)
       const edge = shell.localToWorld(new THREE.Vector3(pane,height*.25,depth*.5)).project(lens)
-      expect(Math.abs(edge.x-front.project(lens).x)*master.width*.5,shell.name).toBeLessThan(8.6)
+      expect(Math.abs(edge.x-front.project(lens).x)*master.width*.5,shell.name).toBeLessThan(4.3)
     }
     expect(footprints).toHaveLength(44)
     expect([...ranks.keys()].sort()).toEqual(['far','middle','near'])
@@ -269,6 +269,14 @@ describe('full roof world', () => {
       expect(shell.material.userData.mechanicalFloorPitch).toBeLessThanOrEqual(25)
       expect(shell.material.userData.roomDepthMeters).toEqual([4,8])
       const { distanceLayer, tenantGate } = shell.material.userData
+      const scale = distanceLayer === 'near' ? .5 : 1
+      expect(shell.material.userData.windowPitchMeters).toEqual([w*scale,h*scale])
+      const [r,g,b] = shell.material.userData.enamel as [number,number,number]
+      if (distanceLayer === 'near') {
+        expect(r).toBeLessThan(g)
+        expect(g).toBeLessThanOrEqual(b)
+        expect(b).toBeLessThan(1)
+      } else expect([r,g,b]).toEqual([1,1,1])
       if (shell.material.userData.crownMist[2] > 0) {
         expect(distanceLayer).not.toBe('near')
         softenedCrowns.push(shell.name)
@@ -277,10 +285,10 @@ describe('full roof world', () => {
       if (existingGate) expect(tenantGate).toEqual(existingGate)
       occupancy.set(distanceLayer,tenantGate)
       const [openingWidth,openingHeight] = shell.material.userData.litOpeningMeters as [number,number]
-      expect(openingWidth).toBeGreaterThanOrEqual(.90)
+      expect(openingWidth).toBeGreaterThanOrEqual(.90*scale)
       expect(openingWidth).toBeLessThanOrEqual(shell.material.userData.clearPaneWidth)
-      expect(openingHeight).toBeGreaterThanOrEqual(1.08)
-      expect(openingHeight).toBeLessThanOrEqual(1.88)
+      expect(openingHeight).toBeGreaterThanOrEqual(1.08*scale)
+      expect(openingHeight).toBeLessThanOrEqual(1.88*scale)
       facadeFamilies.add(shell.material.userData.facade)
       claddingRoughness.set(shell.material.userData.facade,shell.material.roughness)
       const fins = volume.getObjectByName('extruded curtain wall fins') as THREE.InstancedMesh | undefined
