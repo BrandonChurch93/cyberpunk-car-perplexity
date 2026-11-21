@@ -51,7 +51,7 @@ export const atmosphere = {
   projectorWakeFraction: 0.27,
   projectorWakeSlope: [-0.062, -0.012, 0.17, 0.24],
   projectorWakeScatter: [0.53, 0.54],
-  projectorOpeningFraction: 0.085,
+  projectorOpeningFraction: 0.17,
   projectorOpeningAngle: [0.58, 0.86],
   projectorOpeningHeight: [-0.12, -0.045],
   projectorOpeningReach: [0.14, 0.32, 0.97, 1.40],
