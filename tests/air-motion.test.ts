@@ -80,6 +80,7 @@ describe('air rain motion', () => {
     for (const mesh of heroFields) {
       expect(mesh.layers.isEnabled(layers.cameraOnly)).toBe(true)
       expect(mesh.layers.isEnabled(layers.scene)).toBe(false)
+      expect((mesh.material as THREE.ShaderMaterial).uniforms.uShutter.value).toBe(shutterSeconds)
     }
     const paintGeometry = paint as THREE.InstancedBufferGeometry
     const expose = (timeSeconds: number, format = config.formats.master) => {
