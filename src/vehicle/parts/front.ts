@@ -267,7 +267,8 @@ function bladeOptics(material: T.MeshPhysicalMaterial): void {
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
         float bladeU = clamp(vBladeUV.x, 0.0, 1.0);
         float bladeEdge = abs(2.0 * vBladeUV.y - 1.0);
-        float aperture = 1.0 - smoothstep(0.64, 0.94, bladeEdge);
+        float compactBlade = smoothstep(0.055, 0.15, fwidth(vBladeUV.y));
+        float aperture = 1.0 - smoothstep(mix(0.64, 0.86, compactBlade), mix(0.94, 1.0, compactBlade), bladeEdge);
         float core = 1.0 - smoothstep(0.16, 0.62, bladeEdge);
         float ribPhase = bladeU * 23.0 - 0.34 * bladeEdge;
         float ribs = pow(max(0.0, cos(PI2 * ribPhase)), 3.0)
@@ -276,7 +277,7 @@ function bladeOptics(material: T.MeshPhysicalMaterial): void {
         float outline = 1.0 - 0.87 * smoothstep(0.82, 1.0, bladeU);
         float facing = gl_FrontFacing ? max(0.0, dot(normal, normalize(vViewPosition))) : 0.0;
         diffuseColor.rgb *= 0.12 + aperture * (0.51 + 0.14 * ribs);
-        totalEmissiveRadiance *= source * outline * facing * aperture * (0.16 + 1.19 * core + 0.32 * ribs);
+        totalEmissiveRadiance *= source * outline * facing * aperture * (mix(0.16, 0.61, compactBlade) + 1.19 * core + 0.32 * ribs);
       `)
     },
   })
@@ -303,7 +304,7 @@ function projectorTurn(center: T.Vector3, axis: T.Vector3, radius: number, full:
     .rotateX(Math.PI / 2).scale(1, .84, 1).applyQuaternion(rotation).translate(...center.toArray())
 }
 
-function projectorFront(center: T.Vector3, axis: T.Vector3, radius: number, full: boolean) {
+function projectorFront(center: T.Vector3, axis: T.Vector3, radius: number, flange: number, full: boolean) {
   const intervals = full ? 24 : 12
   const apex = -.0043 + radius * .235
   const shoulder = apex - radius * .30
@@ -312,10 +313,11 @@ function projectorFront(center: T.Vector3, axis: T.Vector3, radius: number, full
     return [Math.max(1e-5, .913 * Math.sin(a)), shoulder + (apex - shoulder) * Math.cos(a)]
   })
   const lens = projectorTurn(center, axis, radius, full, [[.920, shoulder - .0011], [.925, shoulder - .0003], ...dome])
-  const shroud = projectorTurn(center, axis, radius, full, [[1.063, -.005], [1.080, -.0026], [1.077, -.0004],
-    [1.058, .0013], [1.028, .0020], [1.006, .0011]])
-  const rim = projectorTurn(center, axis, radius, full, [[1.006, .0011], [.991, .00155], [.967, .00155],
-    [.943, .0001], [.928, -.002], [.919, shoulder - .00055], [.900, shoulder - .0007], [.875, -.007]])
+  const shroud = projectorTurn(center, axis, radius, full, [[1.063, -.005], [1.080 + flange * .56, -.0026],
+    [1.077 + flange * .83, -.0004], [1.058 + flange, .0013], [1.028 + flange, .0020], [1.006 + flange, .0011]])
+  const rim = projectorTurn(center, axis, radius, full, [[1.006 + flange, .0011], [.991 + flange * .87, .00155],
+    [.967 + flange * .63, .00155], [.943 + flange * .23, .0001], [.928, -.002], [.919, shoulder - .00055],
+    [.900, shoulder - .0007], [.875, -.007]])
   return { lens, shroud, rim }
 }
 
@@ -340,15 +342,43 @@ function projectorChipset(center: T.Vector3, axis: T.Vector3, radius: number): T
   return builder.geometry().setAttribute('sourceGain', new T.Float32BufferAttribute(gain, 1))
 }
 
+function projectorFootprint(shader: Parameters<T.Material['onBeforeCompile']>[0]): void {
+  shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec3 vProjectorP;')
+  shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', 'vProjectorP = position;')
+  shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', `
+    varying vec3 vProjectorP;
+    float compactProjector() { return smoothstep(0.00065, 0.0019, length(fwidth(vProjectorP))); }
+  `)
+}
+
+function collarPickup(material: T.Material): void {
+  patchMaterial(material, {
+    id: 'front-projector-collar-pickup',
+    apply(shader) {
+      projectorFootprint(shader)
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec2 vCollarUV;')
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', 'vCollarUV = uv;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'varying vec2 vCollarUV;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
+        float lowerArc = 0.15 + 0.85 * smoothstep(-0.55, 0.52, cos(PI2 * vCollarUV.x + 0.19));
+        float rimFace = smoothstep(0.02, 0.11, vCollarUV.y) * (1.0 - smoothstep(0.53, 0.76, vCollarUV.y));
+        totalEmissiveRadiance *= 1.0 + compactProjector() * 27.0 * lowerArc * rimFace;
+      `)
+    },
+  })
+}
+
 function lensPickup(material: T.Material, flux: T.IUniform<number>): void {
   patchMaterial(material, {
     id: 'front-projector-internal-pickup',
     uniforms: { projectorFlux: flux },
     apply(shader) {
+      projectorFootprint(shader)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'uniform float projectorFlux;')
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
+        float compactDome = compactProjector();
         float lensAngle = max(0.0, dot(normal, normalize(vViewPosition)));
-        float lensGlint = exp(-134.0 * (1.0 - lensAngle));
+        float lensGlint = (1.0 + 21.0 * compactDome) * exp(-mix(134.0, 67.0, compactDome) * (1.0 - lensAngle));
         float caustic = (lensAngle - 0.91) * 46.0;
         float arc = 0.15 * exp(-caustic * caustic) * smoothstep(-0.24, 0.58, normal.y);
         totalEmissiveRadiance += projectorFlux * (lensGlint + arc) * vec3(0.85, 0.94, 1.0);
@@ -447,6 +477,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   lensPickup(projector, lensFlux)
   const rimMetal = tag(new T.MeshStandardMaterial({ color: 0xbac0c6, metalness: .74, roughness: .24,
     envMapIntensity: .60, emissive: 0xe2f0ff, emissiveIntensity: 0 }), 'none')
+  collarPickup(rimMetal)
   const reflector = m.reflector ?? tag(new T.MeshStandardMaterial({ color: 0xc4c9ce, metalness: 1, roughness: .11 }), 'none')
   const facetReturn = tag(new T.MeshStandardMaterial({ color: 0x626262, metalness: .71, roughness: .32 }), 'none')
   const bowl = outline(eye)
@@ -481,7 +512,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   projectorOptics(beam)
   const eyeBox = new T.Box3().setFromPoints(bowl)
   const [cases, shrouds, collars, bowls, rings, retainers, lenses, dies] = Array.from({ length: 8 }, () => [] as T.BufferGeometry[])
-  for (const [along, maxRadius, intensity] of [[.46, .029, 170], [.76, .023, 80]]) {
+  for (const [along, maxRadius, intensity, flange] of [[.46, .029, 170, 0], [.76, .023, 80, .27]]) {
     const x = T.MathUtils.lerp(eyeBox.min.x, eyeBox.max.x, along)
     const ys: number[] = []
     for (let i = 0; i < bowl.length; i++) {
@@ -495,7 +526,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
     const axis = new T.Vector3(.51, .12, .851).normalize()
     const p = seat.clone().addScaledVector(forward, -.022)
     const parts = projectorParts(p, axis, r, full)
-    const trim = projectorFront(p, axis, r, full)
+    const trim = projectorFront(p, axis, r, flange, full)
     parts.collar.dispose()
     parts.lens.dispose()
     parts.source.dispose()
