@@ -47,7 +47,7 @@ describe('full roof world', () => {
     world.root.updateMatrixWorld(true)
     const hero = world.root.getObjectByName('approved hero layout')!
     const local = new THREE.Vector3()
-    const solid: { bounds: THREE.Box3; inverse: THREE.Matrix4; scale: number }[] = []
+    const solid: { bounds: THREE.Box3; inverse: THREE.Matrix4; scale: number; geometry: THREE.BufferGeometry }[] = []
     for (const { id, at, normal, size, scale } of approvedHeroSourceSurvey()) {
       const fixture = hero.getObjectByName(id)!
       expect(fixture.getWorldPosition(local).distanceTo(new THREE.Vector3(...at))).toBeLessThan(1e-10)
@@ -69,9 +69,27 @@ describe('full roof world', () => {
     hero.traverse(object => {
       if (!(object instanceof THREE.Mesh) || !object.geometry.attributes.position) return
       object.geometry.computeBoundingBox()
-      solid.push({ bounds: object.geometry.boundingBox!, inverse: object.matrixWorld.clone().invert(),
-        scale: object.getWorldScale(new THREE.Vector3()).x })
+      const placements = object instanceof THREE.InstancedMesh
+        ? Array.from({ length: object.count }, (_, i) => { const m = new THREE.Matrix4(); object.getMatrixAt(i, m); return m.premultiply(object.matrixWorld) })
+        : [object.matrixWorld.clone()]
+      for (const placement of placements) solid.push({ bounds: object.geometry.boundingBox!, inverse: placement.clone().invert(),
+        scale: Math.min(...new THREE.Vector3().setFromMatrixScale(placement).toArray()), geometry: object.geometry })
     })
+    const face = new THREE.Triangle()
+    const nearest = new THREE.Vector3()
+    const surfaceDistance = (geometry: THREE.BufferGeometry, point: THREE.Vector3): number => {
+      const position = geometry.getAttribute('position')
+      const index = geometry.getIndex()
+      const corners = index ? index.count : position.count
+      let best = Infinity
+      for (let i = 0; i < corners; i += 3) {
+        face.a.fromBufferAttribute(position, index ? index.getX(i) : i)
+        face.b.fromBufferAttribute(position, index ? index.getX(i + 1) : i + 1)
+        face.c.fromBufferAttribute(position, index ? index.getX(i + 2) : i + 2)
+        best = Math.min(best, face.closestPointToPoint(point, nearest).distanceTo(point))
+      }
+      return best
+    }
     const shutterHalf = config.film.shutterDegrees / (720 * config.film.fps)
     let clearance = Infinity
     for (const format of [config.formats.master, config.formats.vertical]) {
@@ -80,8 +98,12 @@ describe('full roof world', () => {
         for (const offset of [-shutterHalf, 0, shutterHalf]) {
           const state = cameraAt(time + offset, format, anchors, time)
           const pupil = apertureRadius(state)
-          for (const box of solid) clearance = Math.min(clearance,
-            box.bounds.distanceToPoint(local.copy(state.position).applyMatrix4(box.inverse))*box.scale - pupil)
+          for (const box of solid) {
+            local.copy(state.position).applyMatrix4(box.inverse)
+            let distance = box.bounds.distanceToPoint(local)*box.scale - pupil
+            if (distance <= .10) distance = surfaceDistance(box.geometry, local)*box.scale - pupil
+            clearance = Math.min(clearance, distance)
+          }
         }
       }
     }
@@ -631,6 +653,21 @@ describe('full roof world', () => {
 
   it('keeps parapet trim warm white and authors HDR on faces rather than duplicating lights', () => {
     const trim = world.root.getObjectByName('parapet warm strip lenses') as THREE.InstancedMesh
+    const wall = world.root.getObjectByName('hero full span concrete parapet') as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
+    expect(patchesOf(wall.material)).toContain('parapet opal downwash')
+    expect(patchesOf(world.deck.material)).not.toContain('parapet opal downwash')
+    expect(wall.material.color.b/wall.material.color.r).toBeGreaterThan(.85)
+    const tints = new Set<THREE.Color>()
+    for (const id of ['left warm parapet strip','right warm parapet strip']) {
+      const slot = world.root.getObjectByName(id)
+      const face = slot?.getObjectByName('weather-sealed opal face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+      const tint = face.material.uniforms.tint!.value as THREE.Color
+      tints.add(tint)
+      expect(tint.r).toBeGreaterThan(15)
+      expect(tint.b/tint.r).toBeGreaterThan(.68)
+      expect(face.geometry.parameters.height).toBe(approvedHeroSourceSurvey().find(source=>source.id===id)!.size[1])
+    }
+    expect(tints.size).toBe(2)
     const color = new THREE.Color()
     expect(world.root.getObjectByName('parapet marker lenses')).toBeUndefined()
     expect(trim.count).toBeGreaterThan(2)

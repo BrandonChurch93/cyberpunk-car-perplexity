@@ -6,6 +6,7 @@ import { plate, type Label } from './fixtures'
 import { group, heroCityYaw, heroDrainLayout, streetY, type Tuple } from './forms'
 import { heroFrontageDistance, heroPoint, heroScale as scale, heroSize } from './hero-scale'
 import { billboardMural, fixtureOpal, signGlass, towerSurface, type Facade, type FacadeLayer, type SignSpill } from './hero-surfaces'
+import { washHeroParapet } from './parapet-wash'
 import { reflectionPracticalBuilder } from './reflection-practicals'
 import type { finishRoof } from './roof-look'
 
@@ -30,7 +31,6 @@ const opalRadiance: Readonly<Record<string,number>> = {
   'cyan garage rise': 2.7, 'cyan garage return': 4.0, 'cyan hotel facade strip': 3.7,
   'violet mid distance blade': 4.8,
   'right amber facade sail': 2.8, 'amber garage rise': 2.65, 'amber garage return': 4.15,
-  'left warm parapet strip': 1.7, 'right warm parapet strip': 1.7,
 }
 const cyanApertures: Readonly<Partial<Record<string,readonly [width: number, gain: number]>>> = {
   'left cyan facade sail': [.83,1.54], 'left cyan secondary strip': [.62,1.48],
@@ -78,6 +78,9 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const city = group(root, 'hero tower layout')
   const roof = group(root, 'hero parapet and near deck layout')
   const { heroWall, zinc, heroStripe, tar } = materials
+  const wallZ = -10.025, wallDepth = .34
+  const warmOpal = new THREE.Color(24.6,22.0,17.7)
+  washHeroParapet(heroWall,wallZ+wallDepth*.5,(approvedHeroSources as readonly Source[]).filter(source=>source.onWall))
   const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.035,.039,.048), roughness: .54, metalness: .59 })
   const oxidizedAluminum = new THREE.MeshStandardMaterial({ color: new THREE.Color(.033,.038,.041), roughness: .61, metalness: .38 })
   const charcoalConcrete = new THREE.MeshStandardMaterial({ color: new THREE.Color(.054,.052,.049), roughness: .83, metalness: .06 })
@@ -524,7 +527,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   markerRow('far central cyan stack',[-62.2,11.7,-345.89],[.56,.88,.22],3.5,10,[.076,1.02,1.87],scale.farCentralWest)
   markerRow('middle service cyan squares',[-11.38,2.7,-59.95],[.23,.29,.08],.63,8,[.043,1.12,1.71],scale.middleWest)
   markerRow('east outer glass cyan markers',[52.6,5.3,-150.948],[.48,1.26,.12],1.36,13,[.056,.85,1.59],scale.outerEast)
-  box(roof, 'hero full span concrete parapet', [0, .525, -10.025], [29, 1.05, .34], heroWall)
+  box(roof, 'hero full span concrete parapet', [0, .525, wallZ], [29, 1.05, wallDepth], heroWall)
   box(roof, 'hero concrete wall cap', [0, 1.047, -10.02], [29, .048, .377], heroWall)
   box(roof, 'hero full span steel top rail', [0, 1.228, -10.015], [29, .034, .052], zinc)
   box(roof, 'hero steel intermediate rail', [0, 1.145, -10.015], [29, .020, .032], zinc)
@@ -576,7 +579,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const segments = source.onWall ? 1 : Math.round(height / (source.tint === 'cyan' ? .34 : .50))
       const shape = cyanApertures[source.id]
       const gain = (opalRadiance[source.id] ?? 1)*(shape?.[1] ?? 1)
-      const opal = fixtureOpal(color.clone().multiplyScalar(gain),segments,shape!==undefined)
+      const opal = fixtureOpal(source.onWall ? warmOpal.clone() : color.clone().multiplyScalar(gain),segments,shape!==undefined)
       plate(housing, 'weather-sealed opal face', source.scale ? offset(opal,-4) : opal, [0,0,.002], width*(shape?.[0] ?? 1),height)
       if (!source.onWall) for (const fraction of [-.40,-.17,.17,.40]) {
         const horizontal = width > height
