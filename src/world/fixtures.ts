@@ -140,7 +140,15 @@ export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector
           float magenta = exp(-dot(spread,spread));
           float cyan = exp(-dot(cyanSpread,cyanSpread));
           vec3 spill = muralCloud*vec3(.193,.100,.086)*magenta*(.94+.09*hazeBank);
-          c = mix(c,base+spill+vec3(.0015,.008,.020)*cyan,southSky);
+          vec2 wind = vec2((az-bill)*15.5+3.3*d.y,d.y*25.5-(az-bill)*6.0);
+          float fold = cloudNoise(wind*.43+vec2(6.2,-4.8));
+          float sheet = cloudNoise(wind+vec2(fold*1.4,fold*1.7));
+          float lobes = smoothstep(.33,.78,.72*sheet+.28*cloudNoise(wind*1.63+fold*1.18));
+          float lane = (d.y-.168-(fold-.5)*.074)/.096;
+          float shoulder = (az-bill+.157)/.33;
+          float pinkCloud = exp(-lane*lane-shoulder*shoulder)*(lobes-.37);
+          vec3 cloudLight = mix(vec3(.133,.057,.096),muralCloud*vec3(.242,.134,.202),.47);
+          c = mix(c,base+spill+vec3(.0015,.008,.020)*cyan+cloudLight*pinkCloud,southSky);
         }
         float northBand = northGlow*smoothstep(.15,.36,d.y)*(1.0-smoothstep(.80,.96,d.y))*smoothstep(0.0,.32,d.z);
         if (northBand > .0) {
@@ -570,26 +578,46 @@ function deckLuminaire(roof: THREE.Group, metal: THREE.Material, frame: THREE.Ma
   const intensity = lumens/(solidAngle*candelaPerUnit)
   const optic = new THREE.MeshBasicMaterial({ toneMapped: false })
   for (const dx of [-1,1]) plate(head,'opal LED optic',optic,[dx*.217,0,.003],.426,size[1])
-  if (x < 0) beadInsert(head,frame,'west nose cutoff',[.217,0,.015],0,0,[.066,.038],17_400)
+  if (x < 0) beadBulkhead(head,frame,'west nose cutoff',[.217,0,.015],0,0,.08,8_900)
   const object = group(head,'luminaire diode center',[0,0,.061])
   const film: FilmLight = { id, kind: 'spot', object, color, intensity, size, angle, penumbra, range: 33, shadow: true, beam: true, level: () => 1 }
   const set = (wide: boolean) => optic.color.copy(color).multiplyScalar(wide ? intensity/(size[0]*size[1]) : .024)
   return { film, set }
 }
 
-function beadInsert(
+function beadBulkhead(
   parent: THREE.Object3D, frame: THREE.Material, id: string, at: Tuple,
-  yaw: number, pitch: number, [width,height]: readonly [number,number], radiance: number,
+  yaw: number, pitch: number, diameter: number, radiance: number,
+  tint: Tuple = [.96,.96,1], returnDepth = .069,
 ): void {
   const insert = group(parent,id,at)
   insert.rotation.set(pitch,yaw,0,'YXZ')
-  block(insert,'sealed optic backplate',frame,[0,0,-.031],[width+.034,height+.032,.069])
-  for (const side of [-1,1]) {
-    block(insert,'optic side rebate',frame,[side*(width*.5+.008),0,.019],[.016,height+.032,.044])
-    block(insert,'optic cutoff lip',frame,[0,side*(height*.5+.008),.022],[width+.032,.016,.050])
+  const radius = diameter*.5, outer = radius+.012, segments = 20
+  mesh(insert,new THREE.Mesh(new THREE.CylinderGeometry(outer,outer,returnDepth + .023,segments),frame),
+    'sealed round bulkhead body',[0,0,(-returnDepth-.023)*.5]).rotation.x = Math.PI*.5
+  mesh(insert,new THREE.Mesh(new THREE.CylinderGeometry(outer,outer,.028,segments,1,true),frame),
+    'bulkhead cutoff return',[0,0,.0135]).rotation.x = Math.PI*.5
+  mesh(insert,new THREE.Mesh(new THREE.RingGeometry(radius,outer,segments),frame),'bulkhead rain bezel',[0,0,.0275])
+  const optic = new THREE.MeshBasicMaterial({ color: new THREE.Color(...tint).multiplyScalar(radiance), toneMapped: false })
+  // The emitter atlas reads plane dimensions, while the rendered face has a round outline.
+  const face = new THREE.PlaneGeometry(diameter,diameter)
+  const aperture = new THREE.CircleGeometry(radius,segments)
+  face.setIndex(aperture.index)
+  for (const [name,attribute] of Object.entries(aperture.attributes)) face.setAttribute(name,attribute)
+  mesh(insert,new THREE.Mesh(face,optic),'compact bead optic',[0,0,.008],false)
+}
+
+function westFacadeBeads(city: THREE.Group, frame: THREE.Material): void {
+  for (const [id,wing,side,diameter,level,tint] of [
+    ['west corner slab',1,-.29,.142,91_000,[.96,.96,1]],
+    ['west market tower',2,-.43,.127,170_000,[1,.16,.75]],
+  ] as const) {
+    const tower = city.getObjectByName(id)!
+    const bay = tower.children.filter(child=>child.name === 'building mass')[wing]!
+    const at = bay.position.clone().add(new THREE.Vector3(bay.scale.x*.5+.29,bay.scale.y*.5-.20,bay.scale.z*side))
+    beadBulkhead(tower,frame,id+' service cutoff',at.toArray(),Math.atan2(-at.x,-at.z),
+      Math.atan2(at.y-.82,Math.hypot(at.x,at.z)),diameter,level,tint,.43)
   }
-  const optic = new THREE.MeshBasicMaterial({ color: new THREE.Color(.96,.96,1).multiplyScalar(radiance), toneMapped: false })
-  plate(insert,'compact bead optic',optic,[0,0,.008],width,height)
 }
 
 function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE.Material, frame: THREE.Material): { film: FilmLight; set(t: number, cutTime?: number): void } {
@@ -750,6 +778,7 @@ export function roofFixtures(roof: THREE.Group, city: THREE.Group, labels: Label
   const rakingCabinet = addRakingCabinet(roof, metal, frame)
   const raking = addBillboard(rakingCabinet, metal, true)
   paintPracticals(roof,city,frame,metal)
+  westFacadeBeads(city,frame)
   const lights = [
     primary.film, raking.film,
     panelPractical(roof, metal, frame, 'east parking canopy fascia', [13.65,2.58,-4.95], -1.42, [9.6,.46], new THREE.Color(.36,.66,1), 7.0, 44, true, 8, 0, .64),
@@ -826,7 +855,7 @@ export function roofFixtures(roof: THREE.Group, city: THREE.Group, labels: Label
   const poles = roof.children.filter(o => o.name === 'deck light pole')
   rearRoofAccess(roof,poles[7]!,labels,metal,frame)
   const service = rearDeckPractical(poles[8]!,roof,metal,frame)
-  beadInsert(poles[0]!,frame,'west deck head cutoff',[.682,4.579,0],Math.PI*.5-.12,.26,[.061,.0315],13_400)
+  beadBulkhead(poles[0]!,frame,'west deck head cutoff',[.682,4.579,0],Math.PI*.5-.12,.26,.08,5_150)
   const luminaires = [
     deckLuminaire(roof,metal,frame,service.film.id,[-13,7.58,2],[.04,.84,1.18],17_800),
     deckLuminaire(roof,metal,frame,'wheel deck pole',[8,7.14,11],[.37,1.10,.10],18_600),
