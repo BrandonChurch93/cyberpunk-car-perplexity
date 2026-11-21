@@ -70,6 +70,10 @@ export const atmosphere = {
   projectorDeckScatterHeight: [0.30, 0.57],
   projectorDeckScatterLoss: 0.75,
   projectorDeckExtinctionLoss: 0.55,
+  projectorDeckWingPath: [8.1, 10.5],
+  projectorDeckWingView: [0.012, 0.026],
+  projectorDeckWingReach: [0.40, 1.05],
+  projectorDeckWingLoss: 0.92,
 } as const
 
 const cloudSeed = (streamSeed('haze/cloud-underlight') / 4294967296 * 64).toFixed(8)
@@ -345,12 +349,16 @@ vec2 clipCone(vec2 segment, vec3 eyeFromLight, vec3 ray, vec3 axis, float cutoff
   return segment;
 }
 
+float deckHitWeight(vec3 hit) {
+  if (any(lessThan(hit.xz, deckBounds.xy)) || any(greaterThan(hit.xz, deckBounds.zw))) return 0.0;
+  return 1.0 - smoothstep(${atmosphere.projectorDeckHitHeight.join(', ')}, abs(hit.y));
+}
+
 vec2 frontDeckWeights(vec3 hit, vec3 ray, float distance, float wakeGain) {
   if (wakeGain <= 0.0 || frontProjectorIndex < 0 || frontProjectorIndex >= filmLightCount) return vec2(0.0);
   if (filmLightShape[frontProjectorIndex].w < 0.5) return vec2(0.0);
-  if (any(lessThan(hit.xz, deckBounds.xy)) || any(greaterThan(hit.xz, deckBounds.zw))) return vec2(0.0);
   float frontView = smoothstep(${atmosphere.projectorDeckFacing.join(', ')}, dot(-ray, filmLightAxis[frontProjectorIndex].xyz));
-  float deck = (1.0 - smoothstep(${atmosphere.projectorDeckHitHeight.join(', ')}, abs(hit.y))) * frontView * wakeGain;
+  float deck = deckHitWeight(hit) * frontView * wakeGain;
   float slope = smoothstep(${atmosphere.projectorDeckRaySlope.join(', ')}, -ray.y);
   float localPath = 1.0 - smoothstep(${atmosphere.foregroundDeckScatterPath.join(', ')}, distance);
   return deck * vec2(slope, max(slope, localPath));
@@ -365,6 +373,9 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   vec3 hit = origin + far * ray;
   float wakeGain = cameraWake ? smoothstep(${atmosphere.projectorWakeFocus.join(', ')}, focusDistance) : 0.0;
   vec2 frontDeck = frontDeckWeights(hit, ray, far, wakeGain);
+  #ifdef SIGN_AIR
+  float farDeck = deckHitWeight(hit) * smoothstep(${atmosphere.projectorDeckWingPath.join(', ')}, far) * wakeGain;
+  #endif
   // The short deck path hands off scatter to Air without changing extinction.
   float localScatterWeight = 1.0 - frontDeck.y;
   float deckAir = 1.0 - ${atmosphere.projectorDeckExtinctionLoss} * frontDeck.x;
@@ -458,6 +469,17 @@ vec4 scatterToDepth(vec2 uv, float depth) {
     float opening = projector && wakeGain > 0.0 ? ${atmosphere.projectorOpeningFraction} * wakeGain
       * (1.0 - smoothstep(${atmosphere.projectorOpeningHeight.join(', ')}, hit.y - filmLightPosition[i].y))
       * smoothstep(${atmosphere.projectorOpeningAngle.join(', ')}, dot(-ray, axis.xyz)) : 0.0;
+    #ifdef SIGN_AIR
+    float deckWingLoss = 0.0;
+    if (projector && farDeck > 0.0) {
+      // Protect the shaft in the plane through the lens and the emitter axis.
+      vec3 plane = cross(toSource, axis.xyz);
+      float separation = abs(dot(plane, ray)) * inversesqrt(max(dot(plane, plane), 1e-6));
+      float outside = smoothstep(${atmosphere.projectorDeckWingView.join(', ')}, separation);
+      float facing = smoothstep(${atmosphere.projectorDeckFacing.join(', ')}, dot(-ray, axis.xyz));
+      deckWingLoss = ${atmosphere.projectorDeckWingLoss} * farDeck * outside * facing;
+    }
+    #endif
     float beamRadius = sqrt(perp2 + min(shape.y * shape.y, 0.01));
     float theta0 = atan((segment.x - along) / beamRadius);
     float theta1 = atan((segment.y - along) / beamRadius);
@@ -508,6 +530,9 @@ vec4 scatterToDepth(vec2 uv, float depth) {
             * phase(cosine, ${atmosphere.projectorCoreAnisotropy}) * (densities.x + densities.y)
             - ${atmosphere.projectorOffAxisLoss} * (1.0 - beamCore) * inScatter);
         }
+        #ifdef SIGN_AIR
+        inScatter *= 1.0 - deckWingLoss * smoothstep(${atmosphere.projectorDeckWingReach.join(', ')}, distanceToLight);
+        #endif
         if (opening > 0.0) {
           float span = smoothstep(${atmosphere.projectorOpeningReach.slice(0, 2).join(', ')}, distanceToLight)
             * (1.0 - smoothstep(${atmosphere.projectorOpeningReach.slice(2).join(', ')}, distanceToLight));
