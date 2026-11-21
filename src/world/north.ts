@@ -111,13 +111,15 @@ export function addNorthSkyline(parent: THREE.Object3D, labels: Label) {
   const led: Size = [ledRight-ledLeft, ledTop-ledBottom]
   const ledAt: Tuple = [(ledLeft+ledRight)*.5, (ledBottom+ledTop)*.5, wallFront-.05]
 
-  const media = (host: THREE.Object3D, name: string, at: Tuple, [w,h]: Size, magenta: Tuple, violet: Tuple, profile: { offset: number; relief?: number; banded?: number; travel?: number }) => {
+  const media = (host: THREE.Object3D, name: string, at: Tuple, [w,h]: Size, magenta: Tuple, violet: Tuple, profile: { offset: number; relief?: number; banded?: number; travel?: number; laps?: number }, turned = false) => {
     const fixture = group(host,name,at)
     fixture.rotation.y = Math.PI
-    const mural = billboardMural(w,h,new THREE.Color(...magenta),{ violet: new THREE.Color(...violet), ...profile })
+    const mural = turned ? billboardMural(h,w,new THREE.Color(...magenta),{ violet: new THREE.Color(...violet), ...profile })
+      : billboardMural(w,h,new THREE.Color(...magenta),{ violet: new THREE.Color(...violet), ...profile })
     const depth = Math.min(1.3,w*.05)
     practical.block(fixture,'media cabinet sealed housing',[0,0,-depth*.5],[w+.9,h+.9,depth])
-    plate(fixture,'animated magenta violet media tiles',mural.material,[0,0,.03],w,h)
+    if (turned) plate(fixture,'animated magenta violet media tiles',mural.material,[0,0,.03],h,w).rotation.z = Math.PI*.5
+    else plate(fixture,'animated magenta violet media tiles',mural.material,[0,0,.03],w,h)
     for (const side of [-1,1]) {
       practical.block(fixture,'media facade cast stile',[side*(w*.5+.28),0,.05],[.36,h+1.1,.34])
       practical.block(fixture,'media facade perimeter beam',[0,side*(h*.5+.30),.05],[w+1.1,.36,.34])
@@ -130,7 +132,14 @@ export function addNorthSkyline(parent: THREE.Object3D, labels: Label) {
     return mural
   }
   const courtMural = media(court,'northern court media facade',[ledAt[0]-court.position.x,ledAt[1]-court.position.y,ledAt[2]-court.position.z],led,
-    palette.magenta,[1.75,.52,8.4],{ offset: 2.35, relief: 1.7, travel: .13, banded: .22 })
+    [8.8,.62,1.35],[3.9,.3,7.6],{ offset: 5.2, relief: 2.3, travel: .19, laps: 2 },true)
+  const courtSpill = new THREE.Color()
+  const courtWash = new THREE.Color()
+  animation.push(time => {
+    courtMural.colorAt(time,courtSpill)
+    courtSpill.multiplyScalar(courtMural.level(time)*.46)
+    courtWash.copy(courtSpill).multiplyScalar(1.45)
+  })
 
   const slab = keyPlots[1]!
   const slabFront = slab.z-slab.d*.5
@@ -138,9 +147,9 @@ export function addNorthSkyline(parent: THREE.Object3D, labels: Label) {
   const slabAt: Tuple = [slab.x+slab.w*.5-17,52,slabFront-.05]
   media(root,'north slab violet media blade',slabAt,slabMedia,[3.6,.32,3.1],[1.6,.42,9.6],{ offset: 4.1, banded: .62, travel: .12 })
 
-  const screen: ScreenReflection = { point: new THREE.Vector3(...ledAt), normal: new THREE.Vector3(0,0,-1), size: new THREE.Vector2(...led), picture: courtMural.picture, spill: new THREE.Color(.42,.034,.286) }
+  const screen: ScreenReflection = { point: new THREE.Vector3(...ledAt), normal: new THREE.Vector3(0,0,-1), size: new THREE.Vector2(...led), picture: courtMural.picture, spill: courtSpill }
   const spills: SignSpill[] = [
-    { point: new THREE.Vector3(...ledAt), size: new THREE.Vector2(...led), color: new THREE.Color(.62,.05,.42) },
+    { point: new THREE.Vector3(...ledAt), size: new THREE.Vector2(...led), color: courtWash },
     { point: new THREE.Vector3(...slabAt), size: new THREE.Vector2(...slabMedia), color: new THREE.Color(.34,.07,.62) },
   ]
 
@@ -242,6 +251,32 @@ export function addNorthSkyline(parent: THREE.Object3D, labels: Label) {
   practical.cabinet(railFace,'east cyan sauna blade',[7.5,52,.5],[2.6,13],palette.cyan,word('SAUNA'),true,3)
   practical.opal(railFace,'east magenta crown band',[0,rail.roof-3,.4],[16,1.1],palette.magenta,1)
 
+  const terrace = parent.getObjectByName('north sign terrace')!
+  terrace.updateWorldMatrix(true,false)
+  const terraceFace = group(terrace,'north terrace compact frontage')
+  terraceFace.position.copy(terrace.worldToLocal(new THREE.Vector3(0,0,47.05)))
+  terraceFace.rotation.y = Math.PI
+  const tx = (x: number) => -x
+  const bays: [number, Tuple, string, Tuple][] = [
+    [-27.3,[7.4,3.3,.7],'NOODLES',[2.9,1.85,.82]],
+    [-21.7,[.22,6.4,9.6],'OPEN',[1.5,2.25,2.5]],
+    [-16.1,[6.2,.4,3.3],'BAR',[2.6,1.2,1.9]],
+  ]
+  for (const [x,tube,text,room] of bays) {
+    practical.block(terraceFace,'shopfront recessed bay surround',[tx(x),2.65,-.25],[4.9,3.5,.5])
+    practical.opal(terraceFace,'lit shopfront interior behind glazing',[tx(x),2.35,.04],[4.3,2.5],room,4)
+    practical.opal(terraceFace,'shopfront head tube',[tx(x),3.85,.16],[4.4,.11],tube,1)
+    practical.cabinet(terraceFace,'shopfront fascia cabinet',[tx(x),4.75,.22],[3.4,.9],tube,word(text),false,3)
+  }
+  const lampsAt = [-28.6,-25.9,-23.2,-20.5,-17.8,-12.6]
+  for (const y of [7.55,12.6]) for (const x of lampsAt) {
+    practical.block(terraceFace,'balcony lamp wall bracket',[tx(x),y+.24,.12],[.1,.1,.26],zinc)
+    practical.opal(terraceFace,'sodium balcony lamp lens',[tx(x),y,.26],[.3,.3],[9.4,5.6,2.1],1)
+  }
+  practical.block(terraceFace,'roof edge bulb catenary',[tx(-20.9),14.82,.32],[17.6,.035,.035],zinc)
+  for (let i=0;i<20;i++) practical.opal(terraceFace,'roof edge festoon bulb',[tx(-29.6+i*.915),14.62,.36],[.17,.17],[10.5,7.4,3.6],1)
+  for (const x of [-29.55,-12.25]) practical.opal(terraceFace,'cyan corner riser tube',[tx(x),7.9,.2],[.14,13.4],[.18,6.6,9.8],12)
+
   const north = parent.getObjectByName('four-sided concrete parapet and steel rail')!
   const strips = (wallName: string, at: readonly number[]) => {
     const wall = north.getObjectByName(wallName)!
@@ -256,6 +291,9 @@ export function addNorthSkyline(parent: THREE.Object3D, labels: Label) {
     if (!(o instanceof THREE.Mesh)) return
     o.castShadow = false
     o.receiveShadow = false
+  })
+  terraceFace.traverse(o => {
+    if (o instanceof THREE.Mesh) o.castShadow = o.receiveShadow = false
   })
   north.traverse(o => {
     if (o instanceof THREE.Mesh && o.parent?.name.endsWith('parapet warm inset strips')) o.castShadow = false

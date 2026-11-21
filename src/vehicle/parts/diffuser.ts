@@ -147,7 +147,13 @@ function dedupe(loop: V2[]): V2[] {
 function rolledEdge(b: MeshBuilder, f: Face, path: V2[], closed: boolean): void {
   const k = 8
   const n = path.length
-  const ring = (i: number): number[] => {
+  const along = [0]
+  for (let i = 1; i <= n; i++) {
+    const a = path[i - 1]
+    const c = path[i % n]
+    along.push(along[i - 1] + Math.hypot(c[0] - a[0], f.y(c[1]) - f.y(a[1]), c[1] - a[1]))
+  }
+  const ring = (i: number, u: number): number[] => {
     const q = path[i]
     const a = path[closed ? (i - 1 + n) % n : Math.max(0, i - 1)]
     const c = path[closed ? (i + 1) % n : Math.min(n - 1, i + 1)]
@@ -160,15 +166,15 @@ function rolledEdge(b: MeshBuilder, f: Face, path: V2[], closed: boolean): void 
     for (let s = 0; s <= k; s++) {
       const ang = (Math.PI * s) / k
       const pos = add(p, add(scale(up, r * (1 - Math.cos(ang))), scale(out, r * Math.sin(ang))))
-      ids.push(b.vertex(pos, norm(add(scale(up, -Math.cos(ang)), scale(out, Math.sin(ang))))))
+      ids.push(b.vertex(pos, norm(add(scale(up, -Math.cos(ang)), scale(out, Math.sin(ang)))), u, r * ang))
     }
     return ids
   }
-  const rings = path.map((_, i) => ring(i))
-  const last = closed ? n : n - 1
-  for (let i = 0; i < last; i++) {
+  const rings = path.map((_, i) => ring(i, along[i]))
+  if (closed) rings.push(ring(0, along[n]))
+  for (let i = 0; i < rings.length - 1; i++) {
     const A = rings[i]
-    const B = rings[(i + 1) % n]
+    const B = rings[i + 1]
     for (let s = 0; s < k; s++) b.quad(A[s], B[s], B[s + 1], A[s + 1])
   }
 }

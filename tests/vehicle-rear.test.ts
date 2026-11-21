@@ -7,9 +7,11 @@ import { buildBody } from '../src/vehicle/body/body'
 import { mainLoft } from '../src/vehicle/body/shape'
 import { bumper, cornerCut, cornerFront, lensEdge, rearFace } from '../src/vehicle/body/tail'
 import { lampWrap } from '../src/vehicle/body/cuts'
+import { createVehicle } from '../src/vehicle'
+import { defaultPaint, paintById } from '../src/config'
 import { outlets } from '../src/vehicle/parts/outlets'
 import { taillamps } from '../src/vehicle/parts/taillamps'
-import { engineBay } from '../src/vehicle/parts/enginebay'
+import { engineBay, grilleFrame } from '../src/vehicle/parts/enginebay'
 
 describe('rear underbody', () => {
   const u = underbody()
@@ -108,7 +110,7 @@ describe('rear module', () => {
     ['outlet lip', ex.lip], ['outlet pipes', ex.pipes], ['outlet back', ex.soot], ['outlet housing', ex.housing],
     ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['lamp reflector', tl.reflector], ['lamp optic', tl.optic], ['valance wall', va.wall],
     ['bay covers', bay.covers], ['bay carbon', bay.carbon], ['plenum', bay.center], ['bay mesh', bay.mesh],
-    ['airbox grille', bay.grille], ['grille bezel', bay.bezel], ['grille duct', bay.duct], ['grille ledge', bay.ledge],
+    ['airbox grille', bay.grille], ['grille bezel', bay.bezel], ['grille duct', bay.duct], ['bay core', bay.core], ['grille ledge', bay.ledge], ['bay shelf', bay.shelf],
     ['intake hose', bay.hose], ['hose clamp', bay.clamp],
   ]
 
@@ -199,7 +201,7 @@ describe('rear module', () => {
   })
 
   it('keeps every bay part under the deck and inside the opening', () => {
-    for (const g of [bay.covers, bay.carbon, bay.center, bay.mesh, bay.grille, bay.bezel, bay.duct, bay.hose, bay.clamp]) {
+    for (const g of [bay.covers, bay.carbon, bay.center, bay.mesh, bay.grille, bay.bezel, bay.duct, bay.core, bay.ledge, bay.shelf, bay.hose, bay.clamp]) {
       const pos = g.getAttribute('position')
       for (let i = 0; i < pos.count; i += 7) {
         const [x, y, z] = [pos.getX(i), pos.getY(i), pos.getZ(i)]
@@ -230,6 +232,20 @@ describe('rear module', () => {
     bay.grille.computeBoundingBox()
     expect(bay.grille.boundingBox!.min.y - bay.duct.boundingBox!.min.y).toBeGreaterThan(0.06)
   })
+  it('hangs the louvred core inside the well, clear of the grille and above the floor', () => {
+    const f = grilleFrame(1)
+    const pos = bay.core.getAttribute('position')
+    let lo = Infinity
+    let hi = -Infinity
+    for (let i = 0; i < pos.count; i++) {
+      const d = (pos.getX(i) - f.c[0]) * f.n[0] + (pos.getY(i) - f.c[1]) * f.n[1] + (pos.getZ(i) - f.c[2]) * f.n[2]
+      lo = Math.min(lo, d)
+      hi = Math.max(hi, d)
+    }
+    expect(hi).toBeLessThan(-0.02)
+    expect(lo).toBeGreaterThan(-0.073)
+    expect(pos.count).toBeGreaterThan(400)
+  })
   it('opens the corners behind the rear wheels below the bumper and nowhere else', () => {
     expect(cornerCut([0.8, 0.3, -2.2])).toBeGreaterThan(0.02)
     expect(cornerCut([-0.8, bumper - 0.05, cornerFront - 0.1])).toBeGreaterThan(0)
@@ -249,4 +265,42 @@ describe('rear module', () => {
     }
     expect(meshZ - (-dims.halfLength)).toBeGreaterThan(0.25)
   })
+})
+
+describe('anisotropic tangent frames', () => {
+  const known = new Set(['cabin-carbon', 'front rolled splitter'])
+  it('keeps tangent and bitangent apart on every face of every anisotropic vehicle material', async () => {
+    const v = await createVehicle({ paint: paintById(defaultPaint), detail: 'full' })
+    const e1 = new THREE.Vector3()
+    const e2 = new THREE.Vector3()
+    const t = new THREE.Vector3()
+    const b = new THREE.Vector3()
+    const bad: string[] = []
+    v.root.traverse((o) => {
+      if (!(o instanceof THREE.Mesh) || known.has(o.name)) return
+      const mat = o.material as THREE.MeshPhysicalMaterial
+      if (!(mat.anisotropy > 0)) return
+      const g = o.geometry as THREE.BufferGeometry
+      const p = g.getAttribute('position')
+      const uv = g.getAttribute('uv')
+      const idx = g.getIndex()
+      if (!uv) return void bad.push(`${o.name} has no uv`)
+      const n = idx ? idx.count : p.count
+      for (let f = 0; f < n; f += 3) {
+        const [i0, i1, i2] = [0, 1, 2].map((k) => (idx ? idx.getX(f + k) : f + k))
+        e1.set(p.getX(i1) - p.getX(i0), p.getY(i1) - p.getY(i0), p.getZ(i1) - p.getZ(i0))
+        e2.set(p.getX(i2) - p.getX(i0), p.getY(i2) - p.getY(i0), p.getZ(i2) - p.getZ(i0))
+        if (t.copy(e1).cross(e2).length() < 1e-12) continue
+        const du1 = uv.getX(i1) - uv.getX(i0)
+        const dv1 = uv.getY(i1) - uv.getY(i0)
+        const du2 = uv.getX(i2) - uv.getX(i0)
+        const dv2 = uv.getY(i2) - uv.getY(i0)
+        if (Math.abs(du1 * dv2 - du2 * dv1) < 1e-14) continue
+        t.copy(e1).multiplyScalar(dv2).addScaledVector(e2, -dv1).normalize()
+        b.copy(e2).multiplyScalar(du1).addScaledVector(e1, -du2).normalize()
+        if (Math.abs(t.dot(b)) > 0.9) bad.push(`${o.name} face ${f / 3}`)
+      }
+    })
+    expect(bad.slice(0, 8)).toEqual([])
+  }, 120000)
 })
