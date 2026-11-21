@@ -382,7 +382,7 @@ describe('full roof world', () => {
     const matrix = new THREE.Matrix4()
     world.root.traverse(mesh => {
       if (!(mesh instanceof THREE.InstancedMesh) ||
-        !['parapet marker lenses','recessed lit window apertures'].includes(mesh.name)) return
+        !['parapet warm strip lenses','recessed lit window apertures'].includes(mesh.name)) return
       expect(mesh.parent?.getObjectByName('sealed metal housings')).toBeInstanceOf(THREE.InstancedMesh)
       for (let i=0;i<mesh.count;i++) {
         mesh.getMatrixAt(i,matrix)
@@ -419,6 +419,29 @@ describe('full roof world', () => {
       }
       expect(wanted,'frame '+frame).toEqual([0,0,0])
     }
+  })
+
+  it('keeps parapet trim warm white and authors HDR on faces rather than duplicating lights', () => {
+    const trim = world.root.getObjectByName('parapet warm strip lenses') as THREE.InstancedMesh
+    const color = new THREE.Color()
+    expect(world.root.getObjectByName('parapet marker lenses')).toBeUndefined()
+    expect(trim.count).toBeGreaterThan(2)
+    for (let i=0;i<trim.count;i++) {
+      trim.getColorAt(i,color)
+      expect(color.g/color.r).toBeGreaterThan(.76)
+      expect(color.b/color.r).toBeGreaterThan(.55)
+      expect(color.r).toBeGreaterThan(4)
+    }
+    const arrow = world.root.getObjectByName('wayfinding arrow stem') as THREE.Mesh<THREE.BoxGeometry,THREE.MeshBasicMaterial>
+    expect(arrow.material.toneMapped).toBe(false)
+    expect(arrow.material.color.r).toBeGreaterThan(10)
+    const blade = world.root.getObjectByName('violet mid distance blade')
+      ?.getObjectByName('weather-sealed opal face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    expect((blade.material.uniforms.tint!.value as THREE.Color).b).toBeGreaterThan(10)
+    const arcade = world.root.getObjectByName('stacked amber arcade cabinet')!
+    const face = arcade.getObjectByName('diffusing cabinet face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    expect((face.material.uniforms.tint!.value as THREE.Color).r).toBeGreaterThan(4)
+    expect(world.lights.some(light => light.object.parent===arcade)).toBe(false)
   })
 
   it('retains the lit sign mount and distinguishes city cladding from wet parapet', () => {

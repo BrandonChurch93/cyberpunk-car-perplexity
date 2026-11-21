@@ -9,6 +9,7 @@ const colors = {
   ivory: [4.4,3.96,3.33],
 } as const satisfies Record<string,Tuple>
 type Tint = keyof typeof colors
+const windowRadiance: Record<Tint,number> = { cyan: 3.7, magenta: 4.5, amber: 4.0, ivory: 2.25 }
 type Run = readonly [fraction: number, y: number, tint: Tint, count: number, w: number, h: number]
 type Window = { at: Tuple; size: readonly [number,number]; tint: Tint; gain: number }
 
@@ -47,8 +48,8 @@ export function deckReflectionTrim(frame: THREE.Material, zinc: THREE.Material) 
       mounts.setMatrixAt(i,matrix.makeScale(w+lip*2,h+lip*2,d).setPosition(x,y,z-d*.5))
       beds.setMatrixAt(i,matrix.makeScale(w+lip*2.3,lip*.74,d*.63).setPosition(x,y-h*.5-lip*.60,z-d*.13))
       apertures.setMatrixAt(i,matrix.makeScale(w,h,1).setPosition(x,y,z+.006))
-      const [r,g,b] = colors[tint]
-      apertures.setColorAt(i,color.setRGB(r,g,b).multiplyScalar(gain))
+      const [r,g,b] = wall ? [9.3,7.5,5.45] : colors[tint]
+      apertures.setColorAt(i,color.setRGB(r,g,b).multiplyScalar(gain*(wall ? 1 : windowRadiance[tint])))
     }
     parent.add(mounts,beds,apertures)
   }
@@ -66,19 +67,11 @@ export function deckReflectionTrim(frame: THREE.Material, zinc: THREE.Material) 
   const parapet = (parent: THREE.Group) => {
     const run = group(parent,'parapet service lighting')
     const lamps = [
-      [-8.90,.73,.36,.046,'amber'],[-7.66,.91,.24,.044,'ivory'],
-      [-6.65,.83,.24,.044,'cyan'],[-5.04,.37,.34,.033,'amber'],
-      [-4.49,.92,.31,.047,'cyan'],[-3.72,.72,.23,.045,'magenta'],
-      [-2.98,.48,.29,.033,'cyan'],[-2.18,.94,.24,.044,'magenta'],
-      [-1.39,.67,.25,.035,'ivory'],[-.52,.88,.29,.046,'cyan'],
-      [.41,.59,.26,.038,'magenta'],[1.30,.96,.30,.058,'magenta'],
-      [2.14,.71,.24,.037,'amber'],[2.93,.94,.34,.047,'cyan'],
-      [3.82,.56,.23,.037,'magenta'],[4.46,.93,.32,.052,'amber'],
-      [5.83,.79,.24,.045,'cyan'],[6.70,.93,.34,.056,'amber'],
-      [7.46,.68,.26,.044,'magenta'],[8.61,.91,.36,.054,'ivory'],
+      [-9.12,.60,.48,.045,.79],[-7.66,.54,.47,.042,.72],[-3.72,.57,.43,.043,.62],
+      [3.82,.56,.43,.044,.65],[7.46,.59,.48,.043,.87],[8.61,.56,.49,.042,.74],
     ] as const
-    batch(run,'parapet marker lenses',lamps.map(([x,y,w,h,tint],i): Window => ({
-      at: [x,y,-9.797], size: [w,h], tint, gain: [.54,.87,.68,.95,.79][i%5]!,
+    batch(run,'parapet warm strip lenses',lamps.map(([x,y,w,h,gain]): Window => ({
+      at: [x,y,-9.797], size: [w,h], tint: 'ivory', gain,
     })),true)
   }
   return { tower, parapet }

@@ -21,6 +21,14 @@ const palette = {
 type Tint = keyof typeof palette
 type Source = { id: string; at: Tuple; size: readonly [number, number]; tint: Tint; text?: string; onWall?: boolean; yaw?: number; scale?: number }
 type RoofMaterials = ReturnType<typeof finishRoof>['materials']
+const signRadiance: Readonly<Record<string,number>> = { HOTEL: 4.1, PARKING: 3.0, BAR: 4.2, '24H': 3.4, OPEN: 4.1, EXIT: 2.7 }
+const opalRadiance: Readonly<Record<string,number>> = {
+  'left cyan facade sail': 2.3, 'left cyan secondary strip': 2.25,
+  'cyan garage rise': 2.7, 'cyan garage return': 4.0, 'cyan hotel facade strip': 3.7,
+  'violet mid distance blade': 4.8,
+  'right amber facade sail': 2.8, 'amber garage rise': 2.65, 'amber garage return': 4.15,
+  'left warm parapet strip': 1.7, 'right warm parapet strip': 1.7,
+}
 
 export const approvedHeroSources = [
   { id: 'left cyan facade sail', at: [-11.76, 6.42, -29.40], size: [.139, 11.05], tint: 'cyan', scale: scale.leftBlade },
@@ -322,7 +330,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
         box(cabinet,'anodised cabinet back',[0,0,0],[signW+.48,signH+.52,.64],frame)
         for (const yy of [-signH*.38,signH*.38]) box(cabinet,'cabinet shear arm',[0,yy,-.22],[1.27,.27,.87],zinc)
         const glyphs = labels(word,'World Condensed',[...word],signW/signH)
-        plate(cabinet,'vertical magenta LED opal',glyphs ? signGlass(glyphs,centerAccent,signW,signH,true) : centerOpal,
+        plate(cabinet,'vertical magenta LED opal',glyphs ? signGlass(glyphs,centerAccent,signW,signH,true,3.4) : centerOpal,
           [0,0,.34],signW,signH)
         signs.push(word)
       }
@@ -338,11 +346,11 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     }
     if (index === 10) {
       const px = wx-w*.14, pz = wz+d*.50+.50
-      practical.cabinet(tower,'stacked amber arcade cabinet',[px,wy-11.4,pz],[5.67,1.94],[5.42,2.73,.72],'ARCADE')
-      practical.cabinet(tower,'stacked amber noodle cabinet',[px,wy-7.0,pz],[5.53,1.53],[5.07,3.13,1.16],'NOODLES')
-      practical.cabinet(tower,'east violet vertical sauna blade',[wx+w*.37,36.4,pz],[1.55,14.0],[2.8,.54,4.6],'SAUNA',true)
-      practical.opal(tower,'east cold stair tracer',[wx-w*.39,27.7,pz],[.81,21.6],[.08,2.10,3.4],7)
-      practical.cabinet(tower,'east amber upper office cabinet',[wx+w*.145,47.3,pz],[3.7,2.02],[3.85,1.98,.51],'24H')
+      practical.cabinet(tower,'stacked amber arcade cabinet',[px,wy-11.4,pz],[5.67,1.94],[5.42,2.73,.72],'ARCADE',false,3.8)
+      practical.cabinet(tower,'stacked amber noodle cabinet',[px,wy-7.0,pz],[5.53,1.53],[5.07,3.13,1.16],'NOODLES',false,3.5)
+      practical.cabinet(tower,'east violet vertical sauna blade',[wx+w*.37,36.4,pz],[1.55,14.0],[2.8,.54,4.6],'SAUNA',true,2.75)
+      practical.opal(tower,'east cold stair tracer',[wx-w*.39,27.7,pz],[.81,21.6],[.16,5.7,9.4],7)
+      practical.cabinet(tower,'east amber upper office cabinet',[wx+w*.145,47.3,pz],[3.7,2.02],[3.85,1.98,.51],'24H',false,3.15)
       signs.push('SAUNA')
     }
     if (name.startsWith('c9 ')) {
@@ -361,10 +369,10 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
         practical.opal(tower,'small stepped cornice lens',[wx-w*.1,wy-.92,pz+.56],[w*.59,1.12],cool ? [.12,2.1,3.3] : [2.95,1.83,.73],3)
       }
       if (name === 'c9 center kiln tower') {
-        practical.cabinet(tower,'small cyan center lift sign',[wx-w*.12,67.4,pz+.58],[3.91,2.50],[.08,3.2,5.7],'OPEN')
+        practical.cabinet(tower,'small cyan center lift sign',[wx-w*.12,67.4,pz+.58],[3.91,2.50],[.08,3.2,5.7],'OPEN',false,3.3)
       } else if (name === 'c9 center fluted offices') {
-        practical.cabinet(tower,'thin magenta tenant mast',[wx+w*.29,94.2,pz+.54],[1.62,12.6],[4.45,.30,1.65],'BAR',true)
-        practical.opal(tower,'amber clock floor slot',[wx+w*.17,103.6,pz+.60],[4.28,1.12],[4.9,2.5,.51],2)
+        practical.cabinet(tower,'thin magenta tenant mast',[wx+w*.29,94.2,pz+.54],[1.62,12.6],[4.45,.30,1.65],'BAR',true,3.9)
+        practical.opal(tower,'amber clock floor slot',[wx+w*.17,103.6,pz+.60],[4.28,1.12],[11.9,6.3,1.03],2)
       } else if (name === 'c9 center clock stack') {
         practical.opal(tower,'small cyan mechanical floor datum',[wx+w*.07,73.2,pz+.61],[6.89,1.06],[.15,3.5,5.4],3)
       }
@@ -432,7 +440,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       animation.push(mural.set)
     } else if (!source.text) {
       const segments = source.onWall ? 1 : Math.round(height / (source.tint === 'cyan' ? .34 : .50))
-      const opal = fixtureOpal(color, segments)
+      const opal = fixtureOpal(color.clone().multiplyScalar(opalRadiance[source.id] ?? 1), segments)
       plate(housing, 'weather-sealed opal face', source.scale ? offset(opal,-4) : opal, [0,0,.002], width,height)
       if (!source.onWall) for (const fraction of [-.40,-.17,.17,.40]) {
         const horizontal = width > height
@@ -452,14 +460,15 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       const rows = allowed === 'PARKING' ? [...allowed] : [allowed]
       plate(housing, 'recessed sign face', source.scale ? distantGlass : glass, [0,0,.002],width,height)
       const exit = allowed === 'EXIT'
+      const radiance = signRadiance[allowed] ?? 1
       const textWidth = width * (exit ? .56 : .98), textHeight = height*.962
       const glyphs = labels(allowed,'World Condensed',rows,textWidth/textHeight)
       if (glyphs) {
-        const letters = signGlass(glyphs,color,textWidth,textHeight,allowed==='PARKING')
+        const letters = signGlass(glyphs,color,textWidth,textHeight,allowed==='PARKING',radiance)
         plate(housing,`opal lettering ${allowed}`,source.scale ? offset(letters,-5) : letters,[exit ? -.16 : 0,0,.010+setback],textWidth,textHeight)
       }
       if (exit) {
-        const led = new THREE.MeshBasicMaterial({ color, toneMapped: false })
+        const led = new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(radiance), toneMapped: false })
         box(housing, 'wayfinding arrow stem', [.293,.0,.012], [.244,.026,.005], led)
         for (const dir of [-1,1]) box(housing, 'wayfinding arrow head', [.386,dir*.038,.012], [.108,.025,.005],led).rotation.z = -dir*Math.PI/4
       } else if (allowed === 'HOTEL') {
