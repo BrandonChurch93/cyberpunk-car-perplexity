@@ -2,6 +2,7 @@ import { Loft, type LoftDef } from '../geom/loft'
 import { Track3 } from '../geom/spline'
 import { add, dot, len, norm, scale, smoothstep, sub, type V3 } from '../geom/vec'
 import { featureLines, frontSection, type PathNode } from './lines'
+import { capZ } from './tail'
 
 export const dims = {
   length: 4.947,
@@ -50,9 +51,19 @@ function line(pts: Zxy[]): Array<[number, number, number, number]> {
   return pts.map(([z, x, y]) => [uAt(z, zf, zr), x, y, z])
 }
 
-/** The key lines as drawn before pass 2. Behind the front they still carry the body unchanged. */
+type Key = ReadonlyArray<readonly [number, number, number, number]>
+
+/** A key line whose end is moved onto the tail cap, every u kept: the move fades out over its last half metre. */
+const onCap = (k: Key): Key => {
+  const [, x, y, end] = k[k.length - 1]
+  const dz = capZ(x, y) - end
+  return k.map((p) => [p[0], p[1], p[2], p[3] + dz * smoothstep(end + 0.5, end, p[3])] as const)
+}
+
+/** The key lines as drawn before pass 2, their ends on the tail cap. Behind the front they still carry the body
+ * unchanged. */
 export const keyLines = {
-  rocker: line([
+  rocker: onCap(line([
     [1.8, 0.93, 0.15],
     [1.5, 0.945, 0.14],
     [1.0, 0.955, 0.135],
@@ -62,8 +73,8 @@ export const keyLines = {
     [-2.0, 0.9, 0.2],
     [-2.25, 0.76, 0.27],
     [-2.4, 0.6, 0.32],
-  ]),
-  sill: line([
+  ])),
+  sill: onCap(line([
     [1.8, 0.955, 0.3],
     [1.5, 0.975, 0.3],
     [1.0, 0.985, 0.305],
@@ -73,8 +84,8 @@ export const keyLines = {
     [-2.0, 0.94, 0.38],
     [-2.25, 0.8, 0.41],
     [-2.42, 0.62, 0.43],
-  ]),
-  crease: line([
+  ])),
+  crease: onCap(line([
     [1.8, 0.965, 0.5],
     [1.5, 0.99, 0.53],
     [0.96, 0.997, 0.575],
@@ -88,10 +99,10 @@ export const keyLines = {
     [-2.1, 0.93, 0.72],
     [-2.3, 0.8, 0.7],
     [-2.44, 0.62, 0.68],
-  ]),
+  ])),
   // The wing ridge over the front arch, then one straight shoulder from the door to the rear hub, then the deck edge
   // falling straight to the tail. Crisp end to end.
-  shoulder: line([
+  shoulder: onCap(line([
     [2.14, 0.8, 0.598],
     [2.03, 0.88, 0.645],
     [1.9, 0.93, 0.69],
@@ -110,11 +121,11 @@ export const keyLines = {
     [-1.9, 0.83, 0.93],
     [-2.2, 0.73, 0.91],
     [-2.42, 0.6, 0.895],
-  ]),
+  ])),
   // The bonnet's outer crease, straight from the bonnet corner to the A-pillar base, then the pillar, the roof rail and
   // the deck edge falling straight to the tail.
   // It starts on the bonnet's front edge, invisible, and comes in crisp at the bonnet corner.
-  rail: line([
+  rail: onCap(line([
     [2.33, 0.52, 0.488],
     [2.24, 0.512, 0.52],
     [2.15, 0.51, 0.55],
@@ -135,11 +146,11 @@ export const keyLines = {
     [-2.0, 0.44, 0.95],
     [-2.3, 0.42, 0.912],
     [-2.44, 0.4, 0.895],
-  ]),
+  ])),
   // The bonnet's inner crease, straight from the bonnet corner to the windscreen base; it dies under the glass and
   // carries on as a smooth line over the roof and deck.
   // It starts at the outer end of the V, invisible, and comes in crisp at the bonnet corner.
-  inner: line([
+  inner: onCap(line([
     [2.378, 0.36, 0.432],
     [2.28, 0.42, 0.474],
     [2.173, 0.474, 0.515],
@@ -160,7 +171,7 @@ export const keyLines = {
     [-1.5, 0.3, 1.0],
     [-2.1, 0.3, 0.935],
     [-2.44, 0.3, 0.895],
-  ]),
+  ])),
   // The center line: the bonnet one straight rising line from the nose tip to the windscreen base, the screen raked a
   // little steeper, the roof, the deck.
   // The ridge blend at the V tip rounds the corner back by about 16 mm, and the deck tip's by about 5 mm, so the key
@@ -527,6 +538,19 @@ export function refLoft(): Loft {
   return new Loft(refDef)
 }
 
+/** The last few centimetres of the loft eased onto the tail cap, so its last section lies on the cap exactly. */
+class TailLoft extends Loft {
+  override at(u: number, v: number): V3 {
+    const p = super.at(u, v)
+    const du = 0.025
+    if (u <= 1 - du) return p
+    const e = super.at(1, v)
+    const t = (u - (1 - du)) / du
+    const w = t * t * t * (t * (6 * t - 15) + 10)
+    return [p[0], p[1], p[2] + w * (capZ(e[0], e[1]) - e[2])]
+  }
+}
+
 export function mainLoft(): Loft {
-  return new Loft(mainDef)
+  return new TailLoft(mainDef)
 }

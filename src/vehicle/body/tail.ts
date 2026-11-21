@@ -3,8 +3,8 @@ import { projectCurve, SurfaceCurve, type Surface, type SurfaceMap } from '../ge
 import type { V2, V3 } from '../geom/vec'
 import type { Cuts } from './cuts'
 
-// The tail cap: one fair height field z(x, y), even in x so the centre line is smooth, with the loft's last section
-// as its top and outer edges. The section's own deviation from the field is blended out within a short band.
+// The tail cap: one fair field z(x, y), a plain crown in x and a small lean in y, with the loft's last section on it
+// as its top and outer edges. Any deviation of the section from the field is blended out within a short band.
 
 const hermite = (t: number): number => t * t * (3 - 2 * t)
 const fade = (t: number): number => {
@@ -15,26 +15,11 @@ const fade = (t: number): number => {
 /** Width of the band, in face parameters, over which the section's deviation from the field dies out. */
 const band = { side: 0.35, top: 0.3 }
 
-function solve(A: number[][], r: number[]): number[] {
-  const n = r.length
-  const M = A.map((row, i) => [...row, r[i]])
-  for (let c = 0; c < n; c++) {
-    let p = c
-    for (let i = c + 1; i < n; i++) if (Math.abs(M[i][c]) > Math.abs(M[p][c])) p = i
-    ;[M[c], M[p]] = [M[p], M[c]]
-    for (let i = 0; i < n; i++) {
-      if (i === c) continue
-      const f = M[i][c] / M[c][c]
-      for (let k = c; k <= n; k++) M[i][k] -= f * M[c][k]
-    }
-  }
-  return M.map((row, i) => row[n] / row[i])
-}
+/** The cap field: the centre of the deck edge, the crown that brings the corners forward, the lean below the deck. */
+export const cap = { z: -2.4778, y: 0.8855, crown: 0.1594, lean: 0.02 }
 
-/** The centre line leans in this far per metre of drop below the deck edge, so the tail never stands proud of it. */
-const plumb = 0.02
-
-const terms = (x: number, y: number): number[] => [1, y, y * y, x * x, x * x * x * x, x * x * y, x * x * y * y]
+/** z of the tail cap at (|x|, y): one plain crown, no inflection. The loft's last section lies on it. */
+export const capZ = (x: number, y: number): number => cap.z + cap.crown * x * x + cap.lean * (cap.y - y)
 
 /** The tail below the deck edge, from the corner (a = 0) to the center line (a = 1), bottom (b = 0) to top. */
 export function rearFace(loft: Loft): (a: number, b: number) => V3 {
@@ -48,26 +33,7 @@ export function rearFace(loft: Loft): (a: number, b: number) => V3 {
   const B2 = (a: number): V2 => [p00[0] * (1 - a), yB]
   const R2 = (b: number): V2 => [0, yB + (p11[1] - yB) * b]
 
-  const k = terms(0, 0).length
-  const A = Array.from({ length: k }, () => new Array<number>(k).fill(0))
-  const r = new Array<number>(k).fill(0)
-  const fit = (p: V3, w: number): void => {
-    const t = terms(p[0], p[1])
-    for (let i = 0; i < k; i++) {
-      r[i] += w * t[i] * p[2]
-      for (let j = 0; j < k; j++) A[i][j] += w * t[i] * t[j]
-    }
-  }
-  for (let i = 0; i <= 60; i++) {
-    fit(L(i / 60), 1)
-    fit(T(i / 60), 1)
-  }
-  for (let i = 0; i <= 20; i++) {
-    const y = yB + ((p11[1] - yB) * i) / 20
-    fit([0, y, p11[2] + plumb * (p11[1] - y)], 2)
-  }
-  const c = solve(A, r)
-  const Z = (x: number, y: number): number => terms(x, y).reduce((s, t, i) => s + t * c[i], 0)
+  const Z = capZ
   const rL = (b: number): number => {
     const p = L(b)
     return p[2] - Z(p[0], p[1])
