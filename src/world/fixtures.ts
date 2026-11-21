@@ -633,16 +633,17 @@ function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE
     const active = cutTime >= detailBeat.start && cutTime < detailBeat.end
     rake.position.y = active ? source.y : .38
     const progress = active ? ease(t,detailBeat.start,detailBeat.end) : 0
-    aim.set(-.358+.12*progress,1.011,-1.22+.38*progress).sub(source).normalize()
+    aim.set(.300,1.008,-1.005-.068*progress).sub(source).normalize()
     head.quaternion.setFromUnitVectors(forward,aim)
     film.object = active ? low : anchor
-    film.size[0] = active ? .85 : 1.42
-    film.size[1] = active ? .10 : .35
-    film.penumbra = active ? .64 : .39
-    film.intensity = active ? 2950 : resting
+    film.size[0] = active ? .034 : 1.42
+    film.size[1] = active ? .022 : .35
+    film.angle = active ? .0065 : .123
+    film.penumbra = active ? .37 : .39
+    film.intensity = active ? 880 : resting
     if (active) film.color.setRGB(.69,.83,1)
     else film.color.copy(tint)
-    graze.color.copy(film.color).multiplyScalar(active ? 14 : .26)
+    graze.color.copy(film.color).multiplyScalar(active ? 4.2 : .26)
   }
   set(0)
   return { film, set }
