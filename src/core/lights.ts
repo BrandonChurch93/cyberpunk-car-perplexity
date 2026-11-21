@@ -43,9 +43,16 @@ interface FilmShadowUniforms {
 }
 
 const compactBeamGlsl = /* glsl */ `
-float filmCompactBeamFalloff(vec3 emission, vec3 axis, vec3 up) {
-  float above = dot(emission, normalize(up - axis * dot(up, axis)));
-  return smoothstep(-0.330, -0.125, above) * (1.0 - smoothstep(0.032, 0.068, above));
+float filmCompactBeamFalloff(vec3 emission, vec3 axis, vec3 up, float surfaceDistance) {
+  vec3 lift = normalize(up - axis * dot(up, axis));
+  float above = dot(emission, lift);
+  float principal = smoothstep(-0.330, -0.125, above) * (1.0 - smoothstep(0.032, 0.068, above));
+  if (surfaceDistance <= 1.40 || surfaceDistance >= 4.85) return principal;
+  float lateral = abs(dot(emission, cross(axis, lift)));
+  float spread = 1.0 - smoothstep(0.045, 0.158, lateral);
+  float lower = 0.58 * smoothstep(-0.39, -0.255, above) * (1.0 - smoothstep(-0.125, -0.04, above));
+  float reach = smoothstep(1.40, 1.82, surfaceDistance) * (1.0 - smoothstep(3.15, 4.85, surfaceDistance));
+  return principal + lower * spread * reach;
 }
 `
 
@@ -59,18 +66,22 @@ uniform vec4 filmLightShape[MAX_FILM_LIGHTS];
 
 ${compactBeamGlsl}
 
-float filmAngularFalloff(int i, vec3 toLight) {
+float filmAngularFalloff(int i, vec3 toLight, float surfaceDistance) {
   float cutoff = filmLightAxis[i].w;
   if (cutoff < -0.5) return 1.0;
   float c = dot(-toLight, filmLightAxis[i].xyz);
   float inner = filmLightShape[i].x;
   if (inner < 0.0) return max(c, 0.0) * smoothstep(cutoff, cutoff + 0.035, c);
   float cone = smoothstep(cutoff, max(cutoff + 1e-5, inner), c);
-  if (filmLightShape[i].w > 0.5) cone *= filmCompactBeamFalloff(-toLight, filmLightAxis[i].xyz, vec3(0.0, 1.0, 0.0));
+  if (filmLightShape[i].w > 0.5) cone *= filmCompactBeamFalloff(-toLight, filmLightAxis[i].xyz, vec3(0.0, 1.0, 0.0), surfaceDistance);
   return cone;
 }
 
-vec3 filmLightAt(int i, vec3 p, out vec3 toLight) {
+float filmAngularFalloff(int i, vec3 toLight) {
+  return filmAngularFalloff(i, toLight, 0.0);
+}
+
+vec3 filmLightSample(int i, vec3 p, bool surface, out vec3 toLight) {
   vec3 d = filmLightPosition[i] - p;
   float dist2 = max(dot(d, d), 1e-4);
   float dist = sqrt(dist2);
@@ -78,7 +89,15 @@ vec3 filmLightAt(int i, vec3 p, out vec3 toLight) {
   float r = dist / filmLightColor[i].a;
   float r2 = r * r;
   float window = max(0.0, 1.0 - r2 * r2);
-  return filmLightColor[i].rgb * filmAngularFalloff(i, toLight) * window * window / max(dist2, 0.01);
+  return filmLightColor[i].rgb * filmAngularFalloff(i, toLight, surface ? dist : 0.0) * window * window / max(dist2, 0.01);
+}
+
+vec3 filmLightAt(int i, vec3 p, out vec3 toLight) {
+  return filmLightSample(i, p, false, toLight);
+}
+
+vec3 filmSurfaceLightAt(int i, vec3 p, out vec3 toLight) {
+  return filmLightSample(i, p, true, toLight);
 }
 `
 
@@ -138,8 +157,8 @@ export function patchFilmLighting(material: THREE.Material): void {
       `)
       const chunk = replaceOnce(attenuation, spotMarker, `
         ${spotMarker}
-        if (spotLight.penumbraCos < 0.0 && spotLight.penumbraCos > -0.999999) {
-          spotAttenuation *= filmCompactBeamFalloff(-light.direction, -spotLight.direction, mat3(viewMatrix) * vec3(0.0, 1.0, 0.0));
+        if (spotAttenuation > 0.0 && spotLight.penumbraCos < 0.0 && spotLight.penumbraCos > -0.999999) {
+          spotAttenuation *= filmCompactBeamFalloff(-light.direction, -spotLight.direction, mat3(viewMatrix) * vec3(0.0, 1.0, 0.0), length(lVector));
         }
       `)
       shader.fragmentShader = replaceOnce(shader.fragmentShader, '#include <lights_pars_begin>', compactBeamGlsl + chunk)

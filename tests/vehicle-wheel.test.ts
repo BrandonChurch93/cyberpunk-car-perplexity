@@ -177,37 +177,61 @@ describe('wheel, tire, brake and arch liner module', { timeout: 30_000 }, () => 
     clayFrontSide.dispose()
   })
 
-  it('flattens the loaded tire at y = 0 with lower sidewall bulge, outward normals and rotor edge vanes', () => {
-    const fl = fullRoot.getObjectByName('wheel-front-left')!
-    const tireMesh = fl.getObjectByName('tire') as THREE.Mesh
-    const pos = tireMesh.geometry.getAttribute('position')
-    const nrm = tireMesh.geometry.getAttribute('normal')
-    const p = new THREE.Vector3()
-    const n = new THREE.Vector3()
-    const center = new THREE.Vector3(dims.frontHubX, 0.3405, dims.frontHubZ)
-    const normalMatrix = new THREE.Matrix3().getNormalMatrix(tireMesh.matrixWorld)
+  it('places front and rear tires tangent above y = 0 with ~180 mm contact patches, lower sidewall bulge, outward normals and rotor edge vanes', () => {
+    for (const [groupName, hubX, loadedY, hubZ] of [
+      ['wheel-front-left', dims.frontHubX, 0.3405, dims.frontHubZ],
+      ['wheel-rear-left', dims.rearHubX, 0.3625, dims.rearHubZ],
+    ] as const) {
+      const wg = fullRoot.getObjectByName(groupName)!
+      const tireMesh = wg.getObjectByName('tire') as THREE.Mesh
+      const reliefMesh = wg.getObjectByName('sidewall-relief') as THREE.Mesh
+      const pos = tireMesh.geometry.getAttribute('position')
+      const nrm = tireMesh.geometry.getAttribute('normal')
+      const p = new THREE.Vector3()
+      const n = new THREE.Vector3()
+      const center = new THREE.Vector3(hubX, loadedY, hubZ)
+      const normalMatrix = new THREE.Matrix3().getNormalMatrix(tireMesh.matrixWorld)
 
-    let minY = Infinity
-    let maxLowerHalfWidth = 0
-    let maxUpperHalfWidth = 0
-    let outwardCount = 0
-    for (let i = 0; i < pos.count; i++) {
-      p.fromBufferAttribute(pos, i).applyMatrix4(tireMesh.matrixWorld)
-      n.fromBufferAttribute(nrm, i).applyMatrix3(normalMatrix).normalize()
-      minY = Math.min(minY, p.y)
-      const halfW = Math.abs(p.x - dims.frontHubX)
-      if (p.y > 0.015 && p.y < 0.08 && Math.abs(p.z - dims.frontHubZ) < 0.06) {
-        maxLowerHalfWidth = Math.max(maxLowerHalfWidth, halfW)
+      let minY = Infinity
+      let minPatchZ = Infinity
+      let maxPatchZ = -Infinity
+      let maxLowerHalfWidth = 0
+      let maxUpperHalfWidth = 0
+      let outwardCount = 0
+      for (let i = 0; i < pos.count; i++) {
+        p.fromBufferAttribute(pos, i).applyMatrix4(tireMesh.matrixWorld)
+        n.fromBufferAttribute(nrm, i).applyMatrix3(normalMatrix).normalize()
+        minY = Math.min(minY, p.y)
+        if (p.y < 0.0022) {
+          minPatchZ = Math.min(minPatchZ, p.z - hubZ)
+          maxPatchZ = Math.max(maxPatchZ, p.z - hubZ)
+        }
+        const halfW = Math.abs(p.x - hubX)
+        if (p.y > 0.01 && p.y < 0.06 && Math.abs(p.z - hubZ) < 0.05) {
+          maxLowerHalfWidth = Math.max(maxLowerHalfWidth, halfW)
+        }
+        if (p.y > 0.55 && Math.abs(p.z - hubZ) < 0.05) {
+          maxUpperHalfWidth = Math.max(maxUpperHalfWidth, halfW)
+        }
+        if (p.clone().sub(center).dot(n) > 0) outwardCount++
       }
-      if (p.y > 0.6 && Math.abs(p.z - dims.frontHubZ) < 0.06) {
-        maxUpperHalfWidth = Math.max(maxUpperHalfWidth, halfW)
+      const rPos = reliefMesh.geometry.getAttribute('position')
+      for (let i = 0; i < rPos.count; i++) {
+        p.fromBufferAttribute(rPos, i).applyMatrix4(reliefMesh.matrixWorld)
+        minY = Math.min(minY, p.y)
       }
-      if (p.clone().sub(center).dot(n) > 0) outwardCount++
+      expect(minY, `${groupName} strictly above deck`).toBeGreaterThan(0.0002)
+      expect(minY, `${groupName} tangent to deck`).toBeLessThan(0.001)
+      const patchLen = maxPatchZ - minPatchZ
+      expect(patchLen, `${groupName} ~180 mm contact patch`).toBeGreaterThan(0.165)
+      expect(patchLen, `${groupName} ~180 mm contact patch`).toBeLessThan(0.195)
+      const bulge = maxLowerHalfWidth - maxUpperHalfWidth
+      expect(bulge, `${groupName} lower sidewall bulge`).toBeGreaterThan(0.0045)
+      expect(bulge, `${groupName} lower sidewall bulge`).toBeLessThan(0.0085)
+      expect(outwardCount / pos.count).toBeGreaterThan(0.92)
     }
-    expect(Math.abs(minY)).toBeLessThan(0.0012)
-    expect(maxLowerHalfWidth - maxUpperHalfWidth).toBeGreaterThan(0.007)
-    expect(outwardCount / pos.count).toBeGreaterThan(0.92)
 
+    const fl = fullRoot.getObjectByName('wheel-front-left')!
     const discMesh = fl.getObjectByName('disc') as THREE.Mesh
     expect(discMesh.geometry.getIndex()!.count / 3).toBeGreaterThan(1500)
     expect(fl.getObjectByName('sidewall-relief')).toBeInstanceOf(THREE.Mesh)

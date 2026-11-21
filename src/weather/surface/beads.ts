@@ -60,6 +60,8 @@ const runTrack = { spacing: 0.03, width: 0.004, length: 0.3, height: 0.00015, li
 const drip = { spacing: 0.009, live: 0.7, minMm: 2.0, maxMm: 4.8, lineWidth: 0.0012, lineHeight: 0.0005 }
 /** A bead under a pixel lands as a spot this many pixels wide (Gaussian sigma), each light at its own place on the cap. */
 export const splatSigma = 0.7
+/** With many jittered samples a frame filters its own pixels, so the spot narrows toward this. */
+const splatSigmaFine = 0.35
 /** Ratios of cell to footprint over which a layer hands over from its mean to single drops. */
 const splatBand = [0.7, 1.3]
 /** Spread of contact angle in degrees, random lean and downhill sag of the cap normal, from drop to drop. */
@@ -68,6 +70,11 @@ const beadJitter = { contact: 30, lean: 0.35, sag: 0.25 }
 const runChain = { spacing: 0.005, live: 0.75, lean: 0.5, share: 1.3 }
 /** A lane this live has gathered the beads in its path. */
 const runLive = 0.5
+/** The body's 'gap' attribute: 1 on a shut gap's edges and walls, falling to 0 over this many meters onto the panel. */
+export const gapAttribute = 'gap'
+export const gapReach = 0.003
+/** Beads pinned along a gap's edge: spacing in meters, the share of places holding one, and their diameters in millimeters. */
+const gapPin = { spacing: 0.006, live: 0.6, minMm: 1.0, maxMm: 2.6 }
 /** Footprints in meters over which the distant film takes over from the drops the macro lens resolves. */
 const coatFade = [0.0014, 0.0026]
 
@@ -491,7 +498,18 @@ float surfGlint = 0.0;
   bool nearTrack = laneDistance < ${trackClear} + 0.007;
   // The runner leaves a thin, level film where it took up the mist, so its lane is darker and glossier than the beaded paint.
   surfLane = 1.0 - smoothstep(${trackClear} * 0.55, ${trackClear}, laneDistance);
+  // No water stands in a shut gap: its beads keep clear of the edge or pin along it.
+  float gapHere = surfGapV;
+  float gapKeep = 1.0 - step(0.999, gapHere);
+  vec3 gapGrad = vec3(0.0);
+  {
+    vec3 dpx = dFdx(p), dpy = dFdy(p);
+    vec3 ns = cross(dpx, dpy);
+    gapGrad = (dFdx(gapHere) * cross(dpy, ns) + dFdy(gapHere) * cross(ns, dpx)) / max(dot(ns, ns), 1e-20);
+    gapGrad -= n * dot(gapGrad, n);
+  }
   surfRunSetup(p, n, down, slope, salt);
+  surfRunSteep *= 1.0 - step(1e-4, gapHere);
   vec3 laneHere = surfRunAt(vec3(0.0));
   float laneBand = max(pixA, 2.0 * laneHere.z);
   float laneCover = step(${runLive}, laneHere.y) * min(2.0 * laneHere.z / pixA, 1.0) * (1.0 - smoothstep(0.5 * laneBand, laneBand, abs(laneHere.x)));
@@ -527,7 +545,7 @@ float surfGlint = 0.0;
   // Per unit glint weight a bead returns E F for each sign; the mean Fresnel share of the signs is already in the cube terms.
   vec3 signShare = emitterBeadF0(surfWorldPos, nW, vW, unit, eyeD, emitterPixelAngle, vec3(${sphereFresnel.toFixed(4)}), -1.0);
   float surfCell = surfPupil * surfCocScale * abs(1.0 / surfFocus - 1.0 / max(vViewPosition.z, 1e-3)) / surfSampleRoot;
-  surfSplatSetup(surfWorldPos, nW, vW, max(${splatSigma.toFixed(2)}, 0.5 * surfCell), max(surfSkyGlint - signShare, vec3(0.0)));
+  surfSplatSetup(surfWorldPos, nW, vW, max(max(${splatSigma.toFixed(2)} / sqrt(surfSampleRoot), ${splatSigmaFine.toFixed(2)}), 0.5 * surfCell), max(surfSkyGlint - signShare, vec3(0.0)));
   vec3 tW1 = normalize(cross(nW, abs(nW.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
   vec3 tW2 = cross(nW, tW1);
   vec3 downW = slope > 1e-4 ? surfToWorld(toView * down) : vec3(0.0);
@@ -537,7 +555,7 @@ float surfGlint = 0.0;
     int lobes;
     surfLayer(i, cellMm, minMm, maxMm, flatD, steepD, lobes, sparseD, denseD);
     float cell = cellMm * 0.001;
-    float density = mix(steepD, flatD, up) * (1.0 - 0.8 * under + (${hangGlsl}) * surfEdge);
+    float density = mix(steepD, flatD, up) * (1.0 - 0.8 * under + (${hangGlsl}) * surfEdge) * gapKeep;
     float perCell = smoothstep(${splatBand[0].toFixed(2)}, ${splatBand[1].toFixed(2)}, cell / pixA);
     if (perCell < 1.0) {
       float fill = (1.0 - perCell) * density * mix(sparseD, denseD, surfCoverage(uv, axis, salt)) * (1.0 - laneCover);
@@ -611,6 +629,7 @@ float surfGlint = 0.0;
     vec3 worldCenter = surfWorldPos + dW;
     if (nearTrack && surfTrackDistance(worldCenter) < ${trackClear} + radius) continue;
     if (surfRunSwept(d3, radius, i)) continue;
+    if (gapHere > 0.0 && (1.0 - gapHere - dot(gapGrad, d3)) * ${gapReach.toFixed(4)} < radius) continue;
     // Drops under five pixels across alias into dark dots and glitter: they join the mist sheen instead of drawing a sharp lens.
     float resolved = smoothstep(1.2 * pixA, 2.6 * pixA, radius);
     if (resolved < 1.0) {
@@ -673,6 +692,29 @@ float surfGlint = 0.0;
         }
         if (resolved > 0.0) surfCap(surfHit, d3, r, height * resolved, n, down, slope, pix, 0.0);
       }
+    }
+  }
+  if (gapHere > 0.0 && gapKeep > 0.0 && level > -0.3 && dot(gapGrad, gapGrad) > 1.0) {
+    vec3 toward = normalize(gapGrad);
+    vec3 e = normalize(cross(n, toward));
+    float dE = (1.0 - gapHere) * ${gapReach.toFixed(4)};
+    float along = dot(p, e);
+    float k = floor(along / ${gapPin.spacing.toFixed(4)});
+    for (int j = -1; j <= 1; j++) {
+      float id = k + float(j);
+      vec3 h = surfHash3(ivec3(int(id), 13, axis), salt);
+      if (h.x >= ${gapPin.live.toFixed(2)}) continue;
+      float r = mix(${(gapPin.minMm * 0.0005).toFixed(5)}, ${(gapPin.maxMm * 0.0005).toFixed(5)}, h.y * h.y);
+      float ac = (id + 0.25 + 0.5 * h.z) * ${gapPin.spacing.toFixed(4)};
+      vec3 d3 = e * (ac - along) + toward * (dE - 1.05 * r);
+      float height = surfCapHeight(r);
+      float side = 1.0 + 0.5 * height / r * cotE;
+      float resolved = smoothstep(1.2 * pixA, 2.6 * pixA, r);
+      if (resolved < 1.0) {
+        vec3 extra = proj * side * (surfSplatSky + surfLensCol * 12.566371 * surfLensExit(height / r, surfSinE));
+        surfSplat((vec4(toView * d3, 0.0) * viewMatrix).xyz, r, height, cos(radians(surfBeadContact)), nW, extra, 1.0 - resolved);
+      }
+      if (resolved > 0.0) surfCap(surfHit, d3, r, height * resolved, n, down, slope, pix, 0.0);
     }
   }
   surfMist = clamp(surfMist, 0.0, 1.0) * (1.0 - surfLane);
@@ -763,11 +805,12 @@ float surfGlint = 0.0;
           }
           float lensRough = max(0.12, mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, R)));
           // Across the disk the exit ray sweeps about half the sky, some 1.6 radians, so one pixel holds 1.6 pix / R of it.
-          lensRough = max(lensRough, sqrt(min(0.8 * pix / R, 1.0)));
+          // The jittered samples of a frame resolve that much finer between them.
+          lensRough = max(lensRough, sqrt(min(0.8 * pix / (R * surfSampleRoot), 1.0)));
           surfLensOpen = shaded * smoothstep(0.0, 0.08, 1.0 - surfHit.r);
           vec3 oW = surfToWorld(o);
           // The cube holds the signs blurred; where one sits inside the exit cone its sharp face replaces it.
-          totalEmissiveRadiance += surfLensOpen * carry * max(getIBLRadiance(o, o, lensRough), emitterGlintF0(surfWorldPos, oW, oW, lensRough, R, vec3(1.0)));
+          totalEmissiveRadiance += surfLensOpen * carry * max(getIBLRadiance(o, o, lensRough), emitterGlintF0(surfWorldPos, oW, oW, max(lensRough, 0.85 * smoothstep(0.15, 0.8, surfSpread)), R, vec3(1.0)));
         }
       }
     }
@@ -785,7 +828,7 @@ float surfGlint = 0.0;
     #endif
     #ifdef USE_ENVMAP
       vec3 vV = -normalize(vViewPosition);
-      float capRough = min(max(mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, surfHit.radius)), 0.045), 1.0);
+      float capRough = min(max(mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, surfHit.radius)), 0.85 * smoothstep(0.15, 0.8, surfSpread)), 1.0);
       float fw = ${waterF0} + ${(1 - waterF0).toFixed(2)} * pow(1.0 - clamp(dot(dropView, vV), 0.0, 1.0), 5.0);
       vec3 sharp = emitterGlint(surfWorldPos, surfToWorld(dropView), surfToWorld(vV), capRough, surfHit.radius);
       totalEmissiveRadiance += shaded * max(sharp - fw * getIBLRadiance(vV, dropView, capRough), vec3(0.0));
@@ -939,9 +982,9 @@ export function applyBeads(material: THREE.Material, uniforms: Uniforms, bead: B
     id: 'surface water beads',
     uniforms: { ...uniforms, surfBeadSalt: { value: bead.salt }, surfBeadContact: { value: bead.contactDegrees } },
     apply(shader) {
-      shader.vertexShader = surfaceVaryingsGlsl(true) + `attribute vec2 ${dripAttribute};\nvarying vec2 surfDripV;\n` + insertAfter(shader.vertexShader, '#include <project_vertex>', surfaceVertexGlsl(true) + `surfDripV = ${dripAttribute};\n`)
+      shader.vertexShader = surfaceVaryingsGlsl(true) + `attribute vec2 ${dripAttribute};\nattribute float ${gapAttribute};\nvarying vec2 surfDripV;\nvarying float surfGapV;\n` + insertAfter(shader.vertexShader, '#include <project_vertex>', surfaceVertexGlsl(true) + `surfDripV = ${dripAttribute};\nsurfGapV = ${gapAttribute};\n`)
       let f = shader.fragmentShader
-      f = surfaceVaryingsGlsl(true) + 'varying vec2 surfDripV;\n' + surfaceCommonGlsl + beadsGlsl + f
+      f = surfaceVaryingsGlsl(true) + 'varying vec2 surfDripV;\nvarying float surfGapV;\n' + surfaceCommonGlsl + beadsGlsl + f
       f = insertBefore(f, '#include <map_fragment>', 'float surfBeadOut = 0.0;\nfloat surfBeadRough = 0.045;\nvec4 surfDiagOut = vec4(0.0);')
       f = insertAfter(f, '#include <clearcoat_normal_fragment_maps>', beadsFragment)
       f = insertAfter(f, '#include <lights_physical_fragment>', beadsSpecular)
