@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import {
   airTransmittance, beadReference, createEmitterTable, emitterGlsl, emitterUniforms, glintReference, maxEmitters,
-  mergeOverlays, Occluders, rankEmitters, splitOf, waterF0, withEmitters, type Emitter,
+  mergeOverlays, Occluders, opticFactor, writeEmitters, sourceReference, emitterScore, rankEmitters, splitOf, waterF0, withEmitters, type Emitter,
 } from '../src/core/emitters'
 import type { FilmLight } from '../src/core/contract'
 
@@ -326,6 +326,63 @@ describe('emitter rank keys and cache', () => {
     expect(count.reads).toBe(2)
     expect(after.find((e) => e.id.startsWith('magenta sign'))!.radiance.g).toBeGreaterThan(2)
     expect(after.find((e) => e.id.startsWith('cyan strip'))!.radiance.toArray()).toEqual(table.candidates.find((e) => e.id.startsWith('cyan strip'))!.radiance.toArray())
+  })
+})
+
+describe('optics and receivers', () => {
+  const flood = (): Emitter => {
+    const center = new THREE.Vector3(0, 8, 12)
+    const axis = new THREE.Vector3(0, 0.9, -1.5).sub(center).normalize()
+    const u = new THREE.Vector3(0.6, 0, 0)
+    return { id: 'flood/0/00', center, u, v: axis.clone().cross(u).normalize().multiplyScalar(0.25), radiance: new THREE.Color(200, 200, 200), visibility: 1, cone: [Math.cos(0.123), Math.cos(0.075)] }
+  }
+
+  it('shows a louvred flood only from inside its own beam', () => {
+    const e = flood()
+    const axis = e.u.clone().cross(e.v).normalize()
+    const inBeam = e.center.clone().addScaledVector(axis, 14)
+    const offBeam = inBeam.clone().add(new THREE.Vector3(4, 0, 0))
+    expect(opticFactor(e, inBeam)).toBeCloseTo(1, 6)
+    expect(opticFactor(e, offBeam)).toBe(0)
+    expect(opticFactor({ ...e, cone: undefined }, offBeam)).toBe(1)
+    const N = new THREE.Vector3(0, 1, 0)
+    const V = new THREE.Vector3(0, 0.3, 1).normalize()
+    expect(sourceReference(e, offBeam, N, V).energy.r).toBe(0)
+    expect(sourceReference(e, inBeam, N, V).energy.r).toBeGreaterThan(0)
+    expect(beadReference([e], offBeam, N, V, 0.002, 4, 7e-4).r).toBe(0)
+  })
+
+  it('packs the optic into the spare uniform lanes', () => {
+    writeEmitters([flood(), { ...flood(), id: 'plain', cone: undefined }])
+    expect(emitterUniforms.emitterRadiance.value[0].w).toBeCloseTo(Math.cos(0.123), 6)
+    expect(emitterUniforms.emitterAxisV.value[0].w).toBeCloseTo(Math.cos(0.075), 6)
+    expect(emitterUniforms.emitterRadiance.value[1].w).toBe(-2)
+    writeEmitters([])
+  })
+
+  it('gives each source radiance times solid angle times Fresnel, with no cap', () => {
+    const e: Emitter = { id: 's', center: new THREE.Vector3(0, 2, -10), u: new THREE.Vector3(0.5, 0, 0), v: new THREE.Vector3(0, 0.5, 0), radiance: new THREE.Color(2, 1, 0.5), visibility: 1 }
+    const P = new THREE.Vector3(0, 0, 0)
+    const N = new THREE.Vector3(0, 1, 0)
+    const V = new THREE.Vector3(0, 0.1, 1).normalize()
+    const { energy, D, H } = sourceReference(e, P, N, V)
+    const omega = -D.z / e.center.lengthSq()
+    expect(energy.r / 2).toBeLessThanOrEqual(omega * (waterF0 + (1 - waterF0) * (1 - H.dot(V)) ** 5) + 1e-9)
+    expect(energy.r / 2).toBeGreaterThan(0)
+    expect(H.dot(D)).toBeCloseTo(H.dot(V), 6)
+    expect(Number.isFinite(sourceReference(e, P, N, new THREE.Vector3(0, 0, -1)).energy.r)).toBe(true)
+  })
+
+  it('ranks what the visible car faces can reflect above what is below their horizon', () => {
+    const focus = new THREE.Vector3()
+    const eye = new THREE.Vector3(0, 0.8, 8)
+    const behind: Emitter = { id: 'wall behind', center: new THREE.Vector3(0, 40, -400), u: new THREE.Vector3(15, 0, 0), v: new THREE.Vector3(0, 15, 0), radiance: new THREE.Color(2, 0.4, 1.5), visibility: 1 }
+    const front: Emitter = { id: 'sign in front', center: new THREE.Vector3(-20, 15, 45), u: new THREE.Vector3(0, 0, 4), v: new THREE.Vector3(0, 1.5, 0), radiance: new THREE.Color(3, 0.4, 2.5), visibility: 1 }
+    front.u.set(-4, 0, 0)
+    const bonnet = [{ normal: new THREE.Vector3(0, 0.85, 0.52).normalize(), weight: 1 }]
+    expect(emitterScore(behind, focus, eye)).toBeGreaterThan(emitterScore(front, focus, eye))
+    expect(emitterScore(behind, focus, eye, bonnet)).toBe(0)
+    expect(emitterScore(front, focus, eye, bonnet)).toBeGreaterThan(0)
   })
 })
 

@@ -41,8 +41,8 @@ const finale = beatById('return')
 
 export const events = {
   lampStageOne: wake.start + 0.6,
-  lampStageTwo: wake.start + 1.6,
-  lampStageThree: wake.start + 3,
+  lampStageTwo: wake.start + 1.4,
+  lampStageThree: wake.start + 2.1,
   pushSettled: wake.start + 2.4,
   engineStart: ignition.start + 1,
   engineRunning: ignition.start + 2,
