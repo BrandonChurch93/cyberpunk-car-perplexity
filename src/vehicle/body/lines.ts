@@ -11,7 +11,7 @@ export const plan = (x: number, y: number): [number, number] => [L * (0.5 - x / 
 /** Front or rear elevation, left half of the sheet: pixel to (|x|, y). */
 export const elev = (x: number, y: number): [number, number] => [(W * (712 - x)) / 1424, (H * (738 - y)) / 738]
 
-const map = (f: (x: number, y: number) => [number, number], pts: Array<[number, number]>): Array<[number, number]> => pts.map(([x, y]) => f(x, y))
+export const map = (f: (x: number, y: number) => [number, number], pts: Array<[number, number]>): Array<[number, number]> => pts.map(([x, y]) => f(x, y))
 
 export const sideLines = {
   glass: map(side, [
@@ -31,23 +31,4 @@ export const planLines = {
   bay: map(plan, [[1790, 600], [1790, 900], [2000, 902], [2200, 885], [2350, 850], [2465, 800], [2468, 600]]),
   bonnet: map(plan, [[455, 600], [455, 760], [470, 850], [520, 950], [600, 1030], [520, 1040], [400, 1030], [260, 990], [140, 940], [70, 880]]),
   wing: map(plan, [[2560, 600], [2545, 800], [2520, 950], [2495, 1080], [2470, 1150]]),
-}
-
-export const frontLines = {
-  eye: map(elev, [[193, 374], [270, 386], [345, 398], [353, 406], [346, 415], [270, 417], [205, 419], [188, 400]]),
-  outerIntake: map(elev, [[212, 486], [320, 484], [430, 480], [560, 470], [500, 545], [450, 618], [330, 620], [228, 620], [204, 560]]),
-  centerIntake: map(elev, [[575, 520], [745, 520], [745, 612], [600, 612], [570, 570]]),
-  drlUpper: map(elev, [[146, 328], [168, 385], [192, 445]]),
-  drlLower: map(elev, [[192, 445], [170, 520], [148, 598], [196, 636]]),
-  drlStem: map(elev, [[192, 445], [300, 458], [425, 466]]),
-}
-
-export const rearLines = {
-  lampUpper: map(elev, [[172, 196], [250, 186], [350, 190], [470, 200]]),
-  lampLower: map(elev, [[180, 272], [260, 262], [350, 255], [470, 245]]),
-  lampChevron: map(elev, [[172, 200], [250, 228], [180, 270]]),
-  exhaust: map(elev, [[512, 230], [532, 196], [652, 196], [680, 230], [652, 266], [532, 266]]),
-  surround: map(elev, [[470, 230], [505, 165], [680, 165], [712, 230], [680, 300], [505, 300]]),
-  lower: map(elev, [[96, 395], [300, 392], [745, 392], [745, 760], [60, 760]]),
-  mesh: map(elev, [[100, 300], [470, 300], [560, 370], [745, 370], [745, 400], [160, 405]]),
 }

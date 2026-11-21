@@ -52,9 +52,32 @@ function surfaceDistance(root: THREE.Object3D, q: THREE.Vector3): number {
 }
 
 describe('vehicle', () => {
-  it('meets the factory size within 5 mm', () => {
-    const box = bodyBox(a.root, false)
-    const body = bodyBox(a.root.getObjectByName('sprung')!, false)
+  it('meets the factory size within 5 mm and keeps every part inside the shell and wheels', () => {
+    const shell = new THREE.Group()
+    for (const name of ['paint', 'glass', 'inner']) {
+      const mesh = a.root.getObjectByName(name) as THREE.Mesh
+      const copy = new THREE.Mesh(mesh.geometry)
+      copy.name = name
+      mesh.updateWorldMatrix(true, false)
+      copy.applyMatrix4(mesh.matrixWorld)
+      shell.add(copy)
+    }
+    const wheels = new THREE.Group()
+    for (const side of ['left', 'right']) for (const end of ['front', 'rear']) {
+      const w = a.root.getObjectByName(`wheel-${end}-${side}`)!
+      w.updateWorldMatrix(true, true)
+      const copy = w.clone()
+      copy.position.setFromMatrixPosition(w.matrixWorld)
+      wheels.add(copy)
+    }
+    const body = bodyBox(shell, false)
+    const box = body.clone().union(bodyBox(wheels, false))
+    expect(bodyBox(a.root, false).min.y).toBeGreaterThan(-0.002)
+    const all = bodyBox(a.root, false)
+    for (const k of ['x', 'y', 'z'] as const) {
+      expect(all.min[k], k).toBeGreaterThan(box.min[k] - 0.005)
+      expect(all.max[k], k).toBeLessThan(box.max[k] + 0.005)
+    }
     expect(Math.abs(box.max.z - box.min.z - 4.947)).toBeLessThan(0.005)
     expect(Math.abs(body.max.x - body.min.x - 2.033)).toBeLessThan(0.005)
     expect(Math.abs(box.max.y - 1.16)).toBeLessThan(0.005)

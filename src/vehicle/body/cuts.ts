@@ -1,6 +1,8 @@
 import { projectCurve, SurfaceMap, type Surface, type SurfaceCurve } from '../geom/cuts'
 import type { V3 } from '../geom/vec'
-import { frontLines, planLines, rearLines, sideLines } from './lines'
+import { planLines, sideLines } from './lines'
+import { noseCuts } from './nose'
+import { tailCuts } from './tail'
 import { dims } from './shape'
 
 const archFront = { z: dims.frontHubZ, y: dims.frontTire.radius, r: 0.405 }
@@ -46,6 +48,8 @@ export function makeCuts(main: Surface, front: Surface, rear: Surface): BodyCuts
   const mm = new SurfaceMap(main, 0, 1, 0, 1, 500, 200)
   const fm = new SurfaceMap(front, 0, 1, 0, 1, 160, 160)
   const rm = new SurfaceMap(rear, 0, 1, 0, 1, 160, 160)
+  const nose = noseCuts(fm)
+  const tail = tailCuts(rm)
   const sideWin: [number, number, number, number] = [0, 1, 0, 0.62]
   const topWin: [number, number, number, number] = [0, 1, 0.45, 1]
   const dlo = projectCurve(mm, 'x', sideLines.glass, true, 0.008, [0, 1, 0.45, 0.75], false, 0.02)
@@ -57,18 +61,6 @@ export function makeCuts(main: Surface, front: Surface, rear: Surface): BodyCuts
   const bay = projectCurve(mm, 'y', planLines.bay, true, 0.008, topWin, true, 0.06)
   const bonnet = projectCurve(mm, 'y', planLines.bonnet, false, 0.006, topWin, false, 0.08)
   const wing = projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08)
-  const eye = projectCurve(fm, 'z', frontLines.eye, true, 0.005, undefined, false, 0.012)
-  const outer = projectCurve(fm, 'z', frontLines.outerIntake, true, 0.006, undefined, false, 0.03)
-  const center = projectCurve(fm, 'z', frontLines.centerIntake, true, 0.006, undefined, true, 0.03)
-  const drlU = projectCurve(fm, 'z', frontLines.drlUpper, false, 0.004, undefined, false, 0.01)
-  const drlL = projectCurve(fm, 'z', frontLines.drlLower, false, 0.004, undefined, false, 0.01)
-  const drlS = projectCurve(fm, 'z', frontLines.drlStem, false, 0.004, undefined, false, 0.01)
-  const lampU = projectCurve(rm, '-z', rearLines.lampUpper, false, 0.004, undefined, false, 0.02)
-  const lampL = projectCurve(rm, '-z', rearLines.lampLower, false, 0.004, undefined, false, 0.02)
-  const chev = projectCurve(rm, '-z', rearLines.lampChevron, false, 0.004, undefined, false, 0.01)
-  const surround = projectCurve(rm, '-z', rearLines.surround, true, 0.005, undefined, false, 0.03)
-  const mesh = projectCurve(rm, '-z', rearLines.mesh, true, 0.006, undefined, true, 0.03)
-  const lower = projectCurve(rm, '-z', rearLines.lower, true, 0.006, undefined, true, 0.02)
   return {
     main: {
       holes: [
@@ -83,10 +75,10 @@ export function makeCuts(main: Surface, front: Surface, rear: Surface): BodyCuts
       glass: [dlo, screen, rearGlass],
       bands: [],
     },
-    front: { holes: [{ c: eye, inset: 0 }, { c: outer, inset: 0 }, { c: center, inset: 0 }], gaps: [], glass: [eye], bands: [{ c: drlU, half: 0.011 }, { c: drlL, half: 0.011 }, { c: drlS, half: 0.011 }] },
-    rear: { holes: [{ c: surround, inset: 0 }, { c: mesh, inset: 0 }, { c: lower, inset: 0 }], gaps: [], glass: [], bands: [{ c: lampU, half: 0.011 }, { c: lampL, half: 0.011 }, { c: chev, half: 0.009 }] },
+    front: nose.cuts,
+    rear: tail.cuts,
     maps: { main: mm, front: fm, rear: rm },
-    curves: { dlo, intake, upper, door, screen, rearGlass, bay, bonnet, wing, eye, outer, center, drlU, drlL, drlS, lampU, lampL, chev, surround, mesh, lower },
+    curves: { dlo, intake, upper, door, screen, rearGlass, bay, bonnet, wing, ...nose.curves, ...tail.curves },
   }
 }
 

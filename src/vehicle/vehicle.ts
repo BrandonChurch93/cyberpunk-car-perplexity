@@ -1,15 +1,16 @@
 import * as THREE from 'three'
 import { config, type PaintSpec } from '../config'
 import { engine as engineCurve, lampThresholds } from '../director/timeline'
-import type { Anchor, AnchorId, VehicleModule, VehicleOptions, VehicleState, WetnessKind } from './contract'
+import type { Anchor, AnchorId, VehicleModule, VehicleOptions, VehicleState } from './contract'
 import { buildBody } from './body/body'
-import { rearLines } from './body/lines'
+import { lines as rearLines } from './body/tail'
 import { dims } from './body/shape'
 import { mirrorGeometry } from './geom/mesh'
 import { smoothstep, type V3 } from './geom/vec'
 import { bay } from './parts/bay'
-import { diffuser, floor, liner, mirror, splitter } from './parts/chassis'
-import { exhaust, guide, projectorGeometry, projectors } from './parts/lamps'
+import { diffuser, floor, liner, mirror } from './parts/chassis'
+import { exhaust, guide } from './parts/lamps'
+import { buildFront } from './parts/front'
 import { buildWheel, type WheelSpec } from './parts/wheel'
 import { makeMaterials, type Materials } from './materials'
 
@@ -108,20 +109,14 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const S = body.surfaces
 
   for (const [name, c] of [
-    ['drl-upper', cuts.curves.drlU],
-    ['drl-lower', cuts.curves.drlL],
-    ['drl-stem', cuts.curves.drlS],
-  ] as const) addPair(guide(S.front, c, 0.004, 0.014, 0.006), m.drl, name)
-  for (const [name, c] of [
     ['tail-upper', cuts.curves.lampU],
     ['tail-lower', cuts.curves.lampL],
     ['tail-chevron', cuts.curves.chev],
   ] as const) addPair(guide(S.rear, c, 0.004, 0.012, 0.006), m.tail, name)
 
-  const projs = projectors(cuts.maps.front)
-  const pg = projectorGeometry(projs)
-  addPair(pg.lens, m.beamLens, 'projector-lens')
-  addPair(pg.body, m.housing, 'projector-body')
+  // Front module: eyes, Y guides, projectors, ducts, grille and splitter (parts/front.ts).
+  // The registry accepts any material; the front module tags its own lens, guide and die finishes.
+  const front = buildFront(sprung, cuts, { ...m, tag: (material, wetness) => m.tag(material as THREE.MeshStandardMaterial, wetness) }, full)
 
   const ex = exhaust(cuts.maps.rear, rearLines.exhaust)
   addPair(ex.lip, m.ceramic, 'outlet-lip')
@@ -139,9 +134,6 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const df = diffuser(-dims.halfLength)
   addPair(df.roof, m.under, 'diffuser')
   addPair(df.fins, m.carbon, 'diffuser-fin')
-  const edge: V3[] = []
-  for (let i = 0; i <= 40; i++) edge.push(S.front(i / 40, 0))
-  addPair(splitter(edge), m.carbon, 'splitter')
   addPair(liner(dims.frontHubZ, dims.frontTire.radius, 0.415, 0.5, 0.99), m.under, 'liner-front')
   addPair(liner(dims.rearHubZ, dims.rearTire.radius, 0.44, 0.5, 1.01), m.under, 'liner-rear')
   const mr = mirror()
@@ -201,12 +193,13 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const anchors = {
     paint: snapAnchor(film.paint, meshes((n) => n === 'paint'), true),
     wheel: snapAnchor(film.wheel, meshes((n, g) => g === 'wheel-front-left' && (n === 'rim' || n === 'disc-hat')), false),
-    lamp: snapAnchor(film.lamp, meshes((n) => n === 'projector-lens-left'), true),
+    lamp: snapAnchor(film.lamp, meshes((n) => n === 'front convex projector lenses'), true),
     detail: snapAnchor(film.detail, meshes((n) => n.startsWith('bay-') || n.startsWith('cam-cover') || n === 'plenum'), true),
     exhaust: snapAnchor(film.exhaust, meshes((n) => n === 'paint' || n.startsWith('outlet-')), false),
   }
 
-  const lamps: VehicleModule['lamps'] = []
+  const lamps: VehicleModule['lamps'] = [...front.lamps]
+  const own = new Set<VehicleModule['lamps'][number]>()
   const lampObject = (name: string, p: V3, dir: V3): THREE.Object3D => {
     const o = new THREE.Object3D()
     o.name = name
@@ -215,13 +208,11 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
     sprung.add(o)
     return o
   }
-  const drlNode = cuts.curves.drlS.p[0]
   const tailMid = cuts.curves.lampU.p[Math.floor(cuts.curves.lampU.p.length / 2)]
-  const main = projs[0].lens
   for (const s of [1, -1]) {
-    lamps.push({ object: lampObject(`drl-${s}`, [s * drlNode[0], drlNode[1], drlNode[2] + 0.01], [0, 0, 1]), stage: lampThresholds.running, beam: false, color: new THREE.Color(0.86, 0.92, 1), intensity: 4 })
-    lamps.push({ object: lampObject(`beam-${s}`, [s * main[0], main[1], main[2] + 0.02], [s * 0.02, -0.02, 1]), stage: lampThresholds.beamStart, beam: true, color: new THREE.Color(1, 0.96, 0.9), intensity: 250 })
-    lamps.push({ object: lampObject(`tail-${s}`, [s * tailMid[0], tailMid[1], tailMid[2] - 0.01], [0, 0, -1]), stage: lampThresholds.running, beam: false, color: new THREE.Color(1, 0.02, 0.01), intensity: 1 })
+    const tail = { object: lampObject(`tail-${s}`, [s * tailMid[0], tailMid[1], tailMid[2] - 0.01], [0, 0, -1]), stage: lampThresholds.running, beam: false, color: new THREE.Color(1, 0.02, 0.01), intensity: 1 }
+    lamps.push(tail)
+    own.add(tail)
   }
   const heatSources = [1, -1].map((s) => {
     const o = new THREE.Object3D()
@@ -245,37 +236,16 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
     const e = Math.min(1, Math.max(0, state.engine))
     const flare = rising * 4 * e * (1 - e)
     const tail = run * (0.6 + 0.4 * flare)
-    for (const l of lamps) l.level = l.beam ? beam : l.color && l.color.g < 0.1 ? tail : run
+    for (const l of own) l.level = tail
     m.setLevels(run, beam, tail)
+    front.update(state.lampStage)
   }
   update({ timeSeconds: 0, lampStage: 0, engine: 0, vibration: 0 })
 
-  const surfaces: Array<{ material: THREE.Material; wetness: WetnessKind }> = [
-    { material: m.paint, wetness: 'beads' },
-    { material: m.glass, wetness: 'beads' },
-    { material: m.carbon, wetness: 'beads' },
-    { material: m.beamLens, wetness: 'beads' },
-    { material: m.drl, wetness: 'beads' },
-    { material: m.tail, wetness: 'beads' },
-    { material: m.mirror, wetness: 'beads' },
-    { material: m.tire, wetness: 'sheet' },
-    { material: m.matte, wetness: 'sheet' },
-    { material: m.covers, wetness: 'sheet' },
-    { material: m.mesh, wetness: 'sheet' },
-    { material: m.rim, wetness: 'sheet' },
-    { material: m.ceramic, wetness: 'sheet' },
-    { material: m.shell, wetness: 'none' },
-    { material: m.under, wetness: 'none' },
-    { material: m.housing, wetness: 'none' },
-    { material: m.soot, wetness: 'none' },
-    { material: m.disc, wetness: 'none' },
-    { material: m.hat, wetness: 'none' },
-    { material: m.caliper, wetness: 'none' },
-  ]
   return {
     root,
     anchors,
-    surfaces,
+    surfaces: m.surfaces,
     lamps,
     heatSources,
     update,
@@ -285,13 +255,14 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   }
 }
 
-/** Scale that brings the sprung body, mirrors aside, to the factory length, width and height. */
+/** Scale that brings the body shell (paint, glass and backing) to the factory length, width and height. Parts fitted to it do not change it. */
 function fitScale(sprung: THREE.Object3D): V3 {
+  const shell = new Set(['paint', 'glass', 'inner'])
   const box = new THREE.Box3()
   const p = new THREE.Vector3()
   sprung.updateWorldMatrix(true, true)
   sprung.traverse((o) => {
-    if (!(o instanceof THREE.Mesh) || o.name.startsWith('mirror')) return
+    if (!(o instanceof THREE.Mesh) || !shell.has(o.name)) return
     const pos = o.geometry.getAttribute('position')
     for (let i = 0; i < pos.count; i++) box.expandByPoint(p.fromBufferAttribute(pos, i))
   })
