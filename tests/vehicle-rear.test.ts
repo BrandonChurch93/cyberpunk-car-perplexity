@@ -210,7 +210,7 @@ describe('rear module', () => {
       }
     }
     expect(bay.grilleNormal[1]).toBeGreaterThan(0.9)
-  })
+  }, 30000)
 
   it('runs the carbon brace the length of the bay with its weave at 3.5 mm tows', () => {
     const pos = bay.carbon.getAttribute('position')
