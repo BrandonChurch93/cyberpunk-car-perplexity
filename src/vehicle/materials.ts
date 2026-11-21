@@ -3,7 +3,8 @@ import type { PaintSpec } from '../config'
 import { stream } from '../core/random'
 import { insertAfter, patchMaterial, replaceOnce } from '../materials/patch'
 import type { VehicleDetail, VehicleModule } from './contract'
-type Material = T.Material
+
+type Material = T.MeshStandardMaterial | T.MeshPhysicalMaterial
 
 const carbonPaths = {
   map: '/assets/third-party/textures/carbon-weave/Fabric004_2K-PNG_Color.png',
@@ -292,6 +293,24 @@ function paintStack(paint: T.MeshPhysicalMaterial, spec: PaintSpec) {
   }
 }
 
+/** Where a mesh has no usable UV gradient the derivative tangent frame is zero and anisotropy would normalize it to NaN, so build one from the normal. */
+function tangentFallback(m: T.MeshPhysicalMaterial): void {
+  patchMaterial(m, {
+    id: 'vehicle tangent fallback',
+    apply(shader) {
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <normal_fragment_begin>', `
+        #if defined( USE_ANISOTROPY ) && !defined( USE_TANGENT )
+          if (dot(tbn[0], tbn[0]) < 1e-12 || dot(tbn[1], tbn[1]) < 1e-12) {
+            vec3 tangentAxis = abs(normal.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+            vec3 tangentU = normalize(cross(tangentAxis, normal));
+            tbn = mat3(tangentU, cross(normal, tangentU), normal);
+          }
+        #endif
+      `)
+    },
+  })
+}
+
 export function palette(spec: PaintSpec, full: boolean) {
   const paint = new T.MeshPhysicalMaterial({
     color: full ? spec.base : 0x93989f, metalness: full ? 0 : .13,
@@ -368,6 +387,7 @@ export function palette(spec: PaintSpec, full: boolean) {
   rearVent.specularIntensity = .085
   rearVent.clearcoat = 0
   const mirror = new T.MeshPhysicalMaterial({ color: 0x57636b, metalness: .94, roughness: .096, clearcoat: .72 })
+  const reflector = new T.MeshPhysicalMaterial({ color: full ? 0xc4c9ce : 0x8a9097, metalness: full ? 1 : .6, roughness: full ? .11 : .3 })
   const hot = new T.MeshPhysicalMaterial({ color: full ? 0x494241 : 0x626367, metalness: .72, roughness: .4, anisotropy: full ? .38 : 0 })
   const engine = new T.MeshStandardMaterial({ color: full ? 0x2b2d31 : 0x55595f, metalness: .38, roughness: .59 })
   const cabin = new T.MeshStandardMaterial({ color: 0x2e2b2a, metalness: 0, roughness: .84 })
@@ -414,6 +434,7 @@ export function palette(spec: PaintSpec, full: boolean) {
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.060, 0.071, 0.14), temper * 0.36);
     `, 'roughnessFactor += 0.12 * oxide;')
   }
+  for (const m of [brushed, forged, spoke, carbon, bayCover, ventCarbon, rearVent, hot]) if (m.anisotropy > 0) tangentFallback(m)
   const surfaces: VehicleModule['surfaces'] = []
   const tag = (material: Material, wetness: VehicleModule['surfaces'][number]['wetness']) => {
     surfaces.push({ material, wetness })
@@ -422,7 +443,7 @@ export function palette(spec: PaintSpec, full: boolean) {
   for (const m of [paint, glass, windscreen, optics, rearOptics, carbon, bayCover, ventCarbon, mirror]) tag(m, 'beads')
   tag(rearVent, 'none')
   for (const m of [matte, tire, diffuser]) tag(m, 'sheet')
-  for (const m of [projector, brushed, forged, spoke, brake, caliper, dark, hot, engine]) tag(m, 'none')
+  for (const m of [projector, reflector, brushed, forged, spoke, brake, caliper, dark, hot, engine]) tag(m, 'none')
   if (full) tag(cabin, 'none')
   const setPaint = (next: PaintSpec): void => {
     repaint?.(next)
@@ -447,35 +468,27 @@ export function palette(spec: PaintSpec, full: boolean) {
     rearVent.normalScale.setScalar(.14)
     rearVent.needsUpdate = true
   }
-  return { paint, glass, windscreen, optics, rearOptics, projector, brushed, forged, spoke, brake, caliper, matte, dark, diffuser, tire, carbon, bayCover, ventCarbon, rearVent, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
+  return { paint, glass, windscreen, optics, rearOptics, projector, reflector, brushed, forged, spoke, brake, caliper, matte, dark, diffuser, tire, carbon, bayCover, ventCarbon, rearVent, mirror, hot, engine, cabin, surfaces, tag, setPaint, load }
 }
 
 export type Palette = ReturnType<typeof palette>
 
-/** The slots the kept body and its parts draw with. The finishes are the film palette above; the lamp emitters keep their radiance calibration. */
-export interface Materials {
-  paint: T.MeshPhysicalMaterial
-  glass: T.MeshPhysicalMaterial
+/** The slots the kept body and its parts draw with, on top of the whole film palette. */
+export interface Materials extends Palette {
   shell: T.MeshStandardMaterial
   drl: T.MeshPhysicalMaterial
   tail: T.MeshPhysicalMaterial
   beamLens: T.MeshPhysicalMaterial
   housing: T.MeshStandardMaterial
-  ceramic: T.MeshStandardMaterial
+  ceramic: T.MeshPhysicalMaterial
   soot: T.MeshStandardMaterial
-  matte: T.MeshStandardMaterial
-  covers: T.MeshStandardMaterial
-  carbon: T.MeshPhysicalMaterial
+  covers: T.MeshPhysicalMaterial
   mesh: T.MeshStandardMaterial
-  under: T.MeshStandardMaterial
-  mirror: T.MeshPhysicalMaterial
-  tire: T.MeshStandardMaterial
-  rim: T.MeshStandardMaterial
+  under: T.MeshPhysicalMaterial
+  rim: T.MeshPhysicalMaterial
   disc: T.MeshStandardMaterial
-  hat: T.MeshStandardMaterial
-  caliper: T.MeshStandardMaterial
+  hat: T.MeshPhysicalMaterial
   setLevels(running: number, beam: number, tail: number): void
-  setPaint(paint: PaintSpec): void
 }
 
 const drlLuminance = 140
@@ -484,47 +497,35 @@ const beamLuminance = 600
 
 export async function makeMaterials(detail: VehicleDetail, paint: PaintSpec): Promise<Materials> {
   const full = detail === 'full'
-  const pal = palette(paint, full)
-  await pal.load()
-  const std = (color: number, roughness: number, extra: T.MeshStandardMaterialParameters = {}): T.MeshStandardMaterial =>
-    new T.MeshStandardMaterial({ color, roughness, metalness: 0, side: T.DoubleSide, ...extra })
-  const phys = (color: number, roughness: number, extra: T.MeshPhysicalMaterialParameters = {}): T.MeshPhysicalMaterial =>
-    new T.MeshPhysicalMaterial({ color, roughness, metalness: 0, ...extra })
-  const two = <M extends T.Material>(material: M): M => {
-    material.side = T.DoubleSide
-    return material
-  }
-  const dark = 0x2b2c2f
-  const darker = 0x1d1e20
-  const m: Materials = {
-    paint: pal.paint,
-    glass: pal.glass,
-    shell: std(darker, 0.9),
-    drl: phys(0xb9bcc0, 0.4, { emissive: new T.Color(0.86, 0.92, 1), emissiveIntensity: 0 }),
-    tail: phys(0x3a3c40, 0.4, { emissive: new T.Color(1, 0.02, 0.01), emissiveIntensity: 0 }),
-    beamLens: phys(0x55585c, 0.2, { emissive: new T.Color(1, 0.96, 0.9), emissiveIntensity: 0 }),
-    housing: two(pal.dark),
-    ceramic: two(pal.hot),
-    soot: std(darker, 0.95),
-    matte: two(pal.matte),
-    covers: two(pal.bayCover),
-    carbon: two(pal.carbon),
-    mesh: std(darker, 0.7),
-    under: two(pal.diffuser),
-    mirror: pal.mirror,
-    tire: two(pal.tire),
-    rim: two(pal.forged),
-    disc: two(pal.brake),
-    hat: two(pal.brushed),
-    caliper: two(pal.caliper),
-    setLevels(running, beam, tail) {
-      m.drl.emissiveIntensity = drlLuminance * running
-      m.tail.emissiveIntensity = tailLuminance * tail
-      m.beamLens.emissiveIntensity = beamLuminance * beam
-    },
-    setPaint(next) {
-      pal.setPaint(next)
+  const p = palette(paint, full)
+  await p.load()
+  for (const x of [p.dark, p.matte, p.hot, p.bayCover, p.carbon, p.diffuser, p.tire, p.forged, p.brake, p.brushed, p.caliper]) x.side = T.DoubleSide
+  const std = (color: number, roughness: number): T.MeshStandardMaterial =>
+    p.tag(new T.MeshStandardMaterial({ color, roughness, metalness: 0, side: T.DoubleSide }), 'none') as T.MeshStandardMaterial
+  const emitter = (color: number, roughness: number, emissive: T.Color): T.MeshPhysicalMaterial =>
+    p.tag(new T.MeshPhysicalMaterial({ color, roughness, metalness: 0, emissive, emissiveIntensity: 0 }), 'beads') as T.MeshPhysicalMaterial
+  const drl = emitter(0xb9bcc0, .4, new T.Color(.86, .92, 1))
+  const tail = emitter(0x3a3c40, .4, new T.Color(1, .02, .01))
+  const beamLens = emitter(0x55585c, .2, new T.Color(1, .96, .9))
+  return {
+    ...p,
+    shell: std(0x1d1e20, .9),
+    drl,
+    tail,
+    beamLens,
+    housing: p.dark,
+    ceramic: p.hot,
+    soot: std(0x1d1e20, .95),
+    covers: p.bayCover,
+    mesh: std(0x1d1e20, .7),
+    under: p.diffuser,
+    rim: p.forged,
+    disc: p.brake,
+    hat: p.brushed,
+    setLevels(running, beam, rear) {
+      drl.emissiveIntensity = drlLuminance * running
+      tail.emissiveIntensity = tailLuminance * rear
+      beamLens.emissiveIntensity = beamLuminance * beam
     },
   }
-  return m
 }
