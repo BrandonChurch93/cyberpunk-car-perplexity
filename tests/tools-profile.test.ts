@@ -7,6 +7,7 @@ describe('profile report', () => {
   it('names the stage of a draw from its section path and target', () => {
     expect(stageOf({ path: 'add/sample/render scene', target: '1920x1080' })).toBe('main scene')
     expect(stageOf({ path: 'add/sample/render scene', target: '1920x1080 msaa4' })).toBe('main transmission prepass')
+    expect(stageOf({ path: 'add/sample/render scene', target: '1920x1080 transmission' })).toBe('main transmission prepass')
     expect(stageOf({ path: 'add/sample/render scene/shadow maps', target: '2048x2048' })).toBe('main shadow maps')
     expect(stageOf({ path: 'add/sample/reflect/render scene', target: '960x540' })).toBe('planar scene')
     expect(stageOf({ path: 'frame/reflect/render scene', target: '128x128 cube2' })).toBe('bounce probe scene')
