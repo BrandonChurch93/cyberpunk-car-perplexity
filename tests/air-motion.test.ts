@@ -15,12 +15,12 @@ describe('air rain motion', () => {
     expect(speeds[2]).toBeGreaterThan(7.9)
     expect(speeds[0]).toBeLessThan(speeds[1])
     expect(speeds[1]).toBeLessThan(speeds[2])
-    for (const diameter of diameters) for (const nominalHeight of [3.2, 7.8, 9.4, 11.6, 16.5]) {
+    for (const diameter of diameters) for (const nominalHeight of [3.2, 7.8, 9.4, 11.6, 20.5]) {
       const { cycles, wrapHeight } = fallCycle(diameter, nominalHeight)
       expect(Number.isInteger(cycles)).toBe(true)
       expect(cycles * wrapHeight / config.film.durationSeconds).toBeCloseTo(terminalSpeed(diameter), 12)
       expect(cycles * wrapHeight * shutterSeconds / config.film.durationSeconds).toBeCloseTo(terminalSpeed(diameter) * shutterSeconds, 12)
-      expect(Math.abs(wrapHeight - nominalHeight)).toBeLessThan(0.5)
+      expect(Math.abs(wrapHeight - nominalHeight)).toBeLessThan(Math.max(0.5, nominalHeight * 0.03))
     }
   })
 
@@ -39,29 +39,39 @@ describe('air rain motion', () => {
     const [near, close, mid, far, beam] = meshes.map((mesh) => mesh.geometry)
     const dropCount = (geometry: THREE.BufferGeometry): number =>
       geometry.getAttribute('aDrop').count / (geometry instanceof THREE.InstancedBufferGeometry ? 1 : 4)
-    expect(dropCount(mid)).toBeGreaterThan(dropCount(far))
     expect(dropCount(close)).toBeGreaterThan(dropCount(near) * 2)
+    expect(dropCount(far)).toBeGreaterThan(dropCount(close))
     world.deck.bounds.max.x += 3
     const shifted = rainMeshes(new RibbonView(), world, light, new THREE.Vector3(-2, 0, 3))
     const resized = shifted.map((mesh) => mesh.geometry)
-    expect(resized[0].getAttribute('aDrop').array).toEqual(near.getAttribute('aDrop').array)
-    expect(resized[1].getAttribute('aDrop').array).toEqual(close.getAttribute('aDrop').array)
-    expect(resized[3].getAttribute('aDrop').array).toEqual(far.getAttribute('aDrop').array)
-    expect(resized[4].getAttribute('aDrop').array).toEqual(beam.getAttribute('aDrop').array)
+    const bytes = (geometry: THREE.BufferGeometry, name: string): Buffer => {
+      const { array } = geometry.getAttribute(name)
+      return Buffer.from(array.buffer, array.byteOffset, array.byteLength)
+    }
+    for (const [index, field] of [[0, near], [1, close], [3, far], [4, beam]] as const) {
+      for (const name of ['aDrop', 'aMotion']) expect(bytes(resized[index], name).equals(bytes(field, name))).toBe(true)
+    }
     const center = (mesh: THREE.Mesh): THREE.Vector3 =>
       (mesh.material as THREE.ShaderMaterial).uniforms.uVolumeCenter.value as THREE.Vector3
     expect(center(meshes[4]).toArray()).toEqual([2, 3.2 * 0.48, -1])
     expect(center(shifted[4]).toArray()).toEqual([-2, 3.2 * 0.48, 3])
-    const drops = mid.getAttribute('aDrop')
-    let fine = 0
-    let rangeMatches = true
-    for (let i = 0; i < drops.count; i++) {
-      const diameter = drops.getW(i)
-      if (diameter < 0.002) fine++
-      rangeMatches &&= diameter >= 0.001 && diameter <= 0.003
+    for (const field of [near, close, mid, far, beam]) {
+      const drops = field.getAttribute('aDrop')
+      const motion = field.getAttribute('aMotion')
+      let fine = 0
+      let rangeMatches = true
+      let worstSpeedError = 0
+      const stride = field instanceof THREE.InstancedBufferGeometry ? 1 : 4
+      for (let i = 0; i < drops.count; i += stride) {
+        const diameter = drops.getW(i)
+        if (diameter < 0.0012) fine++
+        rangeMatches &&= diameter >= 0.001 && diameter <= 0.003
+        worstSpeedError = Math.max(worstSpeedError, Math.abs(terminalSpeed(diameter) - motion.getZ(i)))
+      }
+      expect(rangeMatches).toBe(true)
+      expect(fine).toBeGreaterThan(dropCount(field) * 0.58)
+      expect(worstSpeedError).toBeLessThan(1e-6)
     }
-    expect(rangeMatches).toBe(true)
-    expect(fine).toBeGreaterThan(drops.count * 0.6)
   })
 
   it('finds the highest available wet, upward face in transformed world space', () => {

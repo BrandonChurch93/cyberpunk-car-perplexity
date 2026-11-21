@@ -353,10 +353,10 @@ export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLig
   const deckCenter = world.deck.bounds.getCenter(new THREE.Vector2())
   const deckSpan = world.deck.bounds.getSize(new THREE.Vector2())
   const specs: { key: string; layer: number; density: number; fine: number; size: THREE.Vector3; fade: Fade; gain: number; local?: boolean }[] = [
-    { key: 'near', layer: 0, density: 8.5, fine: 2.65, size: new THREE.Vector3(9.4, 9.4, 9.4), fade: [0.63, 1.31, 3.25, 4.8], gain: 1.04 },
-    { key: 'close', layer: 1, density: 5.4, fine: 2.2, size: new THREE.Vector3(21, 7.8, 21), fade: [2.25, 4.1, 7.6, 13.0], gain: 2.6 },
-    { key: 'middle', layer: 2, density: 2.65, fine: 1.75, size: new THREE.Vector3(Math.min(deckSpan.x, 41), 11.6, Math.min(deckSpan.y, 40)), fade: [7.2, 11.25, 20, 29], gain: 5.15 },
-    { key: 'distance', layer: 3, density: 0.17, fine: 1.6, size: new THREE.Vector3(Math.max(deckSpan.x, 66), 16.5, Math.max(deckSpan.y, 66)), fade: [17.4, 24, 28, 38], gain: 2.05 },
+    { key: 'near', layer: 0, density: 8.5, fine: 5.2, size: new THREE.Vector3(9.4, 9.4, 9.4), fade: [0.63, 1.51, 3.25, 4.8], gain: 0.88 },
+    { key: 'close', layer: 1, density: 8.15, fine: 4.8, size: new THREE.Vector3(21, 7.8, 21), fade: [2.55, 4.8, 8.1, 13.0], gain: 2.45 },
+    { key: 'middle', layer: 2, density: 4.45, fine: 5.6, size: new THREE.Vector3(Math.min(deckSpan.x, 41), 11.6, Math.min(deckSpan.y, 40)), fade: [7.2, 11.25, 22, 31], gain: 6.4 },
+    { key: 'distance', layer: 3, density: 0.56, fine: 5.1, size: new THREE.Vector3(Math.max(deckSpan.x, 96), 20.5, Math.max(deckSpan.y, 96)), fade: [17.4, 25, 43, 61], gain: 3.0 },
     { key: 'beam', layer: 1, density: 76, fine: 7.0, size: new THREE.Vector3(12, 3.2, 14), fade: [1.05, 2.15, 9, 13], gain: 2.45, local: true },
   ]
   return specs.map(({ key, layer, density, fine, size, fade, gain, local }) => {
