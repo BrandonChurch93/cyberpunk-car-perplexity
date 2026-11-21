@@ -80,6 +80,8 @@ vec2 paintSlope[PAINT_MAX_FLAKES];
 int paintFlakes;
 float paintFlakeArea;
 bool paintExplicit;
+uvec2 paintGlintId;
+float paintGlintFlakes;
 
 uvec4 paintHash(uvec4 v) {
   v = v * 1664525u + 1013904223u;
@@ -142,7 +144,15 @@ void paintCells(vec3 viewDir, vec3 viewNormal) {
   uint seed = floatBitsToUint(carFlakeSeed);
   float pick = float(paintHash(uvec4(floatBitsToUint(carLocal), seed)).x) / 4294967295.0;
   paintExplicit = pick < keep;
-  if (!paintExplicit) return;
+  if (!paintExplicit) {
+    float lg = log2(max(paintFootprint, 1e-7));
+    float lv = floor(lg);
+    if (float(paintHash(uvec4(floatBitsToUint(carLocal.zxy), seed ^ 0x5bd1e995u)).x) / 4294967295.0 < lg - lv) lv += 1.0;
+    float g = exp2(lv);
+    paintGlintId = uvec2(ivec2(floor(paintUv / g)) + 1048576);
+    paintGlintFlakes = carFlakeShape.x * g * g / paintCosAxis;
+    return;
+  }
   uvec2 cid = uvec2(ivec2(floor(uv / side)) + 1048576);
   float u = float(paintHash(uvec4(cid, paintAxis, seed ^ 0x9e3779b9u)).x) / 4294967295.0;
   float p = exp(-lambda);
@@ -162,6 +172,21 @@ void paintCells(vec3 viewDir, vec3 viewNormal) {
     float t = 6.2831853 * float(h.y) / 4294967295.0;
     paintSlope[i] = carFlakeShape.y * r * vec2(cos(t), sin(t));
   }
+}
+
+float paintPoisson(float mean, uvec4 h) {
+  float u = float(h.x) / 4294967295.0;
+  if (mean > 12.0) return max(0.0, floor(mean + sqrt(mean) * sqrt(-2.0 * log(max(u, 1e-7))) * cos(6.2831853 * float(h.y) / 4294967295.0) + 0.5));
+  float p = exp(-mean);
+  float F = p;
+  float k = 0.0;
+  for (int i = 1; i < 40; i++) {
+    if (u <= F) break;
+    k = float(i);
+    p *= mean / k;
+    F += p;
+  }
+  return k;
 }
 
 vec3 paintBinder(float cosIn, float cosOut) {
@@ -196,7 +221,10 @@ void paintFlakeDirect(const in IncidentLight light, const in vec3 n, const in ve
     }
     lobe *= paintFlakeArea / (6.2831853 * w * w);
   } else {
-    lobe = carFlakeCell.w * exp(-0.5 * dot(s, s) / spread) / (6.2831853 * spread);
+    float pdf = exp(-0.5 * dot(s, s) / spread) / (6.2831853 * spread);
+    lobe = carFlakeCell.w * pdf;
+    float mean = paintGlintFlakes * pdf * 6.2831853 * w * w;
+    if (mean > 0.0) lobe *= paintPoisson(mean, paintHash(uvec4(paintGlintId, paintAxis, floatBitsToUint(carFlakeSeed) ^ 0x27d4eb2fu))) / mean;
   }
   if (lobe <= 0.0) return;
   float cl = max(dot(li, n), 1e-3);
@@ -206,7 +234,7 @@ void paintFlakeDirect(const in IncidentLight light, const in vec3 n, const in ve
   reflected.directSpecular += light.color * nl * carFlakeColor * paintBinder(cl, cv) * (through * lobe / (hn2 * hn2 * 4.0 * cl * cv * carCoat.w * carCoat.w));
 }
 
-vec3 paintSigns(vec3 P, vec3 N, vec3 V, float roughness, float spread, float resolved) {
+vec3 paintSigns(vec3 P, vec3 N, vec3 V, float roughness, float spread, float resolved, float flakes) {
   vec3 R = reflect(-V, N);
   float a = roughness * roughness;
   float s = max(sqrt(4.0 * a * a + spread * spread), 1e-5);
@@ -229,7 +257,12 @@ vec3 paintSigns(vec3 P, vec3 N, vec3 V, float roughness, float spread, float res
     vec3 ew = lw > 1e-6 ? wq / lw : vec3(0.0);
     float small = 1.0 - smoothstep(resolved, 2.0 * resolved, min(lu, lw) / dist);
     float cover = emitterBox(dot(R, eu) / cr, lu / dist, s) * emitterBox(dot(R, ew) / cr, lw / dist, s);
-    sum += emitterRadiance[i].rgb * (cover * small * emitterCenter[i].w * smoothstep(0.0, 0.05, dot(D, N)));
+    float c = cover * small;
+    if (flakes > 0.0 && c > 0.0) {
+      uvec3 q = uvec3(ivec3(floor(emitterCenter[i].xyz * 4.0)) + 1048576);
+      c = paintPoisson(flakes * c, paintHash(uvec4(paintGlintId, paintAxis ^ (q.x * 73856093u) ^ (q.y * 19349663u) ^ (q.z * 83492791u), floatBitsToUint(carFlakeSeed)))) / flakes;
+    }
+    sum += emitterRadiance[i].rgb * (c * emitterCenter[i].w * smoothstep(0.0, 0.05, dot(D, N)));
   }
   return sum;
 }
@@ -255,7 +288,7 @@ vec3 paintFlakeEnv(vec3 n, vec3 v) {
       vec3 ro = t + n * co;
       vec3 mo = normalize(v + ro);
       vec3 seen = PAINT_FLAKE_CUBE * getIBLRadiance(v, mo, PAINT_FLAKE_ROUGHNESS);
-      seen = max(seen, paintSigns(paintWorld, inverseTransformDirection(mo, viewMatrix), paintEye, PAINT_FLAKE_GLINT, 0.0, 1e9));
+      seen = max(seen, paintSigns(paintWorld, inverseTransformDirection(mo, viewMatrix), paintEye, PAINT_FLAKE_GLINT, 0.0, 1e9, 0.0));
       sum += seen * paintBinder(cr, cv) * (1.0 - F_Schlick(vec3(0.04), 1.0, co).x);
     }
     sum *= paintFlakeArea;
@@ -263,7 +296,7 @@ vec3 paintFlakeEnv(vec3 n, vec3 v) {
     float sigma = sqrt(carFlakeShape.y * carFlakeShape.y + carFlakeShape.z * carFlakeShape.z);
     float alpha = min(1.0, carCoat.w * 1.4142 * sigma * (1.0 + 0.6 * (1.0 - nv)));
     vec3 seen = PAINT_FLAKE_CUBE * getIBLRadiance(v, n, sqrt(alpha));
-    seen = max(seen, paintSigns(paintWorld, inverseTransformDirection(n, viewMatrix), paintEye, sqrt(alpha), 0.0, 1e9));
+    seen = max(seen, paintSigns(paintWorld, inverseTransformDirection(n, viewMatrix), paintEye, sqrt(alpha), 0.0, 1e9, paintGlintFlakes));
     sum = carFlakeCell.w * seen * paintBinder(cv, cv) * (1.0 - F_Schlick(vec3(0.04), 1.0, nv).x);
   }
   return sum * carFlakeColor * (1.0 - F_Schlick(vec3(0.04), 1.0, nv).x);
@@ -272,7 +305,7 @@ vec3 paintFlakeEnv(vec3 n, vec3 v) {
 vec3 paintCoatSigns(vec3 n, vec3 v, float roughness) {
   vec3 p = (vec4(-vViewPosition - viewMatrix[3].xyz, 0.0) * viewMatrix).xyz;
   float bend = length(fwidth(normalize(carNormal)));
-  return paintSigns(p, inverseTransformDirection(n, viewMatrix), inverseTransformDirection(v, viewMatrix), roughness, bend, PAINT_SIGN_RESOLVED);
+  return paintSigns(p, inverseTransformDirection(n, viewMatrix), inverseTransformDirection(v, viewMatrix), roughness, bend, PAINT_SIGN_RESOLVED, 0.0);
 }
 
 void RE_Direct_Paint(const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight) {
