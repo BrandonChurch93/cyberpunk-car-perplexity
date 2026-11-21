@@ -1,7 +1,7 @@
 import * as T from 'three'
 import { lampThresholds } from '../../director/timeline'
 import type { BodyCuts } from '../body/cuts'
-import { fasciaReturn, fasciaUV, guideProfile, guideWidth } from '../body/nose'
+import { fasciaReturn, fasciaThroat, fasciaUV, guideProfile, guideWidth } from '../body/nose'
 import type { VehicleModule, WetnessKind } from '../contract'
 import type { Surface, SurfaceCurve, SurfaceMap } from '../geom/cuts'
 import { MeshBuilder, mirrorGeometry } from '../geom/mesh'
@@ -94,18 +94,28 @@ function face(outer: T.Vector3[], depth = 0): T.BufferGeometry {
   return g
 }
 
-function chamber(loop: T.Vector3[], depth: number, taper: number, slope: number, setback: number) {
+function chamber(loop: T.Vector3[], depth: number, taper: number, slope: number, setback: number,
+  shared?: NonNullable<ReturnType<typeof fasciaThroat>>) {
   const center = average(loop)
   const throat = (p: T.Vector3) => {
     const x = T.MathUtils.lerp(center.x, p.x, taper)
     return new T.Vector3(x, T.MathUtils.lerp(center.y, p.y, taper), center.z - depth + slope * (Math.abs(x) - Math.abs(center.x)))
   }
-  const at = (t: number) => loop.map(p => {
+  const blend = .18
+  const at = (t: number) => loop.map((p, i) => {
     const q = throat(p)
-    return p.clone().lerp(q, t).addScaledVector(forward, -setback * (1 - t))
+    const point = p.clone().lerp(q, t).addScaledVector(forward, -setback * (1 - t))
+    if (shared && t < blend) {
+      const direction = vector(shared[i].inward).multiplyScalar(p.distanceTo(q)).sub(q).add(p)
+      point.addScaledVector(direction, t * (1 - t / blend) ** 2)
+    }
+    return point
   })
-  const rings = [0, .022, .07, .20, .44, .72, 1].map(at)
-  return { wall: grid(rings, false, true), throat: rings.at(-1)!, center: center.z - depth }
+  const rings = [0, .022, .07, .12, blend, .44, .72, 1].map(at)
+  const wall = grid(rings, false, true)
+  const normals = wall.getAttribute('normal')
+  shared?.forEach(({ normal }, i) => normals.setXYZ(i, ...normal))
+  return { wall, throat: rings.at(-1)!, center: center.z - depth }
 }
 
 function grille(throat: T.Vector3[], frontZ: number, full: boolean): T.BufferGeometry {
@@ -174,11 +184,12 @@ function radiatorSeat(throat: T.Vector3[]): T.BufferGeometry {
 
 function cover(loop: T.Vector3[], map: SurfaceMap, full: boolean): T.BufferGeometry {
   const center = average(loop), count = full ? 12 : 6
+  const edgeDepth = loop.map(p => p.z - .002 - map.S(...fasciaUV(map, p.x, p.y))[2])
   const rows = Array.from({ length: count }, (_, i) => {
-    const t = .975 * (count - i) / count
-    return loop.map(p => {
+    const t = (count - i) / count
+    return loop.map((p, j) => {
       const q = center.clone().lerp(p, t)
-      q.z = map.S(...fasciaUV(map, q.x, q.y))[2] - .007 + .003 * (1 - t * t)
+      q.z = map.S(...fasciaUV(map, q.x, q.y))[2] + T.MathUtils.lerp(-.004, edgeDepth[j], t * t)
       return q
     })
   })
@@ -223,8 +234,8 @@ function splitter(S: Surface, full: boolean): T.BufferGeometry {
     const [x, y, z] = S(Math.abs(u), 0)
     return new T.Vector3(Math.sign(u) * x, y, z)
   })
-  const rolls = [[-.012, .004], [.020, .002], [.032, 0], [.038, -.004],
-    [.041, -.010], [.038, -.016], [.024, -.021]]
+  const rolls = [[-.015, .004], [.038, .002], [.057, 0], [.064, -.004],
+    [.066, -.009], [.062, -.014], [.045, -.019]]
   const rows = positions.map((p, i) => rolls.map(([dz, dy]) => {
     const t = Math.abs(i - count) / count
     const tip = p.z + dz * (dz > 0 ? 1 - T.MathUtils.smoothstep(t, .89, 1) : 1)
@@ -264,9 +275,11 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   const { eye, drlL } = cuts.curves
   const map = cuts.maps.front
   const pocketAt = (id: 'outer' | 'center' | 'eye', depth: number, taper: number, slope: number) => {
-    const roll = fasciaReturn(map, id)
-    const loop = roll ? roll.map(vector) : outline(cuts.curves[id], id === 'center')
-    return chamber(signedArea(loop) < 0 ? loop.reverse() : loop, depth, taper, slope, roll ? 0 : .009)
+    const stations = fasciaThroat(map, id)
+    const loop = stations ? stations.map(s => vector(s.point)) : outline(cuts.curves[id], id === 'center')
+    const flip = signedArea(loop) < 0
+    const shared = flip && stations ? [...stations].reverse() : stations
+    return chamber(flip ? loop.reverse() : loop, depth, taper, slope, shared ? 0 : .009, shared)
   }
   const lamps: VehicleModule['lamps'] = []
   const emit = (name: string, p: T.Vector3, beam: boolean, material: T.MeshStandardMaterial, intensity: number) => {
@@ -279,11 +292,11 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
       lamps.push({ object, beam, stage: beam ? lampThresholds.beamStart : lampThresholds.running, level: 0, color: material.emissive.clone(), intensity })
     }
   }
-  const intake = pocketAt('outer', .152, .88, -.46)
+  const intake = pocketAt('outer', .177, .93, -.38)
   add('front outer duct returns', merged([intake.wall, radiatorSeat(intake.throat)]), m.housing, true)
   add('front radiator fins', radiator(intake.throat, full), m.mesh, true)
   add('front radiator cores', face(intake.throat, .028), m.housing, true)
-  const mouth = pocketAt('center', .112, .89, 0)
+  const mouth = pocketAt('center', .137, .92, 0)
   add('front centre duct returns', mouth.wall, m.housing)
   add('front extruded hex grille', grille(mouth.throat, mouth.center, full), m.mesh)
   add('centre duct core', face(mouth.throat, .076), m.housing)
@@ -297,7 +310,8 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   const pocket = pocketAt('eye', .092, .94, -.95)
   add('front eye housing returns', pocket.wall, m.housing, true)
   add('front eye housing back', face(pocket.throat), m.housing, true)
-  add('front clear contoured eye lens', cover(bowl, map, full), lensMaterial, true)
+  const coverRing = fasciaThroat(map, 'eye')?.map(s => vector(s.seat)) ?? bowl
+  add('front clear contoured eye lens', cover(signedArea(coverRing) < 0 ? coverRing.reverse() : coverRing, map, full), lensMaterial, true)
   const drl = tag(m.drl.clone(), 'none')
   drl.emissive.setHex(0xe5f3ff)
   drl.color.setHex(0x939ca1)
@@ -351,13 +365,11 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   return {
     lamps,
     update(stage: number) {
-      const running = T.MathUtils.smoothstep(stage, lampThresholds.running, lampThresholds.running + .05)
-      const beamStart = T.MathUtils.smoothstep(stage, lampThresholds.beamStart, lampThresholds.beamStart + .05)
-      const fullBeam = T.MathUtils.smoothstep(stage, lampThresholds.beamStart, lampThresholds.beamFull)
-      const level = beamStart * (.045 + .955 * fullBeam)
+      const running = stage * stage
+      const level = T.MathUtils.smoothstep(stage, lampThresholds.beamStart, lampThresholds.beamFull)
       for (const l of lamps) l.level = l.beam ? level : running
       drl.emissiveIntensity = 144 * running
-      beam.emissiveIntensity = 260 * level
+      beam.emissiveIntensity = 260 * (level + (1 - level) * .045 * running)
     },
   }
 }

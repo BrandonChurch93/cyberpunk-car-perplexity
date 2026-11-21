@@ -243,8 +243,8 @@ const junction: [number, number] = [192, 445]
 
 export const lines = {
   eye: map(elev, [[193, 378], [254, 394], [318, 410], [328, 416], [320, 429], [254, 425], [205, 423], [189, 404]]),
-  outerIntake: map(elev, [[218, 490], [318, 490], [424, 480], [481, 469], [461, 522], [416, 615], [329, 620], [235, 620], [208, 557]]),
-  centerIntake: map(elev, [[575, 520], [745, 520], [745, 612], [600, 612], [570, 570]]),
+  outerIntake: map(elev, [[218, 478], [361, 491], [480, 511], [455, 553], [352, 624], [208, 624], [195, 596]]),
+  centerIntake: map(elev, [[553, 551], [745, 551], [745, 625], [589, 625], [551, 586]]),
   drlUpper: map(elev, [[175, 394], junction]),
   drlLower: map(elev, [junction, [158, 608]]),
   drlStem: map(elev, [junction, [387, 461]]),
@@ -334,8 +334,8 @@ export function noseCuts(fm: SurfaceMap): { cuts: Cuts; curves: Record<'eye' | '
     return new SurfaceCurve(fm.S, shape.map(([x, y]) => fasciaUV(fm, x, y)), closed, acrossCenter)
   }
   const eye = project(lines.eye.map(([x, y]) => [x - .009, y]), true, .005, .012)
-  const outer = project(lines.outerIntake, true, .006, .020)
-  const center = project(lines.centerIntake, true, .006, .020, true)
+  const outer = project(lines.outerIntake, true, .005, .013)
+  const center = project(lines.centerIntake, true, .005, .012, true)
   const drlU = project(lines.drlUpper, false, .004, .01)
   const drlL = project(lines.drlLower, false, .004, .01)
   const drlS = project(lines.drlStem, false, .004, .01)
@@ -518,15 +518,18 @@ function triangulate(border: V2[], holes: V2[][], stops: readonly Stop[], emit: 
 const rollDepth = .014
 const openingRoll = frontSection.roll
 type Aperture = 'eye' | 'outer' | 'center' | 'slot'
-const ringCache = new WeakMap<SurfaceMap, Partial<Record<Aperture, V3[]>>>()
-export const fasciaReturn = (map: SurfaceMap, aperture: Aperture): V3[] | undefined => ringCache.get(map)?.[aperture]
+type Throat = { point: V3; seat: V3; inward: V3; normal: V3 }
+const ringCache = new WeakMap<SurfaceMap, Partial<Record<Aperture, Throat[]>>>()
+export const fasciaReturn = (map: SurfaceMap, aperture: Aperture): V3[] | undefined =>
+  ringCache.get(map)?.[aperture]?.map(s => s.point)
+export const fasciaThroat = (map: SurfaceMap, aperture: Aperture): Throat[] | undefined => ringCache.get(map)?.[aperture]
 
-function rolledOpening(positions: V3[], normals: V3[], out: TessResult): V3[] {
+function rolledOpening(positions: V3[], normals: V3[], out: TessResult): Throat[] {
   const orientation = ShapeUtils.area(positions.map(p => new Vector2(p[0], p[1]))) > 0 ? 1 : -1
   const indices = positions.map((p, i) => {
     const n = normals[i]
     const count = positions.length
-    const t = norm(sub(positions[(i + 1) % count], positions[(i + count - 1) % count]))
+    const t = norm(add(norm(sub(p, positions[(i + count - 1) % count])), norm(sub(positions[(i + 1) % count], p))))
     const h = norm(cross(n, t)).map(x => x * orientation) as V3
     const ring: number[] = []
     for (let j = 0; j <= 4; j++) {
@@ -535,9 +538,11 @@ function rolledOpening(positions: V3[], normals: V3[], out: TessResult): V3[] {
       const d = addScaled(n.map(x => x * Math.cos(a)) as V3, h, Math.sin(a))
       ring.push(vertex(out, q, d))
     }
-    const throat = addScaled(addScaled(p, h, openingRoll), n, -rollDepth)
+    const shoulder = addScaled(p, h, openingRoll)
+    const seat = addScaled(shoulder, n, -openingRoll)
+    const throat = addScaled(shoulder, n, -rollDepth)
     ring.push(vertex(out, throat, h))
-    return { ring, throat }
+    return { ring, throat: { point: throat, seat, inward: scale(n, -1), normal: h } }
   })
   for (const [i, { ring: a }] of indices.entries()) {
     const { ring: b } = indices[(i + 1) % indices.length]
@@ -621,7 +626,7 @@ export function tessellateFascia(map: SurfaceMap, openings: Cuts['holes'], uEdge
     shell.indices.push(...abc)
   })
   const lip = blank()
-  const rings: Partial<Record<Aperture, V3[]>> = {}
+  const rings: Partial<Record<Aperture, Throat[]>> = {}
   for (const [i, loop] of holes.entries()) {
     const ps = loop.map(sample)
     rings[(['eye', 'outer', 'slot', 'center'] as const)[i]] = rolledOpening(ps.map(p => p.point), ps.map(p => p.normal), lip)
