@@ -2,22 +2,31 @@ import type { SurfaceCurve } from '../geom/cuts'
 import type { Boundary, TessResult } from '../geom/tessellate'
 import { add, cross, norm, scale, sub, type V3 } from '../geom/vec'
 
-/** Half the shut gap between the panel walls, and the roll radius of the panel edges either side of it. */
+/** Half the shut gap between the panel walls, and the roll radius of the panel edges either side of it. The roll is
+ * wide enough to hold a reflection across a few pixels in the macro at 0.75 m, and cut fine enough not to facet there. */
 export const gapHalf = 0.002
-export const gapRoll = 0.002
+export const gapRoll = 0.003
+
+/** Edge rolls set per shut line; a line without one rolls over gapRoll. */
+const rolls = new WeakMap<SurfaceCurve, number>()
+export function withRoll(c: SurfaceCurve, roll: number): SurfaceCurve {
+  rolls.set(c, roll)
+  return c
+}
+const rollOf = (c: SurfaceCurve): number => rolls.get(c) ?? gapRoll
 
 /** Positive inside the band cut out of the paint along the shut lines: the paint edge sits gapHalf + gapRoll off each line. */
 export function gapCut(gaps: SurfaceCurve[]): (p: V3) => number {
   return (p) => {
     let d = -1
-    for (const g of gaps) d = Math.max(d, gapHalf + gapRoll - g.distance(p, 0.3))
+    for (const g of gaps) d = Math.max(d, gapHalf + rollOf(g) - g.distance(p, 0.3))
     return d
   }
 }
 
 /** True on the paint edge of a shut gap. */
 export function onGapEdge(gaps: SurfaceCurve[], tol = 0.001): (p: V3) => boolean {
-  return (p) => gaps.some((g) => g.distance(p, 0.02) < gapHalf + gapRoll + tol)
+  return (p) => gaps.some((g) => g.distance(p, 0.02) < gapHalf + rollOf(g) + tol)
 }
 
 /** The tessellated parts with every boundary run along a shut gap removed, so a flange is not built there twice. */
@@ -106,7 +115,6 @@ export function gapChannel(parts: TessResult[], gaps: SurfaceCurve[], depth = 0.
     return t.positions.length / 3 - 1
   }
   const near = onGapEdge(gaps)
-  const steps = 3
   const lines = gaps.map((g) => resample(g, 0.002).p)
   const closest = (q: V3): V3 => {
     let best: V3 = q
@@ -128,8 +136,20 @@ export function gapChannel(parts: TessResult[], gaps: SurfaceCurve[], depth = 0.
     }
     return best
   }
+  // Each run takes the roll of the shut line it lies along, cut in steps of at most 15 degrees, 9 on the wider rolls.
   const strip = (pts: V3[], nor: V3[], uv: Array<[number, number]>, closed: boolean): void => {
     const n = pts.length
+    const mid = pts[n >> 1]
+    let roll = gapRoll
+    let rd = Infinity
+    for (const g of gaps) {
+      const d = g.distance(mid, 0.05)
+      if (d < rd) {
+        rd = d
+        roll = rollOf(g)
+      }
+    }
+    const steps = Math.max(6, Math.ceil(roll / 0.0005))
     const reach = (i: number, dir: number): V3 => {
       let j = i
       let l = 0
@@ -150,9 +170,9 @@ export function gapChannel(parts: TessResult[], gaps: SurfaceCurve[], depth = 0.
       const row: number[] = []
       for (let k = 0; k <= steps; k++) {
         const th = (k / steps) * (Math.PI / 2)
-        row.push(push(lips, add(add(pts[i], scale(b, gapRoll * Math.sin(th))), scale(N, -gapRoll * (1 - Math.cos(th)))), norm(add(scale(N, Math.cos(th)), scale(b, Math.sin(th)))), uv[i]))
+        row.push(push(lips, add(add(pts[i], scale(b, roll * Math.sin(th))), scale(N, -roll * (1 - Math.cos(th)))), norm(add(scale(N, Math.cos(th)), scale(b, Math.sin(th)))), uv[i]))
       }
-      const foot = add(add(pts[i], scale(b, gapRoll)), scale(N, -depth))
+      const foot = add(add(pts[i], scale(b, roll)), scale(N, -depth))
       row.push(push(lips, foot, b, uv[i]))
       lipRows.push(row)
       const inner = add(closest(pts[i]), scale(N, -depth))

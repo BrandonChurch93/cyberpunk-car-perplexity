@@ -27,12 +27,13 @@ export class CellDrops {
     this.group.visible = false
     const { position, normal } = vehicle.anchors.detail
     this.anchor = position.clone()
-    const n = normal.clone().normalize()
+    vehicle.root.updateMatrixWorld(true)
+    const plate = this.plateMesh(vehicle, normal.clone().normalize())
+    if (!plate) return
+    // The anchor sits near the plate, not on its wet face: water stands on the top face, in that face's own plane.
+    const n = this.topFace(plate, normal.clone().normalize())
     const along = new THREE.Vector3(0, 0, -1).addScaledVector(n, n.z).normalize()
     const across = along.clone().cross(n)
-    vehicle.root.updateMatrixWorld(true)
-    const plate = this.plateMesh(vehicle, n)
-    if (!plate) return
     const { cells, pitch, corner } = this.findCells(plate, n, along, across)
     if (cells.length === 0) return
     const downhill = new THREE.Vector3(0, -1, 0).addScaledVector(n, n.y)
@@ -91,6 +92,38 @@ export class CellDrops {
     return hit ? (hit.object as THREE.Mesh) : null
   }
 
+  private topFace(mesh: THREE.Mesh, near: THREE.Vector3): THREE.Vector3 {
+    const pos = mesh.geometry.getAttribute('position')
+    const index = mesh.geometry.index
+    const count = index ? index.count : pos.count
+    const a = new THREE.Vector3()
+    const b = new THREE.Vector3()
+    const c = new THREE.Vector3()
+    const face = new THREE.Vector3()
+    const sum = new THREE.Vector3()
+    const lifts: Array<{ at: THREE.Vector3; area: number; lift: number }> = []
+    for (let k = 0; k < count; k += 3) {
+      a.fromBufferAttribute(pos, index ? index.getX(k) : k).applyMatrix4(mesh.matrixWorld)
+      if (a.distanceTo(this.anchor) > reachLimit) continue
+      b.fromBufferAttribute(pos, index ? index.getX(k + 1) : k + 1).applyMatrix4(mesh.matrixWorld)
+      c.fromBufferAttribute(pos, index ? index.getX(k + 2) : k + 2).applyMatrix4(mesh.matrixWorld)
+      face.crossVectors(b.clone().sub(a), c.clone().sub(a))
+      const area = face.length()
+      if (area < 1e-16 || face.dot(near) < 0.95 * area) continue
+      sum.add(face)
+      lifts.push({ at: a.clone().sub(this.anchor), area, lift: 0 })
+    }
+    if (lifts.length === 0) return near
+    const n = sum.normalize()
+    for (const l of lifts) l.lift = l.at.dot(n)
+    lifts.sort((x, y) => x.lift - y.lift)
+    const total = lifts.reduce((t, l) => t + l.area, 0)
+    let acc = 0
+    const middle = lifts.find((l) => (acc += l.area) >= total / 2) ?? lifts[0]
+    this.anchor.addScaledVector(n, middle.lift)
+    return n
+  }
+
   private findCells(mesh: THREE.Mesh, n: THREE.Vector3, along: THREE.Vector3, across: THREE.Vector3): { cells: Cell[]; pitch: number; corner: number } {
     const pos = mesh.geometry.getAttribute('position')
     const index = mesh.geometry.index
@@ -108,7 +141,7 @@ export class CellDrops {
       c.fromBufferAttribute(pos, index ? index.getX(k + 2) : k + 2).applyMatrix4(mesh.matrixWorld)
       face.crossVectors(b.clone().sub(a), c.clone().sub(a))
       if (face.lengthSq() < 1e-16 || Math.abs(face.normalize().dot(n)) < 0.95) continue
-      if (Math.abs(a.clone().sub(this.anchor).dot(n)) > 0.002) continue
+      if (Math.abs(a.clone().sub(this.anchor).dot(n)) > 0.001) continue
       for (const p of [a, b, c]) {
         const d = p.clone().sub(this.anchor)
         const u = d.dot(along)
