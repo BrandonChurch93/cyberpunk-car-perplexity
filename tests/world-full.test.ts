@@ -336,6 +336,24 @@ describe('full roof world', () => {
     expect(world.lights).toHaveLength(8)
   })
 
+  it('concentrates occupied room fill around the southern hotel, amber block and center ranks', () => {
+    const fill = (id: string) => {
+      const shell = world.root.getObjectByName(id) as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
+      return shell.material.userData.tenantFill as [number,number]
+    }
+    const hotel = fill('hero hotel tower')
+    const amber = fill('hero amber tower')
+    const center = fill('hero middle center distance')
+    const edge = fill('hero right edge tower')
+    for (const profile of [hotel, amber, center]) expect(profile[0]).toBeGreaterThan(edge[0])
+    expect(hotel[1]).toBeGreaterThan(amber[1])
+    expect(center[1]).toBeGreaterThan(amber[1])
+    const northShells = world.root.getObjectByName('north tower ranks')!.children
+      .filter(item => item.name.startsWith('north tower shells'))
+    expect(northShells.length).toBeGreaterThan(0)
+    for (const shell of northShells) expect(fill(shell.name)[0]).toBe(0)
+  })
+
   it('fits the distant cyan shadow around the car and returns to the local macro cutoff', () => {
     const t = config.film.heroFrameSeconds
     world.beginFrame({ frame: { timeSeconds: t } } as FrameContext)
