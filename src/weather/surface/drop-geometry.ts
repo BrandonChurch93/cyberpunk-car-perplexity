@@ -511,7 +511,7 @@ const lensFragment = /* glsl */ `
     totalEmissiveRadiance += max(sharp - fresnel * getIBLRadiance(normalize(-vViewPosition), capNV, 0.02), vec3(0.0));
   #endif
   float meniscus = smoothstep(0.0, 0.08, surfLensPos.y / SURF_CAP_HS);
-  totalDiffuse = seen * (1.0 - fresnel) * mix(0.25, 1.0, meniscus);
+  totalDiffuse = seen * (1.0 - fresnel) * mix(0.6, 1.0, meniscus);
 }
 `
 
