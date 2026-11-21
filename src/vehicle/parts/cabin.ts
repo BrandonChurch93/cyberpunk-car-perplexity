@@ -10,6 +10,25 @@ export interface Cabin {
   screens: THREE.BufferGeometry
 }
 
+/**
+ * Unwelds a mesh and maps each triangle in metres onto the plane its own face normal faces most, so the carbon weave has a
+ * tangent frame with u and v well apart on every face; the welded box projection mixes planes across rounded corners.
+ */
+function faceMapped(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const out = g.toNonIndexed()
+  const P = out.getAttribute('position')
+  const uv = out.getAttribute('uv')
+  for (let i = 0; i < P.count; i += 3) {
+    const e1 = [0, 1, 2].map((k) => P.getComponent(i + 1, k) - P.getComponent(i, k))
+    const e2 = [0, 1, 2].map((k) => P.getComponent(i + 2, k) - P.getComponent(i, k))
+    const n = [Math.abs(e1[1] * e2[2] - e1[2] * e2[1]), Math.abs(e1[2] * e2[0] - e1[0] * e2[2]), Math.abs(e1[0] * e2[1] - e1[1] * e2[0])]
+    const [a, b] = n[0] >= n[1] && n[0] >= n[2] ? [2, 1] : n[1] >= n[2] ? [0, 2] : [0, 1]
+    for (let j = i; j < i + 3; j++) uv.setXY(j, P.getComponent(j, a), P.getComponent(j, b))
+  }
+  g.dispose()
+  return out
+}
+
 /** Winds every triangle to face the way its vertex normals point. */
 export function orient(g: THREE.BufferGeometry): THREE.BufferGeometry {
   const P = g.getAttribute('position')
@@ -144,5 +163,5 @@ export function cabin(): Cabin {
   seat(leather, trim, 0.37)
   seat(leather, trim, -0.37)
   steering(leather, carbon, [0.37, 0.64, 0.4], norm([0, 0.42, -1]))
-  return { leather: orient(leather.geometry()), trim: orient(trim.geometry()), carbon: orient(carbon.geometry()), screens: orient(screens.geometry()) }
+  return { leather: orient(leather.geometry()), trim: orient(trim.geometry()), carbon: faceMapped(orient(carbon.geometry())), screens: orient(screens.geometry()) }
 }
