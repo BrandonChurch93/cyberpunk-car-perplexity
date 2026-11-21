@@ -20,7 +20,7 @@ export interface GlazingSpec {
   step: number
 }
 
-export const glazingSpec: GlazingSpec = { wall: 0.004, seal: 0.012, roll: 0.0015, sealDrop: 0.0047, paneDrop: 0.0065, inset: 0.012, thickness: 0.005, step: 0.008 }
+export const glazingSpec: GlazingSpec = { wall: 0.004, seal: 0.012, roll: 0.0024, sealDrop: 0.0034, paneDrop: 0.0065, inset: 0.012, thickness: 0.005, step: 0.008 }
 
 export interface Glazing {
   panes: THREE.BufferGeometry
@@ -102,7 +102,119 @@ function seal(S: Surface, c: SurfaceCurve, spec: GlazingSpec): TessResult {
   return out
 }
 
-/** Panes, pane edges and seals for every closed glass curve on `S`, built on both sides. */
+/** Black ceramic frit width at `p`: 32 mm at the header, about 65 mm down the sides and 77 mm along the base. */
+const fritWidth = (p: V3): number => 0.032 + 0.033 * smooth(0.5, 0.75, p[2]) + 0.012 * smooth(1.3, 1.5, p[2])
+
+function smooth(a: number, b: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+
+/** The (u, v) near `uv` whose point on `S` is nearest `q`, by a few Gauss-Newton steps. */
+function project(S: Surface, uv: [number, number], q: V3): [number, number] {
+  let [u, v] = uv
+  const h = 1e-4
+  for (let k = 0; k < 4; k++) {
+    const p = S(u, v)
+    const su = scale(sub(S(Math.min(1, u + h), v), S(Math.max(0, u - h), v)), 1 / (Math.min(1, u + h) - Math.max(0, u - h)))
+    const sv = scale(sub(S(u, Math.min(1, v + h)), S(u, Math.max(0, v - h))), 1 / (Math.min(1, v + h) - Math.max(0, v - h)))
+    const r = sub(q, p)
+    const a = dot(su, su)
+    const b = dot(su, sv)
+    const c = dot(sv, sv)
+    const det = a * c - b * b
+    if (!(Math.abs(det) > 1e-20)) break
+    const x = dot(su, r)
+    const y = dot(sv, r)
+    u = Math.min(1, Math.max(0, u + (c * x - b * y) / det))
+    v = Math.min(1, Math.max(0, v + (a * y - b * x) / det))
+  }
+  return [u, v]
+}
+
+/** The frit behind the outer face, `depth` under the skin: a solid band from the pane edge in, trimmed by the distance to
+ * the glass line leaving out its run along the centerline, then rows of dots that get smaller inboard. */
+function frit(S: Surface, c: SurfaceCurve, spec: GlazingSpec, depth: number, tess: TessOptions): TessResult[] {
+  const pitch = 0.0055
+  const { p: C, uv: UV } = resample(c, pitch)
+  const n = C.length
+  const center = (i: number): boolean => Math.abs(C[i][0]) < 2e-3
+  const segs: Array<[V3, V3]> = []
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n
+    if (!(center(i) && center(j))) segs.push([C[i], C[j]])
+  }
+  const lo = C.reduce<V3>((a, p) => [Math.min(a[0], p[0]), Math.min(a[1], p[1]), Math.min(a[2], p[2])], [Infinity, Infinity, Infinity])
+  const hi = C.reduce<V3>((a, p) => [Math.max(a[0], p[0]), Math.max(a[1], p[1]), Math.max(a[2], p[2])], [-Infinity, -Infinity, -Infinity])
+  const reach = 0.2
+  const edge = (q: V3): number => {
+    if (q[0] < lo[0] - reach || q[0] > hi[0] + reach || q[1] < lo[1] - reach || q[1] > hi[1] + reach || q[2] < lo[2] - reach || q[2] > hi[2] + reach) return reach
+    let best = reach
+    for (const [a, b] of segs) {
+      const ab = sub(b, a)
+      const l2 = dot(ab, ab)
+      const t = l2 > 0 ? Math.min(1, Math.max(0, dot(sub(q, a), ab) / l2)) : 0
+      const e = sub(q, add(a, scale(ab, t)))
+      const d = Math.hypot(e[0], e[1], e[2])
+      if (d < best) best = d
+    }
+    return best
+  }
+  const band = (u: number, v: number, p: V3): number => {
+    if (!c.inside(u, v)) return 0.05
+    const d = edge(p)
+    return Math.max(spec.inset - 0.001 - d, d - spec.inset - fritWidth(p))
+  }
+  const solid = tessellate(offsetSurface(S, -depth), { ...tess, trim: band })
+  const out: TessResult = { positions: [], normals: [], uvs: [], indices: [], boundaries: [] }
+  const radii = [0.0021, 0.0015, 0.0009]
+  const sides = 8
+  for (let i = 0; i < n; i++) {
+    if (center(i)) continue
+    const ia = (i - 1 + n) % n
+    const ib = (i + 1) % n
+    const t = norm(sub(C[ib], C[ia]))
+    const nn0 = surfaceNormal(S, UV[i][0], UV[i][1])
+    const s0 = norm(cross(nn0, t))
+    const w = spec.inset + fritWidth(C[i])
+    for (const [k, r] of radii.entries()) {
+      const want = w + (k + 0.75) * pitch
+      for (const sg of [1, -1]) {
+        const uv = project(S, UV[i], add(add(C[i], scale(s0, sg * want)), scale(t, k % 2 ? 0.5 * pitch : 0)))
+        const on = S(uv[0], uv[1])
+        if (!c.inside(uv[0], uv[1]) || Math.abs(edge(on) - want) > 0.003) continue
+        const nn = surfaceNormal(S, uv[0], uv[1])
+        const o = add(on, scale(nn, -depth))
+        const e1 = norm(sub(t, scale(nn, dot(t, nn))))
+        const e2 = cross(nn, e1)
+        const base = out.positions.length / 3
+        out.positions.push(o[0], o[1], o[2])
+        out.normals.push(nn[0], nn[1], nn[2])
+        out.uvs.push(uv[0], uv[1])
+        for (let j = 0; j < sides; j++) {
+          const th = (j / sides) * Math.PI * 2
+          const q = add(o, add(scale(e1, r * Math.cos(th)), scale(e2, r * Math.sin(th))))
+          out.positions.push(q[0], q[1], q[2])
+          out.normals.push(nn[0], nn[1], nn[2])
+          out.uvs.push(uv[0], uv[1])
+        }
+        for (let j = 0; j < sides; j++) {
+          const x = base + 1 + j
+          const y = base + 1 + ((j + 1) % sides)
+          const px: V3 = [out.positions[3 * x], out.positions[3 * x + 1], out.positions[3 * x + 2]]
+          const py: V3 = [out.positions[3 * y], out.positions[3 * y + 1], out.positions[3 * y + 2]]
+          if (dot(cross(sub(px, o), sub(py, o)), nn) >= 0) out.indices.push(base, x, y)
+          else out.indices.push(base, y, x)
+        }
+        break
+      }
+    }
+  }
+  return [solid, out]
+}
+
+/** Panes, pane edges and seals for every closed glass curve on `S`, built on both sides. Roof glass, the windscreen and
+ * the rear glass, carries a black frit band behind its outer face with a dotted fade inboard, merged into the edges. */
 export function glazing(S: Surface, curves: SurfaceCurve[], fine: Tess, spec: GlazingSpec = glazingSpec): Glazing {
   const tess = { ...fine, maxEdge: Math.max(fine.maxEdge, 0.16), tolerance: Math.max(fine.tolerance, 0.004), edgeLength: Math.max(fine.edgeLength ?? 0, 0.012) }
   const normal = (u: number, v: number) => surfaceNormal(S, u, v)
@@ -116,6 +228,10 @@ export function glazing(S: Surface, curves: SurfaceCurve[], fine: Tess, spec: Gl
     panes.push(outer, flipped(back))
     edges.push(flange([outer], spec.thickness))
     seals.push(seal(S, c, spec))
+    const mid = c.uv[Math.floor(c.uv.length / 2)]
+    if (Math.abs(surfaceNormal(S, mid[0], mid[1])[1]) > 0.5) {
+      edges.push(...frit(S, c, spec, spec.paneDrop + 0.0012, { ...tess, normal }))
+    }
   }
   return { panes: toGeometry(panes, true), edges: toGeometry(edges, true), seals: toGeometry(seals, true) }
 }
