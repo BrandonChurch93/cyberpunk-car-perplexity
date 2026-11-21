@@ -351,13 +351,13 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   return {
     lamps,
     update(stage: number) {
-      const running = T.MathUtils.smoothstep(stage, lampThresholds.running, lampThresholds.running + .05)
-      const beamStart = T.MathUtils.smoothstep(stage, lampThresholds.beamStart, lampThresholds.beamStart + .05)
+      const running = stage * stage
+      const beamStart = T.MathUtils.smoothstep(stage, lampThresholds.running, lampThresholds.beamStart)
       const fullBeam = T.MathUtils.smoothstep(stage, lampThresholds.beamStart, lampThresholds.beamFull)
       const level = beamStart * (.045 + .955 * fullBeam)
       for (const l of lamps) l.level = l.beam ? level : running
       drl.emissiveIntensity = 144 * running
-      beam.emissiveIntensity = 260 * level
+      beam.emissiveIntensity = 260 * (level + (1 - level) * .045 * running)
     },
   }
 }
