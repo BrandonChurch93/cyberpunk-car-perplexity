@@ -32,10 +32,11 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
     float distance2 = dot(offset, offset);
     if (distance2 > source.a * source.a * 1.000001) continue;
     bool compact = filmLightShape[i].w > 0.5;
+    bool sharpSpot = compact || (filmLightShape[i].x > 0.0 && filmLightAxis[i].w > 0.94);
     if (local && !compact && distance2 > 900.0) continue;
     vec3 toSource;
     vec3 incident = filmLightAt(i, p, toSource);
-    if (compact && field >= 0.0 && distance2 < 81.0 && dot(-offset, filmLightAxis[i].xyz) > 0.0) {
+    if (sharpSpot && field >= 0.0 && distance2 < (compact ? 81.0 : 324.0) && dot(-offset, filmLightAxis[i].xyz) > 0.0) {
       vec3 unused;
       vec3 early = filmLightAt(i, p - delta * 0.774597, unused);
       vec3 late = filmLightAt(i, p + delta * 0.774597, unused);
@@ -47,7 +48,7 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
       const float g = 0.68;
       float q = 1.0 + g * g - 2.0 * g * mu;
       float phase = (1.0 - g * g) * inversesqrt(q * q * q);
-      light += incident * (0.015 + 0.32 * min(phase, 5.0));
+      light += incident * (0.19 * min(phase, 4.0) * smoothstep(0.06, 0.57, mu));
       continue;
     }
     bool area = filmLightShape[i].x < 0.0;
@@ -59,7 +60,7 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
     float distantPanel = area ? smoothstep(8100.0, 40000.0, distance2) * smoothstep(0.7, 2.6, field) : 0.0;
     float forwardGain = area ? 2.55 : compact ? 3.45 : 2.16;
     vec3 scattered = incident * (0.002 + (forwardGain + 4.85 * distantPanel) * forward + (area ? 0.17 : compact ? 0.16 : 0.095) * rim);
-    if (compact && field >= 0.0) flash += scattered;
+    if (sharpSpot && field >= 0.0) flash += scattered;
     else light += scattered;
   }
   vec3 total = light + flash;
@@ -204,6 +205,7 @@ void main() {
   if (uLocalFine > 0.5) peak /= 1.0 + 25.0 * max(peak.r, max(peak.g, peak.b));
   flash *= amount * gain * coverage;
   peak += flash / (1.0 + 20.0 * max(flash.r, max(flash.g, flash.b)));
+  if (mist) peak /= 1.0 + 76.0 * max(peak.r, max(peak.g, peak.b));
   if (uLayer < 0.0 && !mist) peak /= 1.0 + 32.0 * max(peak.r, max(peak.g, peak.b));
   vRadiance = veilHighlights(peak, veil);
   vVeil = veil;

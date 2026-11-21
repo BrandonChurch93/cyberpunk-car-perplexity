@@ -13,6 +13,11 @@ const slabFloor = 0.002
 const slabHeight = 0.22
 const vaporScale = 0.42
 
+type VaporDeps = Pick<WeatherDeps, 'lights'> & {
+  vehicle: Pick<WeatherDeps['vehicle'], 'root' | 'anchors'>
+  world: Pick<WeatherDeps['world'], 'deck' | 'steamSources'>
+}
+
 const optics = /* glsl */ `
 #define MAX_VAPOR_SOURCES ${maxVaporSources}
 const float TAU = 6.28318530718;
@@ -62,7 +67,7 @@ uniform vec4 uDeck;
 ${optics}
 ${filmLightsGlsl}
 
-vec3 vaporLight(vec3 p, vec3 toEye, bool deck) {
+vec3 vaporLight(vec3 p, vec3 toEye, bool deck, bool exhaust) {
   vec3 illumination = vec3(0.0);
   for (int i = 0; i < MAX_FILM_LIGHTS; ++i) {
     if (i >= filmLightCount) break;
@@ -75,7 +80,8 @@ vec3 vaporLight(vec3 p, vec3 toEye, bool deck) {
     float mu = -dot(toEye, toLight);
     float lobe = 0.51 * inversesqrt(pow(1.42 - 1.30 * mu, 3.0));
     float coupling = deck && filmLightShape[i].w > 0.5 ? 0.26 : 1.0;
-    illumination += incident * ((0.10 + lobe * 0.20) * coupling);
+    float phase = exhaust ? lobe * 0.22 * smoothstep(0.08, 0.70, mu) : (0.10 + lobe * 0.20) * coupling;
+    illumination += incident * phase;
   }
   return illumination / (1.0 + max(max(illumination.r, illumination.g), illumination.b) * 0.38);
 }
@@ -90,20 +96,41 @@ float deckSpray(vec3 p) {
   return 0.044 * edge * e * pockets;
 }
 
+vec3 exhaustRise(vec3 axis) {
+  return normalize(axis * 0.82 + vec3(0.0, 0.62, 0.0));
+}
+
+float exhaustDensity(vec3 q, vec3 axis) {
+  vec3 main = exhaustRise(axis);
+  float along = dot(q, main);
+  if (along < 0.0 || along > 0.86) return 0.0;
+  float age = along / 0.86;
+  vec3 wind = vec3(uWind.x, 0.0, uWind.y);
+  vec3 bend = wind * 0.49 + vec3(0.0, 0.56, 0.0);
+  bend -= main * dot(bend, main);
+  float phase = TAU * (17.0 * uPhase + uNoise.x) - along * 12.4;
+  vec3 side = normalize(cross(main, vec3(0.07, 1.0, 0.11)));
+  vec3 offset = bend * age * age * 0.54 + side * (0.032 * age * sin(phase));
+  vec3 p = q - main * along - offset;
+  float radius = 0.035 + 0.104 * age;
+  float radial = dot(p, p) / (radius * radius);
+  float core = exp(-2.5 * radial) * (1.0 - smoothstep(1.8, 4.0, radial));
+  float shear = 0.52 + 0.48 * smoothstep(-0.58, 0.76, smootherNoise(q * 6.0, phase));
+  float life = smoothstep(0.012, 0.10, along) * (1.0 - smoothstep(0.24, 0.86, along));
+  return 0.29 * core * life * shear;
+}
+
 float plumeDensity(vec3 q, vec3 axis, float type, float index) {
   bool vent = type < 1.5;
-  bool drain = type > 1.5 && type < 2.5;
-  bool exhaust = type > 3.5;
-  float span = vent ? 2.8 : drain ? 1.35 : 0.86;
-  vec3 main = vent || drain ? axis : vec3(0.0, 1.0, 0.0);
+  float span = vent ? 2.8 : 1.35;
+  vec3 main = axis;
   vec3 wind = vec3(uWind.x, 0.0, uWind.y);
   float y = dot(q, main);
   if (y < 0.025 || y > span) return 0.0;
   float u = y / span;
   float t = TAU * (uPhase * (vent ? 11.0 : 21.0) + index * 0.341 + uNoise.x);
-  float bend = vent ? 0.85 * y * u : drain ? (0.18 + 0.52 * sqrt(u)) : 0.47 * y;
+  float bend = vent ? 0.85 * y * u : 0.18 + 0.52 * sqrt(u);
   vec3 p = q - main * y - wind * bend;
-  if (exhaust) p -= axis * (0.055 + 0.42 * sqrt(u));
   vec3 left = cross(main, wind);
   float twist = y * (vent ? 4.9 : 9.4) - t;
   p -= left * ((vent ? 0.32 : 0.14) * u * sin(twist));
@@ -136,7 +163,7 @@ void main() {
         float density = deckSpray(p) * dt * rayLength * (1.0 - smoothstep(18.0, 26.0, t * rayLength));
         if (density > 0.00002) {
           optical += density;
-          scattered += vaporLight(p, toEye, true) * density;
+          scattered += vaporLight(p, toEye, true, false) * density;
         }
       }
     }
@@ -150,22 +177,22 @@ void main() {
     float type = uAxes[i].w;
     if (emission < 0.001) continue;
     bool vent = type < 1.5;
-    bool drain = type > 1.5 && type < 2.5;
-    vec3 main = vent || drain ? axis : vec3(0.0, 1.0, 0.0);
+    bool exhaust = type > 3.5;
+    vec3 main = exhaust ? exhaustRise(axis) : axis;
     vec3 center = source + main * (vent ? 1.25 : 0.49);
-    center += vec3(uWind.x, 0.0, uWind.y) * (vent ? 0.58 : drain ? 0.48 : 0.22);
-    if (type > 3.5) center += axis * 0.39;
-    vec2 bounds = sphereBounds(center, vent ? 2.08 : 0.95, ray);
+    center += vec3(uWind.x, 0.0, uWind.y) * (vent ? 0.58 : exhaust ? 0.04 : 0.48);
+    vec2 bounds = sphereBounds(center, vent ? 2.08 : exhaust ? 0.61 : 0.95, ray);
     float enter = max(bounds.x, uClip.x);
     float exit = min(bounds.y, scene);
     if (exit <= enter) continue;
-    float dt = (exit - enter) / 8.0;
-    for (int j = 0; j < 8; ++j) {
+    int steps = exhaust ? 17 : 8;
+    float dt = (exit - enter) / float(steps);
+    for (int j = 0; j < steps; ++j) {
       vec3 p = uEye + ray * (enter + (float(j) + 0.5) * dt);
-      float density = plumeDensity(p - source, axis, type, float(i)) * emission * dt * rayLength;
+      float density = (exhaust ? exhaustDensity(p - source, axis) : plumeDensity(p - source, axis, type, float(i))) * emission * dt * rayLength;
       if (density > 0.00002) {
         optical += density;
-        scattered += vaporLight(p, toEye, false) * density;
+        scattered += vaporLight(p, toEye, false, exhaust) * density;
       }
     }
   }
@@ -314,12 +341,11 @@ export class AirVolume implements SamplePass {
   private readonly composite = new FullscreenPass(passMaterial(compositeFragment, this.compositeUniforms))
   private readonly vapor: FullscreenPass
   private readonly position = new THREE.Vector3()
-  private readonly exhaust = new THREE.Vector3()
   private readonly direction = new THREE.Vector3()
   private readonly rotation = new THREE.Quaternion()
   private readonly corner = new THREE.Vector3()
 
-  constructor(private readonly deps: WeatherDeps) {
+  constructor(private readonly deps: VaporDeps) {
     const b = deps.world.deck.bounds
     this.vapor = new FullscreenPass(passMaterial(vaporFragment, {
       ...this.shared,
@@ -339,17 +365,13 @@ export class AirVolume implements SamplePass {
     const afterglow = 0.74 * engine(timeSeconds - 0.11) + 0.26 * engine(timeSeconds - 0.37)
     if (Math.max(power, afterglow) > 0.0001) {
       vehicle.root.updateWorldMatrix(true, false)
-      this.exhaust.copy(vehicle.anchors.exhaust.position).applyMatrix4(vehicle.root.matrixWorld)
-      for (const heat of vehicle.heatSources) {
-        if (index >= maxVaporSources) break
-        heat.object.getWorldPosition(this.position)
-        const isExhaust = this.position.distanceTo(this.exhaust) < Math.max(0.25, 1.8 * vehicle.anchors.exhaust.radius)
-        if (isExhaust) this.direction.copy(vehicle.anchors.exhaust.normal).transformDirection(vehicle.root.matrixWorld)
-        else this.direction.set(0, 1, 0)
-        source[index].set(this.position.x, this.position.y, this.position.z, heat.strength * afterglow)
-        axis[index].set(this.direction.x, this.direction.y, this.direction.z, isExhaust ? 4 : 3)
-        index++
-        if (!isExhaust || power < 0.002) continue
+      const exhaust = vehicle.anchors.exhaust
+      this.position.copy(exhaust.position).applyMatrix4(vehicle.root.matrixWorld)
+      this.direction.copy(exhaust.normal).transformDirection(vehicle.root.matrixWorld)
+      source[index].set(this.position.x, this.position.y, this.position.z, 0.66 * afterglow)
+      axis[index].set(this.direction.x, this.direction.y, this.direction.z, 4)
+      index++
+      if (power >= 0.002) {
         hot = 1
         for (const dx of [-0.9, 0.9]) for (const dy of [-0.42, 1.1]) for (const dz of [-0.9, 0.9]) {
           this.corner.copy(this.position).addScaledVector(this.direction, 0.32)
