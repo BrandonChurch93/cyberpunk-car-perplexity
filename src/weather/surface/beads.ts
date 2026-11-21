@@ -29,10 +29,10 @@ export interface BeadLayer {
 }
 
 export const beadLayers: BeadLayer[] = [
-  { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.55, steep: 0.35, lobes: 1, sparse: 0.6, dense: 1.3, hang: 0 },
-  { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.72, steep: 0.45, lobes: 1, sparse: 0.3, dense: 1.25, hang: 0 },
-  { cellMm: 6.4, minMm: 1.5, maxMm: 3.1, flat: 0.6, steep: 0.3, lobes: 1, sparse: 0.2, dense: 1.8, hang: 0.4 },
-  { cellMm: 16, minMm: 3.2, maxMm: 7.6, flat: 0.4, steep: 0.1, lobes: 1, sparse: 0, dense: 1.5, hang: 0.3 },
+  { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.15, steep: 0.35, lobes: 1, sparse: 0.6, dense: 1.3, hang: 0 },
+  { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.3, steep: 0.45, lobes: 1, sparse: 0.3, dense: 1.25, hang: 0 },
+  { cellMm: 6.4, minMm: 1.5, maxMm: 3.1, flat: 0.9, steep: 0.3, lobes: 1, sparse: 0.4, dense: 1.8, hang: 0.4 },
+  { cellMm: 16, minMm: 2.4, maxMm: 7.6, flat: 1.1, steep: 0.1, lobes: 1, sparse: 0.3, dense: 1.5, hang: 0.3 },
   { cellMm: 36, minMm: 5, maxMm: 16, flat: 1.0, steep: 0.06, lobes: 2, sparse: 0.1, dense: 2.4, hang: 1.2 },
 ]
 
