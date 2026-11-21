@@ -134,7 +134,7 @@ export function ruledFascia({ brow, chin, side, fold }: FasciaRails): FasciaSurf
   const eye = facet([corner, browTip, shoulder])
   const wrap = facet([browTip, outer, shoulder])
   const fields = [shield, ramp, duct, eye, wrap]
-  const eyeShoulder = .032, browShoulder = .054
+  const eyeShoulder = .044, browShoulder = .068
   const support = (a: typeof eye, b: typeof eye, width: number) =>
     [-1, -.5, 0, .5, 1].map(k => (p: V2) => a.depth(...p) - b.depth(...p) - width * k)
   const creases = [
@@ -162,16 +162,23 @@ export function ruledFascia({ brow, chin, side, fold }: FasciaRails): FasciaSurf
   const center = segment(centerFoot, tip), crease = segment(split, vee)
   const inner = coons(u => chin(u * fold), u => brow(u * fold), center, crease)
   const outerChart = coons(u => chin(mix(fold, 1, u)), u => brow(mix(fold, 1, u)), crease, side)
-  const lift = (p: V3, q: V3) => {
-    const t = Math.max(0, 1 - Math.hypot(p[0] - q[0], p[1] - q[1]) / (2 * frontSection.roll))
-    return (q[2] - field([q[0], q[1]])) * t * t * (3 - 2 * t)
+  const lift = (p: V3, q: V3, span: number) => {
+    const t = Math.max(0, 1 - Math.hypot(p[0] - q[0], p[1] - q[1]) / span)
+    return t * t * (3 - 2 * t)
   }
+  const residual = (q: V3) => q[2] - field([q[0], q[1]])
+  const topCorner = residual(brow(1)), lowerCorner = residual(side(0))
   const surface: Surface = (u, v) => {
     if (v === 1) return brow(u)
     if (u === 1) return side(v)
     if (v === 0) return chin(u)
     const p = u <= fold ? inner(u / fold, v) : outerChart((u - fold) / (1 - fold), v)
-    return [p[0], p[1], field([p[0], p[1]]) + lift(p, brow(u)) + lift(p, side(v))]
+    const top = brow(u), outerEdge = side(v), bottom = chin(u)
+    const t = lift(p, top, .052), o = lift(p, outerEdge, .068), b = lift(p, bottom, .046)
+    const blend = (t && t * residual(top)) + (b && b * residual(bottom))
+      + (o && o * (residual(outerEdge) - t * topCorner - b * lowerCorner))
+    const undercut = .046 * Math.sin(Math.PI * v) ** 2 * (1 - smoothstep(.19, .59, p[0]))
+    return [p[0], p[1], field([p[0], p[1]]) + blend - undercut]
   }
   fasciaCreases.set(surface, [...creases,
     { ...rolledCrease('eye-to-duct facet', shoulder, corner, eye, duct), stops: support(eye, duct, eyeShoulder) },
@@ -247,18 +254,18 @@ export function frontFace(loft: Loft): (a: number, b: number) => V3 {
   }
 }
 
-const junction: [number, number] = [192, 445]
+const junction: [number, number] = [205, 455]
 
 export const lines = {
-  eye: map(elev, [[193, 378], [254, 394], [318, 410], [328, 416], [320, 429], [254, 425], [205, 423], [189, 404]]),
-  outerIntake: map(elev, [[218, 478], [361, 491], [480, 511], [455, 553], [352, 624], [208, 624], [195, 596]]),
+  eye: map(elev, [[185, 380], [251, 389], [315, 408], [330, 419], [316, 431], [251, 427], [195, 426], [182, 405]]),
+  outerIntake: map(elev, [[224, 476], [356, 486], [490, 511], [451, 561], [357, 621], [200, 622], [184, 581]]),
   centerIntake: map(elev, [[553, 551], [745, 551], [745, 625], [589, 625], [551, 586]]),
-  drlUpper: map(elev, [[175, 394], junction]),
-  drlLower: map(elev, [junction, [158, 608]]),
-  drlStem: map(elev, [junction, [387, 461]]),
+  drlUpper: map(elev, [[163, 408], junction]),
+  drlLower: map(elev, [junction, [153, 584]]),
+  drlStem: map(elev, [junction, [379, 462]]),
 }
 
-export const guideWidth = { cut: .014, seat: .011, lens: .0075 } as const
+export const guideWidth = { cut: .0165, seat: .0135, lens: .0075 } as const
 
 export function guideProfile(radius: number) {
   const hub = lines.drlLower[0]
@@ -272,9 +279,10 @@ export function guideProfile(radius: number) {
   })
   return ends.map((tip, i) => {
     const a = angle(tip)
+    const width = tip === lines.drlUpper[0] ? radius * .64 : radius
     const cap = Array.from({ length: 13 }, (_, j): V2 => {
       const th = a + Math.PI * (j / 12 - .5)
-      return [tip[0] + radius * Math.cos(th), tip[1] + radius * Math.sin(th)]
+      return [tip[0] + width * Math.cos(th), tip[1] + width * Math.sin(th)]
     })
     const base: [V2, V2] = [corners[(i + 2) % 3], corners[i]]
     return { base, tip, cap }
@@ -396,16 +404,15 @@ function splitAt(loop: V2[], stop: Stop): [V2[], V2[]] {
   return [finish(a), finish(b)]
 }
 
-function addStops(loop: V2[], stops: readonly Stop[]): V2[] {
-  return loop.flatMap((p, i) => {
-    const q = loop[(i + 1) % loop.length]
-    const ts = stops.flatMap(stop => {
-      const dp = stop(p), dq = stop(q)
-      return dp < -1e-10 && dq > 1e-10 || dp > 1e-10 && dq < -1e-10 ? [dp / (dp - dq)] : []
-    }).sort((a, b) => a - b)
-    return [p, ...ts.map((t): V2 => [mix(p[0], q[0], t), mix(p[1], q[1], t)])]
-  })
-}
+const lerp2 = (a: V2, b: V2, t: number): V2 => [mix(a[0], b[0], t), mix(a[1], b[1], t)]
+const edgeStops = (p: V2, q: V2, stops: readonly Stop[]) => stops.flatMap(stop => {
+  const a = stop(p), b = stop(q)
+  return a < -1e-10 && b > 1e-10 || a > 1e-10 && b < -1e-10 ? [a / (a - b)] : []
+}).sort((a, b) => a - b)
+const addStops = (loop: V2[], stops: readonly Stop[]): V2[] => loop.flatMap((p, i) => {
+  const q = loop[(i + 1) % loop.length]
+  return [p, ...edgeStops(p, q, stops).map(t => lerp2(p, q, t))]
+})
 
 function gradeTriangles(input: PlaneTriangle[]): PlaneTriangle[] {
   const tris = input.filter(([a, b, c]) => Math.abs(area(a, b, c)) > 1e-13).map(([a, b, c]): PlaneTriangle =>
@@ -532,22 +539,27 @@ export const fasciaReturn = (map: SurfaceMap, aperture: Aperture): V3[] | undefi
   ringCache.get(map)?.[aperture]?.map(s => s.point)
 export const fasciaThroat = (map: SurfaceMap, aperture: Aperture): Throat[] | undefined => ringCache.get(map)?.[aperture]
 
-function eyeOpening(loop: V2[], sample: (p: V2) => { point: V3; normal: V3 }, out: TessResult): Throat[] {
-  const sign = ShapeUtils.area(loop.map(p => new Vector2(...p))) > 0 ? 1 : -1
+type FasciaSample = (p: V2) => { point: V3; normal: V3 }
+const orientation = (loop: V2[]) => ShapeUtils.area(loop.map(p => new Vector2(...p))) > 0 ? 1 : -1
+function rimMiters(loop: V2[], sign: number): V2[] {
   const count = loop.length
   const tangentIn = (a: V2, b: V2) => {
     const x = b[0] - a[0], y = b[1] - a[1], length = Math.hypot(x, y)
     return [-sign * y / length, sign * x / length] as V2
   }
-  const miters = loop.map((p, i): V2 => {
+  return loop.map((p, i): V2 => {
     const a = tangentIn(loop[(i + count - 1) % count], p), b = tangentIn(p, loop[(i + 1) % count])
     const d = 1 + a[0] * b[0] + a[1] * b[1]
     return [(a[0] + b[0]) / d, (a[1] + b[1]) / d]
   })
-  const radius = openingRoll * .72
+}
+
+function returnOpening(loop: V2[], sample: FasciaSample, out: TessResult, round = openingRoll): Throat[] {
+  const sign = orientation(loop), count = loop.length, miters = rimMiters(loop, sign)
+  const radius = round * .72
   const profiles = [0, 1, 2, 3, 4].map(i => {
     const a = i * Math.PI / 8
-    return [radius * Math.sin(a), openingRoll * (1 - Math.cos(a))]
+    return [radius * Math.sin(a), round * (1 - Math.cos(a))]
   }).concat([[radius + .0006, .008], [radius + .0014, rollDepth]])
   const rows = profiles.map(([inset, depth]) => loop.map(([x, y], i): V3 => {
     const { point: p } = sample([x + inset * miters[i][0], y + inset * miters[i][1]])
@@ -573,6 +585,115 @@ function eyeOpening(loop: V2[], sample: (p: V2) => { point: V3; normal: V3 }, ou
   return rows[last].map((point, i) => ({
     point, seat: rows[4][i], inward: norm(sub(point, rows[last - 1][i])), normal: normals[last][i],
   }))
+}
+
+type Collar = { rim: V2[]; field: V2[]; blade: (p: V2) => number }
+function collar(loop: V2[], stops: readonly Stop[], width: (p: V2) => number, blade: (p: V2) => number): Collar {
+  const miters = rimMiters(loop, orientation(loop))
+  const edge = loop.map(([x, y], i): V2 => {
+    const w = width(loop[i])
+    return [x - w * miters[i][0], y - w * miters[i][1]]
+  })
+  const stations = loop.flatMap((p, i) => {
+    const j = (i + 1) % loop.length, a = edge[i], b = edge[j]
+    return [0, ...edgeStops(a, b, stops)].map(t => ({ rim: lerp2(p, loop[j], t), field: lerp2(a, b, t) }))
+  }).filter((p, i, all) => {
+    const q = all[(i + 1) % all.length]
+    return Math.hypot(p.field[0] - q.field[0], p.field[1] - q.field[1]) > 1e-8
+  })
+  return { rim: stations.map(p => p.rim), field: stations.map(p => p.field), blade }
+}
+
+function collarSurface({ rim, field, blade }: Collar, sample: FasciaSample, out: TessResult, shell: TessResult): void {
+  const stations = [0, .22, .48, .72, 1]
+  const rows = stations.map(t => rim.map((p, i) => {
+    const s = sample(lerp2(field[i], p, t))
+    return { normal: s.normal, point: [s.point[0], s.point[1], s.point[2] + blade(p) * Math.sin(Math.PI * t) ** 2] as V3 }
+  }))
+  const count = rim.length, sign = orientation(rim)
+  const base = out.positions.length / 3, back = shell.positions.length / 3
+  for (const [j, row] of rows.entries()) {
+    for (const [i, s] of row.entries()) {
+      const before = norm(sub(s.point, row[(i + count - 1) % count].point))
+      const after = norm(sub(row[(i + 1) % count].point, s.point))
+      const along = add(before, after)
+      const across = sub(rows[Math.min(j + 1, rows.length - 1)][i].point, rows[Math.max(j - 1, 0)][i].point)
+      const n = j === 0 || j === rows.length - 1 ? s.normal : scale(norm(cross(along, across)), sign)
+      vertex(out, s.point, n)
+      vertex(shell, [s.point[0], s.point[1], s.point[2] - rollDepth], n)
+    }
+  }
+  for (let j = 0; j < rows.length - 1; j++) {
+    for (let i = 0; i < count; i++) {
+      const a = j * count + i, b = j * count + (i + 1) % count
+      const quad = sign > 0 ? [a, b, b + count, a, b + count, a + count] : [a, b + count, b, a, a + count, b + count]
+      out.indices.push(...quad.map(k => base + k))
+      shell.indices.push(...quad.map(k => back + k))
+    }
+  }
+}
+
+const bumperGap = .004, bumperEdgeRoll = .0015, bumperReturn = .0108
+function bumperEdge(map: SurfaceMap, uEdge: readonly number[], vEdge: readonly number[]) {
+  const row = (p: V2, distance: number): V2 => {
+    const start = map.S(...p)
+    const at = (axis: 0 | 1) => {
+      if (p[axis] !== 1) return p[axis]
+      const q = [...p] as V2
+      let lo = .95, hi = 1
+      for (let i = 0; i < 14; i++) {
+        const t = (lo + hi) / 2
+        q[axis] = t
+        if (len(sub(start, map.S(...q))) > distance) lo = t
+        else hi = t
+      }
+      return (lo + hi) / 2
+    }
+    return [at(0), at(1)]
+  }
+  const skinDistance = bumperGap + bumperEdgeRoll
+  const [u, v] = row([1, 1], skinDistance)
+  const pins: V2[] = [
+    ...vEdge.filter(t => t < v - .0005).map((t): V2 => [1, t]),
+    [1, 1],
+    ...[...uEdge].reverse().filter(t => t < u - .0005).map((t): V2 => [t, 1]),
+  ]
+  return pins.map(p => ({
+    section: [0, 1, 2, 3, 4, 5].map(i => {
+      const a = Math.min(i, 4) * Math.PI / 8
+      return row(p, skinDistance - bumperEdgeRoll * Math.sin(a))
+    }),
+  }))
+}
+
+function bumperFlange(rail: V2[][], sample: FasciaSample, stops: readonly Stop[], out: TessResult): void {
+  const columns = rail.flatMap((a, i) => {
+    if (i === rail.length - 1) return [a]
+    const b = rail[i + 1]
+    return [a, ...edgeStops(a[0], b[0], stops).map(t => a.map((p, j) => lerp2(p, b[j], t)))]
+  })
+  const points = columns.map(column => column.map((p, j) => {
+    const { point, normal } = sample(p)
+    const a = Math.min(j, 4) * Math.PI / 8
+    const depth = j === 5 ? bumperReturn : bumperEdgeRoll * (1 - Math.cos(a))
+    return { point: addScaled(point, normal, -depth), normal }
+  }))
+  const base = out.positions.length / 3, rows = rail[0].length
+  for (const [i, column] of points.entries()) {
+    for (const [j, { point, normal }] of column.entries()) {
+      const along = sub(points[Math.min(i + 1, points.length - 1)][j].point, points[Math.max(0, i - 1)][j].point)
+      const across = sub(column[Math.min(j + 1, rows - 1)].point, column[Math.max(0, j - 1)].point)
+      let n = j === 0 ? normal : norm(cross(across, along))
+      if (i === points.length - 1) n = norm([0, n[1], n[2]])
+      vertex(out, point, n)
+    }
+  }
+  for (let i = 1; i < points.length; i++) {
+    for (let j = 0; j < rows - 1; j++) {
+      const a = base + (i - 1) * rows + j, b = a + rows
+      out.indices.push(a, a + 1, b + 1, a, b + 1, b)
+    }
+  }
 }
 
 function rolledOpening(positions: V3[], normals: V3[], out: TessResult): Throat[] {
@@ -621,12 +742,6 @@ export function tessellateFascia(map: SurfaceMap, openings: Cuts['holes'], uEdge
     }
     if (notch[0][1] < notch.at(-1)![1]) notch.reverse()
   }
-  const side: V2[] = [
-    ...uEdge.map((u): V2 => [u, 0]),
-    ...vEdge.slice(1).map((v): V2 => [1, v]),
-    ...[...uEdge].reverse().slice(1).map((u): V2 => [u, 1]),
-    ...notch,
-  ]
   const exact = new Map<string, V2>()
   const project = (uv: V2): V2 => {
     const [x, y] = map.S(...uv), xy: V2 = [x, y]
@@ -638,22 +753,28 @@ export function tessellateFascia(map: SurfaceMap, openings: Cuts['holes'], uEdge
     const a = project([u, 0]), b = project([atBrow, 1])
     return p => -area(a, b, p)
   })
-  const seam = [...vEdge.map((v): V2 => [1, v]), ...[...uEdge].reverse().slice(1).map((u): V2 => [u, 1])].map(project)
-  const stops = [...numeric, ...fittedFasciaCreases(map.S).flatMap(c => c.stops)].map(stop => {
-    const pins = new Set<string>()
-    for (let i = 1; i < seam.length; i++) {
-      const a = seam[i - 1], b = seam[i], da = stop(a), db = stop(b)
-      if (da * db < 0) pins.add(chartKey(Math.abs(da) < Math.abs(db) ? a : b))
-    }
-    return (p: V2) => pins.has(chartKey(p)) ? 0 : stop(p)
-  })
+  const edge = bumperEdge(map, uEdge, vEdge)
+  const rail = edge.map(p => p.section.map(project))
+  const side: V2[] = [
+    ...uEdge.filter(u => u < edge[0].section[0][0] - .0005).map(u => project([u, 0])),
+    ...rail.map(r => r[0]),
+    ...notch.map(project),
+  ]
+  const stops = [...numeric, ...fittedFasciaCreases(map.S).flatMap(c => c.stops)]
   const sample = (p: V2) => {
     const uv = exact.get(chartKey(p)) ?? fasciaUV(map, ...p)
     return { point: [p[0], p[1], map.S(...uv)[2]] as V3, normal: normalAt(map.S, uv) }
   }
-  const border = addStops(finish(side.map(project)), stops)
-  const holes = [eye, outer, slot, ...(notch.length ? [] : [grille])].map(loop => addStops(finish(loop.map(project)), stops))
-  const skin = blank(), shell = blank()
+  const border = addStops(finish(side), stops)
+  const chart = (loop: V2[]) => finish(loop.map(project))
+  const eyeLoop = addStops(chart(eye), stops)
+  const outerCollar = collar(chart(outer), stops,
+    ([x, y]) => .007 + .021 * (1 - smoothstep(.21, .36, y)) * (1 - smoothstep(.66, .87, x)),
+    ([x, y]) => .014 * (1 - smoothstep(.235, .36, y)) * (1 - smoothstep(.68, .89, x)))
+  const slotCollar = collar(chart(slot), stops, () => .0045, () => 0)
+  const grilleLoop = notch.length ? [] : addStops(chart(grille), stops)
+  const holes = [eyeLoop, outerCollar.field, slotCollar.field, ...(grilleLoop.length ? [grilleLoop] : [])]
+  const skin = blank(), shell = blank(), lip = blank()
   const cache = new Map<string, number>()
   const floatKeys: string[] = []
   const id = (xy: V2) => {
@@ -676,15 +797,17 @@ export function tessellateFascia(map: SurfaceMap, openings: Cuts['holes'], uEdge
     skin.indices.push(...abc)
     shell.indices.push(...abc)
   })
-  const lip = blank()
-  const rings: Partial<Record<Aperture, Throat[]>> = {}
-  for (const [i, loop] of holes.entries()) {
-    if (i === 0) {
-      rings.eye = eyeOpening(loop, sample, lip)
-      continue
-    }
-    const ps = loop.map(sample)
-    rings[(['eye', 'outer', 'slot', 'center'] as const)[i]] = rolledOpening(ps.map(p => p.point), ps.map(p => p.normal), lip)
+  bumperFlange(rail, sample, stops, lip)
+  collarSurface(outerCollar, sample, lip, shell)
+  collarSurface(slotCollar, sample, lip, shell)
+  const rings: Partial<Record<Aperture, Throat[]>> = {
+    eye: returnOpening(eyeLoop, sample, lip),
+    outer: returnOpening(outerCollar.rim, sample, lip),
+    slot: returnOpening(slotCollar.rim, sample, lip, .0024),
+  }
+  if (grilleLoop.length) {
+    const ps = grilleLoop.map(sample)
+    rings.center = rolledOpening(ps.map(p => p.point), ps.map(p => p.normal), lip)
   }
   if (notch.length) {
     const half = addStops(finish(notch.map(project)), stops).map(sample)

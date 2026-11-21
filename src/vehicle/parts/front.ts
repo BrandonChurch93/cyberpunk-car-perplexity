@@ -144,13 +144,18 @@ function chamber(loop: T.Vector3[], depth: number, taper: number, slope: number,
   return { wall, throat: rings.at(-1)!, center: center.z - depth }
 }
 
-function grille(throat: T.Vector3[], frontZ: number, full: boolean): T.BufferGeometry {
-  const outer = throat.filter((_, i) => i % 4 === 0).map(p => new T.Vector2(p.x, p.y))
+function grille(throat: T.Vector3[], frontZ: number, full: boolean, slope = 0): T.BufferGeometry {
+  const samples = throat.filter((_, i) => i % 4 === 0).map(p => new T.Vector2(Math.fround(p.x), Math.fround(p.y)))
+  const outer = samples.filter((p, i) => {
+    const a = samples[(i + samples.length - 1) % samples.length], b = samples[(i + 1) % samples.length]
+    const k = b.clone().sub(a), d = p.clone().sub(a)
+    return d.dot(p.clone().sub(b)) >= 0 || Math.abs(k.cross(d)) > .000015 * k.length()
+  })
+  if (T.ShapeUtils.isClockWise(outer)) outer.reverse()
   const bounds = new T.Box2().setFromPoints(outer)
   const holes: T.Vector2[][] = []
   const pitch = full ? .019 : .024, land = full ? .0014 : .0018
   const r = (pitch - land) / Math.sqrt(3), dy = pitch * Math.sqrt(3) / 2
-  const outlineShape = new T.Shape(outer)
   const inset = (v: T.Vector2) => {
     let inside = false
     for (let i = 0, j = outer.length - 1; i < outer.length; j = i++) {
@@ -167,16 +172,36 @@ function grille(throat: T.Vector3[], frontZ: number, full: boolean): T.BufferGeo
     for (let x = (row % 2) * pitch / 2; x < bounds.max.x + pitch; x += pitch) {
       for (const sign of x === 0 ? [1] : [-1, 1]) {
         const hex = Array.from({ length: 6 }, (_, i) => {
-          const a = (i + .5) * Math.PI / 3
-          return new T.Vector2(sign * x + r * Math.cos(a), y + r * Math.sin(a))
+          const a = -(i + .5) * Math.PI / 3
+          return new T.Vector2(Math.fround(sign * x + r * Math.cos(a)), Math.fround(y + r * Math.sin(a)))
         })
         if (hex.every(inset)) holes.push(hex)
       }
     }
   }
-  outlineShape.holes = holes.map(h => new T.Path(h))
-  const g = new T.ExtrudeGeometry(outlineShape, { steps: 1, depth: .008, bevelEnabled: false, curveSegments: 1 })
-  return compactSurface(g.translate(0, 0, frontZ - .008))
+  const loops = [outer, ...holes], points = loops.flat(), depth = .008
+  const builder = new MeshBuilder(), x0 = average(throat).x
+  const z = (p: T.Vector2) => frontZ + slope * (p.x - x0)
+  const n = new T.Vector3(-slope, 0, 1).normalize()
+  const front = points.map(p => builder.vertex([p.x, p.y, z(p)], n.toArray(), p.x, p.y))
+  const rear = points.map(p => builder.vertex([p.x, p.y, z(p) - depth], n.clone().negate().toArray(), p.x, p.y))
+  for (const [a, b, c] of T.ShapeUtils.triangulateShape(outer, holes)) {
+    const p = points[a], e = points[b].clone().sub(p), f = points[c].clone().sub(p)
+    if (Math.abs(e.cross(f)) <= 1e-11) continue
+    const [j, k] = e.cross(f) > 0 ? [b, c] : [c, b]
+    builder.tri(front[a], front[j], front[k])
+    builder.tri(rear[a], rear[k], rear[j])
+  }
+  for (const loop of loops) for (const [i, a] of loop.entries()) {
+    const b = loop[(i + 1) % loop.length], dx = b.x - a.x, dy = b.y - a.y, length = Math.hypot(dx, dy)
+    const n: V3 = [dy / length, -dx / length, 0]
+    const p = builder.vertex([a.x, a.y, z(a) - depth], n, 0, 0)
+    const q = builder.vertex([b.x, b.y, z(b) - depth], n, length, 0)
+    const r = builder.vertex([b.x, b.y, z(b)], n, length, depth)
+    const s = builder.vertex([a.x, a.y, z(a)], n, 0, depth)
+    builder.quad(p, q, r, s)
+  }
+  return compactSurface(builder.geometry())
 }
 
 function radiator(throat: T.Vector3[], full: boolean): T.BufferGeometry {
@@ -459,8 +484,8 @@ function splitter(S: Surface, full: boolean): T.BufferGeometry {
     const [x, y, z] = S(Math.abs(u), 0)
     return new T.Vector3(Math.sign(u) * x, y, z)
   })
-  const rolls = [[-.015, .004], [.038, .002], [.057, 0], [.064, -.004],
-    [.066, -.009], [.062, -.014], [.045, -.019]]
+  const rolls = [[-.015, .006], [.032, .004], [.051, .002], [.059, -.004],
+    [.061, -.011], [.057, -.017], [.044, -.022]]
   const rows = positions.map((p, i) => rolls.map(([dz, dy]) => {
     const t = Math.abs(i - count) / count
     const tip = p.z + dz * (dz > 0 ? 1 - T.MathUtils.smoothstep(t, .89, 1) : 1)
@@ -530,10 +555,12 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
       lamps.push({ object, beam, stage: beam ? lampThresholds.beamStart : lampThresholds.running, level: 0, color: material.emissive.clone(), intensity })
     }
   }
-  const intake = pocketAt('outer', .177, .93, -.38)
+  const ductSlope = -.42
+  const intake = pocketAt('outer', .215, .89, ductSlope)
   add('front outer duct returns', merged([intake.wall, radiatorSeat(intake.throat)]), m.housing, true)
-  add('front radiator fins', radiator(intake.throat, full), m.mesh, true)
-  add('front radiator cores', face(intake.throat, .028), m.housing, true)
+  add('front outer intake hex mesh', grille(intake.throat, intake.center - .009, full, ductSlope), m.mesh, true)
+  add('front radiator fins', radiator(intake.throat, full).translate(0, 0, -.014), m.housing, true)
+  add('front radiator cores', face(intake.throat, .044), m.housing, true)
   const mouth = pocketAt('center', .137, .92, 0)
   add('front centre duct returns', mouth.wall, m.housing)
   add('front extruded hex grille', grille(mouth.throat, mouth.center, full), m.mesh)
@@ -553,7 +580,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   const reflector = m.reflector ?? tag(new T.MeshStandardMaterial({ color: 0xc4c9ce, metalness: 1, roughness: .11 }), 'none')
   const facetReturn = tag(new T.MeshStandardMaterial({ color: 0x626262, metalness: .71, roughness: .32 }), 'none')
   const bowl = outline(eye)
-  const pocket = pocketAt('eye', .092, .94, -.95)
+  const pocket = pocketAt('eye', .101, .94, -.95)
   add('front eye housing returns', pocket.wall, m.housing, true)
   add('front eye housing back', face(pocket.throat), m.housing, true)
   const coverRing = fasciaThroat(map, 'eye')?.map(s => vector(s.seat)) ?? bowl
@@ -575,8 +602,8 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
     const flip = signedArea(slot) < 0
     add('front Y guide seat', merged([grid([slot, low], flip, true), face(flip ? [...low].reverse() : low)]), m.housing, true, guideAssembly)
   }
-  add('front Y guide bezel', guide(map, guideWidth.seat, .0045, .0003), m.housing, true, guideAssembly)
-  add('front Y running guide', guide(map, guideWidth.lens, -.0004, .00032), drl, true, guideAssembly)
+  add('front Y guide bezel', guide(map, guideWidth.seat, .007, .00045), m.housing, true, guideAssembly)
+  add('front Y running guide', guide(map, guideWidth.lens, .0034, .00032), drl, true, guideAssembly)
   emit('front running guide', vector(drlL.p[0]).addScaledVector(forward, .008), false, drl, 3.99)
   const beam = tag(m.beamLens.clone(), 'none')
   beam.emissive.setHex(0xe4f3ff)
