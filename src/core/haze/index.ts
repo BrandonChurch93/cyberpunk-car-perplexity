@@ -351,6 +351,8 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   vec3 hit = origin + far * ray;
   float wakeGain = cameraWake ? smoothstep(${atmosphere.projectorWakeFocus.join(', ')}, focusDistance) : 0.0;
   float frontDeck = frontDeckWeight(hit, ray, wakeGain);
+  // Air carries local light scatter along the short foreground deck paths.
+  float localScatterWeight = 1.0 - frontDeck;
   float deckAir = 1.0 - ${atmosphere.projectorDeckExtinctionLoss} * frontDeck;
   vec2 footprint = deckInterval(origin, ray);
   vec2 layer = layerInterval(origin, ray, footprint);
@@ -424,7 +426,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
         float close = 1.0 - smoothstep(1.0, 3.0, sourceDistance / shape.y);
         strength *= 1.0 + 1.1 * sourceChroma * close;
       }
-      radiance += color.rgb * glow * angular * exp(-glowDepth) * falloff * falloff * strength
+      radiance += (distantArea ? 1.0 : localScatterWeight) * color.rgb * glow * angular * exp(-glowDepth) * falloff * falloff * strength
         * densityAt(tGlow, glowPoint.y, layer, cityStart) * phase(dot(ray, glowDirection) / glowDistance, anisotropy) * foregroundScatter(tGlow);
       continue;
     }
@@ -485,7 +487,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
           receive = mix(receiver, 1.0, opening * span * smoothstep(${atmosphere.projectorOpeningClearance.join(', ')}, clearance));
         }
       } else {
-        inScatter = densityAt(t, p.y, layer, cityStart) * phase(cosine, anisotropy) * scatterFraction;
+        inScatter = localScatterWeight * densityAt(t, p.y, layer, cityStart) * phase(cosine, anisotropy) * scatterFraction;
       }
       radiance += light * (visible * weight * inScatter * receive
         * exp(-opticalDepth) * foregroundScatter(t) * projectorGain);
