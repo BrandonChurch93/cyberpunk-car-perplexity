@@ -1,8 +1,9 @@
 import type * as THREE from 'three'
-import type { SurfaceCurve } from '../geom/cuts'
+import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
+import { lines } from '../body/tail'
 import { MeshBuilder } from '../geom/mesh'
 import { add, cross, norm, scale, type V2, type V3 } from '../geom/vec'
-import { merge, solid } from './solid'
+import { merge, pocket, solid } from './solid'
 
 /** Hex outlet from the patent rear view and photos: aperture, lip, pipes, depths into the body. */
 export const outletSpec = {
@@ -40,21 +41,22 @@ interface Frame {
 
 const at = (f: Frame, a: number, b: number, s: number): V3 => add(add(add(f.o, scale(f.ex, a)), scale(f.ey, b)), scale(f.ez, s))
 
-/** Least squares plane z = c0 + c1 x + c2 y through the points. */
+/** Least squares line z = c0 + c2 y through the points, so the frame is square to the centre line. */
 function fitPlane(pts: V3[]): [number, number, number] {
-  const A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
-  const r = [0, 0, 0]
+  let n = 0
+  let sy = 0
+  let sz = 0
+  let syy = 0
+  let syz = 0
   for (const p of pts) {
-    const row = [1, p[0], p[1]]
-    for (let i = 0; i < 3; i++) {
-      r[i] += row[i] * p[2]
-      for (let j = 0; j < 3; j++) A[i][j] += row[i] * row[j]
-    }
+    n++
+    sy += p[1]
+    sz += p[2]
+    syy += p[1] * p[1]
+    syz += p[1] * p[2]
   }
-  const det = (M: number[][]): number => M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0])
-  const d = det(A)
-  const col = (k: number): number[][] => A.map((row, i) => row.map((v, j) => (j === k ? r[i] : v)))
-  return [det(col(0)) / d, det(col(1)) / d, det(col(2)) / d]
+  const c2 = (n * syz - sy * sz) / (n * syy - sy * sy)
+  return [(sz - c2 * sy) / n, 0, c2]
 }
 
 /** Rounded stretched hexagon as fillet centres and unit directions, so any offset keeps the same parameters. */
@@ -125,44 +127,17 @@ function disk(f: Frame, loop: Array<{ c: V2; n: V2 }>, base: number, d: number, 
   return solid([centre(s0), ring(s0), ring(s1), centre(s1)], [true, true, true, true])
 }
 
-/** Ray from the origin along `dir` to a closed polygon, nearest positive hit. */
-function rayHit(poly: V2[], dir: V2): number {
-  let best = Infinity
-  for (let i = 0; i < poly.length; i++) {
-    const p = poly[i]
-    const q = poly[(i + 1) % poly.length]
-    const ex = q[0] - p[0]
-    const ey = q[1] - p[1]
-    const den = dir[0] * ey - dir[1] * ex
-    if (Math.abs(den) < 1e-12) continue
-    const t = (p[0] * ey - p[1] * ex) / den
-    const u = (p[0] * dir[1] - p[1] * dir[0]) / den
-    if (t > 0 && u >= 0 && u <= 1) best = Math.min(best, t)
-  }
-  return best
-}
-
 /**
  * Two hex outlets, left side (x > 0), seated in the paint's surround aperture: a ceramic lip tube with rolled mouth,
  * two round pipes with rolled ends and soot inside, a back plate, and a dark housing whose returned wall continues the
  * paint's flange down to a floor that the lip stands out of.
  */
-export function outlets(surround: SurfaceCurve): Outlets {
+export function outlets(rm: SurfaceMap, surround: SurfaceCurve): Outlets {
   const sp = outletSpec
   const pts = surround.p
   const [c0, c1, c2] = fitPlane(pts)
-  let x0 = Infinity
-  let x1 = -Infinity
-  let y0 = Infinity
-  let y1 = -Infinity
-  for (const p of pts) {
-    x0 = Math.min(x0, p[0])
-    x1 = Math.max(x1, p[0])
-    y0 = Math.min(y0, p[1])
-    y1 = Math.max(y1, p[1])
-  }
-  const cx = (x0 + x1) / 2 + 0.008
-  const cy = (y0 + y1) / 2
+  const cx = (Math.min(...lines.exhaust.map((q) => q[0])) + Math.max(...lines.exhaust.map((q) => q[0]))) / 2
+  const cy = (Math.min(...lines.exhaust.map((q) => q[1])) + Math.max(...lines.exhaust.map((q) => q[1]))) / 2
   const ex = norm([1, 0, c1])
   const ey0: V3 = [0, 1, c2]
   const ez = norm(cross(ex, ey0))
@@ -200,45 +175,8 @@ export function outlets(surround: SurfaceCurve): Outlets {
     merge(soot, disk(f, loop, pr.r, -pr.wall - 0.0005, pr.soot, pr.soot + 0.004, dx))
   }
 
-  const local: V2[] = pts.map((p) => {
-    const q: V3 = [p[0] - f.o[0], p[1] - f.o[1], p[2] - f.o[2]]
-    return [q[0] * ex[0] + q[1] * ex[1] + q[2] * ex[2], q[0] * ey[0] + q[1] * ey[1] + q[2] * ey[2]]
-  })
-  const depthAt = (a: number, b: number): number => {
-    let best = Infinity
-    let s = 0
-    for (let i = 0; i < local.length; i++) {
-      const d = Math.hypot(local[i][0] - a, local[i][1] - b)
-      if (d < best) {
-        best = d
-        const q: V3 = [pts[i][0] - f.o[0], pts[i][1] - f.o[1], pts[i][2] - f.o[2]]
-        s = q[0] * ez[0] + q[1] * ez[1] + q[2] * ez[2]
-      }
-    }
-    return s
-  }
-  const flange = 0.012
-  const fillet = 0.006
-  const back = 0.003
-  const under = sp.lip - 0.003
-  const rows: V3[][] = [[], [], [], [], [], [], [], []]
-  for (const e of hex) {
-    const hp: V2 = [e.c[0] + e.n[0] * (rc + under), e.c[1] + e.n[1] * (rc + under)]
-    const dir = normalize2(hp)
-    const R = rayHit(local, dir)
-    const pt = (rr: number, s: number): V3 => at(f, dir[0] * rr, dir[1] * rr, s)
-    const s0 = depthAt(dir[0] * R, dir[1] * R) + flange
-    const ri = R - 0.001
-    rows[0].push(pt(ri, s0))
-    rows[1].push(pt(ri, sp.floor - fillet))
-    rows[2].push(pt(ri - fillet * (1 - Math.SQRT1_2), sp.floor - fillet * (1 - Math.SQRT1_2)))
-    rows[3].push(pt(ri - fillet, sp.floor))
-    rows[4].push(at(f, hp[0], hp[1], sp.floor))
-    rows[5].push(at(f, hp[0], hp[1], sp.floor + back))
-    rows[6].push(pt(ri + back, sp.floor + back))
-    rows[7].push(pt(ri + back, s0))
-  }
-  const housing = solid(rows, [true, false, false, false, true, true, true, true])
+  const mouth = hex.map((e): V2 => [e.c[0] + e.n[0] * (rc + sp.wall + 0.001), e.c[1] + e.n[1] * (rc + sp.wall + 0.001)])
+  const housing = pocket(rm, surround, { o: f.o, ex, ey, ez }, sp.floor, [mouth], 0.004)
 
   return { lip: lip.geometry(), pipes: pipes.geometry(), soot: soot.geometry(), housing: housing.geometry(), center: f.o, normal: scale(ez, -1) }
 }

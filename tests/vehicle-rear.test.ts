@@ -2,10 +2,10 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { dims } from '../src/vehicle/body/shape'
 import { openEdges, windingAgreement } from './vehicle-rear-mesh'
-import { centreY, floorY, sheet, strakes, tailZ, underbody, valance } from '../src/vehicle/parts/diffuser'
+import { centreY, floorY, meshZ, sheet, strakes, tailZ, underbody, valance } from '../src/vehicle/parts/diffuser'
 import { buildBody } from '../src/vehicle/body/body'
 import { mainLoft } from '../src/vehicle/body/shape'
-import { rearFace } from '../src/vehicle/body/tail'
+import { bumper, cornerCut, cornerFront, rearFace } from '../src/vehicle/body/tail'
 import { outlets } from '../src/vehicle/parts/outlets'
 import { taillamps } from '../src/vehicle/parts/taillamps'
 import { engineBay } from '../src/vehicle/parts/enginebay'
@@ -64,8 +64,8 @@ describe('rear underbody', () => {
 describe('rear module', () => {
   const body = buildBody({ maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, edgeLength: 0.007 })
   const c = body.cuts.curves
-  const ex = outlets(c.surround)
-  const tl = taillamps(body.cuts.maps.rear, [c.stem, c.lampU, c.lampL, c.chev])
+  const ex = outlets(body.cuts.maps.rear, c.surround)
+  const tl = taillamps(body.cuts.maps.rear, [c.stem, c.lampU, c.lampL, c.chev], c.lens, c.slot)
   const va = valance(c.lower, body.cuts.maps.rear)
   const bay = engineBay(c.bay, 0.02)
   const closed: Array<[string, THREE.BufferGeometry]> = [
@@ -124,5 +124,24 @@ describe('rear module', () => {
       }
     }
     expect(bay.grilleNormal[1]).toBeGreaterThan(0.9)
+  })
+  it('opens the corners behind the rear wheels below the bumper and nowhere else', () => {
+    expect(cornerCut([0.8, 0.3, -2.2])).toBeGreaterThan(0.02)
+    expect(cornerCut([-0.8, bumper - 0.05, cornerFront - 0.1])).toBeGreaterThan(0)
+    expect(cornerCut([0.3, 0.3, -2.2])).toBeLessThan(0)
+    expect(cornerCut([0.8, bumper + 0.02, -2.2])).toBeLessThan(0)
+    expect(cornerCut([0.8, 0.3, cornerFront + 0.05])).toBeLessThan(0)
+  })
+
+  it('sets the lower mesh well back inside the opening, under the bumper', () => {
+    va.panel.computeBoundingBox()
+    const box = va.panel.boundingBox!
+    expect(box.max.y).toBeLessThan(bumper + 0.01)
+    expect(box.max.x).toBeLessThan(0.62)
+    const pos = va.panel.getAttribute('position')
+    for (let i = 0; i < pos.count; i += 11) {
+      if (Math.abs(pos.getX(i)) < 0.55) expect(pos.getZ(i)).toBeGreaterThan(meshZ - 0.01)
+    }
+    expect(meshZ - (-dims.halfLength)).toBeGreaterThan(0.25)
   })
 })
