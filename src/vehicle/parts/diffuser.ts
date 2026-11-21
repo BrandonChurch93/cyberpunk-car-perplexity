@@ -4,7 +4,7 @@ import { add, clamp, cross, norm, scale, sub, type V2, type V3 } from '../geom/v
 import { dims, mainLoft } from '../body/shape'
 import { bumper } from '../body/tail'
 import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
-import { flat, merge } from './solid'
+import { finish, flat, merge } from './solid'
 import { honeycomb } from './enginebay'
 
 /** Plate and strake thickness. Every free edge is a full round of half this. */
@@ -17,11 +17,18 @@ export const floorY = 0.115
 /** Diffuser angle from the factory release: 11 degrees in the centre. Outboard of the outer strakes the corner is open. */
 const centre = { start: -1.15, slope: Math.tan((11 * Math.PI) / 180), blend: 0.3 }
 
-/** Strakes: two each side, 845 and 1300 apart, the outer ones leaning out at the foot. */
+/** Strakes: four thin blades each side at even spacing, the outer ones leaning out at the foot. */
 export const strakes = [
-  { x: 0.4225, lean: 0, lead: -1.78, foot: -1.92, low: 0.13 },
+  { x: 0.1625, lean: 0, lead: -1.8, foot: -1.94, low: 0.13 },
+  { x: 0.325, lean: 0, lead: -1.8, foot: -1.94, low: 0.13 },
+  { x: 0.4875, lean: 0, lead: -1.8, foot: -1.94, low: 0.13 },
   { x: 0.65, lean: (6 * Math.PI) / 180, lead: -1.84, foot: -1.97, low: 0.135 },
 ] as const
+
+/** Strake blade thickness; its edges are full rounds of half this. */
+const blade = 0.004
+const br = blade / 2
+const outer = strakes[strakes.length - 1]
 
 /** Rear lower edge of the body seen from behind, at the diffuser exit height (x, z), measured on build A's body. */
 const tailEdge: V2[] = [
@@ -83,7 +90,7 @@ const leanAxis = 0.29
 
 /** Half width of the outer strake's mid plane at height y. */
 function outerX(y: number): number {
-  const s = strakes[1]
+  const s = outer
   return s.x - ((y - leanAxis) / Math.cos(s.lean)) * Math.sin(s.lean)
 }
 
@@ -92,7 +99,7 @@ function centreEdge(z: number): number {
   const notch = dims.rearHubZ + 0.44
   if (z >= notch) return floorWidth(z)
   const fin = outerX(centreY(z) + r) - 0.002
-  const t = clamp((notch - z) / (notch - strakes[1].lead), 0, 1)
+  const t = clamp((notch - z) / (notch - outer.lead), 0, 1)
   return floorWidth(notch) + (fin - floorWidth(notch)) * t * t * (3 - 2 * t)
 }
 
@@ -213,28 +220,27 @@ function rounded(poly: V2[], radii: number[]): V2[] {
 }
 
 /**
- * One closed strake: a flat slab with a full round on its leading edge, foot and tail. Behind the mesh it rises to the
- * bumper edge as a blade in the open lower tail; ahead of it its root sits inside the plate.
+ * One closed strake: a thin blade with a full round on every edge, its root inside the plate from the leading edge to
+ * the plate's trailing edge, its foot sweeping down to the tail.
  */
 function strake(b: MeshBuilder, s: (typeof strakes)[number]): void {
   const midX = (y: number): number => s.x - ((y - leanAxis) / Math.cos(s.lean)) * Math.sin(s.lean)
   const root = (z: number): number => centreY(z) + sheet + 0.002
-  const upper = bumper + 0.01
-  const top = tailZ(midX(upper) + r) - r
-  const bottom = tailZ(midX(s.low) + r) - r
-  const back = meshZ + 0.002
-  const poly: V2[] = [[top, upper], [back, upper]]
-  const radii: number[] = [0.008, 0]
+  let back = tailZ(s.x) - br
+  for (let k = 0; k < 3; k++) back = tailZ(midX(root(back)) + br) - br - 0.002
+  const bottom = tailZ(midX(s.low) + br) - br
+  const poly: V2[] = []
+  const radii: number[] = []
   const n = 24
   for (let i = 0; i <= n; i++) {
     const z = back + ((s.lead - back) * i) / n
     poly.push([z, root(z)])
-    radii.push(i === n ? 0.006 : 0)
+    radii.push(i === n ? 0.006 : i === 0 ? 0.004 : 0)
   }
-  poly.push([s.foot, s.low + r])
+  poly.push([s.foot, s.low + br])
   radii.push(0.06)
-  poly.push([bottom, s.low + r])
-  radii.push(0.015)
+  poly.push([bottom, s.low + br])
+  radii.push(0.008)
   slab(b, dedupe(rounded(poly, radii)), s)
 }
 
@@ -252,7 +258,7 @@ function slab(b: MeshBuilder, loop: V2[], s: (typeof strakes)[number]): void {
   const tris = THREE.ShapeUtils.triangulateShape(loop.map((q) => new THREE.Vector2(q[0], q[1])), [])
   for (const sign of [1, -1]) {
     const nrm = scale(across, sign)
-    const ids = loop.map((q) => b.vertex(strakePoint(s, q, sign * r), nrm, q[0], q[1]))
+    const ids = loop.map((q) => b.vertex(strakePoint(s, q, sign * br), nrm, q[0], q[1]))
     for (const [a, c, d] of tris) {
       const flip = (sign > 0) !== ccw
       if (flip) b.tri(ids[a], ids[d], ids[c])
@@ -270,8 +276,8 @@ function slab(b: MeshBuilder, loop: V2[], s: (typeof strakes)[number]): void {
     const ids: number[] = []
     for (let j = 0; j <= k; j++) {
       const ang = (Math.PI * j) / k
-      const w = r * Math.cos(ang)
-      const e = r * Math.sin(ang)
+      const w = br * Math.cos(ang)
+      const e = br * Math.sin(ang)
       const p = strakePoint(s, [q[0] + o[0] * e, q[1] + o[1] * e], w)
       const base = strakePoint(s, q, 0)
       const out = sub(strakePoint(s, [q[0] + o[0], q[1] + o[1]], 0), base)
@@ -292,7 +298,7 @@ function slab(b: MeshBuilder, loop: V2[], s: (typeof strakes)[number]): void {
 export interface Underbody {
   /** Flat floor and the diffuser roof rising from it, one plate, left half. */
   floor: THREE.BufferGeometry
-  /** The two strakes of the left half. */
+  /** The four strakes of the left half. */
   strakes: THREE.BufferGeometry
 }
 
@@ -320,7 +326,7 @@ export function underbody(): Underbody {
   plate(fb, centreFace, centrePlan, fixed + tailRows, cols, true)
   const sb = new MeshBuilder()
   for (const s of strakes) strake(sb, s)
-  return { floor: fb.geometry(), strakes: sb.geometry() }
+  return { floor: finish(fb), strakes: finish(sb) }
 }
 
 /** Front of the mesh across the back of the open lower tail, well inside the paint. */
@@ -421,5 +427,5 @@ export function valance(lower: SurfaceCurve, rm: SurfaceMap): { wall: THREE.Buff
   const va = (cavityFront - meshZ) / 2
   const vb = (yt - ventLow) / 2
   merge(panel, honeycomb({ c: [innerX + meshT / 2, ventLow + vb, meshZ + va], a: [0, 0, 1], b: [0, 1, 0], n: [1, 0, 0] }, va, vb, cell, gauge, meshT, 0.0006, 0.006))
-  return { wall: wall.geometry(), panel: panel.geometry() }
+  return { wall: finish(wall), panel: finish(panel) }
 }

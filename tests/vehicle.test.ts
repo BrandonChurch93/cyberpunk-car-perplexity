@@ -171,4 +171,40 @@ describe('vehicle', () => {
     expect(sum).toBeCloseTo(250)
     full.update(stateAt(0))
   })
+
+  it('gives every vertex of every mesh a finite position and uv and a unit normal and tangent and no mesh a zero-area triangle, in both details', () => {
+    const bad: string[] = []
+    for (const [detail, v] of [['blockout', a], ['full', full]] as const) {
+      v.root.traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return
+        const g = o.geometry as THREE.BufferGeometry
+        for (const name of ['position', 'uv', 'normal', 'tangent']) {
+          const at = g.getAttribute(name)
+          if (!at) continue
+          let n = 0
+          for (let i = 0; i < at.count; i++) {
+            const x = at.getX(i)
+            const y = at.getY(i)
+            const z = at.itemSize > 2 ? at.getZ(i) : 0
+            if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) n++
+            else if ((name === 'normal' || name === 'tangent') && Math.abs(Math.hypot(x, y, z) - 1) > 1e-3) n++
+          }
+          if (n) bad.push(`${detail} ${o.name} ${name} ${n}`)
+        }
+        const pos = g.getAttribute('position')
+        const idx = g.getIndex()
+        const tri = new THREE.Triangle()
+        let flat = 0
+        for (let i = 0; i < (idx ? idx.count : pos.count); i += 3) {
+          const [ia, ib, ic] = [0, 1, 2].map((k) => (idx ? idx.getX(i + k) : i + k))
+          tri.a.fromBufferAttribute(pos, ia)
+          tri.b.fromBufferAttribute(pos, ib)
+          tri.c.fromBufferAttribute(pos, ic)
+          if (ia === ib || ib === ic || ia === ic || !(tri.getArea() > 1e-12)) flat++
+        }
+        if (flat) bad.push(`${detail} ${o.name} zero-area triangles ${flat}`)
+      })
+    }
+    expect(bad).toEqual([])
+  })
 })
