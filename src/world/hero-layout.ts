@@ -57,7 +57,7 @@ export const approvedHeroSources = [
   { id: 'amber garage rise', at: [7.24, 3.51, -17.61], size: [.23, 2.64], tint: 'amber', scale: scale.eastFrontage },
   { id: 'amber garage return', at: [7.76, 3.31, -17.61], size: [.12, 2.23], tint: 'amber', scale: scale.eastFrontage },
   { id: 'amber parapet exit', at: [5.45, 1.30, -9.76], size: [1.16, .41], tint: 'amber', text: 'EXIT' },
-  { id: 'left warm parapet strip', at: [-5.83, .53, -9.83], size: [.69, .037], tint: 'strip', onWall: true },
+  { id: 'left warm parapet strip', at: [-5.83, .623, -9.83], size: [.72, .051], tint: 'strip', onWall: true },
   { id: 'right warm parapet strip', at: [5.35, .58, -9.83], size: [.76, .044], tint: 'strip', onWall: true },
 ] as const satisfies readonly Source[]
 
@@ -80,8 +80,8 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const roof = group(root, 'hero parapet and near deck layout')
   const { heroWall, zinc, heroStripe, tar } = materials
   const wallZ = -10.025, wallDepth = .34
-  const westOpal = new THREE.Color(44.2,39.0,31.5)
-  const eastOpal = new THREE.Color(29.8,26.5,21.9)
+  const westOpal = new THREE.Color(77.5,69.0,56.2)
+  const eastOpal = new THREE.Color(24.8,22.1,18.0)
   washHeroParapet(heroWall,wallZ+wallDepth*.5,(approvedHeroSources as readonly Source[]).filter(source=>source.onWall))
   const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.035,.039,.048), roughness: .54, metalness: .59 })
   const oxidizedAluminum = new THREE.MeshStandardMaterial({ color: new THREE.Color(.033,.038,.041), roughness: .61, metalness: .38 })
@@ -539,7 +539,6 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   box(roof, 'hero full span concrete parapet', [0, .525, wallZ], [29, 1.05, wallDepth], heroWall)
   box(roof, 'hero concrete wall cap', [0, 1.047, -10.02], [29, .048, .377], heroWall)
   box(roof, 'hero full span steel top rail', [0, 1.228, -10.015], [29, .044, .063], frame)
-  box(roof, 'hero steel intermediate rail', [0, 1.145, -10.015], [29, .020, .032], zinc)
   deckTrim.parapet(roof)
   for (let i = -6; i <= 6; i++) {
     box(roof, 'hero rail post', [i * 2.35, 1.149, -10.015], [.057, .178, .057], zinc)
@@ -632,7 +631,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     if (source.onWall) {
       const left = x < 0
       const { anchor } = mountLight(housing, left ? 'doorway' : 'lane separator opal',source.size,color,left ? 8.4 : 8.8,15)
-      anchor.rotation.x = left ? .98 : .89
+      anchor.rotation.x = left ? 1.05 : .89
       for (const side of [-1,1]) box(housing, 'sealed parapet light end bracket', [side*(width/2+.012),0,-.022], [.045,height+.037,.15], zinc)
     }
   }
