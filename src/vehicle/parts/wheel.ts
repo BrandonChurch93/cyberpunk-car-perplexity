@@ -1514,15 +1514,11 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
             float wtSideOuter = smoothstep(0.735, 0.795, wtV) * (1.0 - smoothstep(0.955, 0.988, wtV));
             float wtShoulder = smoothstep(0.640, 0.735, wtV) * (1.0 - smoothstep(0.955, 0.990, wtV));
             float wtCrownSheen = 0.58 + 0.28 * clamp(wheelTirePt.y / max(wheelTireRadius, 0.1) * 0.5 + 0.5, 0.0, 1.0);
-            vec3 wtBeadCell = floor(wtSymPt * 340.0 + wheelTireSeed * 19.0);
-            float wtBeadHash = fract(sin(dot(wtBeadCell, vec3(23.1407, 61.9123, 39.4159))) * 43758.5453);
-            float wtBead = wheelTireGrainAmt * wtWeight * wtSideOuter * smoothstep(0.94, 0.996, wtBeadHash)
-              * smoothstep(0.02, 0.12, wtYRel) * (1.0 - smoothstep(0.20, 0.36, wtYRel));
             float wtWetRib = wtRibTop * max(0.50 * wtCrownSheen, 0.84 * wtSplash + 0.36 * wtDeckNear * smoothstep(-0.02, 0.22, wheelTirePt.z));
             float wtWetSide = max(wtSideOuter, 0.86 * wtShoulder) * max(0.68 * wtCrownSheen, 0.88 * wtSplash + 0.40 * wtDeckNear);
             float wtWetChannel = smoothstep(0.34, 0.84, wtMainCh) * (0.46 + 0.54 * wtDeckNear)
               + (0.54 * smoothstep(0.32, 0.88, wtSipe) + 0.40 * wtShCh) * (0.32 + 0.68 * wtDeckNear);
-            float wtWetWater = clamp(max(wtWetChannel, max(wtWetRib, max(wtWetSide, 0.55 * wtBead))), 0.0, 1.0);
+            float wtWetWater = clamp(max(wtWetChannel, max(wtWetRib, wtWetSide)), 0.0, 1.0);
             float wtRibEdge = wtRibTop * smoothstep(0.004, 0.022, wtYRel);
             float wtFootZ = exp(-pow(wheelTirePt.z / 0.105, 2.0)) * smoothstep(0.73, 0.82, max(wtV, 1.0 - wtV));
             float wtBulgeUpper = wtFootZ * smoothstep(0.016, 0.032, wtYRel) * (1.0 - smoothstep(0.048, 0.075, wtYRel));
@@ -1551,7 +1547,7 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
             .replace(
               '#include <normal_fragment_maps>',
               `#include <normal_fragment_maps>
-            float wtReliefH = -(1.0 - 0.42 * wheelTireGrainAmt) * 0.0024 * wtSipe - (1.0 - 0.65 * wheelTireGrainAmt) * 0.0022 * wtMainCh - 0.0010 * wtShCh + 0.0009 * wtBead;
+            float wtReliefH = -(1.0 - 0.42 * wheelTireGrainAmt) * 0.0024 * wtSipe - (1.0 - 0.65 * wheelTireGrainAmt) * 0.0022 * wtMainCh - 0.0010 * wtShCh;
             vec3 wtDx = dFdx(vViewPosition), wtDy = dFdy(vViewPosition);
             vec3 wtR1 = cross(wtDy, normal), wtR2 = cross(normal, wtDx);
             float wtDet = dot(wtDx, wtR1);
@@ -1562,7 +1558,7 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
             .replace(
               '#include <clearcoat_normal_fragment_maps>',
               `#include <clearcoat_normal_fragment_maps>
-            float wtMeniscusH = 0.0012 * (wtMainCh * wtMainCh + 0.45 * wtSipe * wtSipe) + 0.0011 * wtBead;
+            float wtMeniscusH = 0.0012 * (wtMainCh * wtMainCh + 0.45 * wtSipe * wtSipe);
             vec3 wtCcGrad = (dFdx(wtMeniscusH) * wtR1 + dFdy(wtMeniscusH) * wtR2) * sign(wtDet);
             vec3 wtCcBase = normalize(max(abs(wtDet), 1e-9) * clearcoatNormal - wtCcGrad);
             clearcoatNormal = normalize(mix(wtCcBase, normalize(wtCcBase + 0.55 * wheelTireUpView), wtWetChannel * wtDeckNear));
@@ -1793,13 +1789,13 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
   const makeCaliperFinish = (axis: number, label: string) => {
     const mat = tag(
       new THREE.MeshPhysicalMaterial({
-        color: full ? 0x420a0f : 0x3c0b10,
+        color: full ? 0x7c1219 : 0x6c1218,
         metalness: full ? 0.14 : 0.16,
-        roughness: full ? 0.24 : 0.26,
-        clearcoat: full ? 0.86 : 0.68,
-        clearcoatRoughness: full ? 0.085 : 0.12,
-        specularIntensity: 0.9,
-        envMapIntensity: full ? 0.38 : 0.45,
+        roughness: full ? 0.22 : 0.25,
+        clearcoat: full ? 0.88 : 0.68,
+        clearcoatRoughness: full ? 0.08 : 0.12,
+        specularIntensity: 0.92,
+        envMapIntensity: full ? 0.34 : 0.4,
       }),
       'none',
     )
@@ -1814,7 +1810,7 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
           'varying vec3 wheelCalPt;\nuniform float wcAxis;\n' +
           shader.fragmentShader.replace(
             '#include <color_fragment>',
-            '#include <color_fragment>\ndiffuseColor.rgb *= mix(0.42, 1.0, smoothstep(wcAxis - 0.022, wcAxis + 0.016, abs(wheelCalPt.x)));',
+            '#include <color_fragment>\ndiffuseColor.rgb *= mix(0.28, 1.0, smoothstep(wcAxis - 0.018, wcAxis + 0.015, abs(wheelCalPt.x)));',
           )
       },
     })
