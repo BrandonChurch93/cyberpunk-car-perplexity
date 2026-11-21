@@ -10,7 +10,7 @@ import { lampWrap } from '../src/vehicle/body/cuts'
 import { createVehicle } from '../src/vehicle'
 import { defaultPaint, paintById } from '../src/config'
 import { outletSpec, outlets } from '../src/vehicle/parts/outlets'
-import { taillamps } from '../src/vehicle/parts/taillamps'
+import { lensSpec, seamSpec, taillamps } from '../src/vehicle/parts/taillamps'
 import { engineBay, grilleFrame } from '../src/vehicle/parts/enginebay'
 
 describe('rear underbody', () => {
@@ -122,7 +122,7 @@ describe('rear module', () => {
   const bay = engineBay(c.bay, 0.02)
   const closed: Array<[string, THREE.BufferGeometry]> = [
     ['outlet lip', ex.lip], ['outlet pipes', ex.pipes], ['outlet back', ex.soot], ['outlet housing', ex.housing],
-    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['lamp reflector', tl.reflector], ['lamp optic', tl.optic], ['valance wall', va.wall], ['mesh frame', va.frame],
+    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['lamp reflector', tl.reflector], ['lamp optic', tl.optic], ['lamp lens', tl.lens], ['valance wall', va.wall], ['mesh frame', va.frame],
     ['bay covers', bay.covers], ['bay carbon', bay.carbon], ['plenum', bay.center], ['bay mesh', bay.mesh],
     ['airbox grille', bay.grille], ['grille bezel', bay.bezel], ['grille duct', bay.duct], ['bay core', bay.core], ['grille ledge', bay.ledge], ['bay shelf', bay.shelf],
     ['intake hose', bay.hose], ['hose clamp', bay.clamp],
@@ -241,6 +241,82 @@ describe('rear module', () => {
       g.computeBoundingBox()
       expect(g.boundingBox!.max.x).toBeGreaterThan(lampWrap.outX - 0.03)
     }
+  })
+
+  it('glows from a hot core to deep red flanks with the guide holding its power seen from behind, under a lens it stays behind', () => {
+    const pos = tl.guide.getAttribute('position')
+    const nor = tl.guide.getAttribute('normal')
+    const glow = tl.guide.getAttribute('tailGlow')
+    expect(glow.count).toBe(pos.count)
+    let lo = Infinity
+    let hi = 0
+    for (let i = 0; i < glow.count; i++) {
+      lo = Math.min(lo, glow.getX(i))
+      hi = Math.max(hi, glow.getX(i))
+    }
+    expect(hi).toBeGreaterThan(2)
+    expect(lo).toBeLessThan(0.01)
+    expect(lo).toBeGreaterThan(0)
+    expect(tl.optic.getAttribute('tailGlow').count).toBe(tl.optic.getAttribute('position').count)
+    const ix = tl.guide.getIndex()!
+    const rm = body.cuts.maps.rear
+    let area = 0
+    let weighted = 0
+    let seen = 0
+    let power = 0
+    const a = new THREE.Vector3()
+    const b = new THREE.Vector3()
+    const d = new THREE.Vector3()
+    for (let t = 0; t < ix.count; t += 3) {
+      const [i, j, k] = [ix.getX(t), ix.getX(t + 1), ix.getX(t + 2)]
+      a.fromBufferAttribute(pos, i)
+      b.fromBufferAttribute(pos, j).sub(a)
+      d.fromBufferAttribute(pos, k).sub(a)
+      const z = Math.max(0, -b.clone().cross(d).z) / 2
+      seen += z
+      power += (z * (glow.getX(i) + glow.getX(j) + glow.getX(k))) / 3
+      if (a.z > -2.2 || a.x > 0.7) continue
+      const [uu, vv] = rm.invert('-z', a.x, a.y)
+      const n = new THREE.Vector3(nor.getX(i), nor.getY(i), nor.getZ(i))
+      if (n.z > -0.05 || Math.abs(a.z - rm.S(uu, vv)[2]) > 0.013) continue
+      b.fromBufferAttribute(pos, j).sub(a)
+      d.fromBufferAttribute(pos, k).sub(a)
+      const s = (b.cross(d).length() / 2) * -n.z
+      area += s
+      weighted += (s * (glow.getX(i) + glow.getX(j) + glow.getX(k))) / 3
+    }
+    expect(power / seen).toBeCloseTo(1, 3)
+    expect(seen).toBeGreaterThan(0.0127)
+    expect(area).toBeGreaterThan(1e-4)
+    expect(weighted / area).toBeGreaterThan(1)
+    expect(weighted / area).toBeLessThan(1.4)
+    const lp = tl.lens.getAttribute('position')
+    tl.lens.computeBoundingBox()
+    tl.guide.computeBoundingBox()
+    expect(tl.lens.boundingBox!.max.x).toBeGreaterThan(tl.guide.boundingBox!.max.x - 0.012)
+    for (let i = 0; i < lp.count; i += 5) {
+      const [uu, vv] = rm.invert('-z', lp.getX(i), lp.getY(i))
+      if (lp.getX(i) < 0.75) expect(lp.getZ(i)).toBeGreaterThan(rm.S(uu, vv)[2] + lensSpec.face - 1e-4)
+    }
+  }, 60000)
+
+  it('keeps the guide behind the lamp front tip and closes the quarter seam end there with a return', () => {
+    const tip = new THREE.Vector3(0.8803, 0.81, -2.0476)
+    const t = new THREE.Vector3(...seamSpec.t).normalize()
+    const pos = tl.guide.getAttribute('position')
+    for (let i = 0; i < pos.count; i++) expect(new THREE.Vector3().fromBufferAttribute(pos, i).sub(tip).dot(t)).toBeGreaterThan(0.002)
+    const h = tl.housing.getAttribute('position')
+    let near = 0
+    let deep = 0
+    for (let i = 0; i < h.count; i++) {
+      const q = new THREE.Vector3().fromBufferAttribute(h, i)
+      if (q.distanceTo(tip) < 0.02 && Math.abs(q.clone().sub(tip).dot(t)) < 0.002) {
+        near++
+        deep = Math.max(deep, q.distanceTo(tip))
+      }
+    }
+    expect(near).toBeGreaterThan(8)
+    expect(deep).toBeGreaterThan(0.011)
   })
 
   it('keeps every bay part under the deck and inside the opening', () => {
