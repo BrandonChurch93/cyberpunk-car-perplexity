@@ -10,16 +10,19 @@ export const atmosphere = {
   localAirRange: 44.0,
   deckExtinction: 0.052,
   layerHeight: 0.27,
-  cityExtinction: 0.00215,
-  cityLayerHeight: 115.0,
-  outerCityStart: 630.0,
-  outerCityExtinction: 0.00125,
+  cityExtinction: 0.00054,
+  cityLayerHeight: 170.0,
+  outerCityStart: 610.0,
+  outerCityExtinction: 0.00156,
   distantHaloStart: 80.0,
-  cityHaloRange: 0.135,
-  cityHaloScatter: [36.0, 52.0],
-  cloudStart: 565.0,
+  cityHaloRange: 0.16,
+  cityHaloLimits: [48.0, 218.0],
+  cityHaloScatter: [65.0, 86.0],
+  cloudStart: 615.0,
+  cloudEnd: 1060.0,
   airlight: [0.028, 0.028, 0.033],
-  cityAirlight: [0.072, 0.074, 0.082],
+  cityAirlight: [0.020, 0.023, 0.029],
+  outerCityAirlight: [0.050, 0.060, 0.079],
   anisotropy: 0.58,
   scatterFraction: 0.56,
   projectorAnisotropy: 0.76,
@@ -52,6 +55,7 @@ uniform int cloudLightIndex;
 uniform int hazeLightLimit;
 uniform vec2 sampleJitter;
 uniform float focusDistance;
+uniform float farAirCameraFar;
 in vec2 vUv;
 out vec4 outColor;
 
@@ -69,10 +73,13 @@ const float outerCityStart = ${atmosphere.outerCityStart.toFixed(1)};
 const float outerCityDensity = ${atmosphere.outerCityExtinction};
 const float distantHaloStart = ${atmosphere.distantHaloStart.toFixed(1)};
 const float cityHaloRange = ${atmosphere.cityHaloRange};
+const vec2 cityHaloLimits = vec2(${atmosphere.cityHaloLimits.map((range) => range.toFixed(1)).join(', ')});
 const vec2 cityHaloScatter = vec2(${atmosphere.cityHaloScatter.map((gain) => gain.toFixed(1)).join(', ')});
 const float cloudStart = ${atmosphere.cloudStart.toFixed(1)};
+const float cloudEnd = ${atmosphere.cloudEnd.toFixed(1)};
 const vec3 nearAirlight = vec3(${atmosphere.airlight.join(', ')});
 const vec3 cityAirlight = vec3(${atmosphere.cityAirlight.join(', ')});
+const vec3 outerCityAirlight = vec3(${atmosphere.outerCityAirlight.join(', ')});
 const float anisotropy = ${atmosphere.anisotropy};
 const float scatterFraction = ${atmosphere.scatterFraction};
 const int steps = 8;
@@ -85,28 +92,29 @@ float bankCell(vec2 cell) {
 
 float bankNoise(vec2 p) {
   vec2 i = floor(p);
-  vec2 f = smoothstep(0.0, 1.0, fract(p));
+  vec2 t = fract(p);
+  vec2 f = t * t * t * (t * (6.0 * t - 15.0) + 10.0);
   return mix(mix(bankCell(i), bankCell(i + vec2(1, 0)), f.x),
     mix(bankCell(i + vec2(0, 1)), bankCell(i + 1.0), f.x), f.y);
 }
 
 vec3 cloudGlow(vec3 origin, vec3 ray) {
-  if (cloudLightIndex < 0 || ray.y < -0.045) return vec3(0.0);
+  if (cloudLightIndex < 0 || ray.y < -0.015 || ray.y > 0.31) return vec3(0.0);
   vec4 source = filmLightColor[cloudLightIndex];
   vec2 axis = normalize((filmLightPosition[cloudLightIndex] - origin).xz);
-  float side = smoothstep(0.57, 0.98, dot(ray.xz, axis));
+  float side = smoothstep(0.65, 0.93, dot(ray.xz, axis));
   if (side <= 0.0) return vec3(0.0);
   float across = dot(ray.xz, vec2(-axis.y, axis.x));
-  vec2 p = vec2(across * 17.1, ray.y * 22.6);
-  float coarse = bankNoise(p * 0.73);
-  float rolls = bankNoise(p * 2.43 + vec2(coarse * 1.6, -coarse));
-  float detail = bankNoise(p * 5.8 + rolls);
-  float cover = smoothstep(0.32, 0.70, 0.49 * coarse + 0.35 * rolls + 0.16 * detail);
-  vec2 band = vec2((across + 0.04) / 0.32, (ray.y - 0.098 - (rolls - 0.5) * 0.052) / 0.121);
-  float bank = cover * exp(-dot(band, band)) * smoothstep(-0.045, 0.055, ray.y);
-  float loft = 1.0 - smoothstep(0.055, 0.37, ray.y);
+  vec2 p = vec2(across * 9.6, ray.y * 12.0);
+  float bank = bankNoise(p * 0.68);
+  float rolls = bankNoise(p * 1.51 + vec2(1.28 * bank, 2.13));
+  float cover = smoothstep(0.24, 0.78, 0.66 * bank + 0.34 * rolls);
+  float lateral = 1.0 - smoothstep(0.04, 0.22, abs(across + 0.11));
+  float underside = (ray.y - 0.131 - 0.040 * (bank - 0.5)) / 0.105;
+  float altitude = smoothstep(-0.015, 0.055, ray.y) * (1.0 - smoothstep(0.185, 0.31, ray.y));
   vec3 irradiance = source.rgb / max(source.a * source.a, 1.0);
-  return irradiance * side * (8.0 * loft + 28.0 * bank);
+  vec3 underlight = mix(irradiance, irradiance.rrr, 0.16) * vec3(1.16, 1.15, 0.72);
+  return underlight * (side * lateral * altitude * (10.0 + 56.0 * cover * exp(-underside * underside)));
 }
 
 float phase(float cosine, float g) {
@@ -194,16 +202,36 @@ float heightOpticalDepth(float y, float dy, float distance, float density, float
   return density * (max(0.0, -lo) + height * (a - b)) / abs(dy);
 }
 
-float cityOpticalDepth(vec3 origin, vec3 ray, float start, float end) {
-  if (end <= start) return 0.0;
-  float depth = heightOpticalDepth(origin.y + ray.y * start, ray.y, end - start, cityDensity, cityLayerHeight);
+vec2 cityOpticalLayers(vec3 origin, vec3 ray, float start, float end) {
+  if (end <= start) return vec2(0.0);
+  float innerDepth = heightOpticalDepth(origin.y + ray.y * start, ray.y, end - start, cityDensity, cityLayerHeight);
   float outer = max(start, outerCityStart);
-  if (end > outer) depth += heightOpticalDepth(origin.y + ray.y * outer, ray.y, end - outer, outerCityDensity, cityLayerHeight);
-  return depth;
+  float outerDepth = end > outer ? heightOpticalDepth(origin.y + ray.y * outer, ray.y, end - outer, outerCityDensity, cityLayerHeight) : 0.0;
+  return vec2(innerDepth, outerDepth);
+}
+
+float cityOpticalDepth(vec3 origin, vec3 ray, float start, float end) {
+  vec2 layers = cityOpticalLayers(origin, ray, start, end);
+  return layers.x + layers.y;
+}
+
+vec3 cityRadiance(vec3 origin, vec3 ray, float cityStart, float far, vec2 layers) {
+  if (layers.x + layers.y <= 1e-6) return vec3(0.0);
+  vec2 transmission = exp(-layers);
+  vec3 radiance = cityAirlight * (1.0 - transmission.x)
+    + transmission.x * outerCityAirlight * (1.0 - transmission.y);
+  float entry = max(cityStart, cloudStart);
+  float exit = min(far, cloudEnd);
+  if (exit > entry) {
+    float beforeCloud = cityOpticalDepth(origin, ray, cityStart, entry);
+    float cloudDepth = cityOpticalDepth(origin, ray, entry, exit);
+    radiance += exp(-beforeCloud) * cloudGlow(origin, ray) * (1.0 - exp(-cloudDepth));
+  }
+  return radiance;
 }
 
 vec3 distantSourceScatter(vec3 origin, vec3 ray, float far, float cityStart, float nearDepth, vec4 source, float radius, float along, float perp2) {
-  float reach = cityHaloRange * source.a + radius;
+  float reach = clamp(cityHaloRange * source.a + radius, cityHaloLimits.x, cityHaloLimits.y);
   float reach2 = reach * reach;
   if (perp2 >= reach2) return vec3(0.0);
   float interval = sqrt(reach2 - perp2);
@@ -216,7 +244,7 @@ vec3 distantSourceScatter(vec3 origin, vec3 ray, float far, float cityStart, flo
   vec3 irradiance = source.rgb / max(source.a * source.a, 1.0);
   float peak = max(irradiance.r, max(irradiance.g, irradiance.b));
   float warm = smoothstep(0.12, 0.68, (irradiance.r - irradiance.b) / max(peak, 1e-6));
-  vec3 diffuse = mix(irradiance, vec3(peak), mix(0.12, 0.24, warm));
+  vec3 diffuse = mix(irradiance, vec3(peak), mix(0.07, 0.16, warm));
   return diffuse * mix(cityHaloScatter.x, cityHaloScatter.y, warm) * envelope * exp(-before) * (1.0 - exp(-depth));
 }
 
@@ -272,17 +300,11 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   float layerDepth = layerOpticalDepth(origin.y, ray.y, layer, far);
   float cityStart = footprint.y >= footprint.x ? max(localAirRange, footprint.y) : localAirRange;
   float airDepth = heightOpticalDepth(origin.y, ray.y, min(far, localAirRange), airDensity, airHeight);
-  float cityDepth = cityOpticalDepth(origin, ray, cityStart, far);
+  vec2 cityLayers = cityOpticalLayers(origin, ray, cityStart, far);
+  float cityDepth = cityLayers.x + cityLayers.y;
   float transmission = exp(-airDepth - layerDepth - cityDepth);
   vec3 airlight = nearAirlight * (1.0 - exp(-airDepth));
-  if (cityDepth > 1e-6) {
-    airlight += exp(-airDepth - layerDepth) * cityAirlight * (1.0 - exp(-cityDepth));
-    if (far > cloudStart) {
-      float entry = max(cityStart, cloudStart);
-      float cloudDepth = cityOpticalDepth(origin, ray, entry, far);
-      airlight += exp(-airDepth - layerDepth - cityDepth + cloudDepth) * cloudGlow(origin, ray) * (1.0 - exp(-cloudDepth));
-    }
-  }
+  airlight += exp(-airDepth - layerDepth) * cityRadiance(origin, ray, cityStart, far, cityLayers);
   vec3 radiance = airlight * foregroundScatter(far * 0.5);
   vec2 pixel = floor(uv * vec2(textureSize(sceneDepth, 0)));
   float pixelNoise = fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
@@ -458,6 +480,7 @@ function hazeUniforms({ rig, world }: HazeDomain, texture: THREE.Texture | null)
     hazeLightLimit: { value: -1 },
     sampleJitter: { value: new THREE.Vector2() },
     focusDistance: { value: 1 },
+    farAirCameraFar: { value: 1 },
   }
 }
 
@@ -471,6 +494,43 @@ void main() {
 }
 `
 
+const farAirComposite = scattering + /* glsl */ `
+void main() {
+  ivec2 pixel = ivec2(gl_FragCoord.xy);
+  vec4 scene = texelFetch(sceneColor, pixel, 0);
+  float depth = texelFetch(sceneDepth, pixel, 0).r;
+  vec4 eye = inverseProjection * vec4(vUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+  float eyeLength = length(eye.xyz);
+  vec3 ray = mat3(cameraWorld) * (eye.xyz / eyeLength);
+  float far = depth < 1.0 && eye.w > 0.0 ? eyeLength / eye.w : farAirCameraFar * eyeLength / -eye.z;
+  vec3 origin = cameraWorld[3].xyz;
+  vec2 footprint = deckInterval(origin, ray);
+  float cityStart = footprint.y >= footprint.x ? max(localAirRange, footprint.y) : localAirRange;
+  if (origin.y < 0.0) cityStart = max(cityStart, ray.y > 0.0 ? -origin.y / ray.y : far);
+  if (far <= cityStart) {
+    outColor = scene;
+    return;
+  }
+  vec2 layers = cityOpticalLayers(origin, ray, cityStart, far);
+  vec3 radiance = cityRadiance(origin, ray, cityStart, far, layers);
+  for (int i = 0; i < MAX_FILM_LIGHTS; i++) {
+    if (i >= filmLightCount || (hazeLightLimit >= 0 && i >= hazeLightLimit)) break;
+    vec4 shape = filmLightShape[i];
+    if (shape.z > 0.5 || shape.x >= 0.0 || filmLightAxis[i].w <= -0.5) continue;
+    vec4 color = filmLightColor[i];
+    if (max(color.r, max(color.g, color.b)) < 1e-5) continue;
+    vec3 toSource = filmLightPosition[i] - origin;
+    if (dot(toSource, toSource) <= distantHaloStart * distantHaloStart) continue;
+    float along = dot(toSource, ray);
+    vec3 perp = toSource - along * ray;
+    float perp2 = dot(perp, perp);
+    if (perp2 >= color.a * color.a) continue;
+    radiance += distantSourceScatter(origin, ray, far, cityStart, 0.0, color, shape.y, along, perp2);
+  }
+  outColor = vec4(scene.rgb * exp(-layers.x - layers.y) + radiance, scene.a);
+}
+`
+
 export function createHazeCapture(domain: HazeDomain) {
   const uniforms = hazeUniforms(domain, null)
   uniforms.focusDistance.value = 6
@@ -478,6 +538,7 @@ export function createHazeCapture(domain: HazeDomain) {
   const eye = new THREE.Camera()
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), passMaterial(captureComposite, uniforms, { blending: THREE.NoBlending }))
   mesh.frustumCulled = false
+  const farAirPass = new FullscreenPass(passMaterial(farAirComposite, uniforms, { blending: THREE.NoBlending }))
   return {
     render(renderer: THREE.WebGLRenderer, source: THREE.WebGLRenderTarget, output: THREE.WebGLCubeRenderTarget,
       face: number, camera: THREE.PerspectiveCamera, includeVehicleLights: boolean) {
@@ -491,6 +552,18 @@ export function createHazeCapture(domain: HazeDomain) {
       domain.rig.syncShadowUniforms()
       renderer.setRenderTarget(output, face)
       renderer.render(mesh, eye)
+    },
+    renderFarAir(renderer: THREE.WebGLRenderer, source: THREE.WebGLRenderTarget, output: THREE.WebGLRenderTarget,
+      camera: THREE.PerspectiveCamera) {
+      const { min, max } = domain.world.deck.bounds
+      uniforms.deckBounds.value.set(min.x, min.y, max.x, max.y)
+      uniforms.sceneColor.value = source.texture
+      uniforms.sceneDepth.value = source.depthTexture
+      uniforms.inverseProjection.value.copy(camera.projectionMatrixInverse)
+      uniforms.cameraWorld.value.copy(camera.matrixWorld)
+      uniforms.farAirCameraFar.value = camera.far
+      uniforms.hazeLightLimit.value = domain.world.lights.length
+      farAirPass.render(renderer, output)
     },
   }
 }

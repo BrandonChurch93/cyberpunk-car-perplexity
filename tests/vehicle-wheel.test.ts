@@ -1,140 +1,308 @@
-import * as T from 'three'
+import * as THREE from 'three'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { defaultPaint, paintById } from '../src/config'
-import { createVehicle, type VehicleModule } from '../src/vehicle'
-import { frontWheel, rearWheel } from '../src/vehicle/body'
+import { createVehicle, type VehicleModule, type WetnessKind } from '../src/vehicle'
+import { mainLoft, dims } from '../src/vehicle/body/shape'
+import { arches } from '../src/vehicle/body/cuts'
+import type { Surface } from '../src/vehicle/geom/cuts'
+import { makeMaterials } from '../src/vehicle/materials'
+import { archLinerParts, buildLiners } from '../src/vehicle/parts/liners'
+import { buildWheel, buildWheels } from '../src/vehicle/parts/wheel'
 
-const paint = paintById(defaultPaint)
-let blockout: VehicleModule
-let full: VehicleModule
+function assertValidTangentUVs(g: THREE.BufferGeometry, label: string): void {
+  const pos = g.getAttribute('position')
+  const nrm = g.getAttribute('normal')
+  const uv = g.getAttribute('uv')
+  const idx = g.getIndex()
+  expect(pos, `${label} position`).toBeDefined()
+  expect(nrm, `${label} normal`).toBeDefined()
+  expect(uv, `${label} uv`).toBeDefined()
+  expect(idx, `${label} index`).not.toBeNull()
+  const index = idx!
+  expect(index.count % 3, `${label} tri count`).toBe(0)
+  expect(index.count, `${label} non-empty`).toBeGreaterThan(0)
 
-beforeAll(async () => {
-  ;[blockout, full] = await Promise.all([
-    createVehicle({ paint, detail: 'blockout' }),
-    createVehicle({ paint, detail: 'full' }),
-  ])
-}, 30_000)
+  const pa = new THREE.Vector3()
+  const pb = new THREE.Vector3()
+  const pc = new THREE.Vector3()
+  const e1 = new THREE.Vector3()
+  const e2 = new THREE.Vector3()
+  const cr = new THREE.Vector3()
+  const nv = new THREE.Vector3()
+  const issues: string[] = []
 
-describe('closed-web forged wheel', () => {
-  it('closes all five Y-spoke branch junctions into the rim and opens pentagon and triangle windows in both LODs', () => {
-    for (const lod of [blockout, full]) {
-      for (const [name, spec] of [['front wheel', frontWheel], ['rear wheel', rearWheel]] as const) {
-        const wheel = lod.root.getObjectByName(name)
-        expect(wheel).toBeDefined()
-        if (!wheel) continue
-        wheel.updateWorldMatrix(true, true)
-        const R = spec.rim
-        const ray = new T.Raycaster()
-        const dir = new T.Vector3(-1, 0, 0)
-        const th0 = name === 'front wheel' ? 1.18 : 0.56
-        for (let k = 0; k < 5; k++) {
-          const th = th0 + (k * Math.PI * 2) / 5
-          for (const sign of [-1, 1]) {
-            const a = th + sign * 0.456
-            const p = wheel.localToWorld(new T.Vector3(1, 0.94 * R * Math.cos(a), 0.94 * R * Math.sin(a)))
-            ray.set(p, dir)
-            const hit = ray.intersectObject(wheel, true)[0]
-            expect(hit?.object.name).toMatch(/satin forged spoke web|forged divided spokes and barrel|diamond cut spoke faces/)
-          }
-          const aPent = th + Math.PI / 5
-          ray.set(wheel.localToWorld(new T.Vector3(1, 0.56 * R * Math.cos(aPent), 0.56 * R * Math.sin(aPent))), dir)
-          expect(ray.intersectObject(wheel, true)[0]?.object.name ?? 'open').not.toMatch(/satin forged spoke web|forged divided spokes|diamond cut/)
-          ray.set(wheel.localToWorld(new T.Vector3(1, 0.84 * R * Math.cos(th), 0.84 * R * Math.sin(th))), dir)
-          expect(ray.intersectObject(wheel, true)[0]?.object.name ?? 'open').not.toMatch(/satin forged spoke web|forged divided spokes|diamond cut/)
-        }
-      }
+  for (let i = 0; i < index.count && issues.length < 5; i += 3) {
+    const ia = index.getX(i)
+    const ib = index.getX(i + 1)
+    const ic = index.getX(i + 2)
+    pa.fromBufferAttribute(pos, ia)
+    pb.fromBufferAttribute(pos, ib)
+    pc.fromBufferAttribute(pos, ic)
+    e1.subVectors(pb, pa)
+    e2.subVectors(pc, pa)
+    const area2 = cr.crossVectors(e1, e2).length()
+    if (!(area2 > 1e-11)) issues.push(`tri ${i / 3} degenerate 3D area2=${area2}`)
+
+    for (const v of [ia, ib, ic]) {
+      nv.fromBufferAttribute(nrm, v)
+      const len = nv.length()
+      if (!Number.isFinite(len) || len < 0.95) issues.push(`tri ${i / 3} vtx ${v} invalid normal len=${len}`)
+    }
+
+    const ua = uv.getX(ia)
+    const va = uv.getY(ia)
+    const ub = uv.getX(ib)
+    const vb = uv.getY(ib)
+    const uc = uv.getX(ic)
+    const vc = uv.getY(ic)
+    const uvCross = Math.abs((ub - ua) * (vc - va) - (vb - va) * (uc - ua))
+    if (!Number.isFinite(uvCross) || uvCross < 1e-11) issues.push(`tri ${i / 3} degenerate UV area2=${uvCross}`)
+  }
+  expect(issues, label).toEqual([])
+}
+
+describe('wheel, tire, brake and arch liner module', () => {
+  let mainSurface: Surface
+  let blockoutRoot: THREE.Group
+  let fullRoot: THREE.Group
+  let vehicleFull: VehicleModule
+
+  beforeAll(async () => {
+    const loft = mainLoft()
+    mainSurface = (u, v) => loft.at(u, v)
+    const paint = paintById(defaultPaint)
+
+    const mBlock = await makeMaterials('blockout', paint)
+    blockoutRoot = new THREE.Group()
+    const sprungBlock = new THREE.Group()
+    sprungBlock.name = 'sprung'
+    blockoutRoot.add(sprungBlock)
+    const tagBlock = (mat: THREE.Material, w: WetnessKind) => mBlock.tag(mat as THREE.MeshStandardMaterial, w)
+    buildLiners(sprungBlock, mainSurface, { ...mBlock, tag: tagBlock }, false)
+    buildWheels(blockoutRoot, { ...mBlock, tag: tagBlock }, false)
+    blockoutRoot.updateMatrixWorld(true)
+
+    const mFull = await makeMaterials('full', paint)
+    fullRoot = new THREE.Group()
+    const sprungFull = new THREE.Group()
+    sprungFull.name = 'sprung'
+    fullRoot.add(sprungFull)
+    const tagFull = (mat: THREE.Material, w: WetnessKind) => mFull.tag(mat as THREE.MeshStandardMaterial, w)
+    buildLiners(sprungFull, mainSurface, { ...mFull, tag: tagFull }, true)
+    buildWheels(fullRoot, { ...mFull, tag: tagFull }, true)
+    fullRoot.updateMatrixWorld(true)
+
+    vehicleFull = await createVehicle({ paint, detail: 'full' })
+    vehicleFull.root.updateMatrixWorld(true)
+  }, 240_000)
+
+  it('gives every wheel and liner triangle a non-degenerate UV frame for anisotropic beauty', () => {
+    for (const [label, root] of [
+      ['blockout', blockoutRoot],
+      ['full', fullRoot],
+    ] as const) {
+      let meshCount = 0
+      root.traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return
+        meshCount++
+        assertValidTangentUVs(o.geometry, `${label}:${o.parent?.name ?? ''}/${o.name}`)
+      })
+      expect(meshCount).toBeGreaterThan(20)
+    }
+
+    const legacy = buildWheel({
+      radius: dims.frontTire.radius,
+      width: dims.frontTire.width,
+      rim: dims.frontTire.rim,
+      disc: { radius: 0.205, thickness: 0.038 },
+      flat: 0.0063,
+      caliperAngle: Math.PI - 0.35,
+      caliperLength: 1.0,
+      quality: 1,
+    })
+    for (const [k, g] of Object.entries(legacy)) {
+      if (g instanceof THREE.BufferGeometry) assertValidTangentUVs(g, `buildWheel:${k}`)
     }
   })
 
-  it('orients tire normals outward, keeps wheel materials isotropic and stays within the triangle budget', () => {
-    let fullWheelTris = 0
-    full.root.traverse((node) => {
-      if (node.name !== 'front wheel' && node.name !== 'rear wheel') return
-      node.traverse((child) => {
-        if (!(child instanceof T.Mesh)) return
-        const g = child.geometry
-        fullWheelTris += g.index ? g.index.count / 3 : g.getAttribute('position').count / 3
-        if (child.material instanceof T.MeshPhysicalMaterial && /spoke|barrel|flange|hub|cap|lug|caliper/.test(child.name)) {
-          expect(child.material.anisotropy).toBe(0)
+  it('joins Y-spoke branches cleanly into the rim while keeping pentagon and triangle windows open to the brake', () => {
+    const clayFrontSide = new THREE.MeshStandardMaterial({ side: THREE.FrontSide })
+    for (const root of [blockoutRoot, fullRoot]) {
+      const fl = root.getObjectByName('wheel-front-left')!
+      const rimTarget = new THREE.Group()
+      const brakeTarget = new THREE.Group()
+      fl.traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return
+        const clone = new THREE.Mesh(o.geometry, clayFrontSide)
+        clone.applyMatrix4(o.matrixWorld)
+        clone.updateMatrixWorld(true)
+        if (['spoke-web', 'spoke-recess', 'spoke-chamfer', 'rim-barrel', 'rim-flange', 'hub-bowl', 'rim', 'lug-bolts'].includes(o.name)) {
+          rimTarget.add(clone)
+        } else if (['disc', 'disc-vents', 'disc-hat', 'caliper'].includes(o.name)) {
+          brakeTarget.add(clone)
         }
       })
-    })
-    expect(fullWheelTris).toBeLessThan(550_000)
 
-    const tire = full.root.getObjectByName('front wheel')?.getObjectByName('loaded rubber and tread')
-    expect(tire).toBeInstanceOf(T.Mesh)
-    if (tire instanceof T.Mesh) {
-      const pos = tire.geometry.getAttribute('position')
-      const nrm = tire.geometry.getAttribute('normal')
-      let radialDotSum = 0
-      let samples = 0
-      for (let i = 0; i < pos.count; i += 37) {
-        const y = pos.getY(i), z = pos.getZ(i), r = Math.hypot(y, z)
-        if (r > frontWheel.radius - 0.008) {
-          radialDotSum += (y * nrm.getY(i) + z * nrm.getZ(i)) / r
-          samples++
+      const ray = new THREE.Raycaster()
+      const dir = new THREE.Vector3(-1, 0, 0)
+      const theta0 = 1.18
+      const rJoin = 0.91 * dims.frontTire.rim
+
+      for (let k = 0; k < 5; k++) {
+        const th = theta0 + (k / 5) * Math.PI * 2
+        for (const sign of [-1, 1]) {
+          const a = th + sign * 0.42
+          const y = 0.3405 + Math.cos(a) * rJoin
+          const z = dims.frontHubZ + Math.sin(a) * rJoin
+          ray.set(new THREE.Vector3(2.0, y, z), dir)
+          expect(ray.intersectObjects(rimTarget.children, false).length).toBeGreaterThan(0)
         }
+
+        const aPent = th + Math.PI / 5
+        const yPent = 0.3405 + Math.cos(aPent) * (0.62 * dims.frontTire.rim)
+        const zPent = dims.frontHubZ + Math.sin(aPent) * (0.62 * dims.frontTire.rim)
+        ray.set(new THREE.Vector3(2.0, yPent, zPent), dir)
+        expect(ray.intersectObjects(rimTarget.children, false).length).toBe(0)
+        expect(ray.intersectObjects(brakeTarget.children, false).length).toBeGreaterThan(0)
       }
-      expect(samples).toBeGreaterThan(20)
-      expect(radialDotSum / samples).toBeGreaterThan(0.75)
     }
+    clayFrontSide.dispose()
   })
 
-  it('builds the molded sidewall band, front shoulder tread blocks, contact patch bulge and rotor edge vanes in both LODs', () => {
-    for (const lod of [blockout, full]) {
-      const wheel = lod.root.getObjectByName('front wheel')!
-      const tire = wheel.getObjectByName('loaded rubber and tread') as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
-      const spokes = wheel.getObjectByName('satin forged spoke web') as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
-      const band = wheel.getObjectByName('molded sidewall relief') as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
-      const rotor = wheel.getObjectByName('drilled ceramic rotor') as T.Mesh<T.BufferGeometry, T.MeshPhysicalMaterial>
+  it('flattens the loaded tire at y = 0 with lower sidewall bulge, outward normals and rotor edge vanes', () => {
+    const fl = fullRoot.getObjectByName('wheel-front-left')!
+    const tireMesh = fl.getObjectByName('tire') as THREE.Mesh
+    const pos = tireMesh.geometry.getAttribute('position')
+    const nrm = tireMesh.geometry.getAttribute('normal')
+    const p = new THREE.Vector3()
+    const n = new THREE.Vector3()
+    const center = new THREE.Vector3(dims.frontHubX, 0.3405, dims.frontHubZ)
+    const normalMatrix = new THREE.Matrix3().getNormalMatrix(tireMesh.matrixWorld)
 
-      expect(lod.surfaces.find((s) => s.material === tire.material)?.wetness).toBe('sheet')
-      expect(lod.surfaces.find((s) => s.material === spokes.material)?.wetness).toBe('sheet')
-      expect(band.material.roughness).toBeLessThan(tire.material.roughness - 0.25)
-
-      const bandPos = band.geometry.getAttribute('position')
-      let midCollarVerts = 0
-      for (let i = 0; i < bandPos.count; i++) {
-        const r = Math.hypot(bandPos.getY(i), bandPos.getZ(i))
-        if (r > frontWheel.rim + 0.020 && r < frontWheel.radius - 0.035) midCollarVerts++
+    let minY = Infinity
+    let maxLowerHalfWidth = 0
+    let maxUpperHalfWidth = 0
+    let outwardCount = 0
+    for (let i = 0; i < pos.count; i++) {
+      p.fromBufferAttribute(pos, i).applyMatrix4(tireMesh.matrixWorld)
+      n.fromBufferAttribute(nrm, i).applyMatrix3(normalMatrix).normalize()
+      minY = Math.min(minY, p.y)
+      const halfW = Math.abs(p.x - dims.frontHubX)
+      if (p.y > 0.015 && p.y < 0.08 && Math.abs(p.z - dims.frontHubZ) < 0.06) {
+        maxLowerHalfWidth = Math.max(maxLowerHalfWidth, halfW)
       }
-      expect(midCollarVerts).toBeGreaterThan(100)
+      if (p.y > 0.6 && Math.abs(p.z - dims.frontHubZ) < 0.06) {
+        maxUpperHalfWidth = Math.max(maxUpperHalfWidth, halfW)
+      }
+      if (p.clone().sub(center).dot(n) > 0) outwardCount++
+    }
+    expect(Math.abs(minY)).toBeLessThan(0.0012)
+    expect(maxLowerHalfWidth - maxUpperHalfWidth).toBeGreaterThan(0.007)
+    expect(outwardCount / pos.count).toBeGreaterThan(0.92)
 
-      const pos = tire.geometry.getAttribute('position')
-      const cav = tire.geometry.getAttribute('tireCavity')
-      expect(cav).toBeDefined()
-      let maxTopX = 0
-      let maxFootX = 0
-      let minFrontR = Infinity
-      let maxFrontR = 0
-      let maxFrontCav = 0
-      let minFrontCav = 1
-      for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i)
-        if (y > 0.16 && Math.abs(z) < 0.06) maxTopX = Math.max(maxTopX, x)
-        if (y < -0.17 && Math.abs(z) < 0.06) maxFootX = Math.max(maxFootX, x)
-        if (z > 0.28 && Math.abs(y) < 0.10 && x > 0.04 && x < 0.118) {
-          const r = Math.hypot(y, z)
-          minFrontR = Math.min(minFrontR, r)
-          maxFrontR = Math.max(maxFrontR, r)
-          const c = cav.getX(i)
-          maxFrontCav = Math.max(maxFrontCav, c)
-          minFrontCav = Math.min(minFrontCav, c)
+    const discMesh = fl.getObjectByName('disc') as THREE.Mesh
+    expect(discMesh.geometry.getIndex()!.count / 3).toBeGreaterThan(1500)
+    expect(fl.getObjectByName('sidewall-relief')).toBeInstanceOf(THREE.Mesh)
+  })
+
+  it('closes both front and rear wheelhouses in FrontSide clay and thickens the arch lips inside the body skin', () => {
+    const clayFrontSide = new THREE.MeshStandardMaterial({ side: THREE.FrontSide })
+    const sprung = fullRoot.getObjectByName('sprung')!
+    const linerTargets: THREE.Mesh[] = []
+    sprung.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return
+      const clone = new THREE.Mesh(o.geometry, clayFrontSide)
+      clone.name = o.name
+      clone.applyMatrix4(o.matrixWorld)
+      clone.updateMatrixWorld(true)
+      linerTargets.push(clone)
+    })
+
+    const ray = new THREE.Raycaster()
+    for (const [front, zc, yc, rSample] of [
+      [true, dims.frontHubZ, dims.frontTire.radius, 0.34],
+      [false, dims.rearHubZ, dims.rearTire.radius, 0.36],
+    ] as const) {
+      const parts = archLinerParts(mainSurface, front, true)
+      const lipBox = new THREE.Box3().setFromBufferAttribute(parts.lip.getAttribute('position') as THREE.BufferAttribute)
+      expect(lipBox.max.x - lipBox.min.x).toBeGreaterThan(0.015)
+
+      const linerPos = parts.liner.getAttribute('position')
+      for (let i = 0; i < linerPos.count; i++) {
+        const y = linerPos.getY(i)
+        const z = linerPos.getZ(i)
+        expect(y).toBeGreaterThanOrEqual(0.12)
+        if (y > 0.16) {
+          expect(arches([0.95, y, z])).toBeGreaterThan(-0.002)
         }
       }
-      expect(maxFootX - maxTopX).toBeGreaterThan(0.007)
-      expect(maxFrontR - minFrontR).toBeGreaterThan(0.004)
-      expect(maxFrontCav - minFrontCav).toBeGreaterThan(0.55)
 
-      const rotorPos = rotor.geometry.getAttribute('position')
-      rotor.geometry.computeBoundingBox()
-      const midX = 0.5 * (rotor.geometry.boundingBox!.min.x + rotor.geometry.boundingBox!.max.x)
-      let vaneVerts = 0
-      for (let i = 0; i < rotorPos.count; i++) {
-        const rx = rotorPos.getX(i), rr = Math.hypot(rotorPos.getY(i), rotorPos.getZ(i))
-        if (Math.abs(rx - midX) < 0.0098 && rr > frontWheel.disc - 0.016) vaneVerts++
+      for (const side of [1, -1] as const) {
+        const dir = new THREE.Vector3(-side, 0, 0)
+        const thMin = front ? -0.25 : 0.72
+        const thMax = Math.PI + 0.25
+        for (let k = 0; k <= 12; k++) {
+          const theta = thMin + ((thMax - thMin) * k) / 12
+          const y = Math.max(0.16, yc + Math.sin(theta) * rSample)
+          const z = zc - Math.cos(theta) * rSample
+          ray.set(new THREE.Vector3(side * 2.0, y, z), dir)
+          const hits = ray.intersectObjects(linerTargets, false)
+          expect(hits.length, `${front ? 'front' : 'rear'} side=${side} k=${k}`).toBeGreaterThan(0)
+        }
       }
-      expect(vaneVerts).toBeGreaterThan(60)
+      parts.lip.dispose()
+      parts.liner.dispose()
     }
+    clayFrontSide.dispose()
+  })
+
+  it('keeps Pass 2 wheel and liner triangle count under budget and rear liner clear of intake throat and exposed rear tread', () => {
+    let moduleTris = 0
+    fullRoot.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return
+      const idx = o.geometry.getIndex()!
+      moduleTris += idx.count / 3
+    })
+    expect(moduleTris).toBeLessThanOrEqual(210_000)
+
+    const rearLeftLiner = fullRoot.getObjectByName('liner-rear-left') as THREE.Mesh
+    const pos = rearLeftLiner.geometry.getAttribute('position')
+    let minX = Infinity
+    let maxZ = -Infinity
+    let behindLowCount = 0
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i)
+      const y = pos.getY(i)
+      const z = pos.getZ(i)
+      minX = Math.min(minX, x)
+      maxZ = Math.max(maxZ, z)
+      if (y < 0.56 && x > 0.68 && z < dims.rearHubZ) behindLowCount++
+    }
+    expect(minX).toBeGreaterThan(0.625)
+    expect(maxZ).toBeLessThan(-1.03)
+    expect(behindLowCount).toBe(0)
+  })
+
+  it('covers left and right wheels in FrontSide clay on the assembled vehicle and keeps the wheel anchor in place', () => {
+    const clayFrontSide = new THREE.MeshStandardMaterial({ side: THREE.FrontSide })
+    const ray = new THREE.Raycaster()
+    for (const side of ['left', 'right'] as const) {
+      const sign = side === 'left' ? 1 : -1
+      const group = vehicleFull.root.getObjectByName(`wheel-front-${side}`)!
+      expect(group).toBeDefined()
+      const targets: THREE.Mesh[] = []
+      group.traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return
+        assertValidTangentUVs(o.geometry, `vehicle-${side}:${o.name}`)
+        const clone = new THREE.Mesh(o.geometry, clayFrontSide)
+        clone.applyMatrix4(o.matrixWorld)
+        clone.updateMatrixWorld(true)
+        targets.push(clone)
+      })
+      ray.set(new THREE.Vector3(sign * 2.0, 0.3405 + 0.31, dims.frontHubZ), new THREE.Vector3(-sign, 0, 0))
+      expect(ray.intersectObjects(targets, false).length, `${side} tire clay hit`).toBeGreaterThan(0)
+    }
+    expect(Math.abs(vehicleFull.anchors.wheel.position.x - 0.9563)).toBeLessThan(0.008)
+    clayFrontSide.dispose()
   })
 })

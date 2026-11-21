@@ -11,7 +11,7 @@ import { createVehicle } from '../src/vehicle'
 import { createWorld } from '../src/world'
 import { heroDrain } from '../src/world/deck'
 import { billboardState } from '../src/world/fixtures'
-import { approvedHeroSourceSurvey } from '../src/world/hero-layout'
+import { approvedHeroSourceSurvey, heroScreenMount } from '../src/world/hero-layout'
 import { heroLayoutEye, heroPoint, heroScale } from '../src/world/hero-scale'
 import { heroCityYaw, streetY } from '../src/world/forms'
 import { deckHeight } from '../src/world/roof-look'
@@ -76,11 +76,11 @@ describe('full roof world', () => {
   it('grounds non-overlapping real-scale towers and preserves the design rays and emitter falloff', () => {
     const axis = new THREE.Vector3(0,1,0)
     const eye = new THREE.Vector3(...heroLayoutEye)
-    const at = new THREE.Vector3(2.94,5.61,-29.80).applyAxisAngle(axis,heroCityYaw)
+    const at = new THREE.Vector3(...heroScreenMount.at).applyAxisAngle(axis,heroCityYaw)
     const id = 'magenta violet tower screen'
     const emitter = world.lights.find(l => l.id === id)!
-    const k = heroScale.screen
-    const screen = new THREE.Vector3(...heroPoint([2.94,5.61,-29.80],k)).applyAxisAngle(axis,heroCityYaw)
+    const k = heroScreenMount.scale
+    const screen = new THREE.Vector3(...heroPoint(heroScreenMount.at,k)).applyAxisAngle(axis,heroCityYaw)
     const survey = approvedHeroSourceSurvey().find(s => s.id === id)!
     expect(new THREE.Vector3(...survey.at).distanceTo(screen)).toBeLessThan(1e-10)
     expect(screen.sub(eye).distanceTo(at.sub(eye).multiplyScalar(k))).toBeLessThan(1e-10)
@@ -89,22 +89,44 @@ describe('full roof world', () => {
     expect(emitter.range/k).toBeCloseTo(75,12)
     const city = world.root.getObjectByName('hero tower layout')!
     const footprints: { id: string; box: THREE.Box3 }[] = []
+    const { master } = config.formats
+    const lens = new THREE.PerspectiveCamera()
+    applyLens(lens,cameraAt(config.film.heroFrameSeconds,master,anchors),master.width,master.height,{pixel:[0,0],aperture:[0,0]},1)
+    world.root.updateMatrixWorld(true)
+    const ranks = new Map<string, number>()
     for (const volume of city.children.filter(o => o.name.endsWith(' volume'))) {
-      const shell = volume.children[0] as THREE.Mesh
+      const shell = volume.children[0] as THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial>
       shell.geometry.computeBoundingBox()
       const box = shell.geometry.boundingBox!.clone().translate(shell.position)
       expect(box.min.y).toBeCloseTo(streetY,4)
       for (const other of footprints) expect(box.intersectsBox(other.box),shell.name+' / '+other.id).toBe(false)
       footprints.push({ id: shell.name, box })
+      const rank = shell.material.userData.distanceLayer as string
+      ranks.set(rank, (ranks.get(rank) ?? 0)+1)
+      const { width, height, depth } = shell.geometry.parameters
+      const pane = shell.material.userData.clearPaneWidth as number
+      expect(pane).toBeGreaterThan(.90)
+      expect(pane).toBeLessThan(1.55)
+      expect(width).toBeGreaterThan(pane)
+      if (rank !== 'near') continue
+      const front = shell.localToWorld(new THREE.Vector3(0,height*.25,depth*.5))
+      expect(Math.hypot(front.x-eye.x,front.z-eye.z)).toBeGreaterThan(460)
+      const edge = shell.localToWorld(new THREE.Vector3(pane,height*.25,depth*.5)).project(lens)
+      expect(Math.abs(edge.x-front.project(lens).x)*master.width*.5,shell.name).toBeLessThan(8.6)
     }
     expect(footprints).toHaveLength(44)
+    expect([...ranks.keys()].sort()).toEqual(['far','middle','near'])
+    expect(Math.min(...ranks.values())).toBeGreaterThan(5)
   })
 
   it('builds real-meter facade grids with distinct families and uses practical mesh donors in the cube', () => {
     world.root.updateMatrixWorld(true)
     const city = world.root.getObjectByName('hero tower layout')!
     const facadeFamilies = new Set<string>()
+    const claddingRoughness = new Map<string,number>()
     let rooms = 0
+    let finRows = 0
+    let roofShafts = 0
     for (const volume of city.children.filter(o => o.name.endsWith(' volume'))) {
       const shell = volume.children[0] as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
       const [w,h] = shell.material.userData.moduleMeters as [number,number]
@@ -116,10 +138,22 @@ describe('full roof world', () => {
       expect(shell.material.userData.mechanicalFloorPitch).toBeGreaterThanOrEqual(15)
       expect(shell.material.userData.mechanicalFloorPitch).toBeLessThanOrEqual(25)
       facadeFamilies.add(shell.material.userData.facade)
+      claddingRoughness.set(shell.material.userData.facade,shell.material.roughness)
+      const fins = volume.getObjectByName('extruded curtain wall fins') as THREE.InstancedMesh | undefined
+      if (fins) {
+        const front = shell.position.z+shell.geometry.parameters.depth*.5
+        expect(fins.boundingBox!.min.z).toBeLessThan(front)
+        expect(fins.boundingBox!.max.z).toBeGreaterThan(front)
+        finRows++
+      }
+      if (volume.getObjectByName('offset concrete roof shaft')) roofShafts++
       rooms += Math.floor(width/w)*Math.floor(height/h)
     }
     expect(rooms).toBeGreaterThan(10_000)
     expect(facadeFamilies).toEqual(new Set(['curtain','concrete','banded','hotel']))
+    expect(claddingRoughness.get('concrete')!).toBeGreaterThan(claddingRoughness.get('curtain')!)
+    expect(finRows).toBeGreaterThan(30)
+    expect(roofShafts).toBeGreaterThan(5)
     const probe = new THREE.Vector3(0,.6,0)
     const cornices = city.getObjectByName('hero left edge tower volume')!.children.filter(o=>o.name === 'full height cyan cornice')
     expect(cornices).toHaveLength(2)
@@ -175,9 +209,11 @@ describe('full roof world', () => {
     rig.group.updateMatrixWorld(true)
     source.shadow.updateMatrices(source)
     const c = source.shadow.camera
-    expect(c.near).toBeGreaterThan(270)
-    expect(c.far).toBeLessThan(430)
-    const center = new THREE.Box3().setFromObject(vehicle).getCenter(new THREE.Vector3()).project(c)
+    const center = new THREE.Box3().setFromObject(vehicle).getCenter(new THREE.Vector3())
+    const depth = -center.clone().applyMatrix4(c.matrixWorldInverse).z
+    expect(c.near).toBeGreaterThan(depth-105)
+    expect(c.far).toBeLessThan(depth+35)
+    center.project(c)
     expect(Math.max(Math.abs(center.x),Math.abs(center.y),Math.abs(center.z))).toBeLessThan(1)
     world.beginFrame({ frame: { timeSeconds: config.film.macroFrameSeconds } } as FrameContext)
     rig.update(config.film.macroFrameSeconds,[.5,.5])
@@ -544,6 +580,12 @@ describe('full roof world', () => {
     const wall = world.root.getObjectByName(id)
     const rate = emitter.level(0)
     expect(emitter.object.parent).toBe(wall)
+    expect(face.material.uniforms.picture.value).toBe(1)
+    const tower = world.root.getObjectByName('hero screen tower volume')!.children[0]
+    const supportPlane = new THREE.Box3().setFromObject(tower)
+    const ties = wall!.children.filter(node => node.name === 'billboard facade tie plate')
+    expect(ties).toHaveLength(12)
+    for (const tie of ties) expect(supportPlane.intersectsBox(new THREE.Box3().setFromObject(tie))).toBe(true)
     expect(emitter.intensity).toBe(Math.max(...world.lights.filter(light=>!light.shadow).map(light=>light.intensity)))
     const travel = face.material.uniforms.travel.value as number
     firstFrame(.08*config.film.durationSeconds)
@@ -602,6 +644,13 @@ describe('full roof world', () => {
       expect(toScreen(position('hero full span steel top rail')).y).toBeLessThan(.20)
     }
     cameraAtTime(master, heroFrameSeconds)
+    const wall = world.root.getObjectByName(billboard)!
+    const face = wall.getObjectByName('animated magenta violet mural') as THREE.Mesh<THREE.PlaneGeometry>
+    const { width,height } = face.geometry.parameters
+    const left = toScreen(face.localToWorld(new THREE.Vector3(-width*.5,height*.5,0)))
+    const right = toScreen(face.localToWorld(new THREE.Vector3(width*.5,height*.5,0)))
+    expect(left.y).toBeLessThan(1)
+    expect(right.y-left.y).toBeGreaterThan(.02)
     const skyRay = (x: number, y: number) => new THREE.Raycaster(camera.position,
       new THREE.Vector3(x, y, .5).unproject(camera).sub(camera.position).normalize(), 0, camera.far+150)
     for (const x of [-.50, -.40, -.32, -.24, -.16]) {

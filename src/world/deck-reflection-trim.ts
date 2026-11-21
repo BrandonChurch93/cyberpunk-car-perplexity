@@ -14,8 +14,8 @@ type Run = readonly [fraction: number, y: number, tint: Tint, count: number, w: 
 type Window = { at: Tuple; size: readonly [number,number]; tint: Tint; gain: number }
 
 const floors: Partial<Record<string,readonly Run[]>> = {
-  'hero left edge tower': [[.435,33,'ivory',3,1.44,.69],[.430,53,'cyan',4,1.27,.73],[.462,71,'magenta',2,1.06,.62]],
-  'hero near west garage bay': [[-.32,28,'cyan',3,1.16,.81],[.21,42,'ivory',3,1.56,.80],[-.08,51,'cyan',4,1.60,.79]],
+  'hero left edge tower': [[.435,46,'ivory',3,1.44,.69],[.430,74,'cyan',4,1.27,.73],[.462,99,'magenta',2,1.06,.62]],
+  'hero near west garage bay': [[-.32,37,'cyan',3,1.16,.81],[.21,56,'ivory',3,1.56,.80],[-.08,68,'cyan',4,1.60,.79]],
   'c9 west dispatch': [[-.01,44,'cyan',3,1.93,1.22]],
   'hero bar tower': [[-.33,41,'magenta',3,1.53,.95]],
   'c9 center exchange stairs': [[-.16,94,'magenta',3,1.44,1.06],[.03,102,'ivory',3,1.38,1.10]],
@@ -23,9 +23,9 @@ const floors: Partial<Record<string,readonly Run[]>> = {
   'hero tower setback glass wing': [[-.15,48,'cyan',3,1.71,.78],[.22,59,'magenta',2,1.49,1.13]],
   'hero screen tower': [[-.456,69,'magenta',2,1.48,.93],[-.466,88,'cyan',2,1.64,1.12],[.47,62,'magenta',2,1.7,1.25],[.46,79,'ivory',2,1.94,1.31]],
   'hero amber tower': [[.28,43,'amber',4,1.72,.94],[-.20,63,'magenta',3,1.65,1.21],[.24,83,'amber',4,1.81,1.19],[-.16,94,'ivory',3,1.89,1.3]],
-  'hero near east garage bay': [[-.31,28,'cyan',3,1.12,.71],[.13,42,'magenta',3,1.47,.96],[-.20,54,'ivory',3,1.48,.81]],
-  'hero right edge tower': [[-.448,48,'amber',3,1.58,.87],[-.42,63,'ivory',3,1.80,1.08],[-.32,80,'magenta',3,1.81,1.16]],
-  'c9 east narrow stair': [[-.08,68,'cyan',3,1.57,1.22],[.06,81,'cyan',2,1.58,1.35]],
+  'hero near east garage bay': [[-.31,39,'cyan',3,1.12,.71],[.13,58,'magenta',3,1.47,.96],[-.20,75,'ivory',3,1.48,.81]],
+  'hero right edge tower': [[-.448,60,'amber',3,1.58,.87],[-.42,79,'ivory',3,1.80,1.08],[-.32,101,'magenta',3,1.81,1.16]],
+  'c9 east narrow stair': [[-.08,86,'cyan',3,1.57,1.22],[.06,103,'cyan',2,1.58,1.35]],
   'c9 east relay court': [[.08,78,'amber',3,1.86,1.37]],
 }
 
