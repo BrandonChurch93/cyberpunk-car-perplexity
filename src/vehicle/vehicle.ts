@@ -7,10 +7,13 @@ import { lines as rearLines } from './body/tail'
 import { dims } from './body/shape'
 import { mirrorGeometry } from './geom/mesh'
 import { smoothstep, type V3 } from './geom/vec'
-import { bay } from './parts/bay'
-import { diffuser, floor, liner } from './parts/chassis'
+import { engineBay } from './parts/enginebay'
+import { liner } from './parts/chassis'
 import { mirror } from './parts/mirror'
-import { exhaust, guide } from './parts/lamps'
+import { underbody, valance } from './parts/diffuser'
+import { outlets } from './parts/outlets'
+import { taillamps } from './parts/taillamps'
+import { guide } from './parts/lamps'
 import { buildFront } from './parts/front'
 import { buildWheel, type WheelSpec } from './parts/wheel'
 import { glazing } from './parts/glass'
@@ -124,32 +127,37 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const { cuts } = body
   const S = body.surfaces
 
-  for (const [name, c] of [
-    ['tail-upper', cuts.curves.lampU],
-    ['tail-lower', cuts.curves.lampL],
-    ['tail-chevron', cuts.curves.chev],
-  ] as const) addPair(guide(S.rear, c, 0.004, 0.012, 0.006), m.tail, name)
+  const tl = taillamps(cuts.maps.rear, [cuts.curves.stem, cuts.curves.lampU, cuts.curves.lampL, cuts.curves.chev])
+  addPair(tl.guide, m.tail, 'tail-guide')
+  addPair(tl.housing, m.under, 'tail-housing')
 
   // Front module: eyes, Y guides, projectors, ducts, grille and splitter (parts/front.ts).
   // The registry accepts any material; the front module tags its own lens, guide and die finishes.
   const front = buildFront(sprung, cuts, { ...m, tag: (material, wetness) => m.tag(material as THREE.MeshStandardMaterial, wetness) }, full)
 
-  const ex = exhaust(cuts.maps.rear, rearLines.exhaust)
+  const ex = outlets(cuts.curves.surround)
   addPair(ex.lip, m.ceramic, 'outlet-lip')
   addPair(ex.pipes, m.soot, 'outlet-pipe')
   addPair(ex.soot, m.soot, 'outlet-back')
+  addPair(ex.housing, m.under, 'outlet-housing')
 
-  const by = bay(cuts.curves.bay, full ? 0.012 : 0.02)
+  const by = engineBay(cuts.curves.bay, full ? 0.012 : 0.02)
   addPair(by.tub, m.matte, 'bay-tub')
   addPair(by.covers, m.covers, 'cam-cover')
   addPair(by.carbon, m.carbon, 'bay-carbon')
-  add(sprung, by.center, m.carbon, 'plenum')
+  addPair(by.grille, m.mesh, 'bay-grille')
+  addPair(by.bezel, m.matte, 'bay-bezel')
+  addPair(by.duct, m.soot, 'bay-duct')
+  addPair(by.ledge, m.matte, 'bay-ledge')
+  add(sprung, by.center, m.covers, 'plenum')
   add(sprung, by.mesh, m.mesh, 'bay-mesh')
 
-  addPair(floor(), m.under, 'floor')
-  const df = diffuser(-dims.halfLength)
-  addPair(df.roof, m.under, 'diffuser')
-  addPair(df.fins, m.carbon, 'diffuser-fin')
+  const ub = underbody()
+  addPair(ub.floor, m.under, 'diffuser')
+  addPair(ub.strakes, m.carbon, 'diffuser-fin')
+  const va = valance(cuts.curves.lower, cuts.maps.rear)
+  addPair(va.wall, m.under, 'diffuser-wall')
+  addPair(va.panel, m.mesh, 'diffuser-mesh')
   addPair(liner(dims.frontHubZ, dims.frontTire.radius, 0.415, 0.5, 0.99), m.under, 'liner-front')
   addPair(liner(dims.rearHubZ, dims.rearTire.radius, 0.44, 0.5, 1.01), m.under, 'liner-rear')
   const mr = mirror(body.surfaces.main, body.cuts.maps.main)

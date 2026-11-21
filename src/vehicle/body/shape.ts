@@ -160,9 +160,10 @@ export const keyLines = {
   ]),
   // The center line: the bonnet one straight rising line from the nose tip to the windscreen base, the screen raked a
   // little steeper, the roof, the deck.
-  // The ridge blend at the V tip rounds the corner back by about 21 mm, so the key line starts that far ahead.
+  // The ridge blend at the V tip rounds the corner back by about 16 mm, and the deck tip's by about 5 mm, so the key
+  // line runs that far past each end.
   center: line([
-    [zFront + 0.021, 0, 0.408],
+    [zFront + 0.0165, 0, 0.408],
     [2.2, 0, 0.505],
     [1.9, 0, 0.604],
     [1.5, 0, 0.736],
@@ -183,7 +184,7 @@ export const keyLines = {
     [-1.8, 0, 0.93],
     [-2.1, 0, 0.905],
     [-2.3, 0, 0.893],
-    [zRear, 0, 0.885],
+    [zRear - 0.0045, 0, 0.885],
   ]),
 }
 
@@ -220,11 +221,12 @@ export const mainDef: LoftDef = {
   ],
   segs: [
     { bulgeA: 0.08 },
-    { bulgeA: -0.06 },
+    // The lower flank: a shallow hollow, scooped deep behind the front wheel and on through the door into the intake.
+    { bulgeA: [[0, -0.06], [0.27, -0.06], [0.34, -0.3], [0.54, -0.3], [0.62, -0.06], [1, -0.06]] },
     // The upper flank: a plane.
     { bulgeA: [[0, 0.06], [0.2, 0.03], [0.3, 0.02], [1, 0.02]] },
-    // Wing top: a flat facet. Side glass: curved. Deck flank: nearly flat.
-    { bulgeA: [[0, 0], [0.17, 0], [0.27, 0.12], [0.72, 0.12], [0.84, 0.03], [1, 0.03]] },
+    // Wing top: a flat facet over the arch crown. Side glass: curved. Deck flank: nearly flat.
+    { bulgeA: [[0, 0], [0.225, 0], [0.3, 0.12], [0.72, 0.12], [0.84, 0.03], [1, 0.03]] },
     // Bonnet side facet: flat. Roof and deck: crowned.
     { bulgeA: [[0, 0], [0.17, 0], [0.27, 0.12], [1, 0.08]] },
     // Bonnet center: a flat facet each side. Roof and deck: crowned.
