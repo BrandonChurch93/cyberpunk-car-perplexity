@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { config, frameCount } from '../src/config'
-import type { FrameContext, SampleContext } from '../src/core/contract'
+import { candelaPerUnit, type FrameContext, type SampleContext } from '../src/core/contract'
 import { apertureRadius, applyLens } from '../src/core/lens'
 import { LightRig } from '../src/core/lights'
 import { cameraAt } from '../src/director/shots'
@@ -342,6 +342,21 @@ describe('full roof world', () => {
     expect(world.signs).toContain('HOTEL')
   })
 
+  it('shows the stacked accent cabinets from both hero cameras', () => {
+    const point = new THREE.Vector3()
+    for (const name of ['stacked amber arcade cabinet','stacked amber noodle cabinet']) {
+      const cabinet = world.root.getObjectByName(name)!
+      expect(cabinet.parent?.name).toBe('hero near east garage bay volume')
+      cabinet.getObjectByName('diffusing cabinet face')!.getWorldPosition(point)
+      for (const format of [config.formats.master,config.formats.vertical]) {
+        const eye = cameraAt(config.film.heroFrameSeconds,format,anchors).position
+        const delta = point.clone().sub(eye)
+        const ray = new THREE.Raycaster(eye,delta.clone().normalize(),.01,delta.length()+.025)
+        expect(ray.intersectObject(world.root,true)[0]?.object.parent).toBe(cabinet)
+      }
+    }
+  })
+
   it('mounts the reflection strip to the ramp without adding a film light', () => {
     const ramp = world.root.getObjectByName('drive-down ramp and control island')!
     ramp.updateWorldMatrix(true, true)
@@ -555,6 +570,88 @@ describe('full roof world', () => {
     expect(axis(wheel.object).y).toBeLessThan(shoulderAim-.03)
     expect(wheel.level((wheelBeat.start+wheelBeat.end)/2)).toBeGreaterThan(wheel.level(0)*3)
     expect(wheel.level(config.film.durationSeconds)).toBeCloseTo(wheel.level(0),12)
+  })
+
+  it('keeps the wide luminaires out of all camera frusta and retains the macro light cues', () => {
+    const poles = ['west nose luminaire','east rim luminaire'].map(name=>world.root.getObjectByName(name)!)
+    const lights = ['north deck pole','wheel deck pole'].map(id=>world.lights.find(light=>light.id===id)!)
+    const camera = new THREE.PerspectiveCamera()
+    const projection = new THREE.Matrix4()
+    const frustum = new THREE.Frustum()
+    const bounds = poles.map(pole=>new THREE.Box3().setFromObject(pole).expandByScalar(.04))
+    const shutterHalf = config.film.shutterDegrees/(720*config.film.fps)
+    const wake = config.beats.find(beat=>beat.id==='wake')!
+    world.beginFrame({ frame: { timeSeconds: config.film.heroFrameSeconds } } as FrameContext)
+    expect(world.lights).toHaveLength(8)
+    const rig = new LightRig(world.lights,64)
+    const spots = new Map(rig.group.children.filter(o=>o instanceof THREE.SpotLight).map(o=>[o.name,o] as const))
+    for (const [i,light] of lights.entries()) {
+      expect(light.object.parent?.parent).toBe(poles[i])
+      expect(light.object.parent!.children.filter(o=>o.name==='opal LED optic')).toHaveLength(2)
+      const y = light.object.getWorldPosition(new THREE.Vector3()).y
+      expect(y).toBeGreaterThanOrEqual(6)
+      expect(y).toBeLessThanOrEqual(8)
+      expect(light.beam && light.shadow).toBe(true)
+      const angle = light.angle!
+      const flux = light.intensity*candelaPerUnit*2*Math.PI*(1-.5*(Math.cos(angle)+Math.cos(angle*(1-light.penumbra!))))
+      expect(flux).toBeGreaterThanOrEqual(15_000)
+      expect(flux).toBeLessThanOrEqual(20_000)
+      const {r,g,b} = light.color
+      const X = .4124*r+.3576*g+.1805*b
+      const Y = .2126*r+.7152*g+.0722*b
+      const Z = .0193*r+.1192*g+.9505*b
+      const n = (X/(X+Y+Z)-.332)/(Y/(X+Y+Z)-.1858)
+      const kelvin = -449*n**3+3525*n**2-6823.3*n+5520.33
+      expect(kelvin).toBeGreaterThanOrEqual(5000)
+      expect(kelvin).toBeLessThanOrEqual(5700)
+    }
+    world.beginSample({ timeSeconds: wake.end+.007, sample: { frame: { timeSeconds: wake.end-.001 } } } as SampleContext)
+    expect(lights.every(light=>light.beam)).toBe(true)
+    rig.update(wake.end+.007,[.5,.5])
+    for (const light of lights) expect(spots.get(light.id)?.angle).toBeCloseTo(light.angle!,12)
+    world.beginSample({ timeSeconds: wake.end-.007, sample: { frame: { timeSeconds: wake.end } } } as SampleContext)
+    expect(lights.every(light=>!light.beam)).toBe(true)
+    rig.update(wake.end-.007,[.5,.5])
+    for (const light of lights) expect(spots.get(light.id)?.angle).toBeCloseTo(light.angle!,12)
+    expect(lights[0].object.parent?.name).toBe('rear service flood bank')
+    for (const format of [config.formats.master,config.formats.vertical]) {
+      for (let i=0;i<=frameCount;i++) {
+        const t = i/config.film.fps
+        for (const offset of [-shutterHalf,0,shutterHalf]) {
+          const state = cameraAt(t+offset,format,anchors,t)
+          const clearance = Math.min(...bounds.map(box=>box.distanceToPoint(state.position)))-apertureRadius(state)
+          expect(clearance).toBeGreaterThan(.10)
+          applyLens(camera,state,format.width,format.height,{pixel:[0,0],aperture:[0,0]},1)
+          camera.updateMatrixWorld(true)
+          frustum.setFromProjectionMatrix(projection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse))
+          expect(bounds.some(box=>frustum.intersectsBox(box)),format.id+' '+i).toBe(false)
+        }
+      }
+    }
+    world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
+  })
+
+  it('mounts the north and east tenant surrounds on existing facades and exposes them to the cube', () => {
+    world.root.updateMatrixWorld(true)
+    const eye = new THREE.Vector3(0,.6,0)
+    for (const name of ['north central tower','northeast terrace','east residential tower']) {
+      const building = world.root.getObjectByName(name)!
+      const facade = building.getObjectByName('lit concourse and tenant bays')!
+      const walls = building.children.filter(o=>o.name==='building mass').map(o=>new THREE.Box3().setFromObject(o))
+      for (const bracket of facade.children.filter(o=>o.name==='concourse shear bracket')) {
+        const bounds = new THREE.Box3().setFromObject(bracket)
+        expect(walls.some(wall=>wall.intersectsBox(bounds)),name).toBe(true)
+      }
+      const panes = facade.children.filter(o=>o.name==='ceiling reflected through tenant glass')
+      expect(panes).toHaveLength(14)
+      const visible = panes.reduce((count,pane) => {
+        const target = pane.getWorldPosition(new THREE.Vector3()).sub(eye)
+        const length = target.length()
+        const ray = new THREE.Raycaster(eye,target.normalize(),0,length+.03)
+        return count+Number(ray.intersectObject(world.root,true)[0]?.object===pane)
+      },0)
+      expect(visible,name).toBeGreaterThanOrEqual(4)
+    }
   })
 
   it('keeps supported traffic, navigation lights and roof beacons periodic in both hooks', () => {

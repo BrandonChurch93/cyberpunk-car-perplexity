@@ -301,10 +301,10 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
           length,n===0 ? crownCyan : edgeRust,false,index===8 ? .61 : .82)
       }
     }
-    if (index === 8) {
-      const px = wx+w*.27, pz = wz+d*.50+.52
-      practical.cabinet(tower,'stacked amber arcade cabinet',[px,58.4,pz],[7.74,2.50],[4.83,2.13,.48],'ARCADE')
-      practical.cabinet(tower,'stacked amber noodle cabinet',[px,63.2,pz],[7.21,1.86],[4.36,2.43,.78],'NOODLES')
+    if (index === 10) {
+      const px = wx-w*.14, pz = wz+d*.50+.50
+      practical.cabinet(tower,'stacked amber arcade cabinet',[px,wy-11.4,pz],[5.67,1.94],[5.42,2.73,.72],'ARCADE')
+      practical.cabinet(tower,'stacked amber noodle cabinet',[px,wy-7.0,pz],[5.53,1.53],[5.07,3.13,1.16],'NOODLES')
     }
   }
   const upper = towerSurface('hero tower setback roof bay', .094, 'curtain', screenReflection, spillAt('setback'))
