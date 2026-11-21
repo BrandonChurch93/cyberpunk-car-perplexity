@@ -200,7 +200,8 @@ export const mainDef: LoftDef = {
     { pts: keyLines.crease, round: edge, sharp: 1 },
     { pts: keyLines.shoulder, round: edge, sharp: 1 },
     // Ahead of the bonnet corner the bonnet's two creases are only guides: the bonnet and wing top meet the front edge
-    // as one surface, and the creases come in over the last few centimeters before the corner.
+    // as one surface, and the creases come in over the last few centimeters before the corner. The inner one keeps a
+    // short crisp kink where the level V of the front edge turns up over the eye, dying out tangent behind it.
     {
       pts: keyLines.rail,
       monotone: true,
@@ -212,7 +213,7 @@ export const mainDef: LoftDef = {
       pts: keyLines.inner,
       monotone: true,
       round: [[0, edge], [uz(keyLines.inner, 1.477), edge], [uz(keyLines.inner, 1.255), 0.08], [1, 0.08]],
-      sharp: [[0, 0], [uz(keyLines.inner, 2.27), 0], [uz(keyLines.inner, 2.18), 1], [uz(keyLines.inner, 1.477), 1], [uz(keyLines.inner, 1.255), 0], [1, 0]],
+      sharp: [[0, 1], [uz(keyLines.inner, 2.36), 1], [uz(keyLines.inner, 2.33), 0], [uz(keyLines.inner, 2.27), 0], [uz(keyLines.inner, 2.18), 1], [uz(keyLines.inner, 1.477), 1], [uz(keyLines.inner, 1.255), 0], [1, 0]],
     },
     // Along the bonnet the two flat center facets meet at a blended ridge, so the leading edge is a straight V.
     { pts: keyLines.center, round: [[0, 0.08], [0.17, 0.08], [0.24, 0.15], [1, 0.15]], sharp: [[0, 1], [0.17, 1], [0.24, 0], [1, 0]] },
