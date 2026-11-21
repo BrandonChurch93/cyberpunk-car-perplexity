@@ -520,7 +520,10 @@ describe('full roof world', () => {
     const optic = world.root.getObjectByName(rise.id)?.getObjectByName('weather-sealed opal face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
     expect(optic.geometry.parameters.width*rise.scale).toBeLessThan(rise.size[0]*.72)
     expect(optic.material.uniforms.shaped?.value).toBe(1)
-    expect(world.lights.find(light=>light.id===rise.id)?.size).toEqual(rise.size)
+    world.beginFrame({ frame: { timeSeconds: t } } as FrameContext)
+    const wideFootprint = world.lights.find(light=>light.id===rise.id)?.size
+    world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
+    expect(wideFootprint).toEqual(rise.size)
   })
 
   it('shows the stacked accent cabinets from both hero cameras', () => {
