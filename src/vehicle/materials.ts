@@ -2,8 +2,8 @@ import * as T from 'three'
 import type { PaintSpec } from '../config'
 import { stream } from '../core/random'
 import { insertAfter, patchMaterial, replaceOnce } from '../materials/patch'
-import type { VehicleModule } from './contract'
-import type { Material } from './geometry'
+import type { VehicleDetail, VehicleModule } from './contract'
+type Material = T.Material
 
 const carbonPaths = {
   map: '/assets/third-party/textures/carbon-weave/Fabric004_2K-PNG_Color.png',
@@ -451,3 +451,80 @@ export function palette(spec: PaintSpec, full: boolean) {
 }
 
 export type Palette = ReturnType<typeof palette>
+
+/** The slots the kept body and its parts draw with. The finishes are the film palette above; the lamp emitters keep their radiance calibration. */
+export interface Materials {
+  paint: T.MeshPhysicalMaterial
+  glass: T.MeshPhysicalMaterial
+  shell: T.MeshStandardMaterial
+  drl: T.MeshPhysicalMaterial
+  tail: T.MeshPhysicalMaterial
+  beamLens: T.MeshPhysicalMaterial
+  housing: T.MeshStandardMaterial
+  ceramic: T.MeshStandardMaterial
+  soot: T.MeshStandardMaterial
+  matte: T.MeshStandardMaterial
+  covers: T.MeshStandardMaterial
+  carbon: T.MeshPhysicalMaterial
+  mesh: T.MeshStandardMaterial
+  under: T.MeshStandardMaterial
+  mirror: T.MeshPhysicalMaterial
+  tire: T.MeshStandardMaterial
+  rim: T.MeshStandardMaterial
+  disc: T.MeshStandardMaterial
+  hat: T.MeshStandardMaterial
+  caliper: T.MeshStandardMaterial
+  setLevels(running: number, beam: number, tail: number): void
+  setPaint(paint: PaintSpec): void
+}
+
+const drlLuminance = 140
+const tailLuminance = 40
+const beamLuminance = 600
+
+export async function makeMaterials(detail: VehicleDetail, paint: PaintSpec): Promise<Materials> {
+  const full = detail === 'full'
+  const pal = palette(paint, full)
+  await pal.load()
+  const std = (color: number, roughness: number, extra: T.MeshStandardMaterialParameters = {}): T.MeshStandardMaterial =>
+    new T.MeshStandardMaterial({ color, roughness, metalness: 0, side: T.DoubleSide, ...extra })
+  const phys = (color: number, roughness: number, extra: T.MeshPhysicalMaterialParameters = {}): T.MeshPhysicalMaterial =>
+    new T.MeshPhysicalMaterial({ color, roughness, metalness: 0, ...extra })
+  const two = <M extends T.Material>(material: M): M => {
+    material.side = T.DoubleSide
+    return material
+  }
+  const dark = 0x2b2c2f
+  const darker = 0x1d1e20
+  const m: Materials = {
+    paint: pal.paint,
+    glass: pal.glass,
+    shell: std(darker, 0.9),
+    drl: phys(0xb9bcc0, 0.4, { emissive: new T.Color(0.86, 0.92, 1), emissiveIntensity: 0 }),
+    tail: phys(0x3a3c40, 0.4, { emissive: new T.Color(1, 0.02, 0.01), emissiveIntensity: 0 }),
+    beamLens: phys(0x55585c, 0.2, { emissive: new T.Color(1, 0.96, 0.9), emissiveIntensity: 0 }),
+    housing: two(pal.dark),
+    ceramic: two(pal.hot),
+    soot: std(darker, 0.95),
+    matte: two(pal.matte),
+    covers: two(pal.bayCover),
+    carbon: two(pal.carbon),
+    mesh: std(darker, 0.7),
+    under: two(pal.diffuser),
+    mirror: pal.mirror,
+    tire: two(pal.tire),
+    rim: two(pal.forged),
+    disc: two(pal.brake),
+    hat: two(pal.brushed),
+    caliper: two(pal.caliper),
+    setLevels(running, beam, tail) {
+      m.drl.emissiveIntensity = drlLuminance * running
+      m.tail.emissiveIntensity = tailLuminance * tail
+      m.beamLens.emissiveIntensity = beamLuminance * beam
+    },
+    setPaint(next) {
+      pal.setPaint(next)
+    },
+  }
+  return m
+}
