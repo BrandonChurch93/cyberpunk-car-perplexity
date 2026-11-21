@@ -50,8 +50,18 @@ export function withoutGapEdges(parts: TessResult[], near: (p: V3) => boolean): 
 }
 
 export function resample(c: SurfaceCurve, step: number): { p: V3[]; uv: Array<[number, number]> } {
-  const P = c.p
-  const UV = c.uv
+  const P: V3[] = []
+  const UV: Array<[number, number]> = []
+  c.p.forEach((q, i) => {
+    const r = P[P.length - 1]
+    if (r && Math.hypot(q[0] - r[0], q[1] - r[1], q[2] - r[2]) < 1e-6) return
+    P.push(q)
+    UV.push(c.uv[i] as [number, number])
+  })
+  if (c.closed && P.length > 2 && Math.hypot(P[0][0] - P[P.length - 1][0], P[0][1] - P[P.length - 1][1], P[0][2] - P[P.length - 1][2]) < 1e-6) {
+    P.pop()
+    UV.pop()
+  }
   const n = P.length
   const m = c.closed ? n : n - 1
   const p: V3[] = []
