@@ -178,6 +178,7 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const va = valance(cuts.curves.lower, cuts.maps.rear)
   addPair(va.wall, m.exhaust, 'diffuser-wall')
   addPair(va.panel, m.diffuserMesh, 'diffuser-mesh')
+  addPair(va.frame, m.bezel, 'diffuser-frame')
   buildLiners(sprung, S.main, { ...m, tag }, full)
   const mr = mirror(body.surfaces.main, body.cuts.maps.main)
   addPair(mr.head, m.paint, 'mirror-head')

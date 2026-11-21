@@ -122,7 +122,7 @@ describe('rear module', () => {
   const bay = engineBay(c.bay, 0.02)
   const closed: Array<[string, THREE.BufferGeometry]> = [
     ['outlet lip', ex.lip], ['outlet pipes', ex.pipes], ['outlet back', ex.soot], ['outlet housing', ex.housing],
-    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['lamp reflector', tl.reflector], ['lamp optic', tl.optic], ['valance wall', va.wall],
+    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['lamp reflector', tl.reflector], ['lamp optic', tl.optic], ['valance wall', va.wall], ['mesh frame', va.frame],
     ['bay covers', bay.covers], ['bay carbon', bay.carbon], ['plenum', bay.center], ['bay mesh', bay.mesh],
     ['airbox grille', bay.grille], ['grille bezel', bay.bezel], ['grille duct', bay.duct], ['bay core', bay.core], ['grille ledge', bay.ledge], ['bay shelf', bay.shelf],
     ['intake hose', bay.hose], ['hose clamp', bay.clamp],
@@ -282,6 +282,20 @@ describe('rear module', () => {
       if (Math.abs(pos.getX(i)) < 0.55) expect(pos.getZ(i)).toBeGreaterThan(meshZ - 0.01)
     }
     expect(meshZ - (-dims.halfLength)).toBeGreaterThan(0.25)
+  })
+
+  it('hangs the mesh on the back of the housing only, each half whole cells inside its own frame', () => {
+    const pos = va.panel.getAttribute('position')
+    for (let i = 0; i < pos.count; i++) expect(Math.abs(pos.getZ(i) - meshZ)).toBeLessThan(0.004)
+    va.frame.computeBoundingBox()
+    const fb = va.frame.boundingBox!
+    va.panel.computeBoundingBox()
+    const pb = va.panel.boundingBox!
+    expect(pb.min.x).toBeGreaterThan(fb.min.x + 0.005)
+    expect(pb.max.x).toBeLessThan(fb.max.x - 0.005)
+    expect(pb.min.y).toBeGreaterThan(fb.min.y + 0.005)
+    expect(pb.max.y).toBeLessThan(fb.max.y - 0.005)
+    expect(fb.min.x).toBeGreaterThanOrEqual(-1e-6)
   })
 })
 

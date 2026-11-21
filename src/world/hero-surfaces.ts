@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { config } from '../config'
 import { stream } from '../core/random'
-import { insertAfter, patchMaterial } from '../materials/patch'
+import { insertAfter, insertBefore, patchMaterial } from '../materials/patch'
 import { muralMean, muralPainting, pictureLookup } from './mural-picture'
 
 const opalVertex = /* glsl */ `
@@ -26,9 +26,26 @@ export type SignSpill = { point: THREE.Vector3; size: THREE.Vector2; color: THRE
 export type ScreenReflection = { point: THREE.Vector3; normal: THREE.Vector3; size: THREE.Vector2; picture: ReturnType<typeof billboardMural>['picture']; spill: THREE.Color }
 export type FacadeLayer = 'near' | 'middle' | 'far'
 
+const bayPitches: Record<Facade, readonly [number, number, number, number]> = {
+  curtain: [1.54,1.80,3.30,3.60],
+  concrete: [1.33,1.53,3.18,3.39],
+  banded: [1.39,1.70,3.02,3.18],
+  hotel: [1.44,1.67,3.06,3.25],
+}
+
 export function towerSurface(id: string, level: number, facade: Facade, screen: ScreenReflection, spills: readonly SignSpill[], layer: FacadeLayer, frontageDistance: number): THREE.MeshStandardMaterial {
   const r = stream(`world/hero/tower/${id}`)
-  const cell = new THREE.Vector2(layer === 'near' ? r.range(1.63, 1.79) : r.range(1.29, 1.77), r.range(3.12, 3.58))
+  const north = /^north /.test(id)
+  const [w0,w1,h0,h1] = bayPitches[facade]
+  const cell = north
+    ? new THREE.Vector2(layer === 'near' ? r.range(1.63,1.79) : r.range(1.29,1.77),r.range(3.12,3.58))
+    : new THREE.Vector2(r.range(w0,w1),r.range(h0,h1))
+  const organization = stream(`world/hero/tenancy/${id}`)
+  const tenantRhythm = north ? new THREE.Vector4(4,3,1,0) : new THREE.Vector4(
+    (facade === 'hotel' ? 2.8 : facade === 'banded' ? 3.2 : 4.6)+organization.range(0,2.8),
+    (facade === 'hotel' ? 1.8 : facade === 'banded' ? 4.4 : 2.4)+organization.range(0,1.5),
+    organization.range(.66,1.36), organization.range(.07,.97),
+  )
   const whiteBalance = r.range(.14, .48)
   const seed = r.range(0, 61)
   const mechanicalPitch = 15+r.int(11)
@@ -45,6 +62,9 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
     ? new THREE.Color(.72,1.03,1.12) : /right edge|amber tower|east garage/.test(id) ? new THREE.Color(1.15,1.00,.87) :
       new THREE.Color(.96,.98,1.08)
   const centerBank = /middle (west|center) distance|far (center|central|inner west)|center (exchange|clock|fluted|kiln|upper|communication|distant)|rear middle|hero (violet|bar) tower|tower setback glass wing/.test(id)
+  const crownMist = !north && layer !== 'near' && /far center|center upper lift|center distant crown|rear middle/.test(id)
+    ? new THREE.Vector3(111+8*tenantRhythm.w,137+7*tenantRhythm.z,.51+.17*tenantRhythm.w)
+    : new THREE.Vector3(0,1,0)
   const reflectedVeil = centerBank
     ? layer === 'near' ? new THREE.Color(.025,.018,.026) : new THREE.Color(.190,.126,.163)
     : layer === 'near' ? new THREE.Color(0,0,0)
@@ -61,7 +81,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   const stripFloors = /left edge|west garage/.test(id)
   const amberRisers = id === 'hero amber tower'
   const hotelFrontage = id === 'hero hotel tower'
-  const southRooms = /^north /.test(id) ? 0 : 1
+  const southRooms = north ? 0 : 1
   const tenantFill = new THREE.Vector2(
     southRooms * (hotelFrontage ? .91 : amberRisers ? .82 : centerBank ? .77 : .36),
     hotelFrontage ? .75 : amberRisers ? .43 : centerBank ? .69 : .54,
@@ -72,6 +92,9 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   const windowTail = layer === 'far' ? 0 : west ? 98+8*westOffices
     : /amber tower|right edge|east garage/.test(id) ? 29
     : /screen tower|bar tower|center exchange|center clock|center fluted/.test(id) ? 32 : 12
+  const skylineAir = north ? new THREE.Vector3() : new THREE.Vector3(
+    1, centerBank ? .84 : west ? .21 : .40, west ? .13 : .19,
+  )
   const spill = (i: number) => spills[i] ?? { point: new THREE.Vector3(), size: new THREE.Vector2(1,1), color: new THREE.Color(0,0,0) }
   const prefix = 'varying vec2 wallUv, wallUnit, wallFacing; varying vec3 wallPoint, wallNormal, wallTangent; varying float wallSide;'
   const mat = new THREE.MeshStandardMaterial({
@@ -80,8 +103,10 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
     metalness: facade === 'concrete' ? .08 : facade === 'hotel' ? .24 : .42,
   })
   mat.userData.moduleMeters = cell.toArray()
+  mat.userData.tenantRhythm = tenantRhythm.toArray()
   mat.userData.facade = facade
   mat.userData.distanceLayer = layer
+  mat.userData.crownMist = crownMist.toArray()
   mat.userData.clearPaneWidth = paneHalfWidth*2*cell.x
   mat.userData.litOpeningMeters = clearOpening.toArray()
   mat.userData.mechanicalFloorPitch = mechanicalPitch
@@ -89,15 +114,18 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   mat.userData.tenantGate = tenantGate.toArray()
   mat.userData.tenantFill = tenantFill.toArray()
   mat.userData.windowContrast = windowContrast
+  mat.userData.skylineAir = skylineAir.toArray()
   patchMaterial(mat, {
     id: 'hero tower cladding and window rooms',
     uniforms: {
       bay: { value: cell }, roomDepthMeters: { value: roomDepthMeters }, salt: { value: seed }, facadeFamily: { value: family },
+      tenantRhythm: { value: tenantRhythm }, crownMist: { value: crownMist },
       shellLuma: { value: level }, whiteBalance: { value: whiteBalance },
       paneHalfWidth: { value: paneHalfWidth }, litOpening: { value: litOpening },
       facadeTint: { value: facadeTint }, reflectedVeil: { value: reflectedVeil }, windowTail: { value: windowTail }, claddingShade: { value: claddingShade },
       shadowWash: { value: shadowWash }, garageReturn: { value: garageReturn }, roomPhotometry: { value: roomPhotometry },
       windowContrast: { value: windowContrast }, amberRisers: { value: Number(amberRisers) }, westGlaze: { value: Number(west && layer === 'near') },
+      skylineAir: { value: skylineAir },
       mechanicalPitch: { value: mechanicalPitch }, distanceLayer: { value: layer === 'near' ? 0 : layer === 'middle' ? 1 : 2 },
       stripFloors: { value: stripFloors ? 1 : 0 }, tenantGate: { value: tenantGate }, tenantFill: { value: tenantFill },
       screenPoint: { value: screen.point }, screenNormal: { value: screen.normal }, screenSize: { value: screen.size },
@@ -120,8 +148,11 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', /* glsl */ `
         ${prefix}
         uniform vec2 bay, roomDepthMeters, litOpening, tenantFill;
+        uniform vec4 tenantRhythm;
+        uniform vec3 crownMist;
         uniform float salt, facadeFamily, shellLuma, whiteBalance, mechanicalPitch, distanceLayer, stripFloors, windowTail, windowContrast, paneHalfWidth, claddingShade, amberRisers, westGlaze, garageReturn;
         uniform vec3 screenPoint,screenNormal,facadeTint,reflectedVeil,screenSpill,tenantGate,shadowWash,roomPhotometry;
+        uniform vec3 skylineAir;
         uniform vec3 spillPoint[2],spillTint[2];
         uniform vec2 screenSize,spillSize[2];
         uniform sampler2D screenInk;
@@ -174,18 +205,18 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         float roomId=hash21(roomCell+salt);
         float exposure=hash21(roomCell.yx+salt*1.77);
         float roomTintId=hash21(roomCell+vec2(salt*2.25,17.2));
-        float run=floor(roomCell.y*.25);
+        float run=floor(roomCell.y/tenantRhythm.x+tenantRhythm.w);
         float stack=hash21(vec2(run,salt));
         float floorState=hash21(vec2(roomCell.y,salt*1.21));
         float hotel=step(2.5,facadeFamily);
-        float tenantWidth=3.0+floor((5.0-hotel*2.0)*hash21(vec2(run+19.0,salt)));
+        float tenantWidth=tenantRhythm.y+floor((5.0-hotel*2.0)*hash21(vec2(run+19.0,salt)));
         float tenant=floor((roomCell.x+stack*7.0)/tenantWidth);
         float suite=hash21(vec2(tenant,roomCell.y)+salt*.53);
         float tenantStack=hash21(vec2(tenant,run)+salt*.89);
         float concrete=1.0-step(.5,abs(facadeFamily-1.0));
         float banded=1.0-step(.5,abs(facadeFamily-2.0));
         float curtain=1.0-max(concrete,max(banded,hotel));
-        float district=field(vec2(roomCell.x/(tenantWidth*1.44),roomCell.y*.164)+vec2(salt,salt*.63));
+        float district=field(vec2(roomCell.x/(tenantWidth*1.44),roomCell.y*.164*tenantRhythm.z)+vec2(salt,salt*.63));
         float tenantOn=step(tenantGate.y+mix(.14,-.12,district),mix(suite,tenantStack,.61));
         float floorBlock=hash21(vec2(floor((roomCell.y+salt*.41)/(hotel>0.0?5.0:7.0)),salt*1.83));
         float occupied=step(tenantGate.x,floorState)*max(tenantOn*step(.14,roomId),step(.968,roomId));
@@ -282,7 +313,10 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         float receive=mix(1.0,max(wallFacing.x,wallFacing.y*smoothstep(.77,.99,wallUnit.x)),garageReturn);
         float spillCompression=mix(1.0,roomPhotometry.z,smoothstep(.105,.260,baseLuma));
         baseGlow=baseGlow*spillCompression+shadowWash*shadow*receive*(.75+.33*panelReflectance)*(1.0-.35*mechanical-.21*rib);
-        totalEmissiveRadiance+=wallSide*baseGlow;
+        float offsetDistance=length((wallPoint-cameraPosition).xz);
+        float nearTier=1.0-smoothstep(490.0,760.0,offsetDistance);
+        float claddingExposure=smoothstep(.028,.092,baseLuma)*(1.0-.79*lamp);
+        totalEmissiveRadiance+=wallSide*baseGlow*(1.0-skylineAir.x*skylineAir.z*nearTier*claddingExposure);
         totalEmissiveRadiance+=(sill+pilaster*.14+corner*.44)*skyGlass*(.53+.19*floorState)*(.52+.59*curtain+.35*banded);
         float lampRadiance=.46+1.64*exposure*exposure+mix(10.8,3.9,rank)*pow(exposure,10.0)+.39*windowTail*pow(exposure,17.0)+riserOpen*(.53+1.4*exposure);
         float roomCompression=mix(roomPhotometry.y,1.0,smoothstep(.86,.99,exposure));
@@ -311,6 +345,32 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
           (12.0+46.0*exposure*exposure)*(.56+.44*roomLight);
         totalEmissiveRadiance+=wallSide*roomTint*(lobby*.12+curtainBand*.086)*(1.0-mechanical)*
           (1.0-smoothstep(.13,.25+lightAA.y,abs(pane.y-.56)));
+      `)
+      shader.fragmentShader = insertBefore(shader.fragmentShader, '#include <opaque_fragment>', /* glsl */ `
+        if (crownMist.z>.0) {
+          vec3 along=normalize(wallPoint-cameraPosition);
+          float districtAngle=atan(along.x,-along.z)-atan(screenPoint.x,-screenPoint.z)+.114;
+          float angleScale=districtAngle/.235;
+          float uplight=exp(-angleScale*angleScale);
+          float weather=field(wallPoint.xz*.014+vec2(wallPoint.y*.037,salt));
+          float bankHeight=6.7*(weather-.5);
+          float roofFade=crownMist.z*smoothstep(crownMist.x,crownMist.y,wallPoint.y+bankHeight);
+          vec3 roofAir=mix(vec3(.084,.080,.118),vec3(.207,.102,.152),uplight);
+          outgoingLight=mix(outgoingLight,roofAir,roofFade*(.76+.24*weather));
+        }
+        if (skylineAir.x>.0) {
+          vec3 ray=wallPoint-cameraPosition;
+          float lengthMeters=length(ray);
+          float mistPath=max(lengthMeters-681.0,0.0);
+          float strata=exp(-max(0.0,(wallPoint.y+cameraPosition.y)*.5-37.0)/144.0);
+          float t=exp(-min(.52,mistPath*.0010*strata));
+          vec3 heading=ray/max(1.0,lengthMeters);
+          float sector=atan(heading.x,-heading.z)-atan(screenPoint.x,-screenPoint.z)+.158;
+          float broad=exp(-sector*sector/.056);
+          float veil=mix(.24,.85,broad)*skylineAir.y;
+          vec3 filmAir=mix(vec3(.062,.078,.120),vec3(.179,.106,.156),veil);
+          outgoingLight=outgoingLight*t+filmAir*(1.0-t);
+        }
       `)
     },
   })
