@@ -13,22 +13,21 @@ export type Uniforms = Record<string, THREE.IUniform>
  * 0.02 to 0.05 once it is deep, rougher where a thin sheet follows the aggregate, a 2 to 5 mm meniscus, a darker damp halo outside it, and depth that hides the aggregate over the first 3 mm.
  */
 /**
- * The rain sheet on the deck: mean depth over the slab's resting level near the car and away from it, the spread of its broad and
- * small dry crowns, and the low fall around the car that holds it, in world X and Z meters with its falloff.
+ * The rain sheet on the deck: the film the rain keeps over the aggregate (negative, so the tips break it), the pooled level over the
+ * slab's resting height near the car and away from it, the spread of its broad and small crowns and how much of that spread is
+ * left near the car, so only the basins hold deep water there, and the low fall around the car, in world X and Z meters.
  */
-const sheet = { baseMm: 7, farMm: 4.5, broadMm: 16, patchMm: 7, low: [-2.6, -0.5, 3.0, 5.4], fallMeters: 2.5 }
+const sheet = { filmMm: -0.3, baseMm: -4, nearNoise: 0.4, farMm: 4.5, broadMm: 16, patchMm: 7, low: [-2.6, -0.5, 3.0, 5.4], fallMeters: 2.5 }
 /** Undulation of the slab below a puddle's scale: wavelengths in meters and slope amplitude of each. */
 const undulation = [
   [0.045, 0.045],
   [0.11, 0.033],
-  [0.27, 0.02],
-  [0.62, 0.012],
 ]
 
 /** Faces of the exposed aggregate on damp crowns: wavelength in meters and slope amplitude. */
 const aggregate = [
-  [0.014, 0.15],
-  [0.0065, 0.105],
+  [0.014, 0.06],
+  [0.0065, 0.04],
 ]
 /** Roughness the film over resolved aggregate keeps between its faces. */
 const aggregateFloor = 0.12
@@ -39,9 +38,7 @@ const aggregateFloor = 0.12
  */
 const windSpeed = 0.25
 const windRipples = [
-  [0.12, 0.035],
-  [0.32, 0.03],
-  [0.9, 0.02],
+  [0.12, 0.02],
 ].map(([w, a]) => [w, a, Math.max(1, Math.round((windSpeed * config.film.durationSeconds) / w))])
 const windAcross = 2.2
 
@@ -56,10 +53,12 @@ uniform vec4 surfShelter;
 uniform float surfPorosity;
 uniform float surfTime;
 
+float surfTips(vec2 p, float detail) {
+  return detail * (0.7 * (surfNoise2(p / 0.016, 13u) - 0.5) + 0.35 * (surfNoise2(p / 0.0065 + 7.7, 14u) - 0.5));
+}
+
 float surfFineRelief(vec2 p, float detail) {
-  float h = 1.2 * (surfNoise2(p / 0.55, 11u) - 0.5) + 0.5 * (surfNoise2(p / 0.17 + 3.1, 12u) - 0.5);
-  h += detail * (0.7 * (surfNoise2(p / 0.016, 13u) - 0.5) + 0.35 * (surfNoise2(p / 0.0065 + 7.7, 14u) - 0.5));
-  return h;
+  return 1.2 * (surfNoise2(p / 0.55, 11u) - 0.5) + 0.5 * (surfNoise2(p / 0.17 + 3.1, 12u) - 0.5) + surfTips(p, detail);
 }
 
 /**
@@ -71,7 +70,7 @@ float surfSheetLift(vec2 p) {
   float patchy = surfNoise2(p / 0.42 + 5.0, 32u) - 0.5;
   vec2 o = max(max(vec2(${sheet.low[0].toFixed(2)}, ${sheet.low[1].toFixed(2)}) - p, p - vec2(${sheet.low[2].toFixed(2)}, ${sheet.low[3].toFixed(2)})), vec2(0.0));
   float low = 1.0 - smoothstep(0.0, ${sheet.fallMeters.toFixed(2)}, length(o));
-  return mix(${sheet.farMm.toFixed(2)}, ${sheet.baseMm.toFixed(2)}, low) + ${sheet.broadMm.toFixed(2)} * broad + ${sheet.patchMm.toFixed(2)} * patchy;
+  return mix(${sheet.farMm.toFixed(2)}, ${sheet.baseMm.toFixed(2)}, low) + mix(1.0, ${sheet.nearNoise.toFixed(2)}, low) * (${sheet.broadMm.toFixed(2)} * broad + ${sheet.patchMm.toFixed(2)} * patchy);
 }
 
 vec3 surfNoiseGrad(vec2 p, uint salt) {
@@ -159,7 +158,8 @@ float surfDeckHeight(vec2 p, float detail) {
   #ifdef SURF_DECK
     vec2 uv = (p - surfReliefBounds.xy) / surfReliefBounds.zw;
     if (all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0)))) {
-      h = texture2D(surfRelief, uv).r * surfReliefScale + surfReliefOffset - surfSheetLift(p);
+      float pool = texture2D(surfRelief, uv).r * surfReliefScale + surfReliefOffset - surfSheetLift(p) + surfFineRelief(p, detail);
+      return min(pool, ${sheet.filmMm.toFixed(2)} * surfRain + surfTips(p, detail));
     }
   #endif
   return h + surfFineRelief(p, detail);
@@ -176,7 +176,9 @@ const porousFragment = /* glsl */ `
   vec3 surfN = surfToWorld(normal);
   vec2 surfXZ = surfWorldPos.xz;
   float surfFoot = length(fwidth(surfWorldPos));
-  float surfDetail = 1.0 - smoothstep(0.004, 0.02, surfFoot);
+  // Glints stretch along the view on a grazing deck, so the aggregate is filtered on the mean of the two footprint axes.
+  float surfGrain = sqrt(length(dFdx(surfWorldPos)) * length(dFdy(surfWorldPos)));
+  float surfDetail = 1.0 - smoothstep(0.004, 0.02, surfGrain);
   float surfUp = smoothstep(0.55, 0.9, surfN.y);
   float surfCover = 1.0 - 0.75 * surfShelterAt(surfXZ);
   float surfWet = surfRain * mix(0.8, 1.0, surfUp) * surfCover;
@@ -191,8 +193,8 @@ const porousFragment = /* glsl */ `
     #ifdef SURF_GROUNDED
       surfGround = 1.0 - smoothstep(0.01, 0.03, abs(surfWorldPos.y));
     #endif
-    surfWater = surfGround * surfUp * surfCover * smoothstep(0.0, -0.35, surfH);
     surfDepth = max(-surfH, 0.0);
+    surfWater = surfGround * surfUp * mix(surfCover, 1.0, smoothstep(0.5, 2.0, surfDepth)) * smoothstep(0.0, -0.35, surfH);
     surfFringe = surfGround * surfUp * surfCover * (1.0 - smoothstep(0.0, 1.6, surfH)) * (1.0 - surfWater);
     if (abs(surfH) < 1.2 && surfDetail > 0.0) {
       float e = 0.006;
@@ -206,20 +208,20 @@ const porousFragment = /* glsl */ `
     float surfH = 3.0 + surfFineRelief(surfXZ, surfDetail);
   #endif
   float surfDeep = surfWater * (0.6 + 0.4 * smoothstep(1.5, 3.0, surfDepth));
-  surfSlope += surfRipples(surfXZ, min(surfDeep, 1.0), surfWet * surfUp * (1.0 - surfWater) * 0.6, 0.0, surfFoot);
+  surfSlope += surfRipples(surfXZ, min(surfDeep, 1.0), surfWet * surfUp * mix(0.6, 1.0, surfWater), 0.0, surfFoot);
   float surfSlab = surfUp * (1.0 - surfWater * smoothstep(0.5, 4.0, surfDepth));
   surfSlope += surfSlab * surfUndulation(surfXZ, surfFoot);
   float surfOpen = surfDeep * surfCover;
   surfSlope += surfOpen * surfWind(surfXZ, surfFoot, surfTime);
   float surfSlopeVar = surfRingVar + surfSlab * surfSlab * surfUndulationVar + surfOpen * surfOpen * surfWindVar;
   float surfCrown = surfUp * (1.0 - surfWater * smoothstep(0.5, 3.0, surfDepth));
-  surfSlope += surfCrown * surfAggregate(surfXZ, surfFoot);
+  surfSlope += surfCrown * surfAggregate(surfXZ, surfGrain);
 
   float surfDamp = clamp(surfWet + surfFringe * 0.6, 0.0, 1.0);
   float surfStain = 0.6 * surfNoise2(surfXZ / 0.35 + 9.0, 41u) + 0.4 * surfNoise2(surfXZ / 0.09 + 2.0, 42u);
   float surfDark = mix(1.0, mix(0.9, mix(0.3, 0.7, surfStain) * mix(0.92, 1.08, surfAgg), surfPorosity), surfDamp);
   surfDark *= mix(1.0, 0.82, surfFringe);
-  surfDark *= mix(1.0, mix(0.85, 0.65, smoothstep(0.0, 3.0, surfDepth)), surfWater * mix(0.3, 1.0, surfPorosity));
+  surfDark *= mix(1.0, mix(0.55, 0.45, smoothstep(0.0, 3.0, surfDepth)), surfWater * mix(0.3, 1.0, surfPorosity));
   float surfNv = clamp(dot(surfToView(vec3(0.0, 1.0, 0.0)), normalize(vViewPosition)), 0.0, 1.0);
   float surfExit = 1.0 - (0.02 + 0.98 * pow(1.0 - surfNv, 5.0));
   surfDark *= mix(1.0, surfExit * surfExit, max(surfWater, 0.7 * surfDamp));
@@ -227,7 +229,7 @@ const porousFragment = /* glsl */ `
   diffuseColor.rgb = max(mix(vec3(surfL), diffuseColor.rgb, 1.0 + 0.15 * surfDamp), 0.0) * surfDark;
   float surfRoughWet = mix(0.18, 0.32, smoothstep(0.35, 0.75, surfAgg));
   roughnessFactor = mix(roughnessFactor, min(roughnessFactor, surfRoughWet), surfDamp);
-  roughnessFactor = mix(roughnessFactor, mix(0.22, 0.05, smoothstep(2.0, 8.0, surfDepth)), surfWater);
+  roughnessFactor = mix(roughnessFactor, mix(0.1, 0.04, smoothstep(1.0, 6.0, surfDepth)), surfWater);
   float surfR4 = pow(roughnessFactor, 4.0);
   roughnessFactor = sqrt(sqrt(max(surfR4 - 2.0 * surfCrown * surfCrown * surfAggregateHeld, min(surfR4, ${(aggregateFloor ** 4).toExponential(3)}))));
   roughnessFactor = sqrt(sqrt(pow(roughnessFactor, 4.0) + 2.0 * surfSlopeVar));
