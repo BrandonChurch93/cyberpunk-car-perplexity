@@ -5,6 +5,7 @@ import { launchBrowser } from './lib/browser.ts'
 import { args, ensureDir, readJson, workDir, writeJson } from './lib/env.ts'
 import { benchPrograms, installProfiler, sceneFacts, type CompileTime, type ProfileDump, type ProfileProgram } from './lib/profile-page.ts'
 import { markdownTable, tabulate } from './lib/profile-report.ts'
+import { shrinkPage } from './lib/scan.ts'
 import { RenderSession, runTool } from './lib/render.ts'
 
 type Step = { step: string; frame: number; wallMs: number; dump: ProfileDump | null; facts?: Record<string, unknown> }
@@ -71,6 +72,7 @@ void runTool(async () => {
   try {
     const t0 = Date.now()
     const page = await session.freshPage(format, 'beauty', paintById(a.paint ?? defaultPaint).id, 'full')
+    if (a.width) await shrinkPage(page, format, Number(a.width))
     steps.push({ step: 'page load', frame: -1, wallMs: Date.now() - t0, dump: null })
     await page.evaluate('globalThis.__name = (f) => f')
     await page.evaluate(installProfiler)
@@ -101,7 +103,7 @@ void runTool(async () => {
     const info = await page.evaluate(() => window.showcase!.info())
     const programs = (await page.evaluate(() => (window as unknown as { __profile: { dump(sources: boolean): Promise<ProfileDump> } }).__profile.dump(true))).programs
     const dir = ensureDir(join(workDir, 'profile'))
-    const out = join(dir, `profile-${format.id}-${tier}-${frames.join('-')}.json`)
+    const out = join(dir, `profile-${format.id}${a.width ? `-w${a.width}` : ''}-${tier}-${frames.join('-')}.json`)
     writeJson(out, { buildHash: session.buildHash, format: format.id, tier, frames, info, steps })
     console.log(out)
     open = false
