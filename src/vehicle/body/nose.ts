@@ -1,9 +1,9 @@
 import { ShapeUtils, Vector2 } from 'three'
 import { coons, type Curve } from '../geom/coons'
 import type { Loft } from '../geom/loft'
-import { sample2, smin, SurfaceCurve, type Surface, type SurfaceMap } from '../geom/cuts'
+import { sample2, smax, smin, SurfaceCurve, type Surface, type SurfaceMap } from '../geom/cuts'
 import type { TessResult } from '../geom/tessellate'
-import { add, addScaled, clamp, cross, dot, len, lerp3, mix, norm, scale, sub, type V2, type V3 } from '../geom/vec'
+import { add, addScaled, clamp, cross, dot, len, lerp3, mix, norm, scale, smoothstep, sub, type V2, type V3 } from '../geom/vec'
 import type { Cuts } from './cuts'
 import { elev, fasciaBreak, frontSection, map } from './lines'
 
@@ -134,14 +134,18 @@ export function ruledFascia({ brow, chin, side, fold }: FasciaRails): FasciaSurf
   const eye = facet([corner, browTip, shoulder])
   const wrap = facet([browTip, outer, shoulder])
   const fields = [shield, ramp, duct, eye, wrap]
+  const eyeShoulder = .032, browShoulder = .054
+  const support = (a: typeof eye, b: typeof eye, width: number) =>
+    [-1, -.5, 0, .5, 1].map(k => (p: V2) => a.depth(...p) - b.depth(...p) - width * k)
   const creases = [
     rolledCrease('shield center spine', centerFoot, tip, shield, { ...shield, dx: -shield.dx }),
     rolledCrease('shield-to-cheek V', split, vee, ramp, shield),
     rolledCrease('inboard intake fold', split, corner, duct, ramp),
-    rolledCrease('eye-to-duct facet', shoulder, corner, eye, duct),
-    rolledCrease('outer brow return', shoulder, browTip, wrap, eye),
   ]
   const field = (p: V2) => {
+    const t = smoothstep(corner[0], corner[0] + .105, p[0])
+    const fair = () => smax(duct.depth(...p), smin(eye.depth(...p), wrap.depth(...p), browShoulder), eyeShoulder)
+    if (t === 1) return fair()
     let pick = fields[0], best = -Infinity
     for (const f of fields) {
       const m = f.margin(p)
@@ -152,7 +156,8 @@ export function ruledFascia({ brow, chin, side, fold }: FasciaRails): FasciaSurf
       const sample = c.sample(p)
       if (sample && (!closest || sample.weight < closest.weight)) closest = sample
     }
-    return closest?.z ?? pick.depth(...p)
+    const z = closest?.z ?? pick.depth(...p)
+    return t === 0 ? z : mix(z, fair(), t)
   }
   const center = segment(centerFoot, tip), crease = segment(split, vee)
   const inner = coons(u => chin(u * fold), u => brow(u * fold), center, crease)
@@ -168,7 +173,10 @@ export function ruledFascia({ brow, chin, side, fold }: FasciaRails): FasciaSurf
     const p = u <= fold ? inner(u / fold, v) : outerChart((u - fold) / (1 - fold), v)
     return [p[0], p[1], field([p[0], p[1]]) + lift(p, brow(u)) + lift(p, side(v))]
   }
-  fasciaCreases.set(surface, creases)
+  fasciaCreases.set(surface, [...creases,
+    { ...rolledCrease('eye-to-duct facet', shoulder, corner, eye, duct), stops: support(eye, duct, eyeShoulder) },
+    { ...rolledCrease('outer brow return', shoulder, browTip, wrap, eye), stops: support(eye, wrap, browShoulder) },
+  ])
   return Object.assign(surface, { fieldStops: [] })
 }
 
@@ -524,6 +532,49 @@ export const fasciaReturn = (map: SurfaceMap, aperture: Aperture): V3[] | undefi
   ringCache.get(map)?.[aperture]?.map(s => s.point)
 export const fasciaThroat = (map: SurfaceMap, aperture: Aperture): Throat[] | undefined => ringCache.get(map)?.[aperture]
 
+function eyeOpening(loop: V2[], sample: (p: V2) => { point: V3; normal: V3 }, out: TessResult): Throat[] {
+  const sign = ShapeUtils.area(loop.map(p => new Vector2(...p))) > 0 ? 1 : -1
+  const count = loop.length
+  const tangentIn = (a: V2, b: V2) => {
+    const x = b[0] - a[0], y = b[1] - a[1], length = Math.hypot(x, y)
+    return [-sign * y / length, sign * x / length] as V2
+  }
+  const miters = loop.map((p, i): V2 => {
+    const a = tangentIn(loop[(i + count - 1) % count], p), b = tangentIn(p, loop[(i + 1) % count])
+    const d = 1 + a[0] * b[0] + a[1] * b[1]
+    return [(a[0] + b[0]) / d, (a[1] + b[1]) / d]
+  })
+  const radius = openingRoll * .72
+  const profiles = [0, 1, 2, 3, 4].map(i => {
+    const a = i * Math.PI / 8
+    return [radius * Math.sin(a), openingRoll * (1 - Math.cos(a))]
+  }).concat([[radius + .0006, .008], [radius + .0014, rollDepth]])
+  const rows = profiles.map(([inset, depth]) => loop.map(([x, y], i): V3 => {
+    const { point: p } = sample([x + inset * miters[i][0], y + inset * miters[i][1]])
+    return [p[0], p[1], p[2] - depth]
+  }))
+  const base = out.positions.length / 3
+  const normals = rows.map((row, j) => row.map((p, i) => {
+    const before = sub(p, row[(i + count - 1) % count]), after = sub(row[(i + 1) % count], p)
+    const along = add(norm(before), norm(after))
+    const across = sub(rows[Math.min(j + 1, rows.length - 1)][i], rows[Math.max(j - 1, 0)][i])
+    const n = j === 0 ? sample(loop[i]).normal : scale(norm(cross(along, across)), sign)
+    vertex(out, p, n)
+    return n
+  }))
+  for (let j = 1; j < rows.length; j++) {
+    for (let i = 0; i < count; i++) {
+      const a = base + (j - 1) * count + i, b = base + (j - 1) * count + (i + 1) % count
+      if (sign > 0) out.indices.push(a, b, b + count, a, b + count, a + count)
+      else out.indices.push(a, b + count, b, a, a + count, b + count)
+    }
+  }
+  const last = rows.length - 1
+  return rows[last].map((point, i) => ({
+    point, seat: rows[4][i], inward: norm(sub(point, rows[last - 1][i])), normal: normals[last][i],
+  }))
+}
+
 function rolledOpening(positions: V3[], normals: V3[], out: TessResult): Throat[] {
   const orientation = ShapeUtils.area(positions.map(p => new Vector2(p[0], p[1]))) > 0 ? 1 : -1
   const indices = positions.map((p, i) => {
@@ -628,6 +679,10 @@ export function tessellateFascia(map: SurfaceMap, openings: Cuts['holes'], uEdge
   const lip = blank()
   const rings: Partial<Record<Aperture, Throat[]>> = {}
   for (const [i, loop] of holes.entries()) {
+    if (i === 0) {
+      rings.eye = eyeOpening(loop, sample, lip)
+      continue
+    }
     const ps = loop.map(sample)
     rings[(['eye', 'outer', 'slot', 'center'] as const)[i]] = rolledOpening(ps.map(p => p.point), ps.map(p => p.normal), lip)
   }
