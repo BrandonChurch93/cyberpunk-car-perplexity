@@ -184,13 +184,12 @@ function radiatorSeat(throat: T.Vector3[]): T.BufferGeometry {
 
 function cover(loop: T.Vector3[], map: SurfaceMap, full: boolean): T.BufferGeometry {
   const center = average(loop), count = full ? 12 : 6
-  const setback = .012
   const edgeDepth = loop.map(p => p.z - .002 - map.S(...fasciaUV(map, p.x, p.y))[2])
   const rows = Array.from({ length: count }, (_, i) => {
     const t = (count - i) / count
     return loop.map((p, j) => {
       const q = center.clone().lerp(p, t)
-      q.z = map.S(...fasciaUV(map, q.x, q.y))[2] + T.MathUtils.lerp(-setback + .004, edgeDepth[j], t * t)
+      q.z = map.S(...fasciaUV(map, q.x, q.y))[2] + T.MathUtils.lerp(-.004, edgeDepth[j], t * t)
       return q
     })
   })
@@ -311,8 +310,8 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   const pocket = pocketAt('eye', .092, .94, -.95)
   add('front eye housing returns', pocket.wall, m.housing, true)
   add('front eye housing back', face(pocket.throat), m.housing, true)
-  const coverRing = fasciaReturn(map, 'eye')?.map(vector)
-  add('front clear contoured eye lens', cover(coverRing && signedArea(coverRing) < 0 ? coverRing.reverse() : coverRing ?? bowl, map, full), lensMaterial, true)
+  const coverRing = fasciaThroat(map, 'eye')?.map(s => vector(s.seat)) ?? bowl
+  add('front clear contoured eye lens', cover(signedArea(coverRing) < 0 ? coverRing.reverse() : coverRing, map, full), lensMaterial, true)
   const drl = tag(m.drl.clone(), 'none')
   drl.emissive.setHex(0xe5f3ff)
   drl.color.setHex(0x939ca1)

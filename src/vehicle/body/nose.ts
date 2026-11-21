@@ -518,7 +518,7 @@ function triangulate(border: V2[], holes: V2[][], stops: readonly Stop[], emit: 
 const rollDepth = .014
 const openingRoll = frontSection.roll
 type Aperture = 'eye' | 'outer' | 'center' | 'slot'
-type Throat = { point: V3; inward: V3; normal: V3 }
+type Throat = { point: V3; seat: V3; inward: V3; normal: V3 }
 const ringCache = new WeakMap<SurfaceMap, Partial<Record<Aperture, Throat[]>>>()
 export const fasciaReturn = (map: SurfaceMap, aperture: Aperture): V3[] | undefined =>
   ringCache.get(map)?.[aperture]?.map(s => s.point)
@@ -538,9 +538,11 @@ function rolledOpening(positions: V3[], normals: V3[], out: TessResult): Throat[
       const d = addScaled(n.map(x => x * Math.cos(a)) as V3, h, Math.sin(a))
       ring.push(vertex(out, q, d))
     }
-    const throat = addScaled(addScaled(p, h, openingRoll), n, -rollDepth)
+    const shoulder = addScaled(p, h, openingRoll)
+    const seat = addScaled(shoulder, n, -openingRoll)
+    const throat = addScaled(shoulder, n, -rollDepth)
     ring.push(vertex(out, throat, h))
-    return { ring, throat: { point: throat, inward: scale(n, -1), normal: h } }
+    return { ring, throat: { point: throat, seat, inward: scale(n, -1), normal: h } }
   })
   for (const [i, { ring: a }] of indices.entries()) {
     const { ring: b } = indices[(i + 1) % indices.length]
