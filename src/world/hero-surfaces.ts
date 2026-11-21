@@ -54,8 +54,8 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   const eastFrontage = /amber tower|east garage/.test(id)
   const garageReturn = Number(id === 'hero near west garage bay')
   const shadowWash = centerBank
-    ? layer === 'near' ? new THREE.Color(.098,.067,.107).multiplyScalar(id.includes('glass wing') ? 1.31 : 1) : new THREE.Color(.115,.084,.129)
-    : new THREE.Color(.143,.103,.154).multiplyScalar(garageReturn)
+    ? layer === 'near' ? new THREE.Color(.106,.075,.117).multiplyScalar(id.includes('glass wing') ? 1.42 : 1) : new THREE.Color(.115,.084,.129)
+    : new THREE.Color(.175,.138,.184).multiplyScalar(garageReturn)
   const roomPhotometry = new THREE.Vector3(westOffices,eastFrontage ? .72 : 1,eastFrontage ? .80 : 1)
   const windowContrast = (layer === 'near' ? .87 : layer === 'middle' ? .72 : .48) * (west ? 1.08 : 1)
   const stripFloors = /left edge|west garage/.test(id)
@@ -179,7 +179,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         float mechanical=1.0-step(1.0,mod(roomCell.y+floor(salt),mechanicalPitch));
         float podium=(1.0-smoothstep(.56,.74,wallUnit.y));
         float accentRun=stripFloors*podium*step(.79,stack)*step(.28,suite);
-        float occupiedWest=roomPhotometry.x*step(.68,floorState)*step(.49,tenantStack)*step(.30,roomId)*step(.37,suite)*(1.0-accentRun)*(1.0-mechanical);
+        float occupiedWest=roomPhotometry.x*step(.76,floorState)*step(.65,tenantStack)*step(.42,roomId)*step(.52,suite)*(1.0-accentRun)*(1.0-mechanical);
         float warmRiser=0.0, riserOpen=0.0;
         if (amberRisers>0.0) {
           warmRiser=hash21(vec2(floor(roomCell.x*.48),salt+36.8));
@@ -259,7 +259,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         vec3 spill=signGlow*(.19+.12*glass)+districtBounce*(.72+.52*panelReflectance);
         vec3 baseGlow=(claddingShade*envelope*skyGlass*panelReflectance+cityBounce+spill)*(1.0-.21*unlitWest)+farVeil;
         float baseLuma=dot(baseGlow,vec3(.2126,.7152,.0722));
-        float shadow=(1.0-smoothstep(.053,.146,baseLuma))*(1.0-.71*lamp);
+        float shadow=(1.0-smoothstep(.053,mix(.146,.192,garageReturn),baseLuma))*(1.0-.71*lamp);
         float receive=mix(1.0,max(wallFacing.x,wallFacing.y*smoothstep(.77,.99,wallUnit.x)),garageReturn);
         float spillCompression=mix(1.0,roomPhotometry.z,smoothstep(.105,.260,baseLuma));
         baseGlow=baseGlow*spillCompression+shadowWash*shadow*receive*(.75+.33*panelReflectance)*(1.0-.35*mechanical-.21*rib);
@@ -267,7 +267,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         totalEmissiveRadiance+=(sill+pilaster*.14+corner*.44)*skyGlass*(.53+.19*floorState)*(.52+.59*curtain+.35*banded);
         float lampRadiance=.46+1.64*exposure*exposure+mix(10.8,3.9,rank)*pow(exposure,10.0)+.39*windowTail*pow(exposure,17.0)+riserOpen*(.53+1.4*exposure);
         float roomCompression=mix(roomPhotometry.y,1.0,smoothstep(.86,.99,exposure));
-        lampRadiance*=roomCompression*(1.0-.20*roomPhotometry.x*(1.0-smoothstep(.77,.98,exposure)));
+        lampRadiance*=roomCompression*(1.0-.30*roomPhotometry.x*(1.0-smoothstep(.77,.98,exposure)));
         roomTint=mix(roomTint,vec3(.66,.65,.83),rank*.48);
         vec3 litRoom=roomTint*lamp*lampRadiance*roomLight*windowContrast;
         vec3 subpixelRooms=mix(vec3(.126,.104,.092),vec3(.082,.085,.112),rank)*(1.0-mechanical);
@@ -276,9 +276,9 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         totalEmissiveRadiance+=aperture*mullion*mix(subpixelRooms,litRoom,surfaceDetail);
         vec2 officeHalf=min(width,litOpening*vec2(1.15,.97));
         float office=wallSide*windowMask(pane-vec2(.5,.583),officeHalf,lightAA);
-        vec3 officeTint=mix(vec3(1.0,.68,.38),vec3(1.0,.90,.72),smoothstep(.28,.74,tenantStack));
+        vec3 officeTint=mix(vec3(1.0,.80,.54),vec3(1.0,.96,.86),smoothstep(.52,.91,tenantStack));
         totalEmissiveRadiance+=officeTint*office*mullion*occupiedWest*surfaceDetail*
-          (4.2+18.6*exposure*exposure)*(.60+.40*roomLight);
+          (12.0+46.0*exposure*exposure)*(.56+.44*roomLight);
         totalEmissiveRadiance+=wallSide*roomTint*(lobby*.12+curtainBand*.086)*(1.0-mechanical)*
           (1.0-smoothstep(.13,.25+lightAA.y,abs(pane.y-.56)));
       `)

@@ -39,7 +39,7 @@ const cyanApertures: Readonly<Partial<Record<string,readonly [width: number, gai
 }
 const amberLouvres: Readonly<Partial<Record<string,readonly [width: number, gain: number, gap: number]>>> = {
   'right amber facade sail': [.89,.90,.070],
-  'amber garage rise': [.69,.86,.105], 'amber garage return': [.73,.91,.118],
+  'amber garage rise': [.75,.90,.091], 'amber garage return': [.77,.94,.102],
 }
 const facadeSections: Readonly<Partial<Record<string,readonly (readonly [
   offset: number, span: number, drop: number, levels: number, projection: number,
