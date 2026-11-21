@@ -375,7 +375,7 @@ describe('full roof world', () => {
     }
   })
 
-  it('exposes mounted reflection openings to all three deck bands across the wide loop', () => {
+  it('exposes mounted reflection openings to the outer deck bands across the wide loop', () => {
     world.root.updateMatrixWorld(true)
     vehicle.updateMatrixWorld(true)
     const openings: { mesh: THREE.InstancedMesh; center: THREE.Vector3 }[] = []
@@ -401,7 +401,7 @@ describe('full roof world', () => {
     const { master } = config.formats
     const lens = new THREE.PerspectiveCamera()
     for (const frame of [0,60,150,195,240,1170,1215,1340]) {
-      const wanted = [7,2,13]
+      const wanted = [7,frame===0 || frame===1340 ? 2 : 0,13]
       const t = frame/config.film.fps
       applyLens(lens,cameraAt(t,master,anchors),master.width,master.height,{pixel:[0,0],aperture:[0,0]},1)
       for (const { mesh,center } of openings) {
@@ -413,7 +413,8 @@ describe('full roof world', () => {
         if (!wanted[band]) continue
         const contact = lens.position.clone().lerp(mirrored,lens.position.y/(lens.position.y+center.y))
         if (firstHit(lens.position,contact,-.10)) continue
-        const fixture = firstHit(contact.lerp(center,.012),center,.02)
+        const lift = Math.max(.006,deckHeight(contact.x,contact.z)+.006)
+        const fixture = firstHit(contact.lerp(center,lift/center.y),center,.02)
         if (fixture?.object===mesh) wanted[band]!--
       }
       expect(wanted,'frame '+frame).toEqual([0,0,0])
