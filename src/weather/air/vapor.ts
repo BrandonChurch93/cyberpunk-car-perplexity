@@ -4,7 +4,7 @@ import type { SampleContext, SamplePass } from '../../core/contract'
 import { FullscreenPass, passMaterial } from '../../core/fullscreen'
 import { filmLightsGlsl } from '../../core/lights'
 import { stream } from '../../core/random'
-import { engine } from '../../director/timeline'
+import { engine, events } from '../../director/timeline'
 import type { WeatherDeps } from '../contract'
 import { prevailingWind } from './motion'
 
@@ -12,9 +12,11 @@ const maxVaporSources = 8
 const slabFloor = 0.002
 const slabHeight = 0.22
 const vaporScale = 0.42
+const exhaustBankOffset = 0.171
+const maxTailLights = 2
 
 type VaporDeps = Pick<WeatherDeps, 'lights'> & {
-  vehicle: Pick<WeatherDeps['vehicle'], 'root' | 'anchors'>
+  vehicle: Pick<WeatherDeps['vehicle'], 'root' | 'anchors' | 'lamps'>
   world: Pick<WeatherDeps['world'], 'deck' | 'steamSources'>
 }
 
@@ -64,8 +66,16 @@ precision highp float;
 in vec2 vUv;
 out vec4 outColor;
 uniform vec4 uDeck;
+uniform int uTailCount;
+uniform vec3 uTailPosition[${maxTailLights}];
+uniform vec3 uTailAxis[${maxTailLights}];
+uniform vec3 uTailFlux[${maxTailLights}];
 ${optics}
 ${filmLightsGlsl}
+
+float scatterLobe(float mu) {
+  return 0.51 * inversesqrt(pow(1.42 - 1.30 * mu, 3.0));
+}
 
 vec3 vaporLight(vec3 p, vec3 toEye, bool deck, bool exhaust) {
   vec3 illumination = vec3(0.0);
@@ -78,10 +88,22 @@ vec3 vaporLight(vec3 p, vec3 toEye, bool deck, bool exhaust) {
     vec3 toLight;
     vec3 incident = filmLightAt(i, p, toLight);
     float mu = -dot(toEye, toLight);
-    float lobe = 0.51 * inversesqrt(pow(1.42 - 1.30 * mu, 3.0));
+    float lobe = scatterLobe(mu);
     float coupling = deck && filmLightShape[i].w > 0.5 ? 0.26 : 1.0;
-    float phase = exhaust ? lobe * 0.22 * smoothstep(0.08, 0.70, mu) : (0.10 + lobe * 0.20) * coupling;
+    float phase = exhaust ? 0.12 + lobe * 0.19 : (0.10 + lobe * 0.20) * coupling;
     illumination += incident * phase;
+  }
+  if (exhaust) {
+    for (int i = 0; i < ${maxTailLights}; ++i) {
+      if (i >= uTailCount) break;
+      vec3 d = uTailPosition[i] - p;
+      float r2 = max(dot(d, d), 1e-4);
+      vec3 toLight = d * inversesqrt(r2);
+      float forward = dot(-toLight, uTailAxis[i]);
+      float spread = smoothstep(0.0, 0.35, forward) * (0.35 + 0.65 * forward);
+      float phase = 0.16 + 0.24 * scatterLobe(-dot(toEye, toLight));
+      illumination += uTailFlux[i] * spread * phase / max(0.0225, r2);
+    }
   }
   return illumination / (1.0 + max(max(illumination.r, illumination.g), illumination.b) * 0.38);
 }
@@ -96,28 +118,24 @@ float deckSpray(vec3 p) {
   return 0.044 * edge * e * pockets;
 }
 
-vec3 exhaustRise(vec3 axis) {
-  return normalize(axis * 0.82 + vec3(0.0, 0.62, 0.0));
-}
-
-float exhaustDensity(vec3 q, vec3 axis) {
-  vec3 main = exhaustRise(axis);
-  float along = dot(q, main);
-  if (along < 0.0 || along > 0.86) return 0.0;
-  float age = along / 0.86;
+float exhaustDensity(vec3 q, vec3 axis, float index) {
+  const float span = 0.76;
+  float along = dot(q, axis);
+  if (along < 0.0 || along > span) return 0.0;
+  float age = along / span;
   vec3 wind = vec3(uWind.x, 0.0, uWind.y);
-  vec3 bend = wind * 0.49 + vec3(0.0, 0.56, 0.0);
-  bend -= main * dot(bend, main);
-  float phase = TAU * (17.0 * uPhase + uNoise.x) - along * 12.4;
-  vec3 side = normalize(cross(main, vec3(0.07, 1.0, 0.11)));
-  vec3 offset = bend * age * age * 0.54 + side * (0.032 * age * sin(phase));
-  vec3 p = q - main * along - offset;
-  float radius = 0.035 + 0.104 * age;
+  vec3 bend = wind * 0.24 + vec3(0.0, 0.30, 0.0);
+  bend -= axis * dot(bend, axis);
+  float phase = TAU * (19.0 * uPhase + index * 0.37 + uNoise.x) - along * 13.1;
+  vec3 side = normalize(cross(axis, vec3(0.07, 1.0, 0.11)));
+  vec3 offset = bend * age * age + side * (0.043 * age * sin(phase));
+  vec3 p = q - axis * along - offset;
+  float radius = 0.052 + 0.114 * age;
   float radial = dot(p, p) / (radius * radius);
-  float core = exp(-2.5 * radial) * (1.0 - smoothstep(1.8, 4.0, radial));
-  float shear = 0.52 + 0.48 * smoothstep(-0.58, 0.76, smootherNoise(q * 6.0, phase));
-  float life = smoothstep(0.012, 0.10, along) * (1.0 - smoothstep(0.24, 0.86, along));
-  return 0.29 * core * life * shear;
+  float core = exp(-1.6 * radial) * (1.0 - smoothstep(1.5, 3.7, radial));
+  float shear = 0.35 + 0.65 * smoothstep(-0.51, 0.74, smootherNoise(q * 8.6, phase));
+  float life = smoothstep(0.006, 0.095, along) * (1.0 - smoothstep(0.32, span, along));
+  return 0.95 * core * life * shear;
 }
 
 float plumeDensity(vec3 q, vec3 axis, float type, float index) {
@@ -178,8 +196,8 @@ void main() {
     if (emission < 0.001) continue;
     bool vent = type < 1.5;
     bool exhaust = type > 3.5;
-    vec3 main = exhaust ? exhaustRise(axis) : axis;
-    vec3 center = source + main * (vent ? 1.25 : 0.49);
+    vec3 center = source + axis * (vent ? 1.25 : exhaust ? 0.38 : 0.49);
+    if (exhaust) center.y += 0.12;
     center += vec3(uWind.x, 0.0, uWind.y) * (vent ? 0.58 : exhaust ? 0.04 : 0.48);
     vec2 bounds = sphereBounds(center, vent ? 2.08 : exhaust ? 0.61 : 0.95, ray);
     float enter = max(bounds.x, uClip.x);
@@ -189,7 +207,8 @@ void main() {
     float dt = (exit - enter) / float(steps);
     for (int j = 0; j < steps; ++j) {
       vec3 p = uEye + ray * (enter + (float(j) + 0.5) * dt);
-      float density = (exhaust ? exhaustDensity(p - source, axis) : plumeDensity(p - source, axis, type, float(i))) * emission * dt * rayLength;
+      float noiseIndex = float(i - (uAxes[0].w > 3.5 && !exhaust ? 1 : 0));
+      float density = (exhaust ? exhaustDensity(p - source, axis, noiseIndex) : plumeDensity(p - source, axis, type, noiseIndex)) * emission * dt * rayLength;
       if (density > 0.00002) {
         optical += density;
         scattered += vaporLight(p, toEye, false, exhaust) * density;
@@ -340,8 +359,16 @@ export class AirVolume implements SamplePass {
   }
   private readonly composite = new FullscreenPass(passMaterial(compositeFragment, this.compositeUniforms))
   private readonly vapor: FullscreenPass
+  private readonly tailUniforms = {
+    uTailCount: { value: 0 },
+    uTailPosition: { value: Array.from({ length: maxTailLights }, () => new THREE.Vector3()) },
+    uTailAxis: { value: Array.from({ length: maxTailLights }, () => new THREE.Vector3()) },
+    uTailFlux: { value: Array.from({ length: maxTailLights }, () => new THREE.Vector3()) },
+  }
   private readonly position = new THREE.Vector3()
   private readonly direction = new THREE.Vector3()
+  private readonly lateral = new THREE.Vector3()
+  private readonly exhaustOrigin = new THREE.Vector3()
   private readonly rotation = new THREE.Quaternion()
   private readonly corner = new THREE.Vector3()
 
@@ -350,8 +377,25 @@ export class AirVolume implements SamplePass {
     this.vapor = new FullscreenPass(passMaterial(vaporFragment, {
       ...this.shared,
       ...deps.lights,
+      ...this.tailUniforms,
       uDeck: { value: new THREE.Vector4(b.min.x, b.min.y, b.max.x, b.max.y) },
     }))
+  }
+
+  private updateTailLights(): void {
+    const { uTailCount, uTailPosition, uTailAxis, uTailFlux } = this.tailUniforms
+    for (const lamp of this.deps.vehicle.lamps) {
+      const i = uTailCount.value
+      if (i === maxTailLights) break
+      const power = (lamp.level ?? 0) * (lamp.intensity ?? 0)
+      if (lamp.beam || !lamp.color || power <= 0) continue
+      const position = lamp.object.getWorldPosition(uTailPosition.value[i])
+      if (position.distanceToSquared(this.exhaustOrigin) > 2.25) continue
+      const axis = lamp.object.getWorldDirection(uTailAxis.value[i])
+      if (axis.dot(this.direction) < 0.5) continue
+      uTailFlux.value[i].set(lamp.color.r, lamp.color.g, lamp.color.b).multiplyScalar(power)
+      uTailCount.value++
+    }
   }
 
   private updateSources({ camera, timeSeconds }: SampleContext): void {
@@ -359,22 +403,33 @@ export class AirVolume implements SamplePass {
     const source = this.shared.uSources.value
     const axis = this.shared.uAxes.value
     const rect = this.compositeUniforms.uShimmerRect.value.set(1, 1, 0, 0)
+    this.tailUniforms.uTailCount.value = 0
     let index = 0
     let hot = 0
     const power = engine(timeSeconds)
     const afterglow = 0.74 * engine(timeSeconds - 0.11) + 0.26 * engine(timeSeconds - 0.37)
-    if (Math.max(power, afterglow) > 0.0001) {
+    const age = timeSeconds - events.engineStart
+    const pulse = THREE.MathUtils.smoothstep(age, 0, 0.065) * (1 - THREE.MathUtils.smoothstep(age, 1.4, 2.0))
+    const emission = THREE.MathUtils.lerp(0.81 * afterglow, 0.95, pulse)
+    if (Math.max(power, emission) > 0.0001) {
       vehicle.root.updateWorldMatrix(true, false)
       const exhaust = vehicle.anchors.exhaust
-      this.position.copy(exhaust.position).applyMatrix4(vehicle.root.matrixWorld)
+      this.lateral.set(0, 1, 0).crossVectors(exhaust.normal, this.lateral)
+      if (this.lateral.lengthSq() < 1e-8) this.lateral.set(0, 0, 1).crossVectors(exhaust.normal, this.lateral)
+      this.lateral.normalize()
       this.direction.copy(exhaust.normal).transformDirection(vehicle.root.matrixWorld)
-      source[index].set(this.position.x, this.position.y, this.position.z, 0.66 * afterglow)
-      axis[index].set(this.direction.x, this.direction.y, this.direction.z, 4)
-      index++
-      if (power >= 0.002) {
+      this.exhaustOrigin.copy(exhaust.position).applyMatrix4(vehicle.root.matrixWorld)
+      this.updateTailLights()
+      for (const side of [-1, 1]) {
+        this.position.copy(exhaust.position).addScaledVector(this.lateral, side * exhaustBankOffset).applyMatrix4(vehicle.root.matrixWorld)
+        source[index].set(this.position.x, this.position.y, this.position.z, emission)
+        axis[index].set(this.direction.x, this.direction.y, this.direction.z, 4)
+        index++
+      }
+      if (power >= 0.002 || pulse > 0.1) {
         hot = 1
         for (const dx of [-0.9, 0.9]) for (const dy of [-0.42, 1.1]) for (const dz of [-0.9, 0.9]) {
-          this.corner.copy(this.position).addScaledVector(this.direction, 0.32)
+          this.corner.copy(this.exhaustOrigin).addScaledVector(this.direction, 0.32)
           this.corner.x += dx
           this.corner.y += dy
           this.corner.z += dz
