@@ -36,7 +36,7 @@ const isPaintBeat = (time: number): boolean => time >= paintBeat.start && time <
 
 export function reflectionCaptureSize(tier: TierId, time: number): number {
   const captureSize = quality[tier].captureSize
-  return isPaintBeat(time) ? Math.max(captureSize, quality.review.captureSize) : captureSize
+  return isPaintBeat(time) ? Math.max(captureSize, quality.final.captureSize) : captureSize
 }
 
 /** The first bounce that lights the deck inside the capture only needs the broad shapes of the sky and signs. */
