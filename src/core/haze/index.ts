@@ -139,9 +139,9 @@ float projectorBodyPhase(float cosine, float distanceToLight, float downward, fl
 float projectorReceiver(vec3 hit, vec3 source, vec3 axis) {
   vec3 delta = hit - source;
   float nearBody = 1.0 - smoothstep(1.55, 2.3, length(delta));
-  float behindLamp = 1.0 - smoothstep(0.04, 0.32, dot(delta, axis));
-  float aboveDeck = smoothstep(0.07, 0.24, hit.y);
-  return 1.0 - nearBody * behindLamp * aboveDeck;
+  float noseDepth = 1.0 - smoothstep(0.19, 0.46, dot(delta, axis));
+  float aboveDeck = smoothstep(0.04, 0.17, hit.y);
+  return 1.0 - nearBody * noseDepth * aboveDeck;
 }
 
 float projectorOpenCore(float slope, float clearance) {
