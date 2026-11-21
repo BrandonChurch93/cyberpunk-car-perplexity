@@ -38,13 +38,14 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
       new THREE.Color(.96,.98,1.08)
   const stripFloors = /left edge|west garage/.test(id)
   const horizontalFloors = /screen tower|amber tower|right edge|left edge|fluted offices|east narrow stair/.test(id)
+  const claddingShade = id === 'hero amber tower' ? .71 : 1
   const windowTail = layer !== 'far' && /left edge|hotel tower|parking tower|west garage/.test(id) ? 94
     : layer !== 'far' && /amber tower|right edge|east garage/.test(id) ? 53
     : layer !== 'far' && /screen tower|bar tower|center exchange|center clock|center fluted/.test(id) ? 46 : 0
   const spill = (i: number) => spills[i] ?? { point: new THREE.Vector3(), size: new THREE.Vector2(1,1), color: new THREE.Color(0,0,0) }
   const prefix = 'varying vec2 wallUv, wallUnit; varying vec3 wallPoint, wallNormal, wallTangent; varying float wallSide;'
   const mat = new THREE.MeshStandardMaterial({
-    color: new THREE.Color(level*.14,level*.16,level*.20),
+    color: new THREE.Color(level*.14,level*.16,level*.20).multiplyScalar(claddingShade),
     roughness: facade === 'concrete' ? .79 : facade === 'hotel' ? .58 : .39,
     metalness: facade === 'concrete' ? .08 : facade === 'hotel' ? .24 : .42,
   })
@@ -58,7 +59,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
     uniforms: {
       bay: { value: cell }, roomDensity: { value: density }, salt: { value: seed }, facadeFamily: { value: family }, shellLuma: { value: level },
       paneHalfWidth: { value: paneHalfWidth },
-      facadeTint: { value: facadeTint }, windowTail: { value: windowTail },
+      facadeTint: { value: facadeTint }, windowTail: { value: windowTail }, claddingShade: { value: claddingShade },
       mechanicalPitch: { value: mechanicalPitch }, distanceLayer: { value: layer === 'near' ? 0 : layer === 'middle' ? 1 : 2 },
       stripFloors: { value: stripFloors ? 1 : 0 }, horizontalFloors: { value: horizontalFloors ? 1 : 0 },
       screenPoint: { value: screen.point }, screenNormal: { value: screen.normal }, screenSize: { value: screen.size },
@@ -78,7 +79,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', /* glsl */ `
         ${prefix}
         uniform vec2 bay;
-        uniform float roomDensity, salt, facadeFamily, shellLuma, mechanicalPitch, distanceLayer, stripFloors, horizontalFloors, windowTail, paneHalfWidth;
+        uniform float roomDensity, salt, facadeFamily, shellLuma, mechanicalPitch, distanceLayer, stripFloors, horizontalFloors, windowTail, paneHalfWidth, claddingShade;
         uniform vec3 screenPoint,screenNormal,facadeTint;
         uniform vec3 spillPoint[2],spillTint[2];
         uniform vec2 screenSize,spillSize[2];
@@ -174,13 +175,13 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         float skyStain=smoothstep(.25,.91,wallUnit.y);
         vec3 farVeil=mix(vec3(.0),vec3(.014,.015,.024),distanceLayer*.5)*(.78+.22*skyStain);
         float panelReflectance=max(.12,.47+.25*panelPatina+.13*panelGrain-.22*spandrel-.33*mechanical-.32*rib-.22*glass);
-        totalEmissiveRadiance+=wallSide*(envelope*skyGlass*panelReflectance+farVeil+signGlow*(.048+.11*glass));
+        totalEmissiveRadiance+=wallSide*(claddingShade*envelope*skyGlass*panelReflectance+farVeil+signGlow*(.048+.11*glass));
         totalEmissiveRadiance+=(sill+pilaster*.32+corner*.44)*skyGlass*(.33+.16*floorState)*(.52+.59*curtain+.35*banded);
         float lampRadiance=.14+1.91*exposure*exposure+23.0*pow(exposure,11.0)+windowTail*pow(exposure,16.0);
         vec3 litRoom=roomTint*lamp*lampRadiance*roomLight;
         vec3 subpixelRooms=mix(vec3(.165,.104,.075),vec3(.125,.132,.190),distanceLayer*.5)*(1.0-mechanical);
         totalEmissiveRadiance+=glass*((.28+.75*curtain+.28*banded)*
-          (skyGlass*(.23+(1.0-faceOn)*.35)+screenGlass*screenMirror*.37)*(1.0-.59*mechanical)+
+          (claddingShade*skyGlass*(.23+(1.0-faceOn)*.35)+screenGlass*screenMirror*.37)*(1.0-.59*mechanical)+
           mullion*mix(subpixelRooms,litRoom,surfaceDetail));
       `)
     },

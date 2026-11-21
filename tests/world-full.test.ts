@@ -540,6 +540,59 @@ describe('full roof world', () => {
     expect(wideFootprint).toEqual(rise.size)
   })
 
+  it('shows metric warm office floors and mounted right facade markers at the hero', () => {
+    const tower = world.root.getObjectByName('hero amber tower volume')!
+    const shell = tower.getObjectByName('hero amber tower') as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
+    const panes = tower.getObjectByName('warm office window panes') as THREE.InstancedMesh
+    const frame = tower.getObjectByName('east office curtain wall bays')!
+    const housings = frame.getObjectByName('sealed metal housings') as THREE.InstancedMesh<THREE.BoxGeometry>
+    const front = (wall: THREE.Mesh<THREE.BoxGeometry>)=>wall.position.z+wall.geometry.parameters.depth*.5
+    expect(frame.parent).toBe(tower)
+    expect(frame.getObjectByName('folded sill mounts')).toBeDefined()
+    expect(housings.count).toBe(panes.count)
+    expect(shell.material.color.r).toBeLessThan(.016)
+    const eye = cameraAt(config.film.heroFrameSeconds,config.formats.master,anchors).position
+    const matrix = new THREE.Matrix4(), position = new THREE.Vector3(), size = new THREE.Vector3(), color = new THREE.Color()
+    const hits = (p: THREE.Vector3) => {
+      const delta = p.clone().sub(eye)
+      return new THREE.Raycaster(eye,delta.clone().normalize(),.01,delta.length()+.017).intersectObject(world.root,true)[0]
+    }
+    world.root.updateMatrixWorld(true)
+    let bright = 0, dark = 0, visible = 0
+    for (let i=0;i<panes.count;i++) {
+      housings.getMatrixAt(i,matrix)
+      const back = position.setFromMatrixPosition(matrix).z-size.setFromMatrixScale(matrix).z*.5
+      expect(back).toBeLessThan(front(shell))
+      panes.getMatrixAt(i,matrix)
+      size.setFromMatrixScale(matrix)
+      expect(size.x).toBeGreaterThan(1.25)
+      expect(size.x).toBeLessThan(1.50)
+      expect(size.y).toBeLessThan(1.65)
+      panes.getColorAt(i,color)
+      if (color.r===0) dark++
+      else if (color.r>4) {
+        bright++
+        const hit = hits(panes.localToWorld(position.setFromMatrixPosition(matrix)))
+        if (hit?.object===panes && hit.instanceId===i) visible++
+      }
+    }
+    expect(dark).toBeGreaterThan(5)
+    expect(bright).toBeGreaterThan(18)
+    expect(visible).toBeGreaterThan(15)
+    const markers = world.root.getObjectsByProperty('name','east facade service marker')
+    expect(markers).toHaveLength(13)
+    expect(new Set(markers.map(marker=>marker.parent?.name)).size).toBe(3)
+    for (const marker of markers) {
+      const tower = marker.parent!
+      const wall = tower.getObjectByName(tower.name.replace(' volume','')) as THREE.Mesh<THREE.BoxGeometry>
+      const cleats = marker.getObjectsByProperty('name','fixture mounting cleat') as THREE.Mesh<THREE.BoxGeometry>[]
+      expect(cleats).toHaveLength(2)
+      for (const cleat of cleats) expect(marker.position.z+cleat.position.z-cleat.geometry.parameters.depth*.5).toBeLessThan(front(wall))
+    }
+    expect(markers.filter(marker=>hits(marker.getWorldPosition(position))?.object.parent===marker).length).toBeGreaterThan(6)
+    expect(markers.every(marker=>!world.lights.some(light=>light.object.parent===marker))).toBe(true)
+  })
+
   it('shows the stacked accent cabinets from both hero cameras', () => {
     const point = new THREE.Vector3()
     for (const name of ['stacked amber arcade cabinet','stacked amber noodle cabinet']) {

@@ -399,6 +399,17 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
           length,n===0 ? crownCyan : edgeRust,false,index===8 ? .61 : .82)
       }
     }
+    if (index === 8) deckTrim.eastOffices(tower,wx,wz+d*.5)
+    if (index === 8 || index === 9 || index === 10) {
+      const pz = wz+d*.5
+      const markers = index === 8 ? [[-.372,69.3],[-.372,74.5],[-.371,80.1],[.248,59.8],[.247,67.4]]
+        : index === 9 ? [[-.429,59.1],[-.409,72.4],[-.428,89.5],[-.442,98.1]]
+        : [[.224,52.2],[.227,58.6],[.151,68.3],[.125,74.1]]
+      for (const [j,[fraction,y]] of markers.entries()) {
+        practical.opal(tower,'east facade service marker',[wx+w*fraction,y,pz+.116],
+          [j%2===0 ? .54 : .37,j%3===0 ? .43 : .33],j%3===0 ? [7.15,2.86,.83] : [8.3,.19,.115],1)
+      }
+    }
     if (index === 10) {
       const px = wx-w*.14, pz = wz+d*.50+.50
       practical.cabinet(tower,'stacked amber arcade cabinet',[px,wy-11.4,pz],[5.67,1.94],[5.42,2.73,.72],'ARCADE',false,3.8)
