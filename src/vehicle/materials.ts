@@ -340,17 +340,25 @@ function paintStack(paint: T.MeshPhysicalMaterial, spec: PaintSpec) {
   }
 }
 
-/** Where a mesh has no usable UV gradient the derivative tangent frame is zero and anisotropy would normalize it to NaN, so build one from the normal. */
+/**
+ * The derivative tangent frame is zero where a mesh has no UV gradient, rank one where the UVs vary along one direction
+ * only, and never held square to the shading normal. Anisotropic GGX divides by the frame, so any of these can blow up
+ * to NaN or to a firefly; every pixel gets an orthonormal frame built on the normal instead.
+ */
 function tangentFallback(m: T.MeshPhysicalMaterial): void {
   patchMaterial(m, {
     id: 'vehicle tangent fallback',
     apply(shader) {
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <normal_fragment_begin>', `
         #if defined( USE_ANISOTROPY ) && !defined( USE_TANGENT )
-          if (dot(tbn[0], tbn[0]) < 1e-12 || dot(tbn[1], tbn[1]) < 1e-12) {
-            vec3 tangentAxis = abs(normal.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-            vec3 tangentU = normalize(cross(tangentAxis, normal));
-            tbn = mat3(tangentU, cross(normal, tangentU), normal);
+          {
+            vec3 tangentU = tbn[0] - normal * dot(tbn[0], normal);
+            vec3 tangentV = tbn[1] - normal * dot(tbn[1], normal);
+            if (dot(tangentU, tangentU) < 1e-4 * max(dot(tangentV, tangentV), 1e-30)) tangentU = cross(tangentV, normal);
+            if (!(dot(tangentU, tangentU) > 1e-12)) tangentU = cross(abs(normal.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0), normal);
+            tangentU = normalize(tangentU);
+            vec3 tangentB = cross(normal, tangentU);
+            tbn = mat3(tangentU, dot(tangentB, tbn[1]) < 0.0 ? -tangentB : tangentB, normal);
           }
         #endif
       `)
@@ -423,10 +431,10 @@ export function palette(spec: PaintSpec, full: boolean) {
   braceCarbon.clearcoat = 1
   braceCarbon.clearcoatRoughness = .04
   const bayCover = carbon.clone()
-  bayCover.color.setHex(full ? 0xa6aab1 : 0x55595f)
-  bayCover.roughness = .58
-  bayCover.specularIntensity = .54
-  bayCover.clearcoat = .12
+  bayCover.color.setHex(full ? 0x15171a : 0x24262a)
+  bayCover.roughness = .4
+  bayCover.clearcoat = .6
+  bayCover.clearcoatRoughness = .12
   const ventCarbon = carbon.clone()
   ventCarbon.color.setHex(full ? 0x33363a : 0x414346)
   ventCarbon.roughness = .61
@@ -563,6 +571,8 @@ export interface Materials extends Palette {
   tailRecess: T.MeshPhysicalMaterial
   tailInner: T.MeshPhysicalMaterial
   strake: T.MeshPhysicalMaterial
+  bayGrille: T.MeshPhysicalMaterial
+  bezel: T.MeshPhysicalMaterial
   setLevels(running: number, beam: number, tail: number): void
 }
 
@@ -616,6 +626,8 @@ export async function makeMaterials(detail: VehicleDetail, paint: PaintSpec): Pr
     exhaust: wet(full ? 0x0d0e10 : 0x18191c, .15, .42, .65, .12),
     tailRecess: wet(full ? 0x2b0a09 : 0x34100e, .15, .22, .85, .06),
     tailInner,
+    bayGrille: p.tag(new T.MeshPhysicalMaterial({ color: 0x1c1d20, metalness: .25, roughness: .3, clearcoat: .5, clearcoatRoughness: .15, side: T.DoubleSide }), 'beads') as T.MeshPhysicalMaterial,
+    bezel: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x17181b : 0x222327, metalness: .1, roughness: .32, clearcoat: 1, clearcoatRoughness: .12, side: T.DoubleSide }), 'beads') as T.MeshPhysicalMaterial,
     strake: wet(full ? 0x101113 : 0x1c1d20, .1, .35, .7, .08),
     setLevels(running, beam, rear) {
       drl.emissiveIntensity = drlLuminance * running
