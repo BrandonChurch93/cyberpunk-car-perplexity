@@ -467,7 +467,11 @@ function paintPracticals(roof: THREE.Group, city: THREE.Group, shell: THREE.Mate
   const eastReturn = frontageRibbon(north,shell,'east glazed concourse return',[-40.98,22.48,51.04],Math.PI/2,[11.75,3.18],4.25)
   for (const x of [-4.61,0,4.61]) block(eastReturn,'concourse return standoff',metal,[x,0,-.67],[.23,2.4,1.12])
   const concourse = frontageRibbon(north,shell,'northwest concourse ribbon',[-48.7,11.15,43.49],Math.PI,[16.1,4.4],7)
-  for (const x of [-6.2,0,6.2]) block(concourse,'concourse fascia standoff',metal,[x,0,-.43],[.25,3.5,.64])
+  for (const x of [-6.2,0,6.2]) {
+    block(concourse,'concourse fascia standoff',metal,[x,0,-.67],[.25,3.5,1.02])
+    block(concourse,'concourse fascia wall plate',metal,[x,.03,-1.085],[.42,3.69,.25])
+  }
+  for (const y of [-2.21,2.21]) block(concourse,'concourse folded fascia flange',metal,[0,y,-.12],[16.24,.18,.36])
   const ice = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5,3.9,6.1), toneMapped: false })
   const ruby = new THREE.MeshBasicMaterial({ color: new THREE.Color(4.9,.23,.42), toneMapped: false })
   const pearl = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6,3.8,4.2), toneMapped: false })
