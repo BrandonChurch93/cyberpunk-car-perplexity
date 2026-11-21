@@ -16,13 +16,17 @@ function visible(object: THREE.Object3D): boolean {
   return true
 }
 
-export function mirrorEmitters(lights: readonly FilmLight[], rig?: LightRig) {
+export function mirrorEmitters(lights: readonly FilmLight[], rig?: LightRig, lampApertures?: ReadonlyMap<string, THREE.Mesh>) {
   const spots = new Map(rig?.group.children.flatMap(object =>
     object instanceof THREE.SpotLight ? [[object.name, object] as const] : []))
-  const slots = lights.flatMap(light => {
+  const slots: { light?: FilmLight; lamp?: THREE.Mesh; spot: THREE.SpotLight; position: THREE.Vector4; uv: THREE.Vector4 }[] = lights.flatMap(light => {
     const spot = spots.get(light.id)
     return spot ? [{ light, spot, position: new THREE.Vector4(), uv: new THREE.Vector4() }] : []
   })
+  for (const [id, lamp] of lampApertures ?? []) {
+    const spot = spots.get(id)
+    if (spot) slots.push({ lamp, spot, position: new THREE.Vector4(), uv: new THREE.Vector4() })
+  }
   const peaks = slots.map(() => 0)
   const faces = new WeakMap<THREE.Object3D, THREE.Mesh | null>()
   const frustum = new THREE.Frustum()
@@ -46,11 +50,12 @@ export function mirrorEmitters(lights: readonly FilmLight[], rig?: LightRig) {
     peaks: { value: peaks },
     update(viewProjection: THREE.Matrix4, layers: THREE.Layers, size: THREE.Vector2) {
       frustum.setFromProjectionMatrix(viewProjection)
-      for (const { light, spot, position, uv } of slots) {
+      for (const { light, lamp, spot, position, uv } of slots) {
         position.w = 0
         uv.set(1, 1, 0, 0)
-        const face = aperture(light)
+        const face = light ? aperture(light) : lamp
         if (!face || !spot.visible || !visible(face) || !layers.test(face.layers)) continue
+        if (lamp && (!(lamp.material instanceof THREE.MeshStandardMaterial) || lamp.material.emissiveIntensity <= 0)) continue
         face.updateWorldMatrix(true, false)
         if (!frustum.intersectsObject(face)) continue
         spot.getWorldPosition(point)
@@ -78,6 +83,7 @@ export function mirrorEmitters(lights: readonly FilmLight[], rig?: LightRig) {
       const restore: [THREE.ShaderMaterial, THREE.Color, THREE.Color][] = []
       for (const [index, { light }] of slots.entries()) {
         peaks[index] = 0
+        if (!light) continue
         const face = aperture(light)
         if (face?.name !== 'weather-sealed opal face' || !(face.material instanceof THREE.ShaderMaterial)) continue
         const tint = face.material.uniforms.tint?.value

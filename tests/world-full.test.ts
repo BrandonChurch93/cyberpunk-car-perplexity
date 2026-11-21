@@ -152,6 +152,11 @@ describe('full roof world', () => {
       expect(shell.material.userData.mechanicalFloorPitch).toBeGreaterThanOrEqual(15)
       expect(shell.material.userData.mechanicalFloorPitch).toBeLessThanOrEqual(25)
       expect(shell.material.userData.roomDepthMeters).toEqual([4,8])
+      const [openingWidth,openingHeight] = shell.material.userData.litOpeningMeters as [number,number]
+      expect(openingWidth).toBeGreaterThanOrEqual(.90)
+      expect(openingWidth).toBeLessThanOrEqual(shell.material.userData.clearPaneWidth)
+      expect(openingHeight).toBeGreaterThanOrEqual(1.08)
+      expect(openingHeight).toBeLessThanOrEqual(1.88)
       facadeFamilies.add(shell.material.userData.facade)
       claddingRoughness.set(shell.material.userData.facade,shell.material.roughness)
       const fins = volume.getObjectByName('extruded curtain wall fins') as THREE.InstancedMesh | undefined
