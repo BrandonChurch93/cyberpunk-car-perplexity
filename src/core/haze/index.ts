@@ -145,7 +145,7 @@ float projectorOpenCore(float slope, float clearance) {
 float projectorDensity(float t, float height) {
   float h = max(0.0, height);
   float taper = 1.0 - exp(-h / ${atmosphere.projectorAerosolHeight});
-  return airDensity * exp(-h / airHeight) * taper * taper * (1.0 - step(localAirRange, t));
+  return airDensity * exp(-h / airHeight) * taper * taper * taper * taper * (1.0 - step(localAirRange, t));
 }
 
 float foregroundScatter(float t) {
