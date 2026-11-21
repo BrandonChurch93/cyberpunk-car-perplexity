@@ -52,6 +52,8 @@ const coatFilm = [
 ]
 /** The sheet on glass creeps down the pane at this speed in meters per second, a whole number of wavelengths over the film. */
 const glassSheetSpeed = 0.06
+/** Roll waves of the draining film on glass: spacing along the fall line and width across it in meters, and their slope. */
+const glassRoll = { along: 0.04, across: 0.12, slope: 0.06 }
 const glassCycles = (w: number) => Math.max(1, Math.round((glassSheetSpeed * config.film.durationSeconds) / w))
 const runTrack = { spacing: 0.03, width: 0.004, length: 0.3, height: 0.0004 }
 /** Water held along a lower edge: a line of it on the lip and pendant drops hanging from it, spaced about two diameters apart. */
@@ -343,6 +345,13 @@ vec3 surfCoatSlope(vec3 p, vec3 n, vec3 down, float slope, float pix, float cove
     s += sheet * ${amp.toFixed(3)} * filt * g.yz;
     surfCoatVar += sheet * sheet * ${(amp * amp * 0.4).toFixed(6)} * (1.0 - filt * filt);
   }`).join('\n  ')}
+  if (glass > 0.0) {
+    // A film draining down a pane gathers into roll waves: fronts wide across the fall line, close along it, riding down with the flow.
+    vec3 g = surfGradNoiseWrap(vec2(q.x / ${glassRoll.across.toFixed(4)}, q.y / ${glassRoll.along.toFixed(4)} - flow * ${glassCycles(glassRoll.along)}.0), ${glassCycles(glassRoll.along)}, 63, salt);
+    float filt = exp(-2.0 * pow(pix / ${glassRoll.along.toFixed(4)}, 2.0));
+    s += ${glassRoll.slope.toFixed(3)} * filt * vec2(g.y * ${(glassRoll.along / glassRoll.across).toFixed(4)}, g.z);
+    surfCoatVar += ${(glassRoll.slope ** 2 * 0.4).toFixed(6)} * (1.0 - filt * filt);
+  }
   return b * s.x + a * s.y;
 }
 
@@ -667,7 +676,10 @@ float surfGlint = 0.0;
   surfGlint *= hidden;
   surfLensW *= hidden;
   float coatFar = smoothstep(${coatFade[0].toFixed(4)}, ${coatFade[1].toFixed(4)}, pix) * (1.0 - 0.7 * surfLane);
-  vec3 coatTilt = coatFar > 0.0 ? toView * surfCoatSlope(p, n, down, slope, pix, surfCoverage(uv, axis, salt), salt) * coatFar : vec3(0.0);
+  // The drifts keep their beads at any distance, but a merged sheet reads only up close: far off, a dense drift as a sheet would
+  // turn the clean coat between its drops into a broad glossy lobe under every compact light.
+  float sheetCover = mix(surfCoverage(uv, axis, salt), 0.5, 0.7 * smoothstep(0.0012, 0.004, pix));
+  vec3 coatTilt = coatFar > 0.0 ? toView * surfCoatSlope(p, n, down, slope, pix, sheetCover, salt) * coatFar : vec3(0.0);
   surfCoatVar *= coatFar * coatFar;
   coatTilt += toView * (surfRunSlope(pix) + dripTilt);
   surfCoatVar += surfRunVar;

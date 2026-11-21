@@ -20,9 +20,10 @@ const reliefSize = 1024
 const shakeStart = events.engineStart + 0.15
 const refill = { start: beatById('return').start + 3, end: config.film.durationSeconds - 1 }
 
-/** Contact angle by material class. Opaque coated parts bead like waxed paint. Transparent parts are coated polycarbonate and glass. */
+/** Contact angle by material class. Opaque coated parts bead like waxed paint. Clear parts are coated polycarbonate and glass. */
 function beadClass(material: THREE.Material, index: number): BeadClass {
-  return { contactDegrees: material.transparent ? 70 : 100, salt: 101 + 17 * index }
+  const clear = material.transparent || ((material as THREE.MeshPhysicalMaterial).transmission ?? 0) > 0
+  return { contactDegrees: clear ? 70 : 100, salt: 101 + 17 * index }
 }
 
 function vehicleMeshes(root: THREE.Object3D, wanted: Map<THREE.Material, BeadClass>): Array<{ mesh: THREE.Mesh; bead: BeadClass }> {
