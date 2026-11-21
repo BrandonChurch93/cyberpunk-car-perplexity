@@ -66,6 +66,7 @@ precision highp float;
 in vec2 vUv;
 out vec4 outColor;
 uniform vec4 uDeck;
+uniform vec4 uNosePlane;
 uniform int uTailCount;
 uniform vec3 uTailPosition[${maxTailLights}];
 uniform vec3 uTailAxis[${maxTailLights}];
@@ -89,7 +90,7 @@ vec3 vaporLight(vec3 p, vec3 toEye, bool deck, bool exhaust) {
     vec3 incident = filmLightAt(i, p, toLight);
     float mu = -dot(toEye, toLight);
     float lobe = scatterLobe(mu);
-    float coupling = deck && filmLightShape[i].w > 0.5 ? 0.26 : 1.0;
+    float coupling = deck && filmLightShape[i].w > 0.5 ? 0.20 : 1.0;
     float phase = exhaust ? 0.12 + lobe * 0.19 : (0.10 + lobe * 0.20) * coupling;
     illumination += incident * phase;
   }
@@ -115,7 +116,8 @@ float deckSpray(vec3 p) {
   float primary = sin(dot(p.xz, vec2(2.04, -2.14)) - TAU * 12.0 * uPhase + uNoise.x);
   float secondary = sin(dot(p.xz, vec2(3.89, 1.13)) - TAU * 15.0 * uPhase + uNoise.y);
   float pockets = 1.25 * smoothstep(-0.05, 0.74, primary * 0.68 + secondary * 0.32);
-  return 0.044 * edge * e * pockets;
+  float lowFore = smoothstep(0.15, 0.82, dot(p, uNosePlane.xyz) - uNosePlane.w) * (1.0 - smoothstep(0.075, 0.15, p.y));
+  return 0.044 * edge * e * pockets * mix(1.0, 0.54, lowFore);
 }
 
 float exhaustDensity(vec3 q, vec3 axis, float index) {
@@ -359,6 +361,7 @@ export class AirVolume implements SamplePass {
   }
   private readonly composite = new FullscreenPass(passMaterial(compositeFragment, this.compositeUniforms))
   private readonly vapor: FullscreenPass
+  private readonly nosePlane = { value: new THREE.Vector4() }
   private readonly tailUniforms = {
     uTailCount: { value: 0 },
     uTailPosition: { value: Array.from({ length: maxTailLights }, () => new THREE.Vector3()) },
@@ -379,6 +382,7 @@ export class AirVolume implements SamplePass {
       ...deps.lights,
       ...this.tailUniforms,
       uDeck: { value: new THREE.Vector4(b.min.x, b.min.y, b.max.x, b.max.y) },
+      uNosePlane: this.nosePlane,
     }))
   }
 
@@ -400,6 +404,11 @@ export class AirVolume implements SamplePass {
 
   private updateSources({ camera, timeSeconds }: SampleContext): void {
     const { vehicle, world } = this.deps
+    const { root, anchors } = vehicle
+    root.updateWorldMatrix(true, false)
+    this.direction.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize()
+    this.position.copy(anchors.lamp.position).applyMatrix4(root.matrixWorld)
+    this.nosePlane.value.set(this.direction.x, this.direction.y, this.direction.z, this.direction.dot(this.position))
     const source = this.shared.uSources.value
     const axis = this.shared.uAxes.value
     const rect = this.compositeUniforms.uShimmerRect.value.set(1, 1, 0, 0)
@@ -412,16 +421,15 @@ export class AirVolume implements SamplePass {
     const pulse = THREE.MathUtils.smoothstep(age, 0, 0.065) * (1 - THREE.MathUtils.smoothstep(age, 1.4, 2.0))
     const emission = THREE.MathUtils.lerp(0.81 * afterglow, 0.95, pulse)
     if (Math.max(power, emission) > 0.0001) {
-      vehicle.root.updateWorldMatrix(true, false)
-      const exhaust = vehicle.anchors.exhaust
+      const { exhaust } = anchors
       this.lateral.set(0, 1, 0).crossVectors(exhaust.normal, this.lateral)
       if (this.lateral.lengthSq() < 1e-8) this.lateral.set(0, 0, 1).crossVectors(exhaust.normal, this.lateral)
       this.lateral.normalize()
-      this.direction.copy(exhaust.normal).transformDirection(vehicle.root.matrixWorld)
-      this.exhaustOrigin.copy(exhaust.position).applyMatrix4(vehicle.root.matrixWorld)
+      this.direction.copy(exhaust.normal).transformDirection(root.matrixWorld)
+      this.exhaustOrigin.copy(exhaust.position).applyMatrix4(root.matrixWorld)
       this.updateTailLights()
       for (const side of [-1, 1]) {
-        this.position.copy(exhaust.position).addScaledVector(this.lateral, side * exhaustBankOffset).applyMatrix4(vehicle.root.matrixWorld)
+        this.position.copy(exhaust.position).addScaledVector(this.lateral, side * exhaustBankOffset).applyMatrix4(root.matrixWorld)
         source[index].set(this.position.x, this.position.y, this.position.z, emission)
         axis[index].set(this.direction.x, this.direction.y, this.direction.z, 4)
         index++
