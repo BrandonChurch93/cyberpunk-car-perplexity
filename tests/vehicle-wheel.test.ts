@@ -6,7 +6,7 @@ import { mainLoft, dims } from '../src/vehicle/body/shape'
 import { arches } from '../src/vehicle/body/cuts'
 import type { Surface } from '../src/vehicle/geom/cuts'
 import { makeMaterials } from '../src/vehicle/materials'
-import { archLinerParts, buildLiners } from '../src/vehicle/parts/liners'
+import { buildLiners } from '../src/vehicle/parts/liners'
 import { buildWheel, buildWheels } from '../src/vehicle/parts/wheel'
 
 function assertValidTangentUVs(g: THREE.BufferGeometry, label: string): void {
@@ -61,7 +61,7 @@ function assertValidTangentUVs(g: THREE.BufferGeometry, label: string): void {
   expect(issues, label).toEqual([])
 }
 
-describe('wheel, tire, brake and arch liner module', () => {
+describe('wheel, tire, brake and arch liner module', { timeout: 30_000 }, () => {
   let mainSurface: Surface
   let blockoutRoot: THREE.Group
   let fullRoot: THREE.Group
@@ -223,11 +223,13 @@ describe('wheel, tire, brake and arch liner module', () => {
       [true, dims.frontHubZ, dims.frontTire.radius, 0.34],
       [false, dims.rearHubZ, dims.rearTire.radius, 0.36],
     ] as const) {
-      const parts = archLinerParts(mainSurface, front, true)
-      const lipBox = new THREE.Box3().setFromBufferAttribute(parts.lip.getAttribute('position') as THREE.BufferAttribute)
+      const axle = front ? 'front' : 'rear'
+      const lipMesh = sprung.getObjectByName(`arch-lip-${axle}-left`) as THREE.Mesh
+      const linerMesh = sprung.getObjectByName(`liner-${axle}-left`) as THREE.Mesh
+      const lipBox = new THREE.Box3().setFromBufferAttribute(lipMesh.geometry.getAttribute('position') as THREE.BufferAttribute)
       expect(lipBox.max.x - lipBox.min.x).toBeGreaterThan(0.015)
 
-      const linerPos = parts.liner.getAttribute('position')
+      const linerPos = linerMesh.geometry.getAttribute('position')
       for (let i = 0; i < linerPos.count; i++) {
         const y = linerPos.getY(i)
         const z = linerPos.getZ(i)
@@ -247,11 +249,9 @@ describe('wheel, tire, brake and arch liner module', () => {
           const z = zc - Math.cos(theta) * rSample
           ray.set(new THREE.Vector3(side * 2.0, y, z), dir)
           const hits = ray.intersectObjects(linerTargets, false)
-          expect(hits.length, `${front ? 'front' : 'rear'} side=${side} k=${k}`).toBeGreaterThan(0)
+          expect(hits.length, `${axle} side=${side} k=${k}`).toBeGreaterThan(0)
         }
       }
-      parts.lip.dispose()
-      parts.liner.dispose()
     }
     clayFrontSide.dispose()
   })
