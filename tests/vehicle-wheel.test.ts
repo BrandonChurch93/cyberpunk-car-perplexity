@@ -313,4 +313,46 @@ describe('wheel, tire, brake and arch liner module', { timeout: 30_000 }, () => 
     expect(Math.abs(vehicleFull.anchors.wheel.position.x - 0.9563)).toBeLessThan(0.008)
     clayFrontSide.dispose()
   })
+
+  it('gives full wheels dark spokes with machined chamfers, dark steel rotors, crimson calipers and wet sidewall cordons', () => {
+    const fl = vehicleFull.root.getObjectByName('wheel-front-left')!
+    const spokeWeb = fl.getObjectByName('spoke-web') as THREE.Mesh
+    const spokeRecess = fl.getObjectByName('spoke-recess') as THREE.Mesh
+    const spokeChamfer = fl.getObjectByName('spoke-chamfer') as THREE.Mesh
+    const rimFlange = fl.getObjectByName('rim-flange') as THREE.Mesh
+    const centerCap = fl.getObjectByName('rim') as THREE.Mesh
+    const disc = fl.getObjectByName('disc') as THREE.Mesh
+    const caliper = fl.getObjectByName('caliper') as THREE.Mesh
+    const tire = fl.getObjectByName('tire') as THREE.Mesh
+    const sidewallRelief = fl.getObjectByName('sidewall-relief') as THREE.Mesh
+
+    const webMat = spokeWeb.material as THREE.MeshPhysicalMaterial
+    const recessMat = spokeRecess.material as THREE.MeshPhysicalMaterial
+    const chamferMat = spokeChamfer.material as THREE.MeshPhysicalMaterial
+    const flangeMat = rimFlange.material as THREE.MeshPhysicalMaterial
+    const capMat = centerCap.material as THREE.MeshPhysicalMaterial
+    const discMat = disc.material as THREE.MeshPhysicalMaterial
+    const caliperMat = caliper.material as THREE.MeshPhysicalMaterial
+    const tireMat = tire.material as THREE.MeshPhysicalMaterial
+    const sidewallMat = sidewallRelief.material as THREE.MeshPhysicalMaterial
+    const rearLip = vehicleFull.root.getObjectByName('arch-lip-rear-left') as THREE.Mesh
+    const rearLiner = vehicleFull.root.getObjectByName('liner-rear-left') as THREE.Mesh
+    const rearLipMat = rearLip.material as THREE.MeshPhysicalMaterial
+    const rearLinerMat = rearLiner.material as THREE.MeshPhysicalMaterial
+
+    expect(webMat.color.r).toBeLessThan(0.02)
+    expect(webMat.clearcoat).toBeGreaterThan(0.8)
+    expect(recessMat.color.r).toBeLessThan(0.02)
+    expect(capMat.color.r).toBeLessThan(0.02)
+    expect(chamferMat.metalness).toBeGreaterThan(0.7)
+    expect(flangeMat.metalness).toBeGreaterThan(0.75)
+    expect(discMat.metalness).toBeGreaterThan(0.8)
+    expect(discMat.color.r).toBeLessThan(0.06)
+    expect(caliperMat.color.r).toBeGreaterThan(caliperMat.color.g * 3)
+    expect(tireMat.clearcoat).toBeGreaterThan(0.75)
+    expect(sidewallMat.clearcoat).toBeGreaterThan(0.7)
+    expect(sidewallMat.color.r).toBeLessThan(0.02)
+    expect(rearLipMat.clearcoat).toBeGreaterThan(0.85)
+    expect(rearLinerMat.clearcoat).toBeGreaterThan(0.8)
+  })
 })
