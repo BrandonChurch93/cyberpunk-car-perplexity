@@ -99,12 +99,9 @@ describe('full roof world', () => {
 
   it('centres the high cloud spill over the mounted city emitters without adding rig lights', () => {
     const sky = world.root.getObjectByName('city-lit cloud base') as THREE.Mesh<THREE.SphereGeometry,THREE.ShaderMaterial>
-    const districts = sky.material.uniforms.cloudDistricts!.value as THREE.Vector2[]
+    const districts = sky.material.uniforms.cloudDistricts!.value as THREE.Vector3[]
     const survey = approvedHeroSourceSurvey()
-    expect(districts.map(point=>point.toArray())).toEqual(['magenta violet tower screen','left cyan facade sail'].map(id=>{
-      const { at: [x,,z] } = survey.find(source=>source.id===id)!
-      return [x,z]
-    }))
+    expect(districts.map(point=>point.toArray())).toEqual(['magenta violet tower screen','left cyan facade sail'].map(id=>survey.find(source=>source.id===id)!.at))
     expect(sky.material.side).toBe(THREE.BackSide)
     expect(sky.material.depthWrite).toBe(false)
     expect(world.lights).toHaveLength(8)
