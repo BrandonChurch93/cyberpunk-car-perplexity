@@ -46,8 +46,9 @@ export async function createFullWorld(): Promise<WorldModule> {
     const { at: [x,,z] } = survey.find(source=>source.id===id)!
     return new THREE.Vector2(x,z)
   }
-  addSky(root,[district('magenta violet tower screen'),district('left cyan facade sail')])
+  addSky(root,[district('magenta violet tower screen'),district('left cyan facade sail')],hero.muralCloud)
   const reflections = addReflectionFrontages(root,labels)
+  const optics = [...fixtures.lights, ...fixtures.wideLights].filter(light => light.kind === 'spot').map(light => ({ ...light }))
   const wideLights = new Map([...hero.lights,...fixtures.wideLights.map(light=>[light.id,light] as const)])
   const slots = fixtures.lights.map(original => {
     const wide = wideLights.get(original.id)
@@ -75,6 +76,7 @@ export async function createFullWorld(): Promise<WorldModule> {
     reflectionBox: new THREE.Box3(new THREE.Vector3(min.x, 0, min.y), new THREE.Vector3(max.x, 81, max.y)),
     surfaces,
     steamSources: fixtures.steamSources,
+    optics,
     beginFrame: ({ frame }) => set(frame.timeSeconds),
     beginSample: ({ timeSeconds, sample }) => set(timeSeconds, sample?.frame.timeSeconds),
   }

@@ -12,6 +12,7 @@ import { createWorld } from '../src/world'
 import { heroDrain } from '../src/world/deck'
 import { billboardState } from '../src/world/fixtures'
 import { approvedHeroSourceSurvey, heroScreenMount } from '../src/world/hero-layout'
+import { muralLuma, muralMean, muralPainting } from '../src/world/mural-picture'
 import { heroLayoutEye, heroPoint, heroScale } from '../src/world/hero-scale'
 import { heroCityYaw, streetY } from '../src/world/forms'
 import { deckHeight } from '../src/world/roof-look'
@@ -378,22 +379,32 @@ describe('full roof world', () => {
     }
     expect(riser.getObjectsByProperty('name','gallery cyan strip')).toHaveLength(3)
     expect(media.getObjectsByProperty('name','occupied gallery window').length).toBeGreaterThan(30)
-    for (const [name,lo,hi] of [['bonnet media bank',32,36],['windscreen media bank',41,46]] as const) {
+    for (const [name,lo,hi] of [['bonnet media bank',32,37],['bonnet media inset',32,37],
+      ['windscreen media bank',41,46],['windscreen media inset',41,46]] as const) {
       const fixture = required(name)
       expect(fixture.parent).toBe(westMedia)
       const ray = visible(fixture,'animated magenta violet tiles')
-      expect(THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))).toBeGreaterThan(-148)
-      expect(THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))).toBeLessThan(-141)
+      expect(THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))).toBeGreaterThan(-150)
+      expect(THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))).toBeLessThan(-140)
       expect(THREE.MathUtils.radToDeg(Math.asin(ray.y))).toBeGreaterThan(lo)
       expect(THREE.MathUtils.radToDeg(Math.asin(ray.y))).toBeLessThan(hi)
+      const face = fixture.getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+      expect(face.geometry.parameters.width*face.geometry.parameters.height).toBeLessThan(780)
+      expect(face.material.uniforms.artwork.value).toBeInstanceOf(THREE.DataTexture)
+      expect(face.material.uniforms.artworkGain.value).toBeLessThan(1)
     }
     let bonnetRays = 0
-    for (const az of [-148,-146,-144]) for (const el of [33.5,34.5,35.5]) {
+    let darkWestRays = 0
+    for (const az of [-148,-146,-144,-142]) for (const el of [33.5,34.5,35.5,36.5]) {
       const a = THREE.MathUtils.degToRad(az), e = THREE.MathUtils.degToRad(el)
       const ray = new THREE.Raycaster(probe,new THREE.Vector3(Math.sin(a)*Math.cos(e),Math.sin(e),Math.cos(a)*Math.cos(e)))
-      if (firstHit(ray)?.object.parent?.name === 'bonnet media bank') bonnetRays++
+      const object = firstHit(ray)?.object
+      if (object?.name === 'animated magenta violet tiles' && object.parent?.name.startsWith('bonnet media ')) bonnetRays++
+      if (object?.name === 'lower media folded spandrel' || object?.name === 'folded media divider') darkWestRays++
     }
-    expect(bonnetRays).toBeGreaterThanOrEqual(6)
+    expect(bonnetRays).toBeGreaterThanOrEqual(2)
+    expect(bonnetRays).toBeLessThanOrEqual(8)
+    expect(darkWestRays).toBeGreaterThan(2)
     const hits = new Set<string>()
     let mediaRays = 0
     for (const az of [-161,-158,-155,-152,-149]) for (const el of [35,37,38,39,42,44,45]) {
@@ -894,6 +905,27 @@ describe('full roof world', () => {
     expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
   })
 
+  it('paints distinct hot, violet and indigo regions on the media', () => {
+    for (const wall of [false,true]) {
+      const { data, width, height } = muralPainting(wall).image
+      if (!(data instanceof Uint16Array)) throw new Error('Missing half float mural raster')
+      const sample = (u: number, v: number) => {
+        const i = (Math.floor(v*height)*width+Math.floor(u*width))*4
+        const f = THREE.DataUtils.fromHalfFloat
+        return new THREE.Color(f(data[i]),f(data[i+1]),f(data[i+2]))
+      }
+      const hot = sample(.23,.55)
+      const violet = sample(.71,.61)
+      const indigo = sample(.79,.21)
+      expect(hot.r/hot.b).toBeGreaterThan(2)
+      expect(violet.b/violet.r).toBeGreaterThan(2)
+      expect(muralLuma(indigo)).toBeLessThan(.6*muralLuma(violet))
+    }
+    const first = muralMean(1,0,.166,new THREE.Color())
+    const shifted = muralMean(-1,0,.166,new THREE.Color())
+    expect(Math.abs(first.r-shifted.r)).toBeGreaterThan(.25)
+  })
+
   it('drives the tower mural periodically while leaving macro emitter slots on their original mounts', () => {
     const id = 'magenta violet tower screen'
     const emitter = world.lights.find(l => l.id === id)!
@@ -901,10 +933,14 @@ describe('full roof world', () => {
     const firstFrame = (timeSeconds: number) => world.beginFrame({ frame: { timeSeconds } } as FrameContext)
     firstFrame(0)
     const first = face.material.uniforms.flow.value.clone()
+    const sky = world.root.getObjectByName('city-lit cloud base') as THREE.Mesh<THREE.SphereGeometry,THREE.ShaderMaterial>
+    const cloud = sky.material.uniforms.muralCloud.value as THREE.Color
+    const firstCloud = cloud.clone()
     const wall = world.root.getObjectByName(id)
     const rate = emitter.level(0)
     expect(emitter.object.parent).toBe(wall)
     expect(face.material.uniforms.picture.value).toBe(1)
+    world.root.updateMatrixWorld(true)
     const tower = world.root.getObjectByName('hero screen tower volume')!.children[0]
     const supportPlane = new THREE.Box3().setFromObject(tower)
     const ties = wall!.children.filter(node => node.name === 'billboard facade tie plate')
@@ -912,8 +948,19 @@ describe('full roof world', () => {
     for (const tie of ties) expect(supportPlane.intersectsBox(new THREE.Box3().setFromObject(tie))).toBe(true)
     expect(emitter.intensity).toBe(Math.max(...world.lights.filter(light=>!light.shadow).map(light=>light.intensity)))
     const travel = face.material.uniforms.travel.value as number
+    const ink = face.material.uniforms.artwork.value
+    const upper = world.root.getObjectByName('bonnet media bank')!.getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    expect(ink).toBe(muralPainting(true))
+    expect(upper.material.uniforms.artwork.value).toBe(muralPainting(false))
     firstFrame(.08*config.film.durationSeconds)
-    expect(face.material.uniforms.flow.value.distanceTo(first)*travel).toBeGreaterThan(.12)
+    const flow = face.material.uniforms.flow.value as THREE.Vector2
+    expect(flow.distanceTo(first)*travel).toBeGreaterThan(.12)
+    const mean = muralMean(flow.x,flow.y,travel,new THREE.Color())
+    const key = new THREE.Color()
+    emitter.colorAt!(.08*config.film.durationSeconds,key)
+    expect(key.r/key.b).toBeCloseTo(mean.r/mean.b,12)
+    expect(key.g/key.b).toBeCloseTo(mean.g/mean.b,12)
+    expect(cloud.toArray()).not.toEqual(firstCloud.toArray())
     const wake = config.beats.find(beat=>beat.id==='wake')!
     world.beginSample({ timeSeconds: wake.end+.003, sample: { frame: { timeSeconds: wake.end-.001 } } } as SampleContext)
     expect(emitter.object.parent).toBe(wall)
@@ -925,6 +972,7 @@ describe('full roof world', () => {
     expect(emitter.object.parent).toBe(wall)
     expect(face.material.uniforms.flow.value.toArray()).toEqual(first.toArray())
     expect(emitter.level(config.film.durationSeconds)).toBeCloseTo(rate,12)
+    expect(cloud.toArray()).toEqual(firstCloud.toArray())
     firstFrame(0)
   })
 

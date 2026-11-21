@@ -319,6 +319,27 @@ function projectorFront(center: T.Vector3, axis: T.Vector3, radius: number, full
   return { lens, shroud, rim }
 }
 
+function projectorChipset(center: T.Vector3, axis: T.Vector3, radius: number): T.BufferGeometry {
+  const rotation = new T.Quaternion().setFromUnitVectors(forward, axis)
+  const builder = new MeshBuilder(), gain: number[] = []
+  const plate = (x: number, y: number, z: number, width: number, height: number, radiance: number) => {
+    const base = gain.length
+    for (const [u, v] of [[0, 0], [1, 0], [1, 1], [0, 1]]) {
+      const p = new T.Vector3(radius * (x + (u - .5) * width), radius * (y + (v - .5) * height), z)
+        .applyQuaternion(rotation).add(center)
+      builder.vertex(p.toArray(), axis.toArray(), u, v)
+      gain.push(radiance)
+    }
+    builder.quad(base, base + 1, base + 2, base + 3)
+  }
+  plate(0, 0, -.0131, .56, .43, 0)
+  for (const y of [-1, 1]) for (const x of [-1, 1]) {
+    plate(x * .135, y * .105, -.0124, .114, .109, x === y ? .115 : .154)
+    plate(x * .226, y * .105, -.0128, .034, .043, .0015)
+  }
+  return builder.geometry().setAttribute('sourceGain', new T.Float32BufferAttribute(gain, 1))
+}
+
 function lensPickup(material: T.Material, flux: T.IUniform<number>): void {
   patchMaterial(material, {
     id: 'front-projector-internal-pickup',
@@ -327,8 +348,10 @@ function lensPickup(material: T.Material, flux: T.IUniform<number>): void {
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'uniform float projectorFlux;')
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
         float lensAngle = max(0.0, dot(normal, normalize(vViewPosition)));
-        float lensGlint = exp(-59.0 * (1.0 - lensAngle));
-        totalEmissiveRadiance += projectorFlux * lensGlint * vec3(0.85, 0.94, 1.0);
+        float lensGlint = exp(-134.0 * (1.0 - lensAngle));
+        float caustic = (lensAngle - 0.91) * 46.0;
+        float arc = 0.15 * exp(-caustic * caustic) * smoothstep(-0.24, 0.58, normal.y);
+        totalEmissiveRadiance += projectorFlux * (lensGlint + arc) * vec3(0.85, 0.94, 1.0);
       `)
     },
   })
@@ -475,6 +498,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
     const trim = projectorFront(p, axis, r, full)
     parts.collar.dispose()
     parts.lens.dispose()
+    parts.source.dispose()
     cases.push(parts.casework)
     shrouds.push(trim.shroud)
     collars.push(trim.rim)
@@ -482,7 +506,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
     bowls.push(parts.bowl)
     retainers.push(lensRetainers(p, axis, r))
     lenses.push(trim.lens)
-    dies.push(parts.source)
+    dies.push(projectorChipset(p, axis, r))
     emit('main beam projector', seat.addScaledVector(forward, .022), true, beam, intensity)
   }
   add('front projector casings', merged([...cases, ...shrouds]), m.housing, true)
@@ -501,7 +525,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
       for (const l of lamps) l.level = l.beam ? level : running
       drl.emissiveIntensity = 144 * running
       beam.emissiveIntensity = 260 * level
-      lensFlux.value = 2.2 * level
+      lensFlux.value = .32 * level
       rimMetal.emissiveIntensity = .74 * level
     },
   }

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type { VehicleModule } from '../vehicle'
-import { emitterUniforms, maxEmitters, waterF0, type EmitterUniforms, type GlintEmitter } from './emitters-glsl'
+import { beadCapCos, emitterUniforms, opticFactor, maxEmitters, waterF0, type EmitterUniforms, type GlintEmitter } from './emitters-glsl'
 import { atmosphere } from './haze'
 import { layers, type FilmLight } from './contract'
 import { lampSources } from './reflect/lamps'
@@ -21,6 +21,8 @@ export const perGroup = 2
 export const lampSlots = 4
 export const signSlots = 6
 const signName = /lettering|sign face/
+/** A face fronts a spot light's optic when it faces along the beam. */
+const opticAlignment = 0.98
 /** Rects ranked by their raw score before the occlusion rays are cast. */
 export const visibilityShortlist = 96
 
@@ -48,20 +50,39 @@ export function solidAngle(e: GlintEmitter, at: THREE.Vector3): number {
   return Math.min(area * facing / d2, 2 * Math.PI)
 }
 
+/** A direction the visible car faces and its share of the car's projected area toward the camera. */
+export interface Receiver {
+  normal: THREE.Vector3
+  weight: number
+}
+
+function smoothstep(a: number, b: number, x: number): number {
+  const t = Math.min(1, Math.max(0, (x - a) / (b - a)))
+  return t * t * (3 - 2 * t)
+}
+
+const schlick = (c: number): number => waterF0 + (1 - waterF0) * (1 - Math.min(1, Math.max(0, c))) ** 5
+
 /**
- * What the emitter puts into the reflections the camera sees on the car: radiance times its solid angle at the car,
- * times water Fresnel at the half vector between it and the camera, so the city behind the car outranks fittings behind the camera.
+ * What the emitter puts into the reflections the camera sees on the car: radiance times its solid angle at the car, times
+ * water Fresnel at the half vector toward the camera, summed over the car's visible faces that have it above their horizon
+ * inside a bead cap. Without receivers every face counts, so the Fresnel alone decides.
  */
-export function emitterScore(e: Emitter, focus: THREE.Vector3, eye?: THREE.Vector3): number {
-  let fresnel = 1
+export function emitterScore(e: Emitter, focus: THREE.Vector3, eye?: THREE.Vector3, receivers?: readonly Receiver[]): number {
+  let reflect = 1
   if (eye) {
     const D = e.center.clone().sub(focus).normalize()
     const V = eye.clone().sub(focus).normalize()
-    const H = D.add(V)
-    const c = H.lengthSq() > 1e-12 ? H.normalize().dot(V) : 0
-    fresnel = waterF0 + (1 - waterF0) * (1 - Math.min(1, Math.max(0, c))) ** 5
+    const H = D.clone().add(V)
+    const fresnel = H.lengthSq() > 1e-12 ? schlick(H.normalize().dot(V)) : 0
+    reflect = fresnel
+    if (receivers?.length) {
+      reflect = 0
+      for (const r of receivers) reflect += r.weight * smoothstep(0, 0.05, D.dot(r.normal)) * smoothstep(beadCapCos, beadCapCos + 0.1, H.dot(r.normal))
+      reflect *= fresnel
+    }
   }
-  return luminance(e.radiance) * solidAngle(e, focus) * fresnel * e.visibility
+  return luminance(e.radiance) * solidAngle(e, focus) * reflect * e.visibility * opticFactor(e, focus)
 }
 
 const byScore = (a: { e: Emitter; score: number }, b: { e: Emitter; score: number }): number =>
@@ -71,9 +92,9 @@ const byScore = (a: { e: Emitter; score: number }, b: { e: Emitter; score: numbe
  * Key faces first, then up to `lampSlots` lamps by radiance times area, then the best face of up to `signSlots` signs, then the rest brightest first with at most `cap` faces of one fixture.
  * Ties keep id order so the table never depends on traversal or sort stability.
  */
-export function rankEmitters(list: readonly Emitter[], focus: THREE.Vector3, max = maxEmitters, cap = perGroup, eye?: THREE.Vector3): Emitter[] {
+export function rankEmitters(list: readonly Emitter[], focus: THREE.Vector3, max = maxEmitters, cap = perGroup, eye?: THREE.Vector3, receivers?: readonly Receiver[]): Emitter[] {
   const scored = list
-    .map((e) => ({ e, score: e.lamp ? luminance(e.radiance) * 4 * e.u.clone().cross(e.v).length() * e.visibility : emitterScore(e, focus, eye) }))
+    .map((e) => ({ e, score: e.lamp ? luminance(e.radiance) * 4 * e.u.clone().cross(e.v).length() * e.visibility : emitterScore(e, focus, eye, receivers) }))
     .filter(({ e, score }) => (score > 0 || (e.key && luminance(e.radiance) > 0)) && Number.isFinite(score))
     .sort(byScore)
   const kept: Emitter[] = scored.filter(({ e }) => e.key).map(({ e }) => e).slice(0, max)
@@ -122,6 +143,8 @@ export function mergeOverlays(list: readonly Emitter[]): Emitter[] {
   return out
 }
 
+const noOptic = -2
+
 export function writeEmitters(list: readonly Emitter[], uniforms: EmitterUniforms = emitterUniforms): void {
   const count = Math.min(list.length, maxEmitters)
   uniforms.emitterCount.value = count
@@ -136,8 +159,8 @@ export function writeEmitters(list: readonly Emitter[], uniforms: EmitterUniform
     }
     uniforms.emitterCenter.value[i].set(e.center.x, e.center.y, e.center.z, e.visibility)
     uniforms.emitterAxisU.value[i].set(e.u.x, e.u.y, e.u.z, e.lamp ? 1 : 0)
-    uniforms.emitterAxisV.value[i].set(e.v.x, e.v.y, e.v.z, 0)
-    uniforms.emitterRadiance.value[i].set(e.radiance.r, e.radiance.g, e.radiance.b, 0)
+    uniforms.emitterAxisV.value[i].set(e.v.x, e.v.y, e.v.z, e.cone ? e.cone[1] : 0)
+    uniforms.emitterRadiance.value[i].set(e.radiance.r, e.radiance.g, e.radiance.b, e.cone ? e.cone[0] : noOptic)
   }
 }
 
@@ -308,6 +331,47 @@ function lampRect(mesh: THREE.Mesh, origin: THREE.Object3D): { center: THREE.Vec
 const bodyMargin = 0.05
 
 /** The vehicle's box in its own space. */
+const receiverDirections = 64
+
+/** The vehicle's glossy area binned by facing, in vehicle space, once. */
+function receiverBins(root: THREE.Object3D): Array<{ normal: THREE.Vector3; area: number }> {
+  const dirs = Array.from({ length: receiverDirections }, (_, i) => {
+    const y = 1 - (2 * i + 1) / receiverDirections
+    const r = Math.sqrt(1 - y * y)
+    const a = i * Math.PI * (3 - Math.sqrt(5))
+    return new THREE.Vector3(r * Math.cos(a), y, r * Math.sin(a))
+  })
+  const sums = dirs.map(() => ({ normal: new THREE.Vector3(), area: 0 }))
+  const inverse = root.matrixWorld.clone().invert()
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), n = new THREE.Vector3()
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh
+    if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || Array.isArray(mesh.material) || !visibleChain(mesh)) return
+    const material = mesh.material as THREE.MeshPhysicalMaterial
+    if (!material.isMeshStandardMaterial || (material.roughness > 0.5 && !(material.clearcoat > 0)) || material.emissiveIntensity > 0 && luminance(material.emissive) > 0) return
+    const position = mesh.geometry.getAttribute('position')
+    if (!position) return
+    const index = mesh.geometry.getIndex()
+    const m = new THREE.Matrix4().multiplyMatrices(inverse, mesh.matrixWorld)
+    const count = index ? index.count : position.count
+    for (let t = 0; t + 2 < count; t += 3) {
+      const [i0, i1, i2] = index ? [index.getX(t), index.getX(t + 1), index.getX(t + 2)] : [t, t + 1, t + 2]
+      a.fromBufferAttribute(position, i0).applyMatrix4(m)
+      b.fromBufferAttribute(position, i1).applyMatrix4(m)
+      c.fromBufferAttribute(position, i2).applyMatrix4(m)
+      n.subVectors(b, a).cross(c.sub(a))
+      const area = n.length() / 2
+      if (area <= 0) continue
+      n.normalize()
+      let best = 0
+      for (let k = 1; k < dirs.length; k++) if (dirs[k].dot(n) > dirs[best].dot(n)) best = k
+      sums[best].normal.addScaledVector(n, area)
+      sums[best].area += area
+    }
+  })
+  return sums.filter((s) => s.area > 0).map((s) => ({ normal: s.normal.normalize(), area: s.area }))
+}
+
 function vehicleBox(root: THREE.Object3D): THREE.Box3 {
   const box = new THREE.Box3()
   const inverse = root.matrixWorld.clone().invert()
@@ -325,7 +389,7 @@ function vehicleBox(root: THREE.Object3D): THREE.Box3 {
 
 export interface EmitterTableDeps {
   renderer: THREE.WebGLRenderer
-  world: { root: THREE.Object3D; lights?: readonly FilmLight[] }
+  world: { root: THREE.Object3D; lights?: readonly FilmLight[]; optics?: readonly FilmLight[] }
   vehicle: Pick<VehicleModule, 'root' | 'lamps'>
 }
 
@@ -349,9 +413,11 @@ export function createEmitterTable({ renderer, world, vehicle }: EmitterTableDep
   camera.layers.set(layers.scene)
   let occluders: Occluders | null = null
   let body: THREE.Box3 | null = null
+  let bins: Array<{ normal: THREE.Vector3; area: number }> | null = null
   let table: Emitter[] = []
   let candidates: Emitter[] = []
   let measured = 0
+  let receivers: Receiver[] = []
   const focus = new THREE.Vector3()
   const lift = new THREE.Vector3()
 
@@ -441,6 +507,19 @@ export function createEmitterTable({ renderer, world, vehicle }: EmitterTableDep
       vehicle.root.updateWorldMatrix(true, true)
       occluders ??= new Occluders(world.root)
       body ??= vehicleBox(vehicle.root)
+      bins ??= receiverBins(vehicle.root)
+      const view = eye ? eye.clone().sub(new THREE.Vector3().setFromMatrixPosition(vehicle.root.matrixWorld)).normalize() : null
+      const turn = new THREE.Matrix3().setFromMatrix4(vehicle.root.matrixWorld)
+      const facing = view ? bins.map((b) => ({ normal: b.normal.clone().applyMatrix3(turn).normalize(), area: b.area })).map((b) => ({ normal: b.normal, weight: b.area * Math.max(0, b.normal.dot(view)) })) : []
+      const total = facing.reduce((sum, r) => sum + r.weight, 0)
+      receivers = total > 0 ? facing.filter((r) => r.weight > 0).map((r) => ({ normal: r.normal, weight: r.weight / total })) : []
+      const optics = new Map<THREE.Object3D, [number, number, THREE.Vector3]>()
+      for (const light of [...(world.optics ?? []), ...(world.lights ?? [])]) {
+        if (light.kind !== 'spot' || !light.object.parent) continue
+        const axis = new THREE.Vector3(0, 0, 1).transformDirection(light.object.matrixWorld)
+        const angle = light.angle ?? Math.PI / 6
+        optics.set(light.object.parent, [Math.cos(angle), Math.cos(angle * (1 - (light.penumbra ?? 0.3))), axis])
+      }
       const centre = body.getCenter(new THREE.Vector3())
       emitterUniforms.emitterVehicleHalf.value.copy(body.getSize(new THREE.Vector3())).multiplyScalar(0.5).addScalar(bodyMargin)
       emitterUniforms.emitterVehicleInverse.value.copy(vehicle.root.matrixWorld).multiply(new THREE.Matrix4().makeTranslation(centre)).invert()
@@ -464,12 +543,16 @@ export function createEmitterTable({ renderer, world, vehicle }: EmitterTableDep
           radiance.multiplyScalar(airTransmittance(center.distanceTo(focus)))
           const key = !!f.mesh.parent && keyParents.has(f.mesh.parent)
           const sign = signName.test(f.mesh.name)
-          found.push({ id: `${f.mesh.name}/${index}/${a}${b}`, group: `${f.mesh.parent?.name ?? ''}|${f.mesh.name}`, center, u: u.clone(), v: v.clone(), radiance, visibility: 1, key, sign })
+          const optic = f.mesh.parent ? optics.get(f.mesh.parent) : undefined
+          const facing = optic ? optic[2].dot(rect.u.clone().cross(rect.v).normalize()) : 0
+          const cone: [number, number] | undefined = optic && Math.abs(facing) > opticAlignment ? [optic[0], optic[1]] : undefined
+          if (cone && facing < 0) v.negate()
+          found.push({ cone, id: `${f.mesh.name}/${index}/${a}${b}`, group: `${f.mesh.parent?.name ?? ''}|${f.mesh.name}`, center, u: u.clone(), v: v.clone(), radiance, visibility: 1, key, sign })
         }
       })
       const merged = mergeOverlays(found)
       const shortlist = new Set(merged
-        .map((e) => ({ e, score: emitterScore(e, focus, eye) }))
+        .map((e) => ({ e, score: emitterScore(e, focus, eye, receivers) }))
         .sort(byScore)
         .slice(0, visibilityShortlist)
         .map(({ e }) => e))
@@ -486,7 +569,7 @@ export function createEmitterTable({ renderer, world, vehicle }: EmitterTableDep
         found.push({ id: `lamp/${mesh.name}/${index}`, ...rect, radiance, visibility: 1, lamp: true })
       })
       candidates = found
-      table = rankEmitters(found.filter((e) => (e.key || e.visibility > 0) && Number.isFinite(e.visibility)), focus, maxEmitters, perGroup, eye)
+      table = rankEmitters(found.filter((e) => (e.key || e.visibility > 0) && Number.isFinite(e.visibility)), focus, maxEmitters, perGroup, eye, receivers)
       writeEmitters(table)
       return table
     },
