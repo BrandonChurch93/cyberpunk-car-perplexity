@@ -24,7 +24,7 @@ Drawn from the mirrored camera with an oblique near plane on y = 0, deck hidden 
 
 An analytic light paired with a visible aperture in the mirror supplies diffuse light, but no second specular image on the mirrored deck. This covers the cabinet screens, paired practical opals and the live front lamp emitters. Weather-sealed opals use the area's on-axis intensity divided by area as their mirror tint. The running guide uses its dimmer deck-facing radiance and tapers its upper arm as the mirror views it farther toward the same side of the nose. The direct view, cube proxy and lower guide stay intact. An unpaired light still supplies direct specular.
 
-Sharp puddles retain their per-sample rays and level-zero mirror lookup. Rougher film shifts to fixed GGX slope strata and chooses its mip from the footprint across the streak. Each rough ray estimates its own hit distance from mirror depth so near parapets do not collapse the spread of rays that reach the city. The firefly limiter still bounds ordinary taps, but allows physical opal radiance inside an aperture's projected footprint.
+Sharp puddles retain their per-sample rays and level-zero mirror lookup. Rougher film shifts to fixed GGX slope strata and chooses its mip from the footprint across the streak. Each rough ray estimates its own hit distance from mirror depth so near parapets do not collapse the spread of rays that reach the city. Film strata are fixed, so a stratum that lands on a sign or lamp is the streak itself and keeps its full radiance.
 
 | Uniform | Meaning |
 | --- | --- |
@@ -36,7 +36,6 @@ Sharp puddles retain their per-sample rays and level-zero mirror lookup. Rougher
 | `reflectSeed` | Per sub-render seed of the sharp tap pattern |
 | `reflectOn` | 0 while the mirror itself is drawn, so nothing sees its own reflection |
 | `reflectEmitters` | Current analytic sample positions and ownership flags for mirrored apertures |
-| `reflectEmitterBounds`, `reflectEmitterPeaks` | Projected opal bounds and physical luma ceilings |
 
 A world point `x` is found in the mirror image at `(reflectViewProjection * vec4(x, 1)).xy / w * 0.5 + 0.5`.
 

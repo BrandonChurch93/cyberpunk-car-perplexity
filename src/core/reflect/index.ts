@@ -48,7 +48,6 @@ const cubePlanarGuard = 1.18
 export const planarTuning = {
   taps: 4, filter: 0.7, roughStart: 0.55, roughEnd: 0.9, far: 4000, tail: 0.2,
   filmStart: 0.06, filmEnd: 0.13, mipStart: 0.075, mipEnd: 0.20,
-  fireflyStart: 0.12, fireflyEnd: 0.18, fireflyRatio: 4, fireflyFloor: 0.35,
 }
 
 export interface ReflectionsPart extends StagePart {
@@ -162,8 +161,6 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     reflectSeed: { value: 0 },
     reflectOn: { value: 0 },
     reflectEmitters: emitters.positions,
-    reflectEmitterBounds: emitters.bounds,
-    reflectEmitterPeaks: emitters.peaks,
   }
   const box: BoxUniforms = {
     reflectBoxMin: { value: world.reflectionBox.min.clone() },
@@ -248,7 +245,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       renderer.setRenderTarget(previous, face, mip)
     }
     bindPlanar(destination)
-    emitters.update(planar.reflectViewProjection.value, mirror.layers, planar.reflectSize.value)
+    emitters.update(planar.reflectViewProjection.value, mirror.layers)
     planar.reflectOn.value = 1
   }
 
@@ -390,7 +387,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       if (diagnostic !== 'beauty' && diagnostic !== 'wetness') return
       planar.reflectSeed.value = hash01(seed, sample.sample.frame.frameKey, sample.sample.sampleIndex)
       if (cacheCameraPlanar) {
-        emitters.update(planar.reflectViewProjection.value, mirror.layers, planar.reflectSize.value)
+        emitters.update(planar.reflectViewProjection.value, mirror.layers)
         planar.reflectOn.value = 1
       } else renderPlanar(sample.camera, target, sample.timeSeconds)
     },
