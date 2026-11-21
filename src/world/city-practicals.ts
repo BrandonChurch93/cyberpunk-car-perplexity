@@ -202,9 +202,9 @@ function northConcourse(facade: THREE.Group, run: number): void {
       cheap(room,'interior shelving',steel,[-.54,.04,-.07],[.21,1.12,.16])
     }
   }
-  const plant = group(facade,'tenant balcony and plant level',[-run*.27,4.07,.28])
+  const plant = group(facade,'tenant balcony and plant level',[run*.29,4.07,.28])
   cheap(plant,'balcony cantilever slab',concourseStone,[0,0,.49],[3.28,.18,1.19])
-  cheap(plant,'balcony anchoring beam',frame,[0,-.15,-.29],[2.71,.16,1.4])
+  cheap(plant,'balcony anchoring beam',frame,[0,-.15,-.435],[2.71,.16,2.33])
   cheap(plant,'balcony handrail',sill,[0,.98,1.06],[3.11,.059,.077])
   cheap(plant,'balcony lower rail',frame,[0,.27,1.06],[3.11,.043,.043])
   for (const x of [-1.53,-.77,0,.77,1.53]) cheap(plant,'balcony metal picket',frame,[x,.53,1.06],[.055,.904,.053])

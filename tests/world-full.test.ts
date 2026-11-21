@@ -680,6 +680,16 @@ describe('full roof world', () => {
     expect(shadeHeights.size).toBeGreaterThan(8)
     const balcony = facade.getObjectByName('tenant balcony and plant level')!
     expect(balcony.getObjectsByProperty('name','balcony planter trough')).toHaveLength(2)
+    const beam = new THREE.Box3().setFromObject(balcony.getObjectByName('balcony anchoring beam')!)
+    expect(tower.children.some(o=>o.name==='building mass' && beam.intersectsBox(new THREE.Box3().setFromObject(o)))).toBe(true)
+    const master = config.formats.master
+    const camera = new THREE.PerspectiveCamera()
+    const rear = cameraAt(1060/config.film.fps,master,anchors)
+    applyLens(camera,rear,master.width,master.height,{ pixel:[0,0],aperture:[0,0] },1)
+    camera.updateMatrixWorld(true)
+    const balconyScreen = balcony.getWorldPosition(new THREE.Vector3()).project(camera)
+    expect(balconyScreen.x).toBeGreaterThan(-.94)
+    expect(balconyScreen.x).toBeLessThan(-.62)
     const sign = world.root.getObjectByName('KARAOKE')!
     expect(sign.getObjectsByProperty('name','inclined box bracket')).toHaveLength(2)
     expect(sign.getObjectsByProperty('name','sign box end cap')).toHaveLength(2)
