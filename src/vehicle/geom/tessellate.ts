@@ -263,7 +263,55 @@ export function tessellate(S: SurfaceFn, o: TessOptions): TessResult {
     return x
   }
 
-  const tri = (a: Vtx, b: Vtx, c: Vtx): void => {
+  // An edge whose two ends are both kept can still pass over a trimmed band narrower than itself, such as a shut gap,
+  // and its triangle would bridge the band. Such an edge is split at its middle, the same way from either triangle
+  // that shares it, so no crack opens, and the halves are tested again. Samples at a quarter, half and three quarters
+  // of the edge find any band wider than a quarter of the edge.
+  const keyOf = (x: Vtx): string => `${x.u}|${x.v}`
+  const bridges = (a: Vtx, b: Vtx): boolean => {
+    // The trim is a distance, so two kept ends further inside than half the edge each leave no room for a band.
+    if (!trim || a.d >= 0 || b.d >= 0 || a.d + b.d + dist(a.p, b.p) < 0) return false
+    const [p, q] = keyOf(a) < keyOf(b) ? [a, b] : [b, a]
+    for (const t of [0.25, 0.5, 0.75]) {
+      const u = p.u + (q.u - p.u) * t
+      const v = p.v + (q.v - p.v) * t
+      if (trim(u, v, S(u, v)) >= 0) return true
+    }
+    return false
+  }
+  const mid = (a: Vtx, b: Vtx): Vtx => vtx((a.u + b.u) / 2, (a.v + b.v) / 2)
+  const tri = (a: Vtx, b: Vtx, c: Vtx, depth = 0): void => {
+    if (trim && depth < 8) {
+      const sab = bridges(a, b)
+      const sbc = bridges(b, c)
+      const sca = bridges(c, a)
+      const n = Number(sab) + Number(sbc) + Number(sca)
+      if (n === 3) {
+        const ab = mid(a, b)
+        const bc = mid(b, c)
+        const ca = mid(c, a)
+        tri(a, ab, ca, depth + 1)
+        tri(ab, b, bc, depth + 1)
+        tri(ca, bc, c, depth + 1)
+        tri(ab, bc, ca, depth + 1)
+        return
+      }
+      if (n > 0) {
+        // Rotate, keeping the winding, so the first edge (p, q) is split and, when two are, the second is (q, r).
+        const [p, q, r]: Vtx[] = n === 1 ? (sab ? [a, b, c] : sbc ? [b, c, a] : [c, a, b]) : !sca ? [a, b, c] : !sab ? [b, c, a] : [c, a, b]
+        const pq = mid(p, q)
+        if (n === 2) {
+          const qr = mid(q, r)
+          tri(pq, q, qr, depth + 1)
+          tri(p, pq, qr, depth + 1)
+          tri(p, qr, r, depth + 1)
+        } else {
+          tri(p, pq, r, depth + 1)
+          tri(pq, q, r, depth + 1)
+        }
+        return
+      }
+    }
     if (!trim) {
       indices.push(emit(a), emit(b), emit(c))
       return

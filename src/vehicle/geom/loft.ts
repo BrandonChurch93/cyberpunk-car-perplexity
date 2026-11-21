@@ -47,6 +47,12 @@ interface Section {
   segA: V3[][]
   segL: number[]
   round: number[]
+  /** Parameter on the segment ending at each key where its fillet starts. */
+  tIn: number[]
+  /** Parameter on the segment starting at each key where its fillet ends. */
+  tOut: number[]
+  /** Arc weight per key: the cosine of half the turn across the line where a roll sets it, else negative. */
+  wt: number[]
 }
 
 /** A surface swept across key lines. S(u, v): u runs along the key lines, v across them. */
@@ -136,12 +142,19 @@ export class Loft {
       segL.push(L)
     }
     const round: number[] = []
+    const tIn: number[] = []
+    const tOut: number[] = []
+    const wt: number[] = []
     for (let i = 0; i < n; i++) {
-      let r = this.round[i](u)
+      let w = -1
+      const r0 = this.round[i](u)
+      let rA = r0
+      let rB = r0
       const rho = i > 0 && i < n - 1 ? this.roll[i](u) : 0
       if (rho > 0) {
-        // The two faces turn by the angle between their normals; each segment crosses the line at its own angle, so
-        // the setback along the section is the setback across the line over the mean sine of the two.
+        // The two faces turn by the angle between their normals. Across the line a roll of radius rho stands back
+        // rho tan(turn / 2) on each face; each segment crosses the line at its own angle, so its own setback along
+        // the section is that over its own sine, which leaves both legs equal across the line and the arc circular.
         const ax = along[i]
         const na = cross(tEnd[i - 1], ax)
         const nb = cross(tStart[i], ax)
@@ -149,14 +162,26 @@ export class Loft {
         const sb = len(nb)
         if (sa > 1e-3 && sb > 1e-3) {
           const turn = Math.acos(Math.min(1, Math.max(-1, dot(na, nb) / (sa * sb))))
-          r += (rho * Math.tan(turn / 2)) / ((sa + sb) / 2)
+          const d = rho * Math.tan(turn / 2)
+          w = Math.cos(turn / 2)
+          rA += d / sa
+          rB += d / sb
         }
       }
-      if (i > 0) r = Math.min(r, segL[i - 1] * 0.4)
-      if (i < n - 1) r = Math.min(r, segL[i] * 0.4)
-      round.push(i === 0 && !this.mirrorTop ? 0 : r)
+      if (i > 0) rA = Math.min(rA, segL[i - 1] * 0.4)
+      if (i < n - 1) rB = Math.min(rB, segL[i] * 0.4)
+      if (i === 0 && !this.mirrorTop) {
+        rA = 0
+        rB = 0
+      }
+      round.push(Math.max(i > 0 ? rA : 0, i < n - 1 ? rB : 0))
+      // Setbacks are distances from the key point, so the fillet ends sit where the radius says whatever the
+      // segment's parametric speed.
+      tIn.push(i > 0 ? 1 - atDist(segA[i - 1], rA, true) : 1)
+      tOut.push(i < n - 1 ? atDist(segA[i], rB, false) : 0)
+      wt.push(w)
     }
-    const sec = { p, segA, segL, round }
+    const sec = { p, segA, segL, round, tIn, tOut, wt }
     this.cache.set(u, sec)
     return sec
   }
@@ -175,9 +200,8 @@ export class Loft {
     // fades out with its crease's turn.
     const fA = f * Math.min(1, rA / 0.0005)
     const fB = f * Math.min(1, rB / 0.0005)
-    const L = sec.segL[k]
-    const ta = rA / L
-    const tb = 1 - rB / L
+    const ta = sec.tOut[k]
+    const tb = sec.tIn[k + 1]
     if (w < fA) return this.fillet(sec, k, 0.5 + 0.5 * (w / fA))
     if (w > 1 - fB) {
       if (k + 1 === n - 1 && this.mirrorTop) return this.topFillet(sec, (w - (1 - fB)) / fB)
@@ -188,20 +212,22 @@ export class Loft {
   }
 
   private fillet(sec: Section, i: number, s: number): V3 {
-    const r = sec.round[i]
-    const a = bez(sec.segA[i - 1], 1 - r / sec.segL[i - 1])
-    const b = bez(sec.segA[i], r / sec.segL[i])
-    const ta = norm(bezD(sec.segA[i - 1], 1 - r / sec.segL[i - 1]))
-    const tb = norm(bezD(sec.segA[i], r / sec.segL[i]))
+    const a = bez(sec.segA[i - 1], sec.tIn[i])
+    const b = bez(sec.segA[i], sec.tOut[i])
+    const ta = norm(bezD(sec.segA[i - 1], sec.tIn[i]))
+    const tb = norm(bezD(sec.segA[i], sec.tOut[i]))
     const c = corner(a, ta, b, tb)
-    return quad(a, c, b, s)
+    // A rational quadratic weighted by the cosine of half the turn. Across the line, with legs of equal length, that
+    // is the circular arc; the section only sees it obliquely, which is an affine view of the same conic, so the
+    // weight is the turn measured across the line, not in the section's plane.
+    const w = sec.wt[i] >= 0 ? sec.wt[i] : Math.sqrt(Math.max(0, (1 + dot(ta, tb)) / 2))
+    return arc(a, c, b, w, s)
   }
 
   private topFillet(sec: Section, s: number): V3 {
     const n = sec.p.length
-    const r = sec.round[n - 1]
     const seg = sec.segA[n - 2]
-    const tA = 1 - r / sec.segL[n - 2]
+    const tA = sec.tIn[n - 1]
     const a = bez(seg, tA)
     const ta = norm(bezD(seg, tA))
     let c: V3 = [0, a[1], a[2]]
@@ -229,6 +255,31 @@ function corner(a: V3, ta: V3, b: V3, tb: V3): V3 {
   const span = dist(a, b)
   if (s < 0 || s > span * 2 || t > 0 || t < -span * 2) return scale(add(a, b), 0.5)
   return scale(add(addScaled(a, ta, s), addScaled(b, tb, t)), 0.5)
+}
+
+/** Parameter at chord distance d from the start (or from the end) of a cubic segment. */
+function atDist(seg: V3[], d: number, fromEnd: boolean): number {
+  if (d <= 0) return 0
+  const o = fromEnd ? seg[3] : seg[0]
+  let lo = 0
+  let hi = 0.5
+  const at = (t: number) => bez(seg, fromEnd ? 1 - t : t)
+  if (len(sub(at(hi), o)) < d) return hi
+  for (let it = 0; it < 30; it++) {
+    const m = (lo + hi) / 2
+    if (len(sub(at(m), o)) < d) lo = m
+    else hi = m
+  }
+  return (lo + hi) / 2
+}
+
+function arc(a: V3, c: V3, b: V3, w: number, s: number): V3 {
+  const q = 1 - s
+  const A = q * q
+  const B = 2 * q * s * w
+  const C = s * s
+  const d = A + B + C
+  return [(A * a[0] + B * c[0] + C * b[0]) / d, (A * a[1] + B * c[1] + C * b[1]) / d, (A * a[2] + B * c[2] + C * b[2]) / d]
 }
 
 function quad(a: V3, c: V3, b: V3, s: number): V3 {
