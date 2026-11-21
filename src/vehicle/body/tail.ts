@@ -96,17 +96,17 @@ export function rearFace(loft: Loft): (a: number, b: number) => V3 {
 
 /** Rear elevation outlines, left half. */
 export const lines = {
-  exhaust: map(elev, [[495, 246], [516, 211], [655, 211], [677, 246], [655, 282], [516, 282]]),
-  surround: map(elev, [[470, 246], [505, 181], [680, 181], [712, 246], [680, 312], [505, 312]]),
+  exhaust: map(elev, [[495, 256], [516, 221], [655, 221], [677, 256], [655, 292], [516, 292]]),
+  surround: map(elev, [[470, 256], [505, 191], [680, 191], [712, 256], [680, 322], [505, 322]]),
   lower: map(elev, [[745, 369], [420, 369], [365, 395], [362, 800], [745, 800]]),
 }
 
 /** Tail lamp light guides in metres (|x|, y): a stem from the outlets that splits into a sideways Y closed at the corner. */
 export const lampPaths: Record<'stem' | 'upper' | 'lower' | 'end', V2[]> = {
-  stem: [[0.415, 0.822], [0.51, 0.822]],
-  upper: [[0.51, 0.822], [0.585, 0.872]],
-  lower: [[0.51, 0.822], [0.585, 0.776]],
-  end: [[0.585, 0.872], [0.585, 0.776]],
+  stem: [[0.415, 0.81], [0.51, 0.81]],
+  upper: [[0.51, 0.81], [0.585, 0.858]],
+  lower: [[0.51, 0.81], [0.585, 0.764]],
+  end: [[0.585, 0.858], [0.585, 0.764]],
 }
 
 /** Half width of the lamp recess. */
