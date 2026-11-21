@@ -17,16 +17,19 @@ export const floorY = 0.115
 /** Diffuser angle from the factory release: 11 degrees in the centre. Outboard of the outer strakes the corner is open. */
 const centre = { start: -1.15, slope: Math.tan((11 * Math.PI) / 180), blend: 0.3 }
 
-/** Strakes: four thin blades each side at even spacing, the outer ones leaning out at the foot. */
+/**
+ * Strakes: three thin blades each side at even spacing, wedges that deepen toward the exit while their lower edge climbs
+ * from `toe` to `exit`, so air and deck show between and under them. The inner two rise through the open tail to the
+ * bumper in front of the mesh; the outer one leans out at the foot and starts behind the tyre.
+ */
 export const strakes = [
-  { x: 0.1625, lean: 0, lead: -1.8, foot: -1.94, low: 0.13 },
-  { x: 0.325, lean: 0, lead: -1.8, foot: -1.94, low: 0.13 },
-  { x: 0.4875, lean: 0, lead: -1.8, foot: -1.94, low: 0.13 },
-  { x: 0.65, lean: (6 * Math.PI) / 180, lead: -1.84, foot: -1.97, low: 0.135 },
+  { x: 0.65 / 3, lean: 0, lead: -1.72, rake: 0.12, toe: 0.135, exit: 0.155, rise: true },
+  { x: 1.3 / 3, lean: 0, lead: -1.72, rake: 0.12, toe: 0.135, exit: 0.155, rise: true },
+  { x: 0.65, lean: (6 * Math.PI) / 180, lead: -1.88, rake: 0.1, toe: 0.14, exit: 0.16, rise: false },
 ] as const
 
 /** Strake blade thickness; its edges are full rounds of half this. */
-const blade = 0.004
+const blade = 0.006
 const br = blade / 2
 const outer = strakes[strakes.length - 1]
 
@@ -228,19 +231,46 @@ function strake(b: MeshBuilder, s: (typeof strakes)[number]): void {
   const root = (z: number): number => centreY(z) + sheet + 0.002
   let back = tailZ(s.x) - br
   for (let k = 0; k < 3; k++) back = tailZ(midX(root(back)) + br) - br - 0.002
-  const bottom = tailZ(midX(s.low) + br) - br
+  const bottom = tailZ(midX(s.exit) + br) - br
+  const foot = s.lead - s.rake
+  const low = (z: number): number => s.toe + ((s.exit - s.toe) * (foot - z)) / (foot - bottom)
   const poly: V2[] = []
   const radii: number[] = []
   const n = 24
-  for (let i = 0; i <= n; i++) {
-    const z = back + ((s.lead - back) * i) / n
-    poly.push([z, root(z)])
-    radii.push(i === n ? 0.006 : i === 0 ? 0.004 : 0)
+  const m = 12
+  if (s.rise) {
+    const top = ceilingY + wallT / 2 - br + 0.001
+    const zf = meshZ - br - 0.002
+    poly.push([zf, top], [back, top], [bottom, s.exit + br])
+    radii.push(0.004, 0.005, 0.008)
+    for (let i = 1; i < m; i++) {
+      const z = bottom + ((foot - bottom) * i) / m
+      poly.push([z, low(z) + br])
+      radii.push(0)
+    }
+    poly.push([foot, s.toe + br])
+    radii.push(0.03)
+    for (let i = 0; i <= n; i++) {
+      const z = s.lead + ((zf - s.lead) * i) / n
+      poly.push([z, root(z)])
+      radii.push(i === 0 ? 0.006 : 0)
+    }
+  } else {
+    for (let i = 0; i <= n; i++) {
+      const z = back + ((s.lead - back) * i) / n
+      poly.push([z, root(z)])
+      radii.push(i === n ? 0.006 : i === 0 ? 0.004 : 0)
+    }
+    poly.push([foot, s.toe + br])
+    radii.push(0.03)
+    for (let i = 1; i < m; i++) {
+      const z = foot + ((bottom - foot) * i) / m
+      poly.push([z, low(z) + br])
+      radii.push(0)
+    }
+    poly.push([bottom, s.exit + br])
+    radii.push(0.008)
   }
-  poly.push([s.foot, s.low + br])
-  radii.push(0.06)
-  poly.push([bottom, s.low + br])
-  radii.push(0.008)
   slab(b, dedupe(rounded(poly, radii)), s)
 }
 
@@ -260,9 +290,10 @@ function slab(b: MeshBuilder, loop: V2[], s: (typeof strakes)[number]): void {
     const nrm = scale(across, sign)
     const ids = loop.map((q) => b.vertex(strakePoint(s, q, sign * br), nrm, q[0], q[1]))
     for (const [a, c, d] of tris) {
-      const flip = (sign > 0) !== ccw
-      if (flip) b.tri(ids[a], ids[d], ids[c])
-      else b.tri(ids[a], ids[c], ids[d])
+      const [p, q, w] = [loop[a], loop[c], loop[d]]
+      const turn = (q[0] - p[0]) * (w[1] - p[1]) - (q[1] - p[1]) * (w[0] - p[0]) > 0
+      if (turn === sign < 0) b.tri(ids[a], ids[c], ids[d])
+      else b.tri(ids[a], ids[d], ids[c])
     }
   }
   const k = 8
@@ -298,7 +329,7 @@ function slab(b: MeshBuilder, loop: V2[], s: (typeof strakes)[number]): void {
 export interface Underbody {
   /** Flat floor and the diffuser roof rising from it, one plate, left half. */
   floor: THREE.BufferGeometry
-  /** The four strakes of the left half. */
+  /** The three strakes of the left half. */
   strakes: THREE.BufferGeometry
 }
 

@@ -145,6 +145,13 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   addPair(tl.guide, m.tail, 'tail-guide')
   addPair(tl.housing, m.under, 'tail-housing')
   addPair(tl.reflector, m.retro, 'tail-reflector')
+  const tailInner = m.tail.clone()
+  const levels = m.setLevels.bind(m)
+  m.setLevels = (running, beam, rear) => {
+    levels(running, beam, rear)
+    tailInner.emissiveIntensity = m.tail.emissiveIntensity * 0.35
+  }
+  addPair(tl.optic, tailInner, 'tail-optic')
 
   // Front module: eyes, Y guides, projectors, ducts, grille and splitter (parts/front.ts).
   // The registry accepts any material; the front module tags its own lens, guide and die finishes.
@@ -161,9 +168,11 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   addPair(by.covers, m.covers, 'cam-cover')
   addPair(by.carbon, m.carbon, 'bay-carbon')
   addPair(by.grille, m.mesh, 'bay-grille')
-  addPair(by.bezel, m.matte, 'bay-bezel')
+  addPair(by.bezel, m.satin, 'bay-bezel')
   addPair(by.duct, m.soot, 'bay-duct')
-  addPair(by.ledge, m.matte, 'bay-ledge')
+  addPair(by.ledge, m.carbon, 'bay-ledge')
+  addPair(by.hose, m.seal, 'bay-hose')
+  addPair(by.clamp, m.hat, 'bay-clamp')
   add(sprung, by.center, m.covers, 'plenum')
   add(sprung, by.mesh, m.mesh, 'bay-mesh')
 
