@@ -95,6 +95,24 @@ describe('full roof world', () => {
     expect(world.lights).toHaveLength(8)
   })
 
+  it('keeps the Hotel sign clear of foreground facade trim in both hero formats', () => {
+    world.root.updateMatrixWorld(true)
+    const cabinet = world.root.getObjectByName('hotel rooftop cabinet')!
+    const face = cabinet.getObjectByName('recessed sign face') as THREE.Mesh<THREE.PlaneGeometry>
+    const { width,height } = face.geometry.parameters
+    const time = config.film.heroFrameSeconds
+    const camera = new THREE.PerspectiveCamera()
+    for (const format of [config.formats.master,config.formats.vertical]) {
+      applyLens(camera,cameraAt(time,format,anchors),format.width,format.height,{pixel:[0,0],aperture:[0,0]},1)
+      for (const y of [-.28,-.18,.25]) for (const x of [-.26,-.14,0,.14,.26]) {
+        const delta = face.localToWorld(new THREE.Vector3(x*width,y*height,0)).sub(camera.position)
+        const first = new THREE.Raycaster(camera.position,delta.clone().normalize(),.03,delta.length()+.01)
+          .intersectObject(world.root,true)[0]
+        expect(first?.object.parent,format.id+' '+x+' '+y).toBe(cabinet)
+      }
+    }
+  })
+
   it('publishes the mounted hero sources and preserves camera clearance', () => {
     world.root.updateMatrixWorld(true)
     const hero = world.root.getObjectByName('approved hero layout')!
