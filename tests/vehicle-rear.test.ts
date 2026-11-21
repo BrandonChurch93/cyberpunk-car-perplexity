@@ -60,10 +60,17 @@ describe('rear underbody', () => {
     const slope = (centreY(-2.2) - centreY(-2.0)) / 0.2
     expect((Math.atan(slope) * 180) / Math.PI).toBeCloseTo(11, 1)
   })
+  it('spaces the strakes evenly and keeps them below the plate', () => {
+    const gaps = strakes.slice(1).map((s, i) => s.x - strakes[i].x)
+    for (const g of gaps) expect(g).toBeCloseTo(gaps[0], 6)
+    const pos = u.strakes.getAttribute('position')
+    for (let i = 0; i < pos.count; i++) expect(pos.getY(i)).toBeLessThan(centreY(pos.getZ(i)) + sheet + 0.005)
+  })
+
   it('leaves the corner open outboard of the outer strakes behind the rear tyre', () => {
     const pos = u.floor.getAttribute('position')
     for (let i = 0; i < pos.count; i++) {
-      if (pos.getZ(i) < cornerFront) expect(Math.abs(pos.getX(i))).toBeLessThan(strakes[1].x + 0.01)
+      if (pos.getZ(i) < cornerFront) expect(Math.abs(pos.getX(i))).toBeLessThan(strakes[strakes.length - 1].x + 0.01)
     }
   })
 })
@@ -77,7 +84,7 @@ describe('rear module', () => {
   const bay = engineBay(c.bay, 0.02)
   const closed: Array<[string, THREE.BufferGeometry]> = [
     ['outlet lip', ex.lip], ['outlet pipes', ex.pipes], ['outlet back', ex.soot], ['outlet housing', ex.housing],
-    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['valance wall', va.wall],
+    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['lamp reflector', tl.reflector], ['valance wall', va.wall],
     ['bay covers', bay.covers], ['bay carbon', bay.carbon], ['plenum', bay.center], ['bay mesh', bay.mesh],
     ['airbox grille', bay.grille], ['grille bezel', bay.bezel], ['grille duct', bay.duct], ['grille ledge', bay.ledge],
   ]
@@ -85,6 +92,30 @@ describe('rear module', () => {
   it.each(closed)('builds the %s as a closed solid wound outward', (_, g) => {
     expect(windingAgreement(g)).toBe(1)
     expect(openEdges(g, 1e-6)).toBe(0)
+  })
+
+  const ub = underbody()
+  const every: Array<[string, THREE.BufferGeometry]> = [...closed, ['diffuser floor', ub.floor], ['diffuser strakes', ub.strakes], ['valance panel', va.panel], ['bay tub', bay.tub]]
+  it.each(every)('leaves no triangle of the %s without area', (_, g) => {
+    const p = g.getAttribute('position')
+    const ix = g.getIndex()!
+    const a = new THREE.Vector3()
+    const b = new THREE.Vector3()
+    const c = new THREE.Vector3()
+    let zero = 0
+    for (let t = 0; t < ix.count; t += 3) {
+      const [i, j, k] = [ix.getX(t), ix.getX(t + 1), ix.getX(t + 2)]
+      a.fromBufferAttribute(p, i)
+      b.fromBufferAttribute(p, j).sub(a)
+      c.fromBufferAttribute(p, k).sub(a)
+      if (i === j || j === k || i === k || b.cross(c).length() / 2 < 1e-12) zero++
+    }
+    expect(zero).toBe(0)
+  })
+
+  it.each(closed)('gives every vertex of the %s a unit normal', (_, g) => {
+    const n = g.getAttribute('normal')
+    for (let i = 0; i < n.count; i++) expect(Math.abs(Math.hypot(n.getX(i), n.getY(i), n.getZ(i)) - 1)).toBeLessThan(1e-4)
   })
 
   it('meets the loft at the deck edge and the side, and stays level across the centre line', () => {
@@ -118,6 +149,17 @@ describe('rear module', () => {
       g.computeBoundingBox()
       expect(g.boundingBox!.min.z).toBeGreaterThan(-dims.halfLength - 0.005)
       expect(g.boundingBox!.max.x).toBeLessThan(dims.width / 2)
+    }
+  })
+
+  it('sets the reflector into the slot behind the paint flange', () => {
+    const pos = tl.reflector.getAttribute('position')
+    const rm = body.cuts.maps.rear
+    for (let i = 0; i < pos.count; i += 7) {
+      const x = pos.getX(i)
+      const y = pos.getY(i)
+      const [uu, vv] = rm.invert('-z', x, y)
+      expect(pos.getZ(i)).toBeGreaterThan(rm.S(uu, vv)[2] + 0.012)
     }
   })
 

@@ -15,7 +15,7 @@ export interface MirrorSpec {
 
 export const mirrorSpec: MirrorSpec = { center: [1.04, 0.875, 0.95], width: 0.22, height: 0.105, root: [1.0, 0.715] }
 
-function roundCorners(poly: V2[], r: number, k = 4): V2[] {
+function roundCorners(poly: V2[], radii: number[], k = 6): V2[] {
   const out: V2[] = []
   const n = poly.length
   for (let i = 0; i < n; i++) {
@@ -24,7 +24,7 @@ function roundCorners(poly: V2[], r: number, k = 4): V2[] {
     const c = poly[(i + 1) % n]
     const da = Math.hypot(a[0] - p[0], a[1] - p[1])
     const dc = Math.hypot(c[0] - p[0], c[1] - p[1])
-    const s = Math.min(r, da / 2, dc / 2)
+    const s = Math.min(radii[i], da / 2.05, dc / 2.05)
     const p0: V2 = [p[0] + ((a[0] - p[0]) * s) / da, p[1] + ((a[1] - p[1]) * s) / da]
     const p1: V2 = [p[0] + ((c[0] - p[0]) * s) / dc, p[1] + ((c[1] - p[1]) * s) / dc]
     for (let j = 0; j <= k; j++) {
@@ -34,6 +34,23 @@ function roundCorners(poly: V2[], r: number, k = 4): V2[] {
       const w2 = t * t
       out.push([w0 * p0[0] + w1 * p[0] + w2 * p1[0], w0 * p0[1] + w1 * p[1] + w2 * p1[1]])
     }
+  }
+  return out
+}
+
+function even(o: V2[], count: number): V2[] {
+  const n = o.length
+  const acc = [0]
+  for (let i = 0; i < n; i++) acc.push(acc[i] + Math.hypot(o[(i + 1) % n][0] - o[i][0], o[(i + 1) % n][1] - o[i][1]))
+  const out: V2[] = []
+  let j = 0
+  for (let k = 0; k < count; k++) {
+    const d = (k / count) * acc[n]
+    while (acc[j + 1] < d) j++
+    const t = (d - acc[j]) / (acc[j + 1] - acc[j] || 1)
+    const a = o[j]
+    const b = o[(j + 1) % n]
+    out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t])
   }
   return out
 }
@@ -55,6 +72,7 @@ function solid(rings: V3[][], c: V3): THREE.BufferGeometry {
   const pos: number[] = []
   const tri = (a: V3, b: V3, d: V3): void => {
     const nrm = cross(sub(b, a), sub(d, a))
+    if (Math.hypot(nrm[0], nrm[1], nrm[2]) < 1e-12) return
     const mid: V3 = [(a[0] + b[0] + d[0]) / 3 - c[0], (a[1] + b[1] + d[1]) / 3 - c[1], (a[2] + b[2] + d[2]) / 3 - c[2]]
     pos.push(...(dot(nrm, mid) >= 0 ? [...a, ...b, ...d] : [...a, ...d, ...b]))
   }
@@ -90,43 +108,64 @@ function solid(rings: V3[][], c: V3): THREE.BufferGeometry {
 }
 
 /**
- * The left door mirror: a flat angular head, longer than tall with a sharp lower edge, its glass facing back, on a thin
- * blade that leaves the door skin just below the glass corner. `S` and `map` are the body's main surface and its map.
+ * The left door mirror: a teardrop wedge head, tall and full inboard and tapering outboard over a crisp lower edge, its
+ * front a domed shell that rolls into a small even radius at the rim, its glass set in a narrow bezel facing back, on a
+ * thin blade that leaves the door skin just below the glass corner. `S` and `map` are the body's main surface and its map.
  */
 export function mirror(S: Surface, map: SurfaceMap, spec: MirrorSpec = mirrorSpec): { head: THREE.BufferGeometry; glass: THREE.BufferGeometry; stalk: THREE.BufferGeometry } {
   const [cx, cy, cz] = spec.center
   const w = spec.width / 2
   const h = spec.height / 2
-  const raw: V2[] = [[-w, h * 0.82], [-w * 0.92, -h], [w * 0.97, -h], [w, h * 0.35], [w * 0.8, h], [-w * 0.75, h]]
-  const outline = roundCorners(raw, 0.014)
+  const raw: V2[] = [[-w, h * 0.55], [-w * 0.93, -h], [w * 0.95, -h], [w, h * 0.05], [w * 0.6, h * 0.72], [-w * 0.72, h]]
+  const outline = even(roundCorners(raw, [0.032, 0.01, 0.012, 0.026, 0.05, 0.04], 10), 60)
   const r = 0.006
   const zb = cz - 0.035
-  const zf = (q: V2): number => zb + 0.014 + 0.062 * ((q[1] + h) / (2 * h)) - 0.012 * ((q[0] + w) / (2 * w))
+  const apex: V2 = [-w * 0.3, h * 0.18]
   const P = (q: V2, z: number): V3 => [cx + q[0], cy + q[1], z]
-  const o2 = inset(outline, 1.6 * r)
-  const roll: V3[][] = []
-  const front: V3[][] = []
-  for (let k = 0; k <= 4; k++) {
-    const a = (k / 4) * (Math.PI / 2)
-    const o = inset(outline, r * (1 - Math.cos(a)))
-    roll.push(o.map((q) => P(q, zb + r * (1 - Math.sin(a)))))
-    front.push(o.map((q) => P(q, zf(q) - r * (1 - Math.sin(a)))))
+  const rings: V3[][] = [
+    inset(outline, 0.0085).map((q) => P(q, zb + 0.003)),
+    inset(outline, 0.0074).map((q) => P(q, zb + 0.0006)),
+  ]
+  for (let k = 0; k <= 3; k++) {
+    const a = (k / 3) * (Math.PI / 2)
+    rings.push(inset(outline, r * (1 - Math.sin(a))).map((q) => P(q, zb + r * (1 - Math.cos(a)))))
   }
-  const hg = solid([o2.map((q) => P(q, zb)), ...roll.reverse(), ...front, o2.map((q) => P(q, zf(q)))], [cx, cy, cz - 0.005])
+  const p = 2.1
+  const depth = (q: V2): number => 0.064 - 0.03 * ((q[0] + w) / (2 * w))
+  const K = 8
+  for (let k = 1; k <= K; k++) {
+    const f = (k / K) * (Math.PI / 2) * 0.96
+    const rho = Math.cos(f) ** (2 / p)
+    const s = Math.sin(f) ** (2 / p)
+    const b = rho ** 4
+    rings.push(outline.map((q): V3 => {
+      const d: V2 = [q[0] - apex[0], q[1] - apex[1]]
+      const l = Math.hypot(d[0], d[1])
+      const e = 1 / Math.hypot(d[0] / l / (d[0] < 0 ? 0.62 * w : 1.2 * w), d[1] / l / (d[1] > 0 ? 0.7 * h : 1.08 * h))
+      const k = (rho * (b * l + (1 - b) * e)) / l
+      const t: V2 = [apex[0] + d[0] * k, apex[1] + d[1] * k]
+      return P(t, zb + r + depth(t) * s)
+    }))
+  }
+  const turn = new THREE.Matrix4().makeTranslation(cx, cy, cz).multiply(new THREE.Matrix4().makeRotationY(0.1)).multiply(new THREE.Matrix4().makeTranslation(-cx, -cy, -cz))
+  const hg = solid(rings, [cx + apex[0], cy + apex[1], zb + 0.02]).applyMatrix4(turn)
 
   const glass = new MeshBuilder()
-  const gl = inset(outline, 0.009)
-  const ids = gl.map((q) => glass.vertex(P(q, zb - 0.0012), [0, 0, -1]))
+  const gl = inset(outline, 0.0085)
+  const ids = gl.map((q) => glass.vertex(P(q, zb + 0.0024), [0, 0, -1]))
   for (const [x, y, z] of THREE.ShapeUtils.triangulateShape(gl.map((q) => new THREE.Vector2(q[0], q[1])), [])) {
     const e = cross(sub(P(gl[y], 0), P(gl[x], 0)), sub(P(gl[z], 0), P(gl[x], 0)))
+    if (Math.abs(e[2]) < 1e-12) continue
     if (e[2] < 0) glass.tri(ids[x], ids[y], ids[z])
     else glass.tri(ids[x], ids[z], ids[y])
   }
+  const gg = glass.geometry().applyMatrix4(turn)
 
   const [u, v] = map.invert('x', spec.root[0], spec.root[1])
   const foot = S(u, v)
   const n = surfaceNormal(S, u, v)
-  const tip: V3 = [cx - w * 0.45, cy - h + 0.03, zb + 0.016]
+  const tv = new THREE.Vector3(cx - w * 0.45, cy - h + 0.03, zb + 0.02).applyMatrix4(turn)
+  const tip: V3 = [tv.x, tv.y, tv.z]
   const start = addScaled(foot, n, -0.016)
   const path: V3[] = []
   const bow = addScaled(addScaled(foot, n, 0.07), [0, 1, 0], 0.03)
@@ -137,6 +176,6 @@ export function mirror(S: Surface, map: SurfaceMap, spec: MirrorSpec = mirrorSpe
   const along = norm(sub(tip, start))
   const up = norm(cross(along, cross([0, 0, 1], along)))
   const stalk = new MeshBuilder()
-  sweep(stalk, path, path.map(() => up), roundRect(0.012, 0.042, 0.005, 3), false, (t) => 1 - 0.25 * t)
-  return { head: hg, glass: glass.geometry(), stalk: orient(stalk.geometry()) }
+  sweep(stalk, path, path.map(() => up), roundRect(0.01, 0.034, 0.0045, 3), false, (t) => 1 - 0.25 * t)
+  return { head: hg, glass: gg, stalk: orient(stalk.geometry()) }
 }

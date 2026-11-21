@@ -318,16 +318,16 @@ export function archLinerParts(
 
   const drumPoint = (i: number, t: number, backOffset: number): V3 => {
     const s = samples[i]
-    const xOuter = s.p[0] - 0.019
+    const xStart = s.p[0] - 0.019 - backOffset * 0.25
     const cz = -Math.cos(s.theta)
     const sy = Math.sin(s.theta)
     const tuck = front ? 0 : smoothstep(0.05, 0.35, t)
-    const rLip = s.rCut - 0.0045
+    const rLip = s.rCut - 0.0055
     const rCore = mixRadius(rLip, Math.min(rLip, rTight), tuck)
     const fillet = Math.max(0, (t - 0.8) / 0.2)
-    const rMaxArch = front ? s.rCut - 0.0015 : Math.min(s.rCut - 0.0015, 0.4295)
+    const rMaxArch = (front ? s.rCut - 0.0055 : Math.min(s.rCut - 0.0055, 0.4255)) + backOffset
     const rClamped = Math.min(rMaxArch, rCore - 0.014 * fillet * fillet + backOffset)
-    const x = xOuter + (xInner - backOffset - xOuter) * t
+    const x = xStart + (xInner - backOffset - xStart) * t
     const rearCutShelf = !front && s.theta < 0.85 ? bumper + 0.006 : yFloor
     const yMin = Math.max(rearCutShelf, yFloor, s.p[1] + 0.001 * (1 - t))
     const y = Math.max(yMin, yc + sy * rClamped)

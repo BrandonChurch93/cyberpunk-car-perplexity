@@ -114,6 +114,47 @@ function lampWrapHole(S: Surface): SurfaceCurve {
   return new TailEdgeHole(S, [...top, ...end, ...bottom.reverse()])
 }
 
+/** The open shut line's outer end swept back into the front tip of the lamp wrap, so it closes into that opening. */
+function intoTip(S: Surface, c: SurfaceCurve, hole: SurfaceCurve): SurfaceCurve {
+  let k = 0
+  hole.uv.forEach((q, i) => {
+    if (q[0] < hole.uv[k][0]) k = i
+  })
+  const tip = hole.uv[k]
+  const i0 = c.uv.findIndex((q) => q[1] < tip[1] + 0.06)
+  if (i0 < 2) return c
+  const a = c.uv[i0]
+  const e = 1e-4
+  const len = (d: V2): number => {
+    const p = S(a[0], a[1])
+    const q = S(a[0] + d[0] * e, a[1] + d[1] * e)
+    return Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]) / e
+  }
+  const su = len([1, 0])
+  const sv = len([0, 1])
+  const A: V2 = [a[0] * su, a[1] * sv]
+  const B: V2 = [tip[0] * su, tip[1] * sv]
+  const b = c.uv[i0 - 1]
+  const tA: V2 = [(a[0] - b[0]) * su, (a[1] - b[1]) * sv]
+  const lA = Math.hypot(tA[0], tA[1])
+  const L = Math.hypot(B[0] - A[0], B[1] - A[1])
+  const m0: V2 = [(tA[0] / lA) * L, (tA[1] / lA) * L]
+  const m1: V2 = [L, 0]
+  const n = Math.max(4, Math.ceil(L / 0.004))
+  const out: V2[] = c.uv.slice(0, i0 + 1)
+  for (let i = 1; i <= n; i++) {
+    const t = i / n
+    const h00 = 2 * t ** 3 - 3 * t * t + 1
+    const h10 = t ** 3 - 2 * t * t + t
+    const h01 = -2 * t ** 3 + 3 * t * t
+    const h11 = t ** 3 - t * t
+    const x = h00 * A[0] + h10 * m0[0] + h01 * B[0] + h11 * m1[0]
+    const y = h00 * A[1] + h10 * m0[1] + h01 * B[1] + h11 * m1[1]
+    out.push([x / su, y / sv])
+  }
+  return new SurfaceCurve(S, out, false)
+}
+
 export interface Cuts {
   /** Regions cut out of the paint shell, signed distance negative inside. */
   holes: Array<{ c: SurfaceCurve; inset: number }>
@@ -169,8 +210,8 @@ export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, re
   const rearGlass = projectCurve(mm, 'y', planLines.rearGlass, true, 0.008, topWin, true, 0.03)
   const bay = projectCurve(mm, 'y', planLines.bay, true, 0.008, topWin, true, 0.06)
   const bonnet = onSkin(main, projectCurve(mm, 'y', planLines.bonnet, false, 0.006, topWin, false, 0.08))
-  const wing = onSkin(main, projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08))
   const lampWrapCut = lampWrapHole(main)
+  const wing = intoTip(main, onSkin(main, projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08)), lampWrapCut)
   const mainCuts: Cuts = {
     holes: [
       { c: dlo, inset: 0 },
