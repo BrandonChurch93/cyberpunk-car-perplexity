@@ -26,7 +26,7 @@ const eastOfficeFloors: readonly OfficeFloor[] = [
 
 const floors: Partial<Record<string,readonly Run[]>> = {
   'hero left edge tower': [[.435,46,'ivory',3,1.44,.69],[.430,74,'cyan',4,1.27,.73],[.462,99,'magenta',2,1.06,.62]],
-  'hero near west garage bay': [[-.32,37,'cyan',3,1.16,.81],[.21,56,'ivory',3,1.56,.80],[-.08,68,'cyan',4,1.60,.79]],
+  'hero near west garage bay': [[-.32,37,'cyan',3,1.16,.81],[.21,56,'ivory',3,1.56,.80],[-.08,58.23,'cyan',4,1.60,.79]],
   'c9 west dispatch': [[-.01,44,'cyan',3,1.93,1.22]],
   'hero bar tower': [[-.33,41,'magenta',3,1.53,.95]],
   'c9 center exchange stairs': [[-.16,83,'magenta',3,1.44,1.06],[.03,91,'ivory',3,1.38,1.10]],
