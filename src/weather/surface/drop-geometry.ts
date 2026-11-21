@@ -1,6 +1,8 @@
 import * as THREE from 'three'
 import type { CameraState } from '../../core/lens'
+import { withEmitters } from '../../core/emitters'
 import { patchFilmLighting } from '../../core/lights'
+import { boxPatch, type BoxUniforms } from '../../core/reflect/shaders'
 import { layers } from '../../core/contract'
 import { insertAfter, patchMaterial, replaceOnce } from '../../materials/patch'
 import { type BeadClass, beadLayers, cellDrops, dominantAxis, geometryMinMm, maxDensity, runSwept } from './beads'
@@ -167,6 +169,13 @@ export class DropGeometry {
   readonly plain: THREE.MeshPhysicalMaterial
   private readonly lenses = new Map<number, THREE.MeshPhysicalMaterial>()
   private readonly uniforms: Record<string, THREE.IUniform>
+  /** The paint looks up its cube through the parking box; the drops on it must see the same city in the same place. */
+  readonly box: BoxUniforms = {
+    reflectBoxMin: { value: new THREE.Vector3() },
+    reflectBoxMax: { value: new THREE.Vector3() },
+    reflectProbe: { value: new THREE.Vector3() },
+    reflectBoxOn: { value: 0 },
+  }
   private readonly sources: Source[] = []
   private readonly pools = new Map<string, THREE.InstancedMesh[]>()
   count = 0
@@ -174,9 +183,9 @@ export class DropGeometry {
   constructor(meshes: Array<{ mesh: THREE.Mesh; bead: BeadClass }>, uniforms: Record<string, THREE.IUniform>) {
     this.group.name = 'surface water drops'
     this.uniforms = uniforms
-    this.material = dropMaterial(uniforms, 100)
-    this.runner = dropMaterial(uniforms, 100, true)
-    this.plain = dropMaterial(uniforms, null, true)
+    this.material = dropMaterial(uniforms, this.box, 100)
+    this.runner = dropMaterial(uniforms, this.box, 100, true)
+    this.plain = dropMaterial(uniforms, this.box, null, true)
     for (const { mesh, bead } of meshes) {
       const geometry = mesh.geometry
       const pos = geometry.getAttribute('position')
@@ -223,11 +232,21 @@ export class DropGeometry {
     return list
   }
 
+  /** The paint holds its own capture, not the scene's; water on it must mirror the same one. */
+  shareEnvironment(paint: THREE.MeshStandardMaterial): void {
+    for (const m of [this.material, this.runner, this.plain, ...this.lenses.values()]) {
+      if (m.envMap === paint.envMap && m.envMapIntensity === paint.envMapIntensity) continue
+      if (!m.envMap !== !paint.envMap) m.needsUpdate = true
+      m.envMap = paint.envMap
+      m.envMapIntensity = paint.envMapIntensity
+    }
+  }
+
   private lens(contact: number): THREE.MeshPhysicalMaterial {
     if (contact === 100) return this.material
     let m = this.lenses.get(contact)
     if (!m) {
-      m = dropMaterial(this.uniforms, contact)
+      m = dropMaterial(this.uniforms, this.box, contact)
       this.lenses.set(contact, m)
     }
     return m
@@ -453,13 +472,32 @@ const lensFragment = /* glsl */ `
     through *= 0.6;
   }
   vec3 dirW = normalize(surfLin * out2);
+  vec3 baseN = normalize(transpose(inverse(surfLin)) * vec3(0.0, 1.0, 0.0));
+  float leave = dot(dirW, baseN);
+  // Light leaving the far side heading down meets the coat just behind the drop and comes off its mirror.
+  if (leave < 0.0) {
+    dirW = reflect(dirW, baseN);
+    through *= 0.04 + 0.96 * pow(1.0 - min(-leave, 1.0), 5.0);
+  }
+  // The lens packs half the sky into the drop's disk: a pixel spans this much of it, so the image is filtered to that.
+  float lensRough = min(sqrt(0.5 * length(fwidth(dirW))), 0.7);
+  vec3 capW = surfLin * o + surfLensT;
+  vec3 capN = normalize(transpose(inverse(surfLin)) * (o - c));
+  vec3 capV = normalize(cameraPosition - capW);
+  float capR = SURF_CAP_R * length(surfLensM0);
   #ifdef USE_ENVMAP
     vec3 dirV = normalize((viewMatrix * vec4(dirW, 0.0)).xyz);
     vec3 side = normalize(abs(dirV.y) < 0.9 ? cross(dirV, vec3(0.0, 1.0, 0.0)) : cross(dirV, vec3(1.0, 0.0, 0.0)));
-    seen += through * getIBLRadiance(-dirV, side, 0.0);
+    seen += through * max(getIBLRadiance(-dirV, side, lensRough), emitterGlintF0(capW, dirW, dirW, lensRough, -1.0, vec3(1.0)));
   #endif
   float cosIn = clamp(dot(-d, sn), 0.0, 1.0);
   float fresnel = 0.02 + 0.98 * pow(1.0 - cosIn, 5.0);
+  #ifdef USE_ENVMAP
+    // The cube holds the lights blurred; on the cap each face the drop mirrors is drawn sharp at its own place.
+    vec3 capNV = normalize((viewMatrix * vec4(capN, 0.0)).xyz);
+    vec3 sharp = emitterGlint(capW, capN, capV, 0.02, capR);
+    totalEmissiveRadiance += max(sharp - fresnel * getIBLRadiance(normalize(-vViewPosition), capNV, 0.02), vec3(0.0));
+  #endif
   float meniscus = smoothstep(0.0, 0.08, surfLensPos.y / SURF_CAP_HS);
   totalDiffuse = seen * (1.0 - fresnel) * mix(0.25, 1.0, meniscus);
 }
@@ -481,10 +519,11 @@ const defocusFragment = /* glsl */ `
 `
 
 /** Standing drops show magenta in the wetness view and running water yellow green, so the rivulet can be found in a frame. */
-function dropMaterial(uniforms: Record<string, THREE.IUniform>, contact: number | null, running = false): THREE.MeshPhysicalMaterial {
+function dropMaterial(uniforms: Record<string, THREE.IUniform>, box: BoxUniforms, contact: number | null, running = false): THREE.MeshPhysicalMaterial {
   const material = new THREE.MeshPhysicalMaterial({
     color: 0xffffff, metalness: 0, roughness: 0.02, transmission: 1, ior: 1.333, thickness: 0.002, specularIntensity: 1, envMapIntensity: 1,
   })
+  patchMaterial(material, boxPatch(box))
   const theta = THREE.MathUtils.degToRad(contact ?? 90)
   const radius = 1 / Math.sin(theta)
   patchMaterial(material, {
@@ -499,6 +538,7 @@ function dropMaterial(uniforms: Record<string, THREE.IUniform>, contact: number 
         f = insertAfter(f, '#include <transmission_fragment>', lensFragment)
         f = insertAfter(f, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(surfDiagColor, 1.0); }')
         shader.fragmentShader = f
+        withEmitters(shader)
       } else {
         shader.fragmentShader = insertAfter('uniform float surfDiag;\nuniform vec3 surfDiagColor;\n' + shader.fragmentShader, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { gl_FragColor = vec4(surfDiagColor, 1.0); }')
       }
