@@ -1,0 +1,377 @@
+{
+ "purpose": "Addendum 003: one comparison of every vehicle build, scored by one fresh C4",
+ "names": {
+  "A": "car-4",
+  "B": "car-2",
+  "B2": "car-5",
+  "C": "car-1",
+  "D": "car-3"
+ },
+ "frames": {
+  "view1": 195,
+  "view2": 1060,
+  "view3": 0
+ },
+ "files": [
+  {
+   "file": "car-4_view1_clay.png",
+   "build": "A",
+   "pin": "origin/dev/vehicle-a d418ea9",
+   "frame": 195,
+   "view": "clay",
+   "sha256": "a6955a537793e87cad6df0f60d3524daeebdeab2b63bcdf32d63089fd9462aab"
+  },
+  {
+   "file": "car-4_view1_zebra.png",
+   "build": "A",
+   "pin": "origin/dev/vehicle-a d418ea9",
+   "frame": 195,
+   "view": "zebra",
+   "sha256": "e5276e96493b6c08c06f3bb57dbd388f652ed362de3881df5c9a2bac0c2c4160"
+  },
+  {
+   "file": "car-4_view1_zebra-crop.png",
+   "build": "A",
+   "pin": "origin/dev/vehicle-a d418ea9",
+   "frame": 195,
+   "view": "zebra-crop",
+   "sha256": "d4edde3262db7ce46c6d96f02e9e17be04c89b47556fbad56982c502a38f10dc"
+  },
+  {
+   "file": "car-4_view2_clay.png",
+   "build": "A",
+   "pin": "origin/dev/vehicle-a d418ea9",
+   "frame": 1060,
+   "view": "clay",
+   "sha256": "1429922a2c1239b74887dbaa4331a9eda4b9a1002a219cac7c54e55e785137bb"
+  },
+  {
+   "file": "car-4_view2_zebra.png",
+   "build": "A",
+   "pin": "origin/dev/vehicle-a d418ea9",
+   "frame": 1060,
+   "view": "zebra",
+   "sha256": "176a326d8d1dff92dc983981e2d41cf548fd2811e3e7fda9befa0c6cef2d5608"
+  },
+  {
+   "file": "car-4_view2_zebra-crop.png",
+   "build": "A",
+   "pin": "origin/dev/vehicle-a d418ea9",
+   "frame": 1060,
+   "view": "zebra-crop",
+   "sha256": "2cd69a7c0ae4989ebfebb3a15051fc6f52c1ebc8c91c1ea1a38c2f73aed6366e"
+  },
+  {
+   "file": "car-4_view3_clay.png",
+   "build": "A",
+   "pin": "origin/dev/vehicle-a d418ea9",
+   "frame": 0,
+   "view": "clay",
+   "sha256": "5f537966868ec781a3c358fcfa36ea22f4db3bd0f124e2ef6119dc7369e50cfb"
+  },
+  {
+   "file": "car-4_view3_zebra.png",
+   "build": "A",
+   "pin": "origin/dev/vehicle-a d418ea9",
+   "frame": 0,
+   "view": "zebra",
+   "sha256": "abd7bb3304f2fbae89d5c6796359a41f014d7d5823f45622846100309b5de7c8"
+  },
+  {
+   "file": "car-4_view3_zebra-crop.png",
+   "build": "A",
+   "pin": "origin/dev/vehicle-a d418ea9",
+   "frame": 0,
+   "view": "zebra-crop",
+   "sha256": "bb93c4cc0db1c58f2647120e3be3e195ed2aff10ac819e2d80ecb35eddf4c461"
+  },
+  {
+   "file": "car-2_view1_clay.png",
+   "build": "B",
+   "pin": "dev/p3 60e0969 (the film car)",
+   "frame": 195,
+   "view": "clay",
+   "sha256": "3a28535feaa2bb8ec9c69ba40bc034508ef35af91c74aa5953185599f22441f6"
+  },
+  {
+   "file": "car-2_view1_zebra.png",
+   "build": "B",
+   "pin": "dev/p3 60e0969 (the film car)",
+   "frame": 195,
+   "view": "zebra",
+   "sha256": "2259eca76b1efbaf24dff3544bd93a6de644f962e53e4bdbdef302e1abcd09f0"
+  },
+  {
+   "file": "car-2_view1_zebra-crop.png",
+   "build": "B",
+   "pin": "dev/p3 60e0969 (the film car)",
+   "frame": 195,
+   "view": "zebra-crop",
+   "sha256": "a8f39fd4df88647cf049795e388e699837491ffeec6c70871dd9e339326622b1"
+  },
+  {
+   "file": "car-2_view2_clay.png",
+   "build": "B",
+   "pin": "dev/p3 60e0969 (the film car)",
+   "frame": 1060,
+   "view": "clay",
+   "sha256": "7f6f27d198b03d2cde6220f8fdfda56a9280256a032104bc2842de820e303d25"
+  },
+  {
+   "file": "car-2_view2_zebra.png",
+   "build": "B",
+   "pin": "dev/p3 60e0969 (the film car)",
+   "frame": 1060,
+   "view": "zebra",
+   "sha256": "405bb2e0cd035bff022d6560d31802794cf3931a5ddff682a63b02933b164d38"
+  },
+  {
+   "file": "car-2_view2_zebra-crop.png",
+   "build": "B",
+   "pin": "dev/p3 60e0969 (the film car)",
+   "frame": 1060,
+   "view": "zebra-crop",
+   "sha256": "a90e4cf2a8687301662e48a910d106867d76b7eb2bdc42f84667f98d9320594e"
+  },
+  {
+   "file": "car-2_view3_clay.png",
+   "build": "B",
+   "pin": "dev/p3 60e0969 (the film car)",
+   "frame": 0,
+   "view": "clay",
+   "sha256": "3dfa8968e6256b22607405e09efd1402891d3fa0d51e069985dde0c7136a3c18"
+  },
+  {
+   "file": "car-2_view3_zebra.png",
+   "build": "B",
+   "pin": "dev/p3 60e0969 (the film car)",
+   "frame": 0,
+   "view": "zebra",
+   "sha256": "232a27a87dcebb0605d089c4223adfe181d51c9830a38fd9d6361a95801c9fbc"
+  },
+  {
+   "file": "car-2_view3_zebra-crop.png",
+   "build": "B",
+   "pin": "dev/p3 60e0969 (the film car)",
+   "frame": 0,
+   "view": "zebra-crop",
+   "sha256": "bc661640176dd31a01f2e9fc30cf53ebcf6842f73e86f8ffc175b85d64841d68"
+  },
+  {
+   "file": "car-5_view1_clay.png",
+   "build": "B2",
+   "pin": "dev/vehicle-b-onedomain 76ad60b",
+   "frame": 195,
+   "view": "clay",
+   "sha256": "54bc7255e25f996fe8e4209588a07eec8c73a79aec1133ac1c028fdaa5c94fbb"
+  },
+  {
+   "file": "car-5_view1_zebra.png",
+   "build": "B2",
+   "pin": "dev/vehicle-b-onedomain 76ad60b",
+   "frame": 195,
+   "view": "zebra",
+   "sha256": "585ead5fc772b8b6ee72e638e148642001d312cc00e55edd5d72392d82a512f6"
+  },
+  {
+   "file": "car-5_view1_zebra-crop.png",
+   "build": "B2",
+   "pin": "dev/vehicle-b-onedomain 76ad60b",
+   "frame": 195,
+   "view": "zebra-crop",
+   "sha256": "5f84a6dcc521d286e21dc7da9b67e08535fc8160d9b9dff38fc25ea3b9d57431"
+  },
+  {
+   "file": "car-5_view2_clay.png",
+   "build": "B2",
+   "pin": "dev/vehicle-b-onedomain 76ad60b",
+   "frame": 1060,
+   "view": "clay",
+   "sha256": "216225a44a8febfdba95a6d125b871fa0f4216b7413347a1aca5b21e745235dd"
+  },
+  {
+   "file": "car-5_view2_zebra.png",
+   "build": "B2",
+   "pin": "dev/vehicle-b-onedomain 76ad60b",
+   "frame": 1060,
+   "view": "zebra",
+   "sha256": "3dae4a8839db4782df682f794cd8c4975566aa62862a3a6901411fd73a3c79c8"
+  },
+  {
+   "file": "car-5_view2_zebra-crop.png",
+   "build": "B2",
+   "pin": "dev/vehicle-b-onedomain 76ad60b",
+   "frame": 1060,
+   "view": "zebra-crop",
+   "sha256": "a4f5a12f37a6c59180c77c5a9c1841d20c97f63c46ad11d2ae41c7e87e9d48f1"
+  },
+  {
+   "file": "car-5_view3_clay.png",
+   "build": "B2",
+   "pin": "dev/vehicle-b-onedomain 76ad60b",
+   "frame": 0,
+   "view": "clay",
+   "sha256": "dbdffe1f91c2a82b0854e8997159f7bc1ba5aee5669664eafc196223d6fd84e1"
+  },
+  {
+   "file": "car-5_view3_zebra.png",
+   "build": "B2",
+   "pin": "dev/vehicle-b-onedomain 76ad60b",
+   "frame": 0,
+   "view": "zebra",
+   "sha256": "87ec6dd26d7a16aef582ceea6818d31b5742108c3e24f3e8df7c1d3b8696cf0c"
+  },
+  {
+   "file": "car-5_view3_zebra-crop.png",
+   "build": "B2",
+   "pin": "dev/vehicle-b-onedomain 76ad60b",
+   "frame": 0,
+   "view": "zebra-crop",
+   "sha256": "abbd9bc8de28d83fd5b91d9494c82dd3babe30631894ff0f04709fcd9d00c31b"
+  },
+  {
+   "file": "car-1_view1_clay.png",
+   "build": "C",
+   "pin": "dev/vehicle-c adf31a2",
+   "frame": 195,
+   "view": "clay",
+   "sha256": "79e6230e92b4bf4d1c3e5eaece207e44944ad5ea620e298da6e64a7641ea05e0"
+  },
+  {
+   "file": "car-1_view1_zebra.png",
+   "build": "C",
+   "pin": "dev/vehicle-c adf31a2",
+   "frame": 195,
+   "view": "zebra",
+   "sha256": "e39f9b8641e6b2ae5e6b371510caabb5163a59f98d0bda113d6ead93b6fa5892"
+  },
+  {
+   "file": "car-1_view1_zebra-crop.png",
+   "build": "C",
+   "pin": "dev/vehicle-c adf31a2",
+   "frame": 195,
+   "view": "zebra-crop",
+   "sha256": "9ac0164acd77b0e19bfd57096373c9ddfa5b2b780e17f32473b04d997a2c9392"
+  },
+  {
+   "file": "car-1_view2_clay.png",
+   "build": "C",
+   "pin": "dev/vehicle-c adf31a2",
+   "frame": 1060,
+   "view": "clay",
+   "sha256": "fc3be7e85223733b7a15cf914c9b9fa923e6065d17447147de61fb1fa3fd8249"
+  },
+  {
+   "file": "car-1_view2_zebra.png",
+   "build": "C",
+   "pin": "dev/vehicle-c adf31a2",
+   "frame": 1060,
+   "view": "zebra",
+   "sha256": "da852ae2641341cfac4e0dc52c2d487e1b35a8194fad316d763b6ae460777500"
+  },
+  {
+   "file": "car-1_view2_zebra-crop.png",
+   "build": "C",
+   "pin": "dev/vehicle-c adf31a2",
+   "frame": 1060,
+   "view": "zebra-crop",
+   "sha256": "0baa16656ca452b5fe6685019f86095191839180257265b457d7763a29fd299d"
+  },
+  {
+   "file": "car-1_view3_clay.png",
+   "build": "C",
+   "pin": "dev/vehicle-c adf31a2",
+   "frame": 0,
+   "view": "clay",
+   "sha256": "4864b15322113f429398d6bd1099c51a0d1c6f9083cf090c1bee6deba2957a1b"
+  },
+  {
+   "file": "car-1_view3_zebra.png",
+   "build": "C",
+   "pin": "dev/vehicle-c adf31a2",
+   "frame": 0,
+   "view": "zebra",
+   "sha256": "244fa01e3c6b47eeeaea806ead55eeb3757f507b35f0b09c45c78f4fffe56774"
+  },
+  {
+   "file": "car-1_view3_zebra-crop.png",
+   "build": "C",
+   "pin": "dev/vehicle-c adf31a2",
+   "frame": 0,
+   "view": "zebra-crop",
+   "sha256": "cfa7a661ecae3c213f1c6cc357f31f3d27bd36d8c1815d54cf6494038d560ead"
+  },
+  {
+   "file": "car-3_view1_clay.png",
+   "build": "D",
+   "pin": "dev/vehicle-d 249d6dd",
+   "frame": 195,
+   "view": "clay",
+   "sha256": "597c5a6ea1d7607dcf53e5c69ac6c502aab21a464f3e90983bc4e0361745dda9"
+  },
+  {
+   "file": "car-3_view1_zebra.png",
+   "build": "D",
+   "pin": "dev/vehicle-d 249d6dd",
+   "frame": 195,
+   "view": "zebra",
+   "sha256": "485f531ceb74d487ffbed923321d9546aaaba80dc36d0442e81d7b7a1a715144"
+  },
+  {
+   "file": "car-3_view1_zebra-crop.png",
+   "build": "D",
+   "pin": "dev/vehicle-d 249d6dd",
+   "frame": 195,
+   "view": "zebra-crop",
+   "sha256": "7c113e3c42826d7fe4ecbf339f12f5303c1dad6f3fe1f1932fc44161e0e13400"
+  },
+  {
+   "file": "car-3_view2_clay.png",
+   "build": "D",
+   "pin": "dev/vehicle-d 249d6dd",
+   "frame": 1060,
+   "view": "clay",
+   "sha256": "10c4073a9be561d2bce20f6afcb23b86e55b5a83a322dae6d5bd57669855b11f"
+  },
+  {
+   "file": "car-3_view2_zebra.png",
+   "build": "D",
+   "pin": "dev/vehicle-d 249d6dd",
+   "frame": 1060,
+   "view": "zebra",
+   "sha256": "613b1cc266b84e8b50d2b593ba3809302eed35b7b21644315ef4193fe384a76d"
+  },
+  {
+   "file": "car-3_view2_zebra-crop.png",
+   "build": "D",
+   "pin": "dev/vehicle-d 249d6dd",
+   "frame": 1060,
+   "view": "zebra-crop",
+   "sha256": "ed72c711f389b79b941e5fb417376fd94c2f01f0182475a0a1eaa1cd478c30df"
+  },
+  {
+   "file": "car-3_view3_clay.png",
+   "build": "D",
+   "pin": "dev/vehicle-d 249d6dd",
+   "frame": 0,
+   "view": "clay",
+   "sha256": "a243215b58aa434bd51b5190150208f8aba31b41ad92ef34f99e0160ff0dfe37"
+  },
+  {
+   "file": "car-3_view3_zebra.png",
+   "build": "D",
+   "pin": "dev/vehicle-d 249d6dd",
+   "frame": 0,
+   "view": "zebra",
+   "sha256": "fdcc70dfc9292c64c670ecb92091638d9be29a5fa4d2ca80336b010b2e4ef88b"
+  },
+  {
+   "file": "car-3_view3_zebra-crop.png",
+   "build": "D",
+   "pin": "dev/vehicle-d 249d6dd",
+   "frame": 0,
+   "view": "zebra-crop",
+   "sha256": "906d55ccdf2dcf65c59bcf421fc26ad0dfa96292a819427688f04a25a0f17bfe"
+  }
+ ]
+}

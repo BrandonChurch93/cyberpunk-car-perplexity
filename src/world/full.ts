@@ -42,8 +42,9 @@ export async function createFullWorld(): Promise<WorldModule> {
   detailFacades(city)
   const hero = addApprovedHeroLayout(root, labels, materials)
   const reflections = addReflectionFrontages(root,labels)
+  const wideLights = new Map([...hero.lights,...fixtures.wideLights.map(light=>[light.id,light] as const)])
   const slots = fixtures.lights.map(original => {
-    const wide = hero.lights.get(original.id)
+    const wide = wideLights.get(original.id)
     return { original, wide, output: wide ? { ...wide } : original }
   })
   const set = (timeSeconds: number, cutTime = timeSeconds) => {

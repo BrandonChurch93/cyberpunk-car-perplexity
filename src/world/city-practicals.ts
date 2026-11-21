@@ -132,6 +132,66 @@ function mountedText(city: THREE.Group, labels: Label, signs: string[]): void {
   })
 }
 
+function cityConcourseWindows(city: THREE.Group, labels: Label, signs: string[]): void {
+  for (const [towerName, face, base, u, allowed, chroma] of [
+    ['north central tower','south',5.15,-1.20,'ARCADE',[.70,.86,1.0]],
+    ['northeast terrace','south',12.2,.12,'NOODLES',[1.0,.67,.37]],
+    ['east residential tower','west',6.25,1.65,'24H',[.64,.83,1.0]],
+  ] as const) {
+    const tower = city.getObjectByName(towerName)!
+    const east = face === 'west'
+    const width = east ? 'z' : 'x'
+    const normal = east ? 'x' : 'z'
+    const wall = tower.children.filter(o => o.name === 'building mass' && o.scale[width] > 7 &&
+      Math.abs(o.position.y-base-1.2) + 2.6 < o.scale.y*.5).sort((a,b) => b.scale[width]-a.scale[width])[0]!
+    const run = Math.min(wall.scale[width]-.8, 12.4)
+    const reveal = wall.scale[normal]*.5+1.18
+    const facade = group(tower,'lit concourse and tenant bays',[
+      wall.position.x+(east ? -reveal : u),
+      base,
+      wall.position.z+(east ? u : -reveal),
+    ])
+    facade.rotation.y = east ? -Math.PI/2 : Math.PI
+    const accent = new THREE.Color(...chroma)
+    const tones = Array.from({ length: 5 }, (_, i) => gray(accent.r*(.16+.17*i),accent.g*(.16+.17*i),accent.b*(.16+.17*i)))
+    const floorStone = gray(.029,.059,.088)
+    const r = stream(`world/city/concourse/${towerName}`)
+    const bays = 7
+    const pitch = run/bays
+    for (const x of [-run*.42,0,run*.42]) {
+      cheap(facade,'concourse shear bracket',steel,[x,.01,-.56],[.13,.32,1.36])
+      cheap(facade,'upper floor mounting lug',trim,[x,2.73,-.56],[.113,.12,1.36])
+    }
+    for (const [y, phase] of [[.83,0],[3.02,1]]) {
+      cheap(facade,'cast floor edge',floorStone,[0,y-1.00,.25],[run+.15,.32,.41])
+      cheap(facade,'sealed curtain wall head',steel,[0,y+.96,.259],[run+.11,.14,.37])
+      cheap(facade,'window recess',black,[0,y,.16],[run,1.84,.22])
+      const vacancies = new Set([phase,r.int(bays)])
+      for (let i=0; i<bays; i++) {
+        const x = (i-(bays-1)/2)*pitch
+        const occupied = !vacancies.has(i) && r.next() > (phase === 0 ? .21 : .44)
+        const light = occupied ? tones[r.int(tones.length)]! : trim
+        const spec = occupied ? tones[tones.length-1]! : black
+        plate(facade,'ceiling reflected through tenant glass',light,[x,y+.22,.282],pitch-.14,1.28)
+        plate(facade,'room light bounce',spec,[x,y+.72,.285],pitch-.16,.13)
+        plate(facade,'frosted stair glazing return',occupied ? tones[0]! : trim,[x,y-.58,.287],pitch-.16,.33)
+        cheap(facade,'extruded external mullion',steel,[x-pitch*.5+.034,y,.32],[.069,1.82,.13])
+        if (i===bays-1) cheap(facade,'closing jamb',steel,[x+pitch*.5-.034,y,.32],[.069,1.82,.13])
+        if (occupied && r.next()>.35) {
+          cheap(facade,'half drawn roller shade',trim,[x+pitch*.26,y+.24,.293],[pitch*.31,1.08,.032])
+        }
+      }
+    }
+    const text = config.signage.generic.find(s=>s===allowed)!
+    const cabinet = group(facade,'concourse entrance fascia',[run*.19,1.925,.26])
+    cheap(cabinet,'cabinet back',black,[0,0,0],[3.32,.69,.32])
+    cheap(cabinet,'folded cabinet subframe',trim,[0,-.30,.19],[3.31,.052,.088])
+    plate(cabinet,'frosted fascia face',washedSign,[0,0,.163],3.12,.57)
+    labelFace(cabinet,text,[0,0,.172],[3.0,.49],labels,accent.clone().multiplyScalar(2.05))
+    signs.push(text)
+  }
+}
+
 function roofDetails(city: THREE.Group): ((t: number) => void)[] {
   const updates: ((t: number) => void)[] = []
   const anchors = [...city.getObjectByName('near city')!.children, ...city.getObjectByName('middle city')!.children.slice(0,3)]
@@ -258,6 +318,7 @@ function aircraft(city: THREE.Group): (t: number) => void {
 
 export function cityPracticals(city: THREE.Group, labels: Label, signs: string[]): (t: number) => void {
   mountedText(city, labels, signs)
+  cityConcourseWindows(city, labels, signs)
   const updates=[...roofDetails(city),railway(city),aircraft(city)]
   const update=(t: number)=>{ for (const fn of updates) fn(t) }
   update(0)
