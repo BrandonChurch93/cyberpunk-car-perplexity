@@ -165,6 +165,13 @@ function radiator(throat: T.Vector3[], full: boolean): T.BufferGeometry {
   return merged(fins)
 }
 
+function radiatorSeat(throat: T.Vector3[]): T.BufferGeometry {
+  const center = average(throat)
+  const edge = throat.map(p => p.clone().lerp(center, .08))
+  const inner = edge.map(p => p.clone().addScaledVector(forward, -.016))
+  return grid([throat, edge, inner], false, true)
+}
+
 function cover(loop: T.Vector3[], map: SurfaceMap, full: boolean): T.BufferGeometry {
   const center = average(loop), count = full ? 12 : 6
   const rows = Array.from({ length: count }, (_, i) => {
@@ -217,7 +224,7 @@ function splitter(S: Surface, full: boolean): T.BufferGeometry {
     return new T.Vector3(Math.sign(u) * x, y, z)
   })
   const rolls = [[-.012, .004], [.020, .002], [.032, 0], [.038, -.004],
-    [.041, -.010], [.038, -.016], [.031, -.019], [-.012, -.020]]
+    [.041, -.010], [.038, -.016], [.024, -.021]]
   const rows = positions.map((p, i) => rolls.map(([dz, dy]) => {
     const t = Math.abs(i - count) / count
     const tip = p.z + dz * (dz > 0 ? 1 - T.MathUtils.smoothstep(t, .89, 1) : 1)
@@ -226,8 +233,11 @@ function splitter(S: Surface, full: boolean): T.BufferGeometry {
   }))
   for (const [i, p] of positions.entries()) {
     const x = .44 * p.x, z = Math.min(2.265, p.z - .13)
+    const t = Math.abs(i - count) / count
+    const y = T.MathUtils.lerp(floorY - .001, p.y - .022, T.MathUtils.smoothstep(t, .55, 1))
+    rows[i].push(new T.Vector3(p.x, y, p.z - .018))
     rows[i].unshift(new T.Vector3(x, floorY + .006, z))
-    rows[i].push(new T.Vector3(x, floorY + .002, z))
+    rows[i].push(new T.Vector3(x, floorY - .001, z))
   }
   const caps = [rows[0], rows.at(-1)!].map((ps, i) => face(ps.map(p => new T.Vector3(p.z * (i ? -1 : 1), p.y, 0)))
     .rotateY(i ? Math.PI / 2 : -Math.PI / 2).translate(ps[0].x, 0, 0))
@@ -270,7 +280,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
     }
   }
   const intake = pocketAt('outer', .152, .88, -.46)
-  add('front outer duct returns', intake.wall, m.housing, true)
+  add('front outer duct returns', merged([intake.wall, radiatorSeat(intake.throat)]), m.housing, true)
   add('front radiator fins', radiator(intake.throat, full), m.mesh, true)
   add('front radiator cores', face(intake.throat, .028), m.housing, true)
   const mouth = pocketAt('center', .112, .89, 0)
