@@ -4,13 +4,14 @@ import { toGeometry } from '../geom/mesh'
 import { tessellate, type TessOptions, type TessResult, type TrimFn } from '../geom/tessellate'
 import { cross, norm, sub, type V3 } from '../geom/vec'
 import { makeCuts, paintTrim, wheelOpenings, type BodyCuts } from './cuts'
-import { gapLips, onGapEdge, withoutGapEdges } from './gaps'
+import { gapChannel, onGapEdge, withoutGapEdges } from './gaps'
 import { fitFascia, tessellateFascia, type FasciaEdge } from './nose'
 import { rearFace } from './tail'
 import { backingLoft, dims, mainLoft } from './shape'
 
 export interface BodyGeometry {
   paint: THREE.BufferGeometry
+  gapFloor: THREE.BufferGeometry
   shell: THREE.BufferGeometry
   cuts: BodyCuts
   surfaces: { main: Surface; front: Surface; rear: Surface }
@@ -138,9 +139,8 @@ export function buildBody(q: BodyQuality): BodyGeometry {
   // Openings roll over 4 mm. Shut gaps roll over 2 mm from paint edges cut 4 mm off the line, so the gap between the
   // two walls stays 4 mm. The fascia rolls and returns its own openings.
   const allGaps = [cuts.main, cuts.rear].flatMap((c) => c.gaps)
-  const lips = ([[main, cuts.main, wheelOpenings], [rear, cuts.rear, undefined]] as const).map(([S, c, extra]) =>
-    gapLips(S, c.gaps, paintTrim({ ...c, gaps: [] }, extra)))
-  paint.push(flange(withoutGapEdges(paint, onGapEdge(allGaps)), 0.014, () => 0.004), ...lips, ...nose.paint)
+  const channel = gapChannel(paint, allGaps)
+  paint.push(flange(withoutGapEdges(paint, onGapEdge(allGaps)), 0.014, () => 0.004), channel.lips, ...nose.paint)
   const inner = -0.014
   // The backing is open wherever the skin has an opening (glass, bay, intakes, ducts, outlets), so every opening
   // goes through the thick panel and its returned walls are the paint flange. Shut gaps stay closed behind.
@@ -161,5 +161,5 @@ export function buildBody(q: BodyQuality): BodyGeometry {
   const frontBand = 0.015 / dims.length
   const mainBacking: TrimFn = (u, v, p) => Math.max(bayTrim(u, v, p), (frontBand - u) * dims.length)
   const shell = [backing(mainBack, mainGrid, mainBacking), nose.shell, backing(rear, faceGrid, openings(cuts.rear))]
-  return { paint: toGeometry(paint, true), shell: toGeometry(shell, true), cuts, surfaces: { main, front, rear }, grids: { main: mainGrid } }
+  return { paint: toGeometry(paint, true), gapFloor: toGeometry([channel.floor], true), shell: toGeometry(shell, true), cuts, surfaces: { main, front, rear }, grids: { main: mainGrid } }
 }
