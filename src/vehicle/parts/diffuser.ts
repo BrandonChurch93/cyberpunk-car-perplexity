@@ -28,6 +28,9 @@ export const strakes = [
   { x: 0.65, lean: (6 * Math.PI) / 180, lead: -1.88, rake: 0.1, toe: 0.14, exit: 0.16, rise: false },
 ] as const
 
+/** Chord of the inner strakes where they rise above the roof, ahead of the trailing edge: blades, not walls. */
+const riseChord = 0.12
+
 /** Strake blade thickness; its edges are full rounds of half this. */
 const blade = 0.006
 const br = blade / 2
@@ -240,7 +243,7 @@ function strake(b: MeshBuilder, s: (typeof strakes)[number]): void {
   const m = 12
   if (s.rise) {
     const top = ceilingY + wallT / 2 - br + 0.001
-    const zf = meshZ - br - 0.002
+    const zf = Math.max(meshZ - br - 0.002, back + riseChord)
     poly.push([zf, top], [back, top], [bottom, s.exit + br])
     radii.push(0.004, 0.005, 0.008)
     for (let i = 1; i < m; i++) {
