@@ -294,8 +294,9 @@ export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, re
   const bay = projectCurve(mm, 'y', planLines.bay, true, 0.008, topWin, true, 0.06)
   const bonnet = onSkin(main, projectCurve(mm, 'y', planLines.bonnet, false, 0.006, topWin, false, 0.08), 0.006)
   const lampWrapCut = lampWrapHole(main)
-  // The rear deck shut line crosses the paint macro at 0.75 m, so its edges roll over 5 mm and hold the reflection.
-  const wing = withRoll(intoTip(main, onSkin(main, projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08), 0.006), lampWrapCut), 0.005)
+  // The rear deck shut line crosses the paint macro at 0.75 m, so its edges roll a little wider, over 2 mm, and hold the
+  // reflection there.
+  const wing = withRoll(intoTip(main, onSkin(main, projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08), 0.006), lampWrapCut), 0.002)
   const mainCuts: Cuts = {
     holes: [
       { c: dlo, inset: 0 },

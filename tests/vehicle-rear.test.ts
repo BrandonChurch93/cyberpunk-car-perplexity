@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { dims } from '../src/vehicle/body/shape'
-import { openEdges, windingAgreement } from './vehicle-rear-mesh'
+import { maxValence, openEdges, windingAgreement } from './vehicle-rear-mesh'
 import { centreY, floorY, meshZ, sheet, strakes, tailZ, underbody, valance } from '../src/vehicle/parts/diffuser'
 import { buildBody } from '../src/vehicle/body/body'
 import { mainLoft } from '../src/vehicle/body/shape'
@@ -91,6 +91,20 @@ describe('rear underbody', () => {
     expect(risen).toBeGreaterThan(0)
   })
 
+  it('builds the strakes as swept quads, filleted into the roof and tapered to a rounded free edge', () => {
+    expect(maxValence(u.strakes)).toBeLessThanOrEqual(8)
+    const pos = u.strakes.getAttribute('position')
+    const band: Array<[number, number]> = []
+    for (let i = 0; i < pos.count; i++) {
+      const z = pos.getZ(i)
+      if (pos.getX(i) > 0.1 && pos.getX(i) < 0.32 && z < -1.98 && z > -2.02) band.push([pos.getX(i), pos.getY(i) - centreY(z)])
+    }
+    const spread = (pts: Array<[number, number]>): number => Math.max(...pts.map((p) => p[0])) - Math.min(...pts.map((p) => p[0]))
+    const bottom = Math.min(...band.map((p) => p[1]))
+    expect(spread(band.filter((p) => Math.abs(p[1]) < 0.0005))).toBeGreaterThan(0.018)
+    expect(spread(band.filter((p) => p[1] < bottom + 0.003))).toBeLessThan(0.0055)
+  })
+
   it('leaves the corner open outboard of the outer strakes behind the rear tyre', () => {
     const pos = u.floor.getAttribute('position')
     for (let i = 0; i < pos.count; i++) {
@@ -108,7 +122,7 @@ describe('rear module', () => {
   const bay = engineBay(c.bay, 0.02)
   const closed: Array<[string, THREE.BufferGeometry]> = [
     ['outlet lip', ex.lip], ['outlet pipes', ex.pipes], ['outlet back', ex.soot], ['outlet housing', ex.housing],
-    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['lamp reflector', tl.reflector], ['lamp optic', tl.optic], ['valance wall', va.wall],
+    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['lamp reflector', tl.reflector], ['lamp optic', tl.optic], ['valance wall', va.wall], ['mesh frame', va.frame],
     ['bay covers', bay.covers], ['bay carbon', bay.carbon], ['plenum', bay.center], ['bay mesh', bay.mesh],
     ['airbox grille', bay.grille], ['grille bezel', bay.bezel], ['grille duct', bay.duct], ['bay core', bay.core], ['grille ledge', bay.ledge], ['bay shelf', bay.shelf],
     ['intake hose', bay.hose], ['hose clamp', bay.clamp],
@@ -175,6 +189,10 @@ describe('rear module', () => {
       expect(g.boundingBox!.min.z).toBeGreaterThan(-dims.halfLength - 0.005)
       expect(g.boundingBox!.max.x).toBeLessThan(dims.width / 2)
     }
+  })
+
+  it('closes the reflector faces with strips across the slot, not fans to its middle', () => {
+    expect(maxValence(tl.reflector)).toBeLessThanOrEqual(8)
   })
 
   it('sets the reflector into the slot behind the paint flange', () => {
@@ -264,6 +282,20 @@ describe('rear module', () => {
       if (Math.abs(pos.getX(i)) < 0.55) expect(pos.getZ(i)).toBeGreaterThan(meshZ - 0.01)
     }
     expect(meshZ - (-dims.halfLength)).toBeGreaterThan(0.25)
+  })
+
+  it('hangs the mesh on the back of the housing only, each half whole cells inside its own frame', () => {
+    const pos = va.panel.getAttribute('position')
+    for (let i = 0; i < pos.count; i++) expect(Math.abs(pos.getZ(i) - meshZ)).toBeLessThan(0.004)
+    va.frame.computeBoundingBox()
+    const fb = va.frame.boundingBox!
+    va.panel.computeBoundingBox()
+    const pb = va.panel.boundingBox!
+    expect(pb.min.x).toBeGreaterThan(fb.min.x + 0.005)
+    expect(pb.max.x).toBeLessThan(fb.max.x - 0.005)
+    expect(pb.min.y).toBeGreaterThan(fb.min.y + 0.005)
+    expect(pb.max.y).toBeLessThan(fb.max.y - 0.005)
+    expect(fb.min.x).toBeGreaterThanOrEqual(-1e-6)
   })
 })
 

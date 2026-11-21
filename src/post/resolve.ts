@@ -11,8 +11,8 @@ import { FILM_CURVE, toneMapGlsl } from './tone'
 
 export const FILM_EXPOSURE = 0.84
 const GRAIN_SIZE_PX = 1.8
-const GRAIN_LUMA = 0.010
-const GRAIN_CHROMA = 0.0025
+const GRAIN_LUMA = 0.022
+const GRAIN_CHROMA = 0.005
 const grainStream = streamSeed('film-grain')
 const ditherStream = streamSeed('film-dither')
 

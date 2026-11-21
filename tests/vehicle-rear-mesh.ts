@@ -49,3 +49,16 @@ export function openEdges(g: THREE.BufferGeometry, seamX?: number): number {
   for (const [id, c] of count) if (c === 1 && !(seamX !== undefined && xs.get(id)! <= seamX)) open++
   return open
 }
+
+/** Most triangles meeting at one welded point: a fan cap or a pinched pole shows as a high count. */
+export function maxValence(g: THREE.BufferGeometry): number {
+  const pos = g.getAttribute('position')
+  const idx = g.getIndex()!
+  const key = (i: number): string => `${Math.round(pos.getX(i) * 1e5)},${Math.round(pos.getY(i) * 1e5)},${Math.round(pos.getZ(i) * 1e5)}`
+  const m = new Map<string, number>()
+  for (let t = 0; t < idx.count; t++) {
+    const k = key(idx.getX(t))
+    m.set(k, (m.get(k) ?? 0) + 1)
+  }
+  return Math.max(...m.values())
+}

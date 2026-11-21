@@ -2,7 +2,7 @@ import type * as THREE from 'three'
 import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
 import { MeshBuilder } from '../geom/mesh'
 import { add, cross, dist, dot, lerp3, norm, scale, sub, type V2, type V3 } from '../geom/vec'
-import { bar, barOn, finish, flat, holePlane, merge, pocket, solid, tailNormal, type Plane } from './solid'
+import { bar, barOn, finish, flat, holePlane, merge, orient, pocket, solid, tailNormal, zipCap, type Plane } from './solid'
 
 /** Light guide section, the depth of the dark lens recess it sits in, and of the slot below. */
 export const lampSpec = { guide: 0.012, thick: 0.016, front: 0.005, corner: 0.003, lens: 0.022, slot: 0.05, inset: 0.015 } as const
@@ -274,26 +274,21 @@ function reflector(rm: SurfaceMap, slot: SurfaceCurve): MeshBuilder {
     return { p, nn, h }
   })
   const ring = (inward: number, depth: number): V3[] => frame.map((e) => add(add(e.p, scale(e.h, inward)), scale(e.nn, -depth)))
-  const mid = (depth: number): V3[] => {
-    const c = ring(r.gap + r.roll, depth).reduce<V3>((a, p) => add(a, scale(p, 1 / m)), [0, 0, 0])
-    return frame.map(() => c)
-  }
   const s0 = r.front
   const s1 = r.front + r.thick
-  const rows: V3[][] = [mid(s0)]
-  const sharp: boolean[] = [true]
+  const rows: V3[][] = []
   const k = 3
   for (let i = 0; i <= k; i++) {
     const a = (Math.PI / 2) * (i / k)
     rows.push(ring(r.gap + r.roll * (1 - Math.sin(a)), s0 + r.roll * (1 - Math.cos(a))))
-    sharp.push(false)
   }
-  for (let i = 0; i <= k; i++) {
+  for (let i = 1; i <= k; i++) {
     const a = (Math.PI / 2) * (i / k)
     rows.push(ring(r.gap + r.roll * (1 - Math.cos(a)), s1 - r.roll * (1 - Math.sin(a))))
-    sharp.push(false)
   }
-  rows.push(mid(s1))
-  sharp.push(true)
-  return solid(rows, sharp, false)
+  const b = solid(rows, rows.map(() => false), false)
+  const front = frame.map((e) => e.nn)
+  zipCap(b, rows[0], front)
+  zipCap(b, rows[rows.length - 1], front.map((n) => scale(n, -1)))
+  return orient(b)
 }

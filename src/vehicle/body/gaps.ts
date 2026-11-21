@@ -2,10 +2,13 @@ import type { SurfaceCurve } from '../geom/cuts'
 import type { Boundary, TessResult } from '../geom/tessellate'
 import { add, cross, norm, scale, sub, type V3 } from '../geom/vec'
 
-/** Half the shut gap between the panel walls, and the roll radius of the panel edges either side of it. The roll is
- * wide enough to hold a reflection across a few pixels in the macro at 0.75 m, and cut fine enough not to facet there. */
+/** Half the shut gap between the panel walls, and the roll radius of the panel edges either side of it. The gap is an
+ * open 4 mm slot between two returned panel edges; the roll is a pressed edge, small enough that the slot reads as a
+ * gap and not a groove, and still a lit line a few pixels wide in the macro at 0.75 m. */
 export const gapHalf = 0.002
-export const gapRoll = 0.003
+export const gapRoll = 0.0015
+/** Depth of the panel walls returned into each shut gap: the flange a panel edge turns down, 8 to 12 mm on a car. */
+export const gapDepth = 0.011
 
 /** Edge rolls set per shut line; a line without one rolls over gapRoll. */
 const rolls = new WeakMap<SurfaceCurve, number>()
@@ -105,7 +108,7 @@ export function resample(c: SurfaceCurve, step: number): { p: V3[]; uv: Array<[n
  * them: each edge rolls over `gapRoll` into a wall `gapHalf` off the line, down to `depth`, onto a floor that runs just
  * past the line. The floor is returned apart so it can take a dark finish.
  */
-export function gapChannel(parts: TessResult[], gaps: SurfaceCurve[], depth = 0.007): { lips: TessResult; floor: TessResult } {
+export function gapChannel(parts: TessResult[], gaps: SurfaceCurve[], depth = gapDepth): { lips: TessResult; floor: TessResult } {
   const lips: TessResult = { positions: [], normals: [], uvs: [], indices: [], boundaries: [] }
   const floor: TessResult = { positions: [], normals: [], uvs: [], indices: [], boundaries: [] }
   const push = (t: TessResult, p: V3, n: V3, uv: [number, number]): number => {
@@ -136,7 +139,7 @@ export function gapChannel(parts: TessResult[], gaps: SurfaceCurve[], depth = 0.
     }
     return best
   }
-  // Each run takes the roll of the shut line it lies along, cut in steps of at most 15 degrees, 9 on the wider rolls.
+  // Each run takes the roll of the shut line it lies along, cut in steps of at most 15 degrees.
   const strip = (pts: V3[], nor: V3[], uv: Array<[number, number]>, closed: boolean): void => {
     const n = pts.length
     const mid = pts[n >> 1]
@@ -254,3 +257,39 @@ function thin(p: V3[], gap = 0.0005): number[] {
 }
 
 const dist = (a: V3, b: V3): number => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+/**
+ * Per-vertex gap mask for a paint mesh built by toGeometry(parts, mirror): 1 on the rolled edges and walls of every shut
+ * gap, easing to 0 over the 3 mm of panel beside each edge. Water and other surface layers read it to keep clear of
+ * the gaps. Values follow toGeometry's vertex order, each part then its mirror.
+ */
+export function gapMask(parts: TessResult[], walls: TessResult, gaps: SurfaceCurve[], mirror: boolean): Float32Array {
+  const count = parts.reduce((n, t) => n + (t.positions.length / 3) * (mirror ? 2 : 1), 0)
+  const out = new Float32Array(count)
+  const ease = 0.003
+  let o = 0
+  for (const t of parts) {
+    const n = t.positions.length / 3
+    const m = new Float32Array(n)
+    if (t === walls) m.fill(1)
+    else {
+      for (let i = 0; i < n; i++) {
+        const p: V3 = [t.positions[i * 3], t.positions[i * 3 + 1], t.positions[i * 3 + 2]]
+        let v = 0
+        for (const g of gaps) {
+          const edge = gapHalf + rollOf(g)
+          const d = g.distance(p, edge + ease)
+          if (d < edge + ease) v = Math.max(v, d <= edge + 0.0002 ? 1 : 1 - (d - edge) / ease)
+        }
+        m[i] = v
+      }
+    }
+    out.set(m, o)
+    o += n
+    if (mirror) {
+      out.set(m, o)
+      o += n
+    }
+  }
+  return out
+}

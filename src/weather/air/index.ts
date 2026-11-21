@@ -11,7 +11,7 @@ export async function createAir(deps: WeatherDeps): Promise<SceneSystem> {
   const view = new RibbonView()
   const splashes = new Splashes(deps, view)
   const volume = new AirVolume(deps)
-  root.add(...rainMeshes(view, deps.world, deps.lights, deps.vehicle.root.getWorldPosition(new THREE.Vector3())), splashes.mesh, splashes.spray)
+  root.add(...rainMeshes(view, deps.world, deps.lights, deps.vehicle.root.getWorldPosition(new THREE.Vector3())), splashes.mesh, splashes.spray, splashes.deckSpray)
   return {
     root,
     lights: [],
