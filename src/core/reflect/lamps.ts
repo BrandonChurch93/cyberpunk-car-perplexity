@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { insertAfter, patchMaterial } from '../../materials/patch'
 import type { VehicleModule } from '../../vehicle'
 
-const guideDeckRadiance = 0.28
+const guideDeckRadiance = 0.40
 const guideDeckArm = { fraction: 0.95, height: [0.29, 0.48], lateral: [0.06, 0.28] }
 
 function portAimName(meshName: string): string | undefined {
