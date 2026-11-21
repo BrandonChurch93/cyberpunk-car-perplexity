@@ -89,15 +89,34 @@ describe('full roof world', () => {
     expect(emitter.range/k).toBeCloseTo(75,12)
     const city = world.root.getObjectByName('hero tower layout')!
     const footprints: { id: string; box: THREE.Box3 }[] = []
+    const { master } = config.formats
+    const lens = new THREE.PerspectiveCamera()
+    applyLens(lens,cameraAt(config.film.heroFrameSeconds,master,anchors),master.width,master.height,{pixel:[0,0],aperture:[0,0]},1)
+    world.root.updateMatrixWorld(true)
+    const ranks = new Map<string, number>()
     for (const volume of city.children.filter(o => o.name.endsWith(' volume'))) {
-      const shell = volume.children[0] as THREE.Mesh
+      const shell = volume.children[0] as THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial>
       shell.geometry.computeBoundingBox()
       const box = shell.geometry.boundingBox!.clone().translate(shell.position)
       expect(box.min.y).toBeCloseTo(streetY,4)
       for (const other of footprints) expect(box.intersectsBox(other.box),shell.name+' / '+other.id).toBe(false)
       footprints.push({ id: shell.name, box })
+      const rank = shell.material.userData.distanceLayer as string
+      ranks.set(rank, (ranks.get(rank) ?? 0)+1)
+      const { width, height, depth } = shell.geometry.parameters
+      const pane = shell.material.userData.clearPaneWidth as number
+      expect(pane).toBeGreaterThan(.90)
+      expect(pane).toBeLessThan(1.55)
+      expect(width).toBeGreaterThan(pane)
+      if (rank !== 'near') continue
+      const front = shell.localToWorld(new THREE.Vector3(0,height*.25,depth*.5))
+      expect(Math.hypot(front.x-eye.x,front.z-eye.z)).toBeGreaterThan(460)
+      const edge = shell.localToWorld(new THREE.Vector3(pane,height*.25,depth*.5)).project(lens)
+      expect(Math.abs(edge.x-front.project(lens).x)*master.width*.5,shell.name).toBeLessThan(8.6)
     }
     expect(footprints).toHaveLength(44)
+    expect([...ranks.keys()].sort()).toEqual(['far','middle','near'])
+    expect(Math.min(...ranks.values())).toBeGreaterThan(5)
   })
 
   it('builds real-meter facade grids with distinct families and uses practical mesh donors in the cube', () => {
@@ -175,9 +194,11 @@ describe('full roof world', () => {
     rig.group.updateMatrixWorld(true)
     source.shadow.updateMatrices(source)
     const c = source.shadow.camera
-    expect(c.near).toBeGreaterThan(270)
-    expect(c.far).toBeLessThan(430)
-    const center = new THREE.Box3().setFromObject(vehicle).getCenter(new THREE.Vector3()).project(c)
+    const center = new THREE.Box3().setFromObject(vehicle).getCenter(new THREE.Vector3())
+    const depth = -center.clone().applyMatrix4(c.matrixWorldInverse).z
+    expect(c.near).toBeGreaterThan(depth-105)
+    expect(c.far).toBeLessThan(depth+35)
+    center.project(c)
     expect(Math.max(Math.abs(center.x),Math.abs(center.y),Math.abs(center.z))).toBeLessThan(1)
     world.beginFrame({ frame: { timeSeconds: config.film.macroFrameSeconds } } as FrameContext)
     rig.update(config.film.macroFrameSeconds,[.5,.5])

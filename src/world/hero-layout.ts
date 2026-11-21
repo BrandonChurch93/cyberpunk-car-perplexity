@@ -4,7 +4,7 @@ import type { FilmLight } from '../core/contract'
 import { deckReflectionTrim, paintBayLine } from './deck-reflection-trim'
 import { plate, type Label } from './fixtures'
 import { group, heroCityYaw, heroDrainLayout, streetY, type Tuple } from './forms'
-import { heroPoint, heroScale as scale, heroSize } from './hero-scale'
+import { heroFrontageDistance, heroPoint, heroScale as scale, heroSize } from './hero-scale'
 import { billboardMural, fixtureOpal, signGlass, towerSurface, type Facade, type FacadeLayer, type SignSpill } from './hero-surfaces'
 import { reflectionPracticalBuilder } from './reflection-practicals'
 import type { finishRoof } from './roof-look'
@@ -127,7 +127,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     return { light, anchor }
   }
   const infill = [
-    ['c9 west dispatch', -114.4, -615, 13.8, 31, 65, .060, 1],
+    ['c9 west dispatch', -114.4, -615, 13.8, 31, 65, .060, 1.02],
     ['c9 west stepped roof', -126.1, -808, 13.4, 29, 134, .067, 1],
     ['c9 west telephone exchange', -146.4, -985, 16.9, 34, 119, .049, 1],
     ['c9 center kiln tower', -88.8, -682, 9.8, 23, 91, .070, 1],
@@ -135,8 +135,8 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     ['c9 center upper lift', -89.6, -1060, 15.7, 37, 140, .057, 1],
     ['c9 center communications', -43.0, -768, 10.8, 38, 105, .077, 1],
     ['c9 center distant crown', -18.2, -926, 10.2, 35, 151, .065, 1],
-    ['c9 east narrow stair', 127.6, -435, 10.5, 22, 82, .079, 1],
-    ['c9 east relay court', 198.1, -586, 14.4, 38, 112, .070, 1],
+    ['c9 east narrow stair', 127.6, -435, 10.5, 22, 82, .079, 1.28],
+    ['c9 east relay court', 198.1, -586, 14.4, 38, 112, .070, 1.02],
     ['c9 east glass exchange', 235.7, -784, 18.0, 48, 153, .070, 1],
     ['c9 east lit switchyard', 271.8, -1033, 15.4, 36, 148, .058, 1],
     ['c9 center exchange stairs', -53.8, -639, 10.1, 22, 106, .057, 1],
@@ -155,11 +155,11 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     ['hero right edge tower', 32.82, -73.5, 11.64, 11.8, 91.8, .069, scale.rightEdge],
     ['hero near east garage bay', 7.22, -17.79, 1.88, 3.91, 5.27, .057, scale.eastFrontage],
     ['hero middle west distance', -10.91, -60.0, 1.48, 7.24, 9.14, .080, scale.middleWest],
-    ['hero far west distance', -9.10, -83.0, 2.15, 7.90, 13.76, .068, 8.67],
+    ['hero far west distance', -9.10, -83.0, 2.15, 7.90, 13.76, .068, 8.73],
     ['hero middle center distance', -6.54, -65.0, 1.20, 8.17, 8.23, .080, 9.55],
     ['hero far center distance', -5.11, -94.0, 2.02, 7.56, 13.11, .064, 8.4],
-    ['hero middle east distance', 17.27, -56.0, 2.82, 9.15, 8.33, .085, 9],
-    ['outer west exchange glass tower', -43.4, -157, 17.9, 15.7, 21.30, .059, 3.6],
+    ['hero middle east distance', 17.27, -56.0, 2.82, 9.15, 8.33, .085, 9.34],
+    ['outer west exchange glass tower', -43.4, -157, 17.9, 15.7, 21.30, .059, 3.84],
     ['outer west bank setback', -75.6, -279, 19.2, 23.6, 33.21, .049, 2.65],
     ['far west communications stack', -98.3, -433, 24.8, 28.4, 45.77, .047, 2.3],
     ['far west narrow crown', -42.15, -337, 7.6, 15.3, 41.24, .044, scale.farWest],
@@ -196,18 +196,18 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   for (const [index,[name, x, faceZ, width, depth, top, level, k]] of towers.entries()) {
     const z = faceZ-depth*.5
     const tower = group(city, name + ' volume')
-    const layer: FacadeLayer = name.startsWith('c9 ') ? faceZ < -820 ? 'far' : 'middle' :
-      index >= 16 || [12,14].includes(index) ? 'far' : [4,5,11,13,15].includes(index) ? 'middle' : 'near'
-    const shell = towerSurface(name, level, facadeOf(name,index), screenReflection, spillAt(name),layer)
-    groundedBox(tower,name,x,top,z,width,depth,shell,k)
     const [wx,wy,wz] = heroPoint([x,top,z],k)
     const w = width*k, d = depth*k
+    const distance = heroFrontageDistance(wx,wz+d*.5)
+    const layer: FacadeLayer = distance < 620 ? 'near' : distance < 840 ? 'middle' : 'far'
+    const shell = towerSurface(name, level, facadeOf(name,index), screenReflection, spillAt(name),layer)
+    groundedBox(tower,name,x,top,z,width,depth,shell,k)
     deckTrim.tower(tower,name,wx,wz+d*.5,w)
     box(tower,'folded coping band',[wx,wy-.52,wz],[w+.28,1.5,d+.28],frame)
     if (faceZ >= -50 && width >= 1) {
       for (const side of [-1,1]) groundedBox(tower,'rainwater jamb',x+side*(width/2-.068),top,faceZ+.021,.092,.092,frame,k)
     }
-    if (index !== 1 && wy > 62 && w > 10) {
+    if (index !== 1 && index !== 2 && wy > 62 && w > 10) {
       const stepped = [11,12,20].includes(index)
       const flat = [13,14,21].includes(index)
       const crownH = stepped ? 6.7 : flat ? 1.42 : index%4===0 ? 7.3 : index%3===0 ? 4.9 : 2.55
@@ -298,17 +298,17 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       }
     } else if (index === 9) {
       const pz = wz+d*.5
-      for (const [j, y] of [269,281,290,313,337,361,391,407,420].entries()) {
+      for (const [j, floor] of [.591,.617,.637,.687,.740,.793,.859,.894,.922].entries()) {
         const ribbon = j%3 === 0
         const n = ribbon ? 3 : 4+(j%3)
         for (let i=0;i<n;i++) {
           const cx = wx+(i-(n-1)*.5)*7.5+(j%2 ? .12 : -.12)*w
-          practical.opal(tower,'warm tower service floor',[cx,y,pz+.38],[ribbon ? 7.26 : 5.1,ribbon ? 2.7 : 3.3],
+          practical.opal(tower,'warm tower service floor',[cx,wy*floor,pz+.38],[ribbon ? 7.26 : 5.1,ribbon ? 2.7 : 3.3],
             j%3 === 1 ? [19,12.4,5.6] : [24,9.1,1.9],1)
         }
       }
-      practical.cabinet(tower,'high amber rooftop wayfinding',[wx-10,372,pz+.67],[20,8.0],[28,10.2,2.4],'24H')
-      practical.cabinet(tower,'high amber hotel wayfinding',[wx+5,446,pz+.66],[30,5.2],[22,11.1,3.9],'HOTEL')
+      practical.cabinet(tower,'high amber rooftop wayfinding',[wx-10,wy*.817,pz+.67],[20,8.0],[28,10.2,2.4],'24H')
+      practical.cabinet(tower,'high amber hotel wayfinding',[wx+5,wy*.979,pz+.66],[30,5.2],[22,11.1,3.9],'HOTEL')
     } else if ([7,11,20,24,26].includes(index)) {
       const litH = (wy-streetY)*.49
       addRail('recessed facade edge tracer',wx+w*(index%2 ? -.44 : .45),streetY+litH*.98,wz+d*.5,litH,
