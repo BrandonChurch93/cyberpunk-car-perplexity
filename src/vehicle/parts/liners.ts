@@ -1,4 +1,7 @@
 import * as THREE from 'three'
+import { waterF0 } from '../../core/emitters-glsl'
+import { stream } from '../../core/random'
+import { patchMaterial } from '../../materials/patch'
 import { surfaceNormal } from '../body/body'
 import { arches, wheelOpenings } from '../body/cuts'
 import { dims } from '../body/shape'
@@ -7,7 +10,7 @@ import type { WetnessKind } from '../contract'
 import type { Surface } from '../geom/cuts'
 import { mirrorGeometry } from '../geom/mesh'
 import { cross, dot, norm, smoothstep, sub, type V3 } from '../geom/vec'
-import { ensureValidWheelGeometry } from './wheel'
+import { ensureValidWheelGeometry, patchEmitterGlintSheen } from './wheel'
 
 export interface LinerMaterials {
   under: THREE.Material
@@ -245,6 +248,26 @@ function buildOrientedGrid(
   return ensureValidWheelGeometry(g)
 }
 
+function sampleRearShelfNodes(main: Surface, firstArch: ArchSample, count: number): Array<{ p: V3; n: V3 }> {
+  const uJoin = locateOnMain(main, firstArch.p[2], firstArch.p[1]).u
+  const uTail = 0.994
+  if (uTail - uJoin < 0.015) return []
+  const out: Array<{ p: V3; n: V3 }> = []
+  for (let i = 0; i < count; i++) {
+    const u = uTail + (uJoin - uTail) * (i / count)
+    let vLo = 0
+    let vHi = 0.48
+    for (let k = 0; k < 26; k++) {
+      const mid = (vLo + vHi) * 0.5
+      if (wheelOpenings(main(u, mid)) > 0) vLo = mid
+      else vHi = mid
+    }
+    const v = (vLo + vHi) * 0.5
+    out.push({ p: main(u, v), n: surfaceNormal(main, u, v) })
+  }
+  return out
+}
+
 export function archLinerParts(
   main: Surface,
   front: boolean,
@@ -255,27 +278,42 @@ export function archLinerParts(
   const zc = front ? dims.frontHubZ : dims.rearHubZ
   const yc = front ? dims.frontTire.radius : dims.rearTire.radius
 
-  // Seated liner collar behind the body's 14 mm painted arch return (4 mm roll -> dr = +4 mm, dn = -14 mm).
+  const rawLipNodes: Array<{ p: V3; n: V3 }> = front
+    ? samples.map(({ p, n }) => ({ p, n }))
+    : [...sampleRearShelfNodes(main, samples[0], full ? 16 : 10), ...samples.map(({ p, n }) => ({ p, n }))]
+
+  const lipNodes = rawLipNodes.map(({ p, n }, i) => {
+    const prev = rawLipNodes[Math.max(0, i - 1)].p
+    const next = rawLipNodes[Math.min(rawLipNodes.length - 1, i + 1)].p
+    const tauArc = norm(sub(next, prev))
+    let tang = norm(cross(n, tauArc))
+    const probe: V3 = [p[0] + tang[0] * 0.006, p[1] + tang[1] * 0.006, p[2] + tang[2] * 0.006]
+    if (wheelOpenings(probe) < wheelOpenings(p)) tang = [-tang[0], -tang[1], -tang[2]]
+    return { p, n, tang }
+  })
+
+  // Molded stone-guard arch flange seated behind the body's painted arch return, rolling 8.2 mm into the opening and 38.5 mm deep.
   const lipSection: ReadonlyArray<readonly [number, number]> = [
-    [-0.003, -0.0124],
-    [0.0041, -0.0126],
-    [0.0046, -0.0142],
-    [0.0047, -0.0168],
-    [0.0038, -0.0198],
-    [0.0018, -0.0222],
-    [-0.003, -0.0226],
-    [-0.003, -0.0124],
+    [-0.0032, -0.0132],
+    [0.0022, -0.0082],
+    [0.0068, -0.0096],
+    [0.0082, -0.0134],
+    [0.008, -0.0188],
+    [0.0062, -0.0265],
+    [0.003, -0.0355],
+    [-0.0032, -0.0385],
+    [-0.0032, -0.0132],
   ]
-  const lipRows: V3[][] = samples.map(({ p, n, tang }, i) => {
-    const t = i / (samples.length - 1)
-    const startTaper = front ? 0.35 + 0.65 * smoothstep(0, 0.06, t) : 0.65 + 0.35 * smoothstep(0, 0.05, t)
-    const endTaper = 0.35 + 0.65 * smoothstep(0, 0.06, 1 - t)
+  const lipRows: V3[][] = lipNodes.map(({ p, n, tang }, i) => {
+    const t = i / (lipNodes.length - 1)
+    const startTaper = front ? 0.4 + 0.6 * smoothstep(0, 0.06, t) : 0.78 + 0.22 * smoothstep(0, 0.05, t)
+    const endTaper = 0.4 + 0.6 * smoothstep(0, 0.06, 1 - t)
     const taper = Math.min(startTaper, endTaper)
-    const nSafe: V3 = norm([Math.max(0.78, n[0]), Math.max(0, n[1]), n[2]])
+    const nSafe: V3 = norm([Math.max(0.58, n[0]), Math.max(-0.12, n[1]), n[2]])
     return lipSection.map(([dr, dn]): V3 => {
       const drScaled = dr > 0 ? dr * taper : dr
       const x = p[0] + tang[0] * drScaled + nSafe[0] * dn
-      const y = Math.max(p[1] + 0.001, p[1] + tang[1] * drScaled + nSafe[1] * dn)
+      const y = Math.max(0.125, p[1] + tang[1] * drScaled + nSafe[1] * dn)
       const z = p[2] + tang[2] * drScaled + nSafe[2] * dn
       return [x, y, z]
     })
@@ -300,8 +338,8 @@ export function archLinerParts(
   })
   const startCapPts = lipRows[0].slice(0, -1)
   const endCapPts = lipRows[lipRows.length - 1].slice(0, -1)
-  const startTan = norm(sub(samples[1].p, samples[0].p))
-  const endTan = norm(sub(samples[samples.length - 1].p, samples[samples.length - 2].p))
+  const startTan = norm(sub(lipNodes[1].p, lipNodes[0].p))
+  const endTan = norm(sub(lipNodes[lipNodes.length - 1].p, lipNodes[lipNodes.length - 2].p))
   const lip = mergeGeometries([
     lipTube,
     buildPolygonCap(startCapPts, [-startTan[0], -startTan[1], -startTan[2]]),
@@ -313,23 +351,27 @@ export function archLinerParts(
   const xInner = front ? 0.5 : 0.635
   const yFloor = Math.max(0.126, samples[samples.length - 1].p[1] + 0.002)
   const wallThick = 0.004
-  const drumCols = full ? 5 : 4
+  const drumCols = full ? 7 : 4
   const rTight = (front ? dims.frontTire.radius : dims.rearTire.radius) + 0.026
 
   const drumPoint = (i: number, t: number, backOffset: number): V3 => {
     const s = samples[i]
-    const xStart = s.p[0] - 0.019 - backOffset * 0.25
+    const xStart = s.p[0] - 0.017 - backOffset * 0.25
     const cz = -Math.cos(s.theta)
     const sy = Math.sin(s.theta)
     const tuck = front ? 0 : smoothstep(0.05, 0.35, t)
-    const rLip = s.rCut - 0.0055
-    const rCore = mixRadius(rLip, Math.min(rLip, rTight), tuck)
+    const rLip = s.rCut - 0.0062
+    const rib =
+      full && backOffset === 0
+        ? 0.0024 * (0.5 - 0.5 * Math.cos(s.theta * 28)) * smoothstep(0.06, 0.22, t) * (1 - smoothstep(0.76, 0.94, t))
+        : 0
+    const rCore = mixRadius(rLip, Math.min(rLip, rTight), tuck) - rib
     const fillet = Math.max(0, (t - 0.8) / 0.2)
     const rMaxArch = (front ? s.rCut - 0.0055 : Math.min(s.rCut - 0.0055, 0.4255)) + backOffset
     const rClamped = Math.min(rMaxArch, rCore - 0.014 * fillet * fillet + backOffset)
     const x = xStart + (xInner - backOffset - xStart) * t
     const rearCutShelf = !front && s.theta < 0.85 ? bumper + 0.006 : yFloor
-    const yMin = Math.max(rearCutShelf, yFloor, s.p[1] + 0.001 * (1 - t))
+    const yMin = Math.max(rearCutShelf, yFloor)
     const y = Math.max(yMin, yc + sy * rClamped)
     const z = zc + cz * rClamped
     return [x, y, z]
@@ -351,7 +393,7 @@ export function archLinerParts(
   const innerArchEdge = samples.map((_, i) => innerDrumRows[i][drumCols - 1])
   const bulkheadPts: V3[] = front
     ? [...innerArchEdge]
-    : [[xInner, 0.18, zc - 0.335], ...innerArchEdge]
+    : [[xInner, 0.142, zc - 0.345], ...innerArchEdge]
   const backBulkheadPts: V3[] = bulkheadPts.map(([x, y, z]): V3 => [x - wallThick, y, z])
   const bulkheadInner = buildPolygonCap(bulkheadPts, [1, 0, 0])
   const bulkheadOuter = buildPolygonCap(backBulkheadPts, [-1, 0, 0])
@@ -380,27 +422,105 @@ function mixRadius(a: number, b: number, t: number): number {
 
 export function buildLiners(sprung: THREE.Group, main: Surface, m: LinerMaterials, full: boolean): void {
   const tag = <M extends THREE.Material>(material: M, wetness: WetnessKind): M => (m.tag ? (m.tag(material, wetness) as M) : material)
+  const lodTag = full ? 'full' : 'blockout'
   const archLipMat = tag(
     new THREE.MeshPhysicalMaterial({
-      color: full ? 0x15181e : 0x3b3f46,
-      metalness: 0.14,
-      roughness: full ? 0.22 : 0.34,
-      clearcoat: full ? 0.76 : 0.32,
-      clearcoatRoughness: 0.1,
-      specularIntensity: 0.9,
-      envMapIntensity: 1.35,
+      color: full ? 0x131720 : 0x3b3f46,
+      metalness: 0.18,
+      roughness: full ? 0.18 : 0.34,
+      clearcoat: full ? 0.92 : 0.32,
+      clearcoatRoughness: 0.054,
+      specularIntensity: 1.0,
+      envMapIntensity: 1.48,
     }),
     'sheet',
   )
+  patchEmitterGlintSheen(archLipMat, `liner arch lip emitter glint ${lodTag}`, {
+    baseCurv: 0.045,
+    coatCurv: 0.038,
+    coatF0: waterF0 + 0.024,
+    gain: 2.25,
+  })
+
   const linerMat = tag(
     new THREE.MeshPhysicalMaterial({
-      color: full ? 0x14161a : 0x2a2d33,
-      metalness: 0.04,
-      roughness: 0.84,
-      specularIntensity: 0.28,
+      color: full ? 0x171b23 : 0x2a2d33,
+      metalness: 0.08,
+      roughness: full ? 0.31 : 0.62,
+      clearcoat: full ? 0.88 : 0.28,
+      clearcoatRoughness: 0.076,
+      specularIntensity: 0.96,
+      envMapIntensity: 1.46,
     }),
-    'none',
+    'sheet',
   )
+  const linerId = `wheelhouse liner molded wet finish ${lodTag}`
+  const linerSeed = stream(linerId).range(0.1, 21)
+  patchMaterial(linerMat, {
+    id: linerId,
+    uniforms: {
+      wlSeed: { value: linerSeed },
+      wlDetail: { value: full ? 1 : 0 },
+    },
+    apply(shader) {
+      shader.vertexShader =
+        'varying vec3 wheelLinerPt;\n' +
+        shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nwheelLinerPt = position;')
+      shader.fragmentShader =
+        `varying vec3 wheelLinerPt;
+        uniform float wlSeed;
+        uniform float wlDetail;
+        float wlHash(vec3 p) {
+          p = fract(p * vec3(0.1031, 0.0973, 0.1099));
+          p += dot(p, p.yzx + wlSeed + 19.19);
+          return fract((p.x + p.y) * p.z);
+        }
+      ` +
+        shader.fragmentShader
+          .replace(
+            '#include <color_fragment>',
+            `#include <color_fragment>
+            vec3 wlSym = vec3(abs(wheelLinerPt.x), wheelLinerPt.y, wheelLinerPt.z);
+            float wlFoot = length(fwidth(wlSym));
+            float wlLouverFade = wlDetail * (1.0 - smoothstep(0.004, 0.014, wlFoot));
+            float wlLouver = sin(wlSym.y * 165.0 + wlSym.z * 28.0) * wlLouverFade;
+            float wlSpray = 1.0 - smoothstep(0.22, 0.72, wlSym.y);
+            float wlGrain = wlHash(floor(wlSym * 780.0)) - 0.5;
+            float wlGrainW = wlDetail * (1.0 - smoothstep(0.0004, 0.0014, wlFoot));
+            diffuseColor.rgb *= (1.0 + 0.14 * wlLouver + 0.08 * wlGrain * wlGrainW) * mix(1.0, 0.88, wlSpray);
+          `,
+          )
+          .replace(
+            '#include <roughnessmap_fragment>',
+            `#include <roughnessmap_fragment>
+            roughnessFactor = clamp(roughnessFactor - 0.12 * wlSpray - 0.04 * wlLouver, 0.15, 0.68);
+          `,
+          )
+          .replace(
+            '#include <normal_fragment_maps>',
+            `#include <normal_fragment_maps>
+            float wlReliefH = 0.0016 * wlLouver;
+            vec3 wlDx = dFdx(vViewPosition), wlDy = dFdy(vViewPosition);
+            vec3 wlR1 = cross(wlDy, normal), wlR2 = cross(normal, wlDx);
+            float wlDet = dot(wlDx, wlR1);
+            vec3 wlGrad = (dFdx(wlReliefH) * wlR1 + dFdy(wlReliefH) * wlR2) * sign(wlDet);
+            normal = normalize(max(abs(wlDet), 1e-9) * normal - wlGrad);
+          `,
+          )
+          .replace(
+            '#include <clearcoat_normal_fragment_maps>',
+            `#include <clearcoat_normal_fragment_maps>
+            clearcoatNormal = normalize(max(abs(wlDet), 1e-9) * clearcoatNormal - 0.75 * wlGrad);
+          `,
+          )
+    },
+  })
+  patchEmitterGlintSheen(linerMat, `liner tub emitter glint ${lodTag}`, {
+    baseCurv: 0.14,
+    coatCurv: 0.095,
+    coatF0: waterF0 + 0.024,
+    gain: 2.15,
+  })
 
   const addPair = (g: THREE.BufferGeometry, mat: THREE.Material, baseName: string): void => {
     for (const [idx, geom] of [g, mirrorGeometry(g)].entries()) {

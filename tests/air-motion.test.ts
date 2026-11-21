@@ -37,8 +37,8 @@ describe('air rain motion', () => {
     const body = new THREE.Vector3(2, 0, -1)
     const view = new RibbonView()
     const meshes = rainMeshes(view, world, light, body)
-    expect(meshes.map((mesh) => mesh.name)).toEqual(['rain-near', 'rain-close', 'rain-middle', 'rain-distance', 'rain-beam', 'rain-paint', 'rain-beam-grain'])
-    const [near, close, mid, far, beam, paint, hero] = meshes.map((mesh) => mesh.geometry)
+    expect(meshes.map((mesh) => mesh.name)).toEqual(['rain-near', 'rain-close', 'rain-middle', 'rain-distance', 'rain-beam', 'rain-paint', 'rain-beam-grain', 'rain-media-grain'])
+    const [near, close, mid, far, beam, paint, hero, media] = meshes.map((mesh) => mesh.geometry)
     const dropCount = (geometry: THREE.BufferGeometry): number =>
       geometry.getAttribute('aDrop').count / (geometry instanceof THREE.InstancedBufferGeometry ? 1 : 4)
     expect(dropCount(close)).toBeGreaterThan(dropCount(near) * 2)
@@ -50,14 +50,14 @@ describe('air rain motion', () => {
       const { array } = geometry.getAttribute(name)
       return Buffer.from(array.buffer, array.byteOffset, array.byteLength)
     }
-    for (const [index, field] of [[0, near], [1, close], [3, far], [4, beam], [5, paint], [6, hero]] as const) {
+    for (const [index, field] of [[0, near], [1, close], [3, far], [4, beam], [5, paint], [6, hero], [7, media]] as const) {
       for (const name of ['aDrop', 'aMotion']) expect(bytes(resized[index], name).equals(bytes(field, name))).toBe(true)
     }
     const center = (mesh: THREE.Mesh): THREE.Vector3 =>
       (mesh.material as THREE.ShaderMaterial).uniforms.uVolumeCenter.value as THREE.Vector3
     expect(center(meshes[4]).toArray()).toEqual([2, 3.2 * 0.48, -1])
     expect(center(shifted[4]).toArray()).toEqual([-2, 3.2 * 0.48, 3])
-    for (const field of [near, close, mid, far, beam, paint, hero]) {
+    for (const field of [near, close, mid, far, beam, paint, hero, media]) {
       const drops = field.getAttribute('aDrop')
       const motion = field.getAttribute('aMotion')
       let fine = 0
@@ -76,8 +76,11 @@ describe('air rain motion', () => {
     }
     expect(meshes[5].layers.isEnabled(layers.cameraOnly)).toBe(true)
     expect(meshes[5].layers.isEnabled(layers.scene)).toBe(false)
-    expect(meshes[6].layers.isEnabled(layers.cameraOnly)).toBe(true)
-    expect(meshes[6].layers.isEnabled(layers.scene)).toBe(false)
+    const heroFields = meshes.slice(6)
+    for (const mesh of heroFields) {
+      expect(mesh.layers.isEnabled(layers.cameraOnly)).toBe(true)
+      expect(mesh.layers.isEnabled(layers.scene)).toBe(false)
+    }
     const paintGeometry = paint as THREE.InstancedBufferGeometry
     const expose = (timeSeconds: number, format = config.formats.master) => {
       const frameIndex = Math.round(timeSeconds * config.film.fps)
@@ -90,15 +93,15 @@ describe('air rain motion', () => {
       return paintGeometry.instanceCount
     }
     expect(expose(config.film.heroFrameSeconds)).toBe(0)
-    expect(meshes[6].visible).toBe(true)
+    expect(heroFields.every(mesh => mesh.visible)).toBe(true)
     expect(expose(config.film.macroFrameSeconds)).toBe(dropCount(paint))
-    expect(meshes[6].visible).toBe(false)
+    expect(heroFields.some(mesh => mesh.visible)).toBe(false)
     expect(expose(config.film.macroFrameSeconds, config.formats.vertical)).toBe(dropCount(paint))
     const paintBeat = config.beats.find(beat => beat.id === 'paint')!
     expect(expose(paintBeat.end)).toBe(0)
-    expect(meshes[6].visible).toBe(false)
+    expect(heroFields.some(mesh => mesh.visible)).toBe(false)
     expect(expose(config.film.durationSeconds)).toBe(0)
-    expect(meshes[6].visible).toBe(true)
+    expect(heroFields.every(mesh => mesh.visible)).toBe(true)
   })
 
   it('finds the highest available wet, upward face in transformed world space', () => {

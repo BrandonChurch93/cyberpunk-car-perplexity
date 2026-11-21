@@ -747,6 +747,8 @@ float surfGlint = 0.0;
             carry *= 0.04 + 0.96 * pow(1.0 - min(-on, 1.0), 5.0);
           }
           float lensRough = max(0.12, mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, R)));
+          // Across the disk the exit ray sweeps about half the sky, some 1.6 radians, so one pixel holds 1.6 pix / R of it.
+          lensRough = max(lensRough, sqrt(min(0.8 * pix / R, 1.0)));
           surfLensOpen = shaded * smoothstep(0.0, 0.08, 1.0 - surfHit.r);
           vec3 oW = surfToWorld(o);
           // The cube holds the signs blurred; where one sits inside the exit cone its sharp face replaces it.

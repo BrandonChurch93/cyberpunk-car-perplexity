@@ -72,7 +72,7 @@ const bayLine = v(0.234, 0.511, 0.827).normalize()
 
 function bay(t: number, a: Anchors, focalMm: number, reach: number): Shot {
   const p = glide(t, detail.start, detail.end, 1.5, 1.2)
-  const target = a.detail.position.clone().add(v(0, 0, mix(0.05, -0.05, p)))
+  const target = a.detail.position.clone().add(v(0, 0, mix(0.055, -0.015, p)))
   return {
     position: target.clone().addScaledVector(bayLine, reach),
     target,
@@ -95,7 +95,7 @@ function shoulder(t: number, focalMm: number): Shot {
     target,
     focalMm,
     focus: target,
-    tStop: 4,
+    tStop: 11,
     operator: 'macro',
     near: 0.02,
   }

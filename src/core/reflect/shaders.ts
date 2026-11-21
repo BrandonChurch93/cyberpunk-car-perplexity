@@ -18,8 +18,6 @@ export interface PlanarUniforms {
   reflectSeed: { value: number }
   reflectOn: { value: number }
   reflectEmitters: { value: THREE.Vector4[] }
-  reflectEmitterBounds: { value: THREE.Vector4[] }
-  reflectEmitterPeaks: { value: number[] }
 }
 
 const worldVarying = 'varying vec3 vReflectWorld;'
@@ -110,8 +108,6 @@ uniform float reflectSeed;
 uniform float reflectOn;
 #if REFLECT_EMITTERS > 0
   uniform vec4 reflectEmitters[REFLECT_EMITTERS];
-  uniform vec4 reflectEmitterBounds[REFLECT_EMITTERS];
-  uniform float reflectEmitterPeaks[REFLECT_EMITTERS];
 #endif
 
 vec2 reflectUv( vec3 x ) {
@@ -137,10 +133,6 @@ vec3 planarRay( vec3 v, vec3 normal ) {
   vec3 r = reflect( - v, normal );
   r.y = abs( r.y );
   return r;
-}
-
-float planarLuma( vec3 c ) {
-  return dot( c, vec3( 0.2126, 0.7152, 0.0722 ) );
 }
 
 float planarDistance( vec3 p, vec2 uv ) {
@@ -178,17 +170,6 @@ vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
   float lod = clamp( log2( max( minor * REFLECT_FILTER, 1.0 ) ), 0.0, reflectLodMax );
   float filmBlend = smoothstep( REFLECT_FILM_START, REFLECT_FILM_END, roughness );
   float mipBlend = smoothstep( REFLECT_MIP_START, REFLECT_MIP_END, roughness );
-  vec2 centerEdge = min( uvCenter, 1.0 - uvCenter );
-  float fireflyBlend = smoothstep( REFLECT_FIREFLY_START, REFLECT_FIREFLY_END, roughness )
-    * smoothstep( 0.0, 0.02, min( centerEdge.x, centerEdge.y ) );
-  float tapLimit = REFLECT_FIREFLY_FLOOR;
-  if ( fireflyBlend > 0.0 ) {
-    vec2 uvLong = reflectUv( p + planarRay( v, normalize( n + a * b ) ) * dist );
-    float major = length( ( uvLong - uvCenter ) * reflectSize );
-    float refLod = clamp( log2( max( max( minor, major ) * REFLECT_FILTER, 1.0 ) ), 0.0, reflectLodMax );
-    vec3 center = textureLod( reflectMap, uvCenter, refLod ).rgb;
-    tapLimit += REFLECT_FIREFLY_RATIO * max( 0.0, planarLuma( center ) );
-  }
   vec2 jitter = filmBlend < 1.0 ? vec2( reflectHash( gl_FragCoord.xy ), reflectHash( gl_FragCoord.yx + 71.0 ) ) : vec2( 0.0 );
   vec3 sum = vec3( 0.0 );
   float count = 0.0;
@@ -227,18 +208,6 @@ vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
     float inside = smoothstep( 0.0, 0.02, min( edge.x, edge.y ) );
     vec3 env = inside < 1.0 ? reflectEnvironment( r, roughness * 0.5 ) : vec3( 0.0 );
     vec3 mirror = inside > 0.0 ? textureLod( reflectMap, clamp( uv, 0.0, 1.0 ), mipBlend * clamp( max( lod, log2( max( spread, 1.0 ) ) ), 0.0, reflectLodMax ) ).rgb : vec3( 0.0 );
-    float luma = planarLuma( mirror );
-    float ceiling = tapLimit;
-    #if REFLECT_EMITTERS > 0
-      if ( fireflyBlend > 0.0 && luma > ceiling ) {
-        for ( int j = 0; j < REFLECT_EMITTERS; j ++ ) {
-          vec4 bounds = reflectEmitterBounds[j];
-          if ( all( greaterThanEqual( uv, bounds.xy ) ) && all( lessThanEqual( uv, bounds.zw ) ) ) ceiling = max( ceiling, reflectEmitterPeaks[j] );
-        }
-      }
-    #endif
-    float excess = max( luma - ceiling, 0.0 ) / max( REFLECT_FIREFLY_FLOOR, luma );
-    mirror *= 1.0 - fireflyBlend * excess;
     sum += weight * mix( env, mirror, inside );
     count += weight;
   }
@@ -311,10 +280,6 @@ export interface PlanarTuning {
   filmEnd: number
   mipStart: number
   mipEnd: number
-  fireflyStart: number
-  fireflyEnd: number
-  fireflyRatio: number
-  fireflyFloor: number
 }
 
 /** Replaces the specular environment term of the deck with the planar reflection. Must follow `boxPatch` on the same material. */
@@ -335,10 +300,6 @@ export function planarPatch(uniforms: PlanarUniforms, tuning: PlanarTuning, deck
       REFLECT_FILM_END: f(tuning.filmEnd),
       REFLECT_MIP_START: f(tuning.mipStart),
       REFLECT_MIP_END: f(tuning.mipEnd),
-      REFLECT_FIREFLY_START: f(tuning.fireflyStart),
-      REFLECT_FIREFLY_END: f(tuning.fireflyEnd),
-      REFLECT_FIREFLY_RATIO: f(tuning.fireflyRatio),
-      REFLECT_FIREFLY_FLOOR: f(tuning.fireflyFloor),
       ...(deckDetail ? { REFLECT_DECK_DETAIL: 1 } : {}),
     },
     apply(shader) {

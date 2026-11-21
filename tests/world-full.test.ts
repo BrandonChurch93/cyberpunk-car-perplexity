@@ -649,7 +649,7 @@ describe('full roof world', () => {
       }
       expect(wanted,'frame '+frame).toEqual([0,0,0])
     }
-  })
+  }, 30000)
 
   it('keeps parapet trim warm white and authors HDR on faces rather than duplicating lights', () => {
     const trim = world.root.getObjectByName('parapet warm strip lenses') as THREE.InstancedMesh

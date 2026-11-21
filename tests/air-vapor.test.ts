@@ -12,6 +12,7 @@ it('emits two deterministic exhaust banks in the transformed anchor frame', () =
   root.position.set(2, 4, 7)
   root.rotation.y = Math.PI / 2
   const exhaust = { position: new THREE.Vector3(0.15, 0.8, -2), normal: new THREE.Vector3(0, 0, -1), radius: 0.3 }
+  const lamp = { position: new THREE.Vector3(0.9, 0.55, 1.8), normal: new THREE.Vector3(0, 0, 1), radius: 0.05 }
   const unrelatedHeat = new THREE.Object3D()
   unrelatedHeat.position.set(0.7, 0.3, 1)
   root.add(unrelatedHeat)
@@ -22,7 +23,7 @@ it('emits two deterministic exhaust banks in the transformed anchor frame', () =
   const liveTail = { object: tail, stage: 0, beam: false, color: new THREE.Color(1, 0.02, 0.01), intensity: 2, level: 0.25 }
   const vehicle = {
     root,
-    anchors: { paint: exhaust, wheel: exhaust, lamp: exhaust, detail: exhaust, exhaust },
+    anchors: { paint: exhaust, wheel: exhaust, lamp, detail: exhaust, exhaust },
     heatSources: [{ object: unrelatedHeat, strength: 100 }],
     lamps: [liveTail, { ...liveTail, object: unrelatedHeat }],
   }
@@ -45,6 +46,7 @@ it('emits two deterministic exhaust banks in the transformed anchor frame', () =
   let axes: number[][] = []
   let shimmer = 0
   let tailFlux: number[][] = []
+  let nosePlane: number[] = []
   const renderer = {
     setRenderTarget() {},
     render(mesh: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>) {
@@ -53,6 +55,7 @@ it('emits two deterministic exhaust banks in the transformed anchor frame', () =
       sources = read(u.uSources.value)
       axes = read(u.uAxes.value)
       shimmer = u.uHot?.value ?? 0
+      if (u.uNosePlane) nosePlane = u.uNosePlane.value.toArray()
       if (u.uTailCount) tailFlux = u.uTailFlux.value.slice(0, u.uTailCount.value).map((v: THREE.Vector3) => v.toArray())
     },
   } as unknown as THREE.WebGLRenderer
@@ -69,6 +72,10 @@ it('emits two deterministic exhaust banks in the transformed anchor frame', () =
     return { sources, axes, shimmer, tailFlux }
   }
   expect(draw(events.engineStart - 0.1)).toEqual({ sources: [[9, 2, 3, 1]], axes: [[0, 1, 0, 1]], shimmer: 0, tailFlux: [] })
+  expect(nosePlane[0]).toBeCloseTo(1, 12)
+  expect(nosePlane[1]).toBe(0)
+  expect(nosePlane[2]).toBeCloseTo(0, 12)
+  expect(nosePlane[3]).toBeCloseTo(3.8, 12)
   const firstCatch = draw(events.engineStart + 2 / config.film.fps)
   expect(firstCatch.sources).toHaveLength(3)
   expect(firstCatch.sources.slice(0, 2).every((source) => source[3] > 0.8)).toBe(true)
@@ -93,4 +100,5 @@ it('emits two deterministic exhaust banks in the transformed anchor frame', () =
     expect(new THREE.Vector3(...moved.sources[i].slice(0, 3)).distanceTo(new THREE.Vector3(...banks[i]))).toBeCloseTo(0.027, 12)
   }
   expect(moved.axes).toEqual(running.axes)
+  expect(nosePlane[3]).toBeCloseTo(3.8, 12)
 })
