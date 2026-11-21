@@ -56,7 +56,7 @@ export const atmosphere = {
   projectorCoreSpan: [0.12, 0.28, 1.40, 2.85],
   projectorCoreClearance: [0.045, 0.24],
   projectorCoreAnisotropy: 0.45,
-  projectorCoreScatter: 0.92,
+  projectorCoreScatter: 1.45,
   projectorOffAxisLoss: 0.32,
   projectorOpeningFraction: 0.17,
   projectorOpeningAngle: [0.58, 0.86],
