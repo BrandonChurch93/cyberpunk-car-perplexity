@@ -146,6 +146,7 @@ flat out float vMist;
 flat out vec3 vBeamTrace;
 flat out vec2 vGlint;
 flat out float vSkyKeep;
+flat out vec4 vDropFlashes;
 
 ${scatter}
 
@@ -242,16 +243,33 @@ void main() {
   vec3 flash;
   float paint = uPaint;
   if (paint > 1.5 && depth > uFocus * 1.4) paint = 0.0;
+  bool strata = uFilmView > 0.5 && uLayer >= 0.0 && uLocalFine < 0.5 && uHero < 2.5;
+  float depthGain = strata && paint < 0.5 ? 1.0 - smoothstep(13.5, 27.0, depth) : 1.0;
+  if (depthGain <= 0.0) return;
   vec3 trace;
   vec3 radiance = scatterRain(p, delta, normalize(eye - p), mist, uLayer, uLocalFine > 0.5, paint, uHero, uSkyDepthEnabled, flash, trace, vSkyKeep);
   if (all(equal(radiance + flash, vec3(0.0)))) return;
-  float gain = uLayer < 0.0 ? (mist ? 1.0 : 0.64) : uGain;
+  float gain = uLayer < 0.0 ? (mist ? 1.0 : 0.64) : uGain * depthGain;
   float paintDefocus = smoothstep(0.10, 0.34, abs(depth / uFocus - 1.0));
   if (paint > 0.5 && paint < 1.5) gain *= mix(2.9, 0.21, paintDefocus);
   float coverage = min(1.0, diameter * 0.39894228 / sigmaSide) * min(1.0, max(len, diameter) / (1.35 * sigmaEnd));
   float longSide = max(uViewport.x, uViewport.y);
   float frameTravel = len / longSide;
   vGlint = vec2(-1.0, 1.0);
+  vDropFlashes = vec4(0.0);
+  if (strata) {
+    vec2 focusCoc = uFocusAperture * abs(1.0 - depth / uFocus) * pixelFocal / depth;
+    float opticalWidth = length(normal * focusCoc) / longSide;
+    float diffuse = smoothstep(0.00085, 0.0026, opticalWidth);
+    float rare = smoothstep(0.91, 0.995, aMotion.w);
+    if (uLayer < 0.5 && paint < 0.5) gain *= mix(1.0, 0.30 + 1.85 * rare, diffuse);
+    float resolution = smoothstep(3.2, 6.5, len) * (1.0 - diffuse);
+    float phase = 6.28318530718 * (uPhase * floor(43.0 * uDuration * pow(0.001 / aDrop.w, 1.5) + 0.5) + aMotion.w);
+    float first = 0.22 + 0.14 * sin(phase);
+    float second = 0.70 + 0.17 * sin(phase + 2.5 + aMotion.w * 2.2);
+    float span = sqrt(sigmaEnd * sigmaEnd + (0.075 + 0.045 * aMotion.w) * (0.075 + 0.045 * aMotion.w) * len * len);
+    vDropFlashes = vec4(resolution, first * len, second * len, span);
+  }
   if (uHero > 0.5 && uLayer >= 0.0) {
     vec2 focusCoc = uFocusAperture * abs(1.0 - depth / uFocus) * pixelFocal / depth;
     float opticalWidth = length(vec2(length(normal * focusCoc), physical)) * 0.5 / longSide;
@@ -308,6 +326,7 @@ flat in float vMist;
 flat in vec3 vBeamTrace;
 flat in vec2 vGlint;
 flat in float vSkyKeep;
+flat in vec4 vDropFlashes;
 out vec4 outColor;
 
 void main() {
@@ -331,6 +350,11 @@ void main() {
   if (vGlint.x >= 0.0) {
     float glint = (x - vGlint.x) / vGlint.y;
     beamTrace *= mix(0.095, 1.0, exp(-0.5 * glint * glint));
+  }
+  if (vDropFlashes.x > 0.0) {
+    vec2 glints = (x - vDropFlashes.yz) / vDropFlashes.w;
+    vec2 highlights = exp(-0.5 * glints * glints);
+    beamTrace *= mix(1.0, 0.40 + dot(highlights, vec2(1.18, 1.42)), vDropFlashes.x);
   }
   if (uSkyDepthEnabled && texelFetch(uSkyDepth, ivec2(gl_FragCoord.xy), 0).r >= 1.0) {
     beamTrace *= mix(0.04, 1.0, vSkyKeep);
