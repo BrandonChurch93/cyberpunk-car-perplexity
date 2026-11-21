@@ -97,7 +97,7 @@ describe('full roof world', () => {
       for (const other of footprints) expect(box.intersectsBox(other.box),shell.name+' / '+other.id).toBe(false)
       footprints.push({ id: shell.name, box })
     }
-    expect(footprints).toHaveLength(30)
+    expect(footprints).toHaveLength(42)
   })
 
   it('builds real-meter facade grids with distinct families and uses practical mesh donors in the cube', () => {
@@ -242,11 +242,26 @@ describe('full roof world', () => {
       expect(caster.intersectObject(world.root,true)[0]?.object,fixture.name).toBe(face)
       return ray.normalize()
     }
-    for (let i=1;i<=3;i++) {
-      const ray = visible(required('upper magenta violet screen '+i),'animated magenta violet tiles')
-      expect(ray.y).toBeGreaterThan(.40)
-      expect(ray.z).toBeLessThan(0)
+    const media = required('upper reflection accents')
+    const apertures = media.children.filter(o=>o instanceof THREE.Group)
+    expect(apertures).toHaveLength(9)
+    let mediaArea = 0
+    for (const fixture of apertures) {
+      const aperture = fixture.name.includes('blade') ? 'diffusing cabinet face' : 'sealed opal aperture'
+      const ray = visible(fixture,aperture)
+      const azimuth = THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))
+      expect(azimuth).toBeGreaterThan(-159)
+      expect(azimuth).toBeLessThan(-149)
+      expect(ray.y).toBeGreaterThan(.57)
+      expect(ray.y).toBeLessThan(.76)
+      const face = fixture.getObjectByName(aperture) as THREE.Mesh<THREE.PlaneGeometry>
+      const { width,height } = face.geometry.parameters
+      const area = width*height
+      expect(area).toBeLessThan(65)
+      mediaArea += area
     }
+    expect(mediaArea).toBeLessThan(350)
+    expect(riser.getObjectByName('animated magenta violet tiles')).toBeUndefined()
     const bridge = required('screen tower upper service skybridge')
     const bridgeEmitters = bridge.children.filter(o => o.name === 'high bridge window bay' || o.name === 'high bridge service sign')
     expect(bridgeEmitters).toHaveLength(7)
@@ -272,7 +287,7 @@ describe('full roof world', () => {
     const macro = visible(required('northwest animated LED wall'),'animated magenta violet tiles')
     expect(THREE.MathUtils.radToDeg(Math.atan2(macro.x,macro.z))).toBeCloseTo(-49,0)
     expect(visible(required('recessed amber service sign'),'diffusing cabinet face').z).toBeLessThan(0)
-    const tiles = riser.getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+    const tiles = required('northwest animated LED wall').getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
     const getFlow = (timeSeconds: number) => {
       world.beginFrame({ frame: { timeSeconds } } as FrameContext)
       return (tiles.material.uniforms.flow.value as THREE.Vector2).clone()
@@ -515,12 +530,11 @@ describe('full roof world', () => {
     for (const x of [-.50, -.40, -.32, -.24, -.16]) {
       expect(skyRay(x,.92).intersectObject(world.root, true)[0]?.object.name).toBe('city-lit cloud base')
     }
-    expect(skyRay(-.16,.75).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
     const centerTowers = [
       [.291,.175,'hero middle west distance',650,720],
-      [.327,.200,'far west narrow crown',980,1_025],
+      [.327,.200,'c9 center kiln tower',680,730],
       [.363,.150,'hero far west distance',790,830],
-      [.402,.200,'far inner west glass crown',965,1_015],
+      [.402,.200,'c9 center fluted offices',805,850],
       [.440,.175,'hero far center distance',845,900],
       [.478,.120,'hero violet tower',630,690],
     ] as const
@@ -531,8 +545,16 @@ describe('full roof world', () => {
       expect(hit?.distance).toBeLessThan(far)
       expect(patchesOf((hit?.object as THREE.Mesh).material as THREE.Material)).toContain('hero tower cladding and window rooms')
     }
-    expect(skyRay(.402*2-1,1-.175*2).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
-    expect(skyRay(.421*2-1,1-.175*2).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
+    for (const [u,v] of [[.390,.105],[.425,.095],[.456,.095]]) {
+      expect(skyRay(2*u-1,1-2*v).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
+    }
+    for (const name of ['small cyan center lift sign','thin magenta tenant mast','amber clock floor slot',
+      'small cyan mechanical floor datum','east violet vertical sauna blade','east amber upper office cabinet']) {
+      const ndc = toScreen(position(name))
+      expect(Math.abs(ndc.x)).toBeLessThan(1)
+      expect(Math.abs(ndc.y)).toBeLessThan(1)
+      expect(skyRay(ndc.x,ndc.y).intersectObject(world.root,true)[0]?.object.parent?.name).toBe(name)
+    }
     cameraAtTime(vertical, heroFrameSeconds)
     const tallScreen = toScreen(position(billboard))
     expect(Math.abs(tallScreen.x)).toBeLessThan(.7)
