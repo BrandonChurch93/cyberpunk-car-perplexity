@@ -66,12 +66,13 @@ void runTool(async () => {
   const frames = (a.frames ?? '195,360').split(',').map(Number)
   const warm = Number(a.warm ?? 1)
   const plain = Number(a.plain ?? 1)
+  const diag = a.diag ?? 'beauty'
   const session = await RenderSession.open({ budgetMinutes: 0 })
   const steps: Step[] = []
   let open = true
   try {
     const t0 = Date.now()
-    const page = await session.freshPage(format, 'beauty', paintById(a.paint ?? defaultPaint).id, 'full')
+    const page = await session.freshPage(format, diag, paintById(a.paint ?? defaultPaint).id, 'full')
     if (a.width) await shrinkPage(page, format, Number(a.width))
     steps.push({ step: 'page load', frame: -1, wallMs: Date.now() - t0, dump: null })
     await page.evaluate('globalThis.__name = (f) => f')
@@ -103,7 +104,7 @@ void runTool(async () => {
     const info = await page.evaluate(() => window.showcase!.info())
     const programs = (await page.evaluate(() => (window as unknown as { __profile: { dump(sources: boolean): Promise<ProfileDump> } }).__profile.dump(true))).programs
     const dir = ensureDir(join(workDir, 'profile'))
-    const out = join(dir, `profile-${format.id}${a.width ? `-w${a.width}` : ''}-${tier}-${frames.join('-')}.json`)
+    const out = join(dir, `profile-${format.id}${a.width ? `-w${a.width}` : ''}${diag === 'beauty' ? '' : `-${diag}`}-${tier}-${frames.join('-')}.json`)
     writeJson(out, { buildHash: session.buildHash, format: format.id, tier, frames, info, steps })
     console.log(out)
     open = false

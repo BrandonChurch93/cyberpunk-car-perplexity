@@ -72,7 +72,8 @@ void runTool(async () => {
       console.log(`${plan.jobs.length} stills, build ${plan.buildHash}`)
       return 0
     }
-    const mine = shardJobs(plan.jobs, a.shard)
+    const pageKey = (j: { format: string; diag: string }): string => `${j.format}|${j.diag}`
+    const mine = shardJobs(plan.jobs, a.shard).sort((x, y) => pageKey(x).localeCompare(pageKey(y)) || x.frame - y.frame)
     console.log(`shard ${a.shard}: ${mine.length} of ${plan.jobs.length} stills at ${tier}, ${paint}, ${detail}, build ${plan.buildHash}`)
     for (const job of mine) {
       const { file, record, reused } = await session.still(jobSpec(job, plan))
