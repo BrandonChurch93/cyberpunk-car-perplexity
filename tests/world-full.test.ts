@@ -13,7 +13,7 @@ import { createWorld } from '../src/world'
 import { heroDrain } from '../src/world/deck'
 import { billboardState } from '../src/world/fixtures'
 import { approvedHeroSourceSurvey, heroScreenMount } from '../src/world/hero-layout'
-import { muralLuma, muralMean, muralPainting } from '../src/world/mural-picture'
+import { muralLuma, muralMean, muralPainting, muralRise } from '../src/world/mural-picture'
 import { heroLayoutEye, heroPoint, heroScale } from '../src/world/hero-scale'
 import { heroCityYaw, streetY } from '../src/world/forms'
 import { deckHeight } from '../src/world/roof-look'
@@ -1147,7 +1147,7 @@ describe('full roof world', () => {
       const { data, width, height } = muralPainting(wall).image
       if (!(data instanceof Uint16Array)) throw new Error('Missing half float mural raster')
       const sample = (u: number, v: number) => {
-        const i = (Math.floor(v*height)*width+Math.floor(u*width))*4
+        const i = (Math.floor(v*Math.min(width,height))*width+Math.floor(u*width))*4
         const f = THREE.DataUtils.fromHalfFloat
         return new THREE.Color(f(data[i]),f(data[i+1]),f(data[i+2]))
       }
@@ -1261,9 +1261,11 @@ describe('full roof world', () => {
     const wall = world.root.getObjectByName(billboard)!
     const face = wall.getObjectByName('animated magenta violet mural') as THREE.Mesh<THREE.PlaneGeometry>
     const { width,height } = face.geometry.parameters
-    const left = toScreen(face.localToWorld(new THREE.Vector3(-width*.5,height*.5,0)))
-    const right = toScreen(face.localToWorld(new THREE.Vector3(width*.5,height*.5,0)))
+    const band = height*(1/muralRise-.5)
+    const left = toScreen(face.localToWorld(new THREE.Vector3(-width*.5,band,0)))
+    const right = toScreen(face.localToWorld(new THREE.Vector3(width*.5,band,0)))
     expect(left.y).toBeLessThan(1)
+    expect(toScreen(face.localToWorld(new THREE.Vector3(width*.5,height*.5,0))).y).toBeGreaterThan(1)
     expect(right.y-left.y).toBeGreaterThan(.02)
     const skyRay = (x: number, y: number) => new THREE.Raycaster(camera.position,
       new THREE.Vector3(x, y, .5).unproject(camera).sub(camera.position).normalize(), 0, camera.far+150)
