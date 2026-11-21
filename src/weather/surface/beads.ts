@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { config } from '../../config'
+import { withEmitters, waterF0 } from '../../core/emitters'
 import { filmLightsGlsl } from '../../core/lights'
 import { insertAfter, insertBefore, patchMaterial } from '../../materials/patch'
 import { surfaceCommonGlsl, surfaceVaryingsGlsl, surfaceVertexGlsl } from './glsl'
@@ -29,7 +30,7 @@ export interface BeadLayer {
 export const beadLayers: BeadLayer[] = [
   { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.55, steep: 0.35, lobes: 1, sparse: 0.6, dense: 1.3, hang: 0 },
   { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.72, steep: 0.45, lobes: 1, sparse: 0.3, dense: 1.25, hang: 0 },
-  { cellMm: 7.5, minMm: 1.5, maxMm: 3.6, flat: 0.85, steep: 0.3, lobes: 1, sparse: 0.5, dense: 1.8, hang: 0.4 },
+  { cellMm: 6.4, minMm: 1.5, maxMm: 3.1, flat: 0.85, steep: 0.3, lobes: 1, sparse: 0.55, dense: 1.9, hang: 0.4 },
   { cellMm: 36, minMm: 5, maxMm: 16, flat: 1.0, steep: 0.06, lobes: 2, sparse: 0.1, dense: 2.4, hang: 1.2 },
 ]
 
@@ -50,7 +51,7 @@ const coatFilm = [
 /** The sheet on glass creeps down the pane at this speed in meters per second, a whole number of wavelengths over the film. */
 const glassSheetSpeed = 0.06
 const glassCycles = (w: number) => Math.max(1, Math.round((glassSheetSpeed * config.film.durationSeconds) / w))
-const runTrack = { spacing: 0.03, ridge: 0.12, width: 0.004, length: 0.3, height: 0.0004 }
+const runTrack = { spacing: 0.03, width: 0.004, length: 0.3, height: 0.0004 }
 /** Footprints in meters over which the distant film takes over from the drops the macro lens resolves. */
 const coatFade = [0.0014, 0.0026]
 
@@ -302,24 +303,34 @@ vec3 surfCoatSlope(vec3 p, vec3 n, vec3 down, float slope, float pix, float cove
     s += sheet * ${amp.toFixed(3)} * filt * g.yz;
     surfCoatVar += sheet * sheet * ${(amp * amp * 0.4).toFixed(6)} * (1.0 - filt * filt);
   }`).join('\n  ')}
+  return b * s.x + a * s.y;
+}
+
+/** A rivulet is a cylinder of water down a lane: its ridge tilts the coat across the lane where the lens resolves it, and past that it is a glint line. */
+float surfRunVar = 0.0;
+vec3 surfRunSlope(vec3 p, vec3 n, vec3 down, float slope, float pix, uint salt) {
+  surfRunLine = 0.0;
+  surfRunVar = 0.0;
   float steep = smoothstep(0.15, 0.6, slope);
-  if (steep > 0.0) {
-    vec2 scale = vec2(${runTrack.spacing.toFixed(4)}, ${runTrack.length.toFixed(4)});
-    vec3 t = surfGradNoise(q / scale, 63, salt);
-    float live = smoothstep(0.45, 0.7, surfGradNoise(q / (scale * vec2(2.0, 1.5)), 64, salt).x);
-    float d = (t.x - 0.5) / ${runTrack.ridge.toFixed(3)};
-    vec2 grad = live * ${runTrack.height.toFixed(5)} * step(abs(d), 1.0) * (-2.0 * d / ${runTrack.ridge.toFixed(3)}) * t.yz / scale;
-    float filt = exp(-2.0 * pow(pix / ${runTrack.width.toFixed(4)}, 2.0));
-    s += steep * filt * grad;
-    // Past the lens a run is a thin cylinder across the pixel: it keeps its share of the pixel and sends out its own glint line.
-    float lane = q.x / ${runTrack.spacing.toFixed(4)} + 0.8 * surfGradNoise(vec2(0.0, q.y / ${(runTrack.length * 0.5).toFixed(4)}), 65, salt).x;
-    float laneId = floor(lane);
-    float across = abs(fract(lane) - 0.5) * ${runTrack.spacing.toFixed(4)};
-    float run = step(0.65, surfHash3(ivec3(int(laneId), 5, 0), salt).x) * smoothstep(0.4, 0.6, surfGradNoise(vec2(laneId * 1.7, q.y / ${runTrack.length.toFixed(4)}), 66, salt).x);
-    float band = max(surfPixA, ${runTrack.width.toFixed(4)});
-    surfRunLine = steep * run * (1.0 - filt) * min(${runTrack.width.toFixed(4)} / surfPixA, 1.0) * (1.0 - smoothstep(0.5 * band, band, across));
-    surfCoatVar += steep * steep * live * ${(((2 * runTrack.height) / runTrack.width) ** 2 * 0.5).toFixed(6)} * (1.0 - filt * filt);
-  }
+  if (steep <= 0.0) return vec3(0.0);
+  vec3 a = down;
+  vec3 b = normalize(cross(n, a));
+  vec2 q = vec2(dot(p, b), dot(p, a));
+  vec3 m = surfGradNoise(vec2(0.0, q.y / ${(runTrack.length * 0.5).toFixed(4)}), 65, salt);
+  vec3 w = surfGradNoise(vec2(0.0, q.y / ${(runTrack.length * 0.12).toFixed(4)}), 67, salt);
+  float lane = q.x / ${runTrack.spacing.toFixed(4)} + 0.8 * m.x + 0.2 * w.x;
+  vec2 gl = vec2(1.0 / ${runTrack.spacing.toFixed(4)}, 0.8 * m.z / ${(runTrack.length * 0.5).toFixed(4)} + 0.2 * w.z / ${(runTrack.length * 0.12).toFixed(4)});
+  float laneId = floor(lane);
+  float u = (fract(lane) - 0.5) / length(gl);
+  float run = steep * step(0.65, surfHash3(ivec3(int(laneId), 5, 0), salt).x) * smoothstep(0.4, 0.6, surfGradNoise(vec2(laneId * 1.7, q.y / ${runTrack.length.toFixed(4)}), 66, salt).x);
+  if (run <= 0.0) return vec3(0.0);
+  float rh = ${(runTrack.width / 2).toFixed(4)} * (0.6 + 0.8 * surfHash3(ivec3(int(laneId), 6, 0), salt).x);
+  float filt = exp(-2.0 * pow(pix / ${runTrack.width.toFixed(4)}, 2.0));
+  float inside = step(abs(u), rh);
+  vec2 s = run * filt * inside * (-2.0 * ${runTrack.height.toFixed(5)} * u / (rh * rh)) * gl / length(gl);
+  float band = max(surfPixA, ${runTrack.width.toFixed(4)});
+  surfRunLine = run * (1.0 - filt) * min(${runTrack.width.toFixed(4)} / surfPixA, 1.0) * (1.0 - smoothstep(0.5 * band, band, abs(u)));
+  surfRunVar = run * run * ${(((2 * runTrack.height) / runTrack.width) ** 2 * 0.5).toFixed(6)} * (1.0 - filt * filt) * (1.0 - smoothstep(0.5 * band, band, abs(u)));
   return b * s.x + a * s.y;
 }
 
@@ -497,7 +508,8 @@ float surfGlint = 0.0;
   float coatFar = smoothstep(${coatFade[0].toFixed(4)}, ${coatFade[1].toFixed(4)}, pix) * (1.0 - 0.7 * surfLane);
   vec3 coatTilt = coatFar > 0.0 ? toView * surfCoatSlope(p, n, down, slope, pix, surfCoverage(uv, axis, salt), salt) * coatFar : vec3(0.0);
   surfCoatVar *= coatFar * coatFar;
-  surfRunLine *= coatFar;
+  coatTilt += toView * surfRunSlope(p, n, down, slope, pix, salt);
+  surfCoatVar += surfRunVar;
   surfGlint += surfRunLine * ${(runTrack.width / 2).toFixed(4)} / (6.2831853 * pixA);
   #ifdef USE_CLEARCOAT
     clearcoatNormal = surfSafeNormalize(clearcoatNormal - coatTilt, clearcoatNormal);
@@ -544,7 +556,9 @@ float surfGlint = 0.0;
           }
           float lensRough = max(0.12, mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, R)));
           surfLensOpen = shaded * smoothstep(0.0, 0.08, 1.0 - surfHit.r);
-          totalEmissiveRadiance += surfLensOpen * carry * getIBLRadiance(o, o, lensRough);
+          vec3 oW = surfToWorld(o);
+          // The cube holds the signs blurred; where one sits inside the exit cone its sharp face replaces it.
+          totalEmissiveRadiance += surfLensOpen * carry * max(getIBLRadiance(o, o, lensRough), emitterGlintF0(surfWorldPos, oW, oW, lensRough, R, vec3(1.0)));
         }
       }
     }
@@ -560,6 +574,13 @@ float surfGlint = 0.0;
     #else
       normal = normalize(mix(normal, dropView, shaded));
     #endif
+    #ifdef USE_ENVMAP
+      vec3 vV = -normalize(vViewPosition);
+      float capRough = min(max(mix(0.26, 0.045, smoothstep(1.5 * pix, 9.0 * pix, surfHit.radius)), 0.045), 1.0);
+      float fw = ${waterF0} + ${(1 - waterF0).toFixed(2)} * pow(1.0 - clamp(dot(dropView, vV), 0.0, 1.0), 5.0);
+      vec3 sharp = emitterGlint(surfWorldPos, surfToWorld(dropView), surfToWorld(vV), capRough, surfHit.radius);
+      totalEmissiveRadiance += shaded * max(sharp - fw * getIBLRadiance(vV, dropView, capRough), vec3(0.0));
+    #endif
   }
   if (w > 0.0 && surfHit.radius > 0.0007) {
     vec3 nW = surfToWorld(toView * n);
@@ -570,6 +591,22 @@ float surfGlint = 0.0;
       vec3 e = filmLightAt(i, surfWorldPos, toLight);
       float facing = dot(nW, toLight);
       if (facing <= 0.0) continue;
+      vec3 tl = toLight - nW * facing;
+      vec3 rel = (vec4(toView * (-surfHit.offset), 0.0) * viewMatrix).xyz;
+      vec3 focus = -tl * surfHit.radius * 0.45;
+      float s = length(rel - focus) / (surfHit.radius * 0.32);
+      caustic += e * facing * exp(-s * s) * 2.2;
+    }
+    for (int i = 0; i < EMITTER_MAX; i++) {
+      if (i >= emitterCount) break;
+      vec3 face = cross(emitterAxisU[i].xyz, emitterAxisV[i].xyz);
+      vec3 toE = emitterCenter[i].xyz - surfWorldPos;
+      float d2 = max(dot(toE, toE), 1e-6);
+      vec3 toLight = toE * inversesqrt(d2);
+      float front = -dot(toLight, face);
+      float facing = dot(nW, toLight);
+      if (front <= 0.0 || facing <= 0.0) continue;
+      vec3 e = emitterRadiance[i].rgb * emitterCenter[i].w * min(4.0 * front / d2, 6.2831853);
       vec3 tl = toLight - nW * facing;
       vec3 rel = (vec4(toView * (-surfHit.offset), 0.0) * viewMatrix).xyz;
       vec3 focus = -tl * surfHit.radius * 0.45;
@@ -604,6 +641,10 @@ float surfGlint = 0.0;
       float open = mix(0.3, 1.0, smoothstep(-0.3, 0.1, dot(-vV, nV)));
       glint += ${sphereFresnel.toFixed(4)} * around + ${rimFresnel.toFixed(3)} * open * getIBLRadiance(vV, across, 0.35);
     #endif
+    // Per unit glint weight a bead returns E F for each sign; the mean Fresnel share is already in the cube terms above.
+    float eyeD = length(cameraPosition - surfWorldPos);
+    float unit = 2.0 * eyeD * emitterPixelAngle;
+    glint += max(emitterBead(surfWorldPos, nW, vW, unit, eyeD, emitterPixelAngle) - emitterBeadF0(surfWorldPos, nW, vW, unit, eyeD, emitterPixelAngle, vec3(${sphereFresnel.toFixed(4)}), -1.0), vec3(0.0));
     totalEmissiveRadiance += glint * surfGlint * (1.0 - surfLane);
   }
   #ifdef USE_ENVMAP
@@ -617,7 +658,7 @@ float surfGlint = 0.0;
     float sinRise = sin(min(rise, 1.5));
     vec3 dir = normalize(ahead * cos(min(rise, 1.5)) + nV * sinRise);
     float coat = 0.04 + 0.96 * pow(1.0 - sinRise, 5.0);
-    totalEmissiveRadiance += 0.9 * coat * surfLensW * (1.0 - surfLane) * getIBLRadiance(dir, dir, 0.45);
+    totalEmissiveRadiance += 0.9 * coat * surfLensW * (1.0 - surfLane) * max(getIBLRadiance(dir, dir, 0.45), emitterGlintF0(surfWorldPos, surfToWorld(dir), surfToWorld(dir), 0.45, -1.0, vec3(1.0)));
   }
   #endif
   surfBeadOut = shaded;
@@ -630,7 +671,7 @@ float surfGlint = 0.0;
 
 // Three's own floor on roughness is applied before this chunk; a tighter lobe under a compact light blows up into fireflies.
 const beadsSpecular = /* glsl */ `
-surfBeadRough = min(max(surfBeadRough, 0.045) + geometryRoughness, 1.0);
+surfBeadRough = min(max(surfBeadRough, 0.045), 1.0);
 material.specularColor *= 1.0 - surfLensOpen;
 #ifdef USE_CLEARCOAT
   material.clearcoat *= 1.0 - 0.6 * surfHalo * (1.0 - surfBeadOut);
@@ -659,6 +700,7 @@ export function applyBeads(material: THREE.Material, uniforms: Uniforms, bead: B
       f = insertAfter(f, '#include <lights_physical_fragment>', beadsSpecular)
       f = insertBefore(f, '#include <opaque_fragment>', 'if (surfDiag > 0.5) { outgoingLight = surfDiagOut.rgb; }')
       shader.fragmentShader = f
+      withEmitters(shader)
     },
   })
 }

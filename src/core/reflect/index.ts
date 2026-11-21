@@ -3,6 +3,7 @@ import type { FormatSpec, TierId } from '../../config'
 import { config } from '../../config'
 import { patchMaterial } from '../../materials/patch'
 import { layers, type FrameContext, type SampleContext } from '../contract'
+import { createEmitterTable, type EmitterTable } from '../emitters'
 import { createHazeCapture } from '../haze'
 import { applyLens } from '../lens'
 import type { StageDeps, StagePart } from '../parts'
@@ -46,6 +47,8 @@ export interface ReflectionsPart extends StagePart {
   /** For other parts: the planar reflection of the deck and how to look it up. See `src/core/reflect/README.md`. */
   planar: PlanarUniforms
   box: BoxUniforms
+  /** The glint emitter table behind `emitterUniforms`. See `src/core/emitters.ts`. */
+  glints: EmitterTable
 }
 
 interface ReflectionDeps extends Pick<StageDeps, 'renderer' | 'scene'> {
@@ -189,6 +192,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     bindPlanar(target)
   }
   const bounce = new Probe(renderer, bounceSize, captureNear, captureFar)
+  const glints = createEmitterTable({ renderer, world, vehicle })
   scene.add(lamps.root)
   const probePosition = new THREE.Vector3()
   const cameraPlanarVP = new THREE.Matrix4()
@@ -334,6 +338,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   return {
     planar,
     box,
+    glints,
     resize(next) {
       format = next
       fitTarget()
@@ -349,6 +354,8 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       cacheCameraPlanar = frame.samples > 1 && !quality[tier].planarEverySample
       fitTarget()
       patchAll()
+      if (diagnostic === 'normals' || diagnostic === 'zebra') glints.clear()
+      else glints.update()
       if (diagnostic === 'normals') return
       if (diagnostic === 'zebra') {
         box.reflectBoxOn.value = 0
@@ -364,6 +371,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     },
     beforeSample(sample: SampleContext) {
       planar.reflectOn.value = 0
+      glints.setPixelAngle(sample.camera, format.height)
       if (diagnostic !== 'beauty' && diagnostic !== 'wetness') return
       planar.reflectSeed.value = hash01(seed, sample.sample.frame.frameKey, sample.sample.sampleIndex)
       if (cacheCameraPlanar) {

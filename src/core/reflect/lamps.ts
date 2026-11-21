@@ -11,6 +11,19 @@ function portAimName(meshName: string): string | undefined {
   if (meshName === 'tail-guide-right') return 'tail--1'
 }
 
+/** The vehicle meshes that draw a lamp, each with the anchor its light is aimed from. */
+export function lampSources(vehicle: Pick<VehicleModule, 'root' | 'lamps'>) {
+  const origins = new Map(vehicle.lamps.map(({ object }) => [object.name, object] as const))
+  const found: Array<{ mesh: THREE.Mesh; origin: THREE.Object3D }> = []
+  vehicle.root.traverse((node) => {
+    if (!(node instanceof THREE.Mesh) || !(node.material instanceof THREE.MeshStandardMaterial)) return
+    const port = portAimName(node.name)
+    const origin = origins.get(`${node.name} emission origin`) ?? (port === undefined ? undefined : origins.get(port))
+    if (origin) found.push({ mesh: node, origin })
+  })
+  return found
+}
+
 export function probeLamps(vehicle: Pick<VehicleModule, 'root' | 'lamps'>) {
   const root = new THREE.Group()
   root.name = 'cube lamp emitters'
