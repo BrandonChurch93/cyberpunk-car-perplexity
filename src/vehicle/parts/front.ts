@@ -14,6 +14,7 @@ type FrontMaterials = Pick<import('../materials').Materials, 'housing' | 'mesh' 
   optics?: T.Material
   projector?: T.Material
   reflector?: T.Material
+  surfaces?: VehicleModule['surfaces']
   tag?: (material: T.Material, wetness: WetnessKind) => T.Material
 }
 
@@ -227,12 +228,15 @@ function guide(map: SurfaceMap, radius: number, depth: number, rise: number): T.
   const blend = (a: V2, b: V2, t: number): V2 => [T.MathUtils.lerp(a[0], b[0], t), T.MathUtils.lerp(a[1], b[1], t)]
   const section = [0, .14, .4, .6, .86, 1]
   const builder = new MeshBuilder()
+  const tracks = [0, 0, 0]
   const hub = arms.map(a => a.base[0]).reduce<V2>((a, b) => [a[0] + b[0] / 3, a[1] + b[1] / 3], [0, 0])
   const center = builder.vertex(point(hub, rise), [0, 0, 1], -.08, .5)
   for (const { base: [a, b], tip, cap } of arms) {
-    const end = blend(tip, cap[6], .56)
+    const dx = tip[0] - hub[0], dy = tip[1] - hub[1]
+    const stem = Math.abs(dx) > Math.abs(dy), lower = !stem && dy < 0
+    const end = blend(tip, cap[6], lower ? 1.16 : .56)
     const length = Math.hypot(end[0] - hub[0], end[1] - hub[1])
-    const taper = Math.min(.33, .029 / length)
+    const taper = Math.min(.33, (lower ? .015 : .029) / length)
     const count = Math.max(4, Math.ceil(length / .004))
     const first = builder.pos.length / 3
     builder.grid(count, section.length, (i, j) => {
@@ -246,6 +250,7 @@ function guide(map: SurfaceMap, radius: number, depth: number, rise: number): T.
       return { p: point(xy, deck * width * Math.min(1, 8 * u)), n: [0, 0, 1], u, v }
     }, false, true)
     const apex = builder.vertex(point(end), [0, 0, 1], 1, .5)
+    for (let i = first; i <= apex; i++) tracks.push(length, +stem, +lower)
     const last = first + (count - 1) * section.length
     for (let j = 0; j < section.length - 1; j++) {
       builder.tri(center, first + j, first + j + 1)
@@ -254,30 +259,35 @@ function guide(map: SurfaceMap, radius: number, depth: number, rise: number): T.
   }
   const g = builder.geometry()
   g.computeVertexNormals()
-  return g
+  return g.setAttribute('bladeTrack', new T.Float32BufferAttribute(tracks, 3))
 }
 
 function bladeOptics(material: T.MeshPhysicalMaterial): void {
   patchMaterial(material, {
     id: 'front-prism-blade',
     apply(shader) {
-      shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec2 vBladeUV;')
-      shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', 'vBladeUV = uv;')
-      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'varying vec2 vBladeUV;')
+      const track = 'varying vec2 vBladeUV; varying vec3 vBladeTrack;'
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', `attribute vec3 bladeTrack; ${track}`)
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', 'vBladeUV = uv; vBladeTrack = bladeTrack;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', track)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
         float bladeU = clamp(vBladeUV.x, 0.0, 1.0);
         float bladeEdge = abs(2.0 * vBladeUV.y - 1.0);
+        float stem = vBladeTrack.y;
+        float lower = vBladeTrack.z;
         float compactBlade = smoothstep(0.055, 0.15, fwidth(vBladeUV.y));
         float aperture = 1.0 - smoothstep(mix(0.64, 0.86, compactBlade), mix(0.94, 1.0, compactBlade), bladeEdge);
-        float core = 1.0 - smoothstep(0.16, 0.62, bladeEdge);
-        float ribPhase = bladeU * 23.0 - 0.34 * bladeEdge;
+        float core = 1.0 - smoothstep(mix(0.16, 0.10, stem), mix(0.62, 0.43, stem), bladeEdge);
+        float ribPhase = bladeU * vBladeTrack.x / 0.0105 - 0.34 * bladeEdge;
         float ribs = pow(max(0.0, cos(PI2 * ribPhase)), 3.0)
           * (1.0 - smoothstep(0.24, 0.66, fwidth(ribPhase)));
         float source = 0.25 + 0.67 * exp(-5.8 * bladeU) + 0.29 * exp(-11.0 * abs(bladeU - 0.68));
-        float outline = 1.0 - 0.87 * smoothstep(0.82, 1.0, bladeU);
-        float facing = gl_FrontFacing ? max(0.0, dot(normal, normalize(vViewPosition))) : 0.0;
-        diffuseColor.rgb *= 0.12 + aperture * (0.51 + 0.14 * ribs);
-        totalEmissiveRadiance *= source * outline * facing * aperture * (mix(0.16, 0.61, compactBlade) + 1.19 * core + 0.32 * ribs);
+        float outline = 1.0 - 0.87 * smoothstep(mix(0.82, 0.94, lower), 1.0, bladeU);
+        float view = gl_FrontFacing ? max(0.0, dot(normal, normalize(vViewPosition))) : 0.0;
+        float facing = mix(view, sqrt(view), lower);
+        float shoulder = mix(0.11, mix(0.61, 0.18, stem), compactBlade);
+        diffuseColor.rgb *= 0.11 + aperture * (0.44 + 0.24 * ribs);
+        totalEmissiveRadiance *= source * outline * facing * aperture * (shoulder + mix(1.19, 1.43, stem) * core + 0.29 * ribs);
       `)
     },
   })
@@ -321,8 +331,10 @@ function projectorFront(center: T.Vector3, axis: T.Vector3, radius: number, flan
     [.967 + flange * .63, .00155], [.943 + flange * .23, .0001], [.928, -.002], [.919, shoulder - .00055],
     [.900, shoulder - .0007], [.875, -.007]])
   if (flange > 0) {
-    const uv = rim.getAttribute('uv')
-    for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) + 2)
+    for (const surface of [rim, lens]) {
+      const uv = surface.getAttribute('uv')
+      for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) + 2)
+    }
   }
   return { lens, shroud, rim }
 }
@@ -370,14 +382,19 @@ function collarPickup(material: T.Material): void {
         float satinFlange() {
           return collarExtended() * (1.0 - compactProjector()) * (1.0 - smoothstep(0.28, 0.46, collarSection()));
         }
+        float collarArc() { return smoothstep(-0.24, 0.78, cos(PI2 * vCollarUV.x - 0.44)); }
       `)
       projectorFootprint(shader)
-      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <color_fragment>', 'diffuseColor.rgb *= 1.0 - 0.87 * satinFlange();')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <color_fragment>', `
+        float darkArc = compactProjector() * (1.0 - collarArc());
+        diffuseColor.rgb *= (1.0 - 0.87 * satinFlange()) * (1.0 - 0.58 * darkArc);
+      `)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <roughnessmap_fragment>', 'roughnessFactor = mix(roughnessFactor, 0.49, satinFlange());')
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
-        float lowerArc = 0.15 + 0.85 * smoothstep(-0.55, 0.52, cos(PI2 * vCollarUV.x + 0.19));
-        float rimFace = smoothstep(0.02, 0.11, collarSection()) * (1.0 - smoothstep(0.53, 0.76, collarSection()));
-        totalEmissiveRadiance *= 1.0 - 0.91 * satinFlange() + compactProjector() * 53.0 * lowerArc * rimFace;
+        float rimFace = smoothstep(0.33, 0.49, collarSection()) * (1.0 - smoothstep(0.68, 0.86, collarSection()));
+        float crescent = mix(0.29, 1.0, collarExtended()) * collarArc() * rimFace;
+        float metalFace = (1.0 - 0.91 * satinFlange()) * (1.0 - 0.94 * darkArc);
+        totalEmissiveRadiance *= metalFace + compactProjector() * 58.0 * crescent;
       `)
     },
   })
@@ -388,11 +405,12 @@ function lensPickup(material: T.Material, flux: T.IUniform<number>): void {
     id: 'front-projector-internal-pickup',
     uniforms: { projectorFlux: flux },
     apply(shader) {
-      const rayFrame = 'varying vec3 vProjectorAxis; varying vec3 vProjectorUp;'
+      const rayFrame = 'varying vec3 vProjectorAxis; varying vec3 vProjectorUp; varying float vProjectorPrimary;'
       shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', rayFrame)
       shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', `
         vProjectorAxis = normalMatrix * (vec3(sign(position.x), 1.0, 1.0) * vec3(${projectorAxis.toArray().join(', ')}));
         vProjectorUp = normalMatrix[1];
+        vProjectorPrimary = step(1.5, uv.y);
       `)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', `
         uniform float projectorFlux;
@@ -408,12 +426,13 @@ function lensPickup(material: T.Material, flux: T.IUniform<number>): void {
         float primaryReturn = dot(normal, normalize(lensView + opticalAxis));
         float obliqueReturn = dot(normal, normalize(lensView + 2.2 * opticalAxis));
         float lowView = 1.0 - smoothstep(0.072, 0.105, dot(normalize(vProjectorUp), lensView));
-        float core = 540.0 * primary * exp(-285.0 * (1.0 - primaryReturn))
-          + 360.0 * oblique * exp(-285.0 * (1.0 - obliqueReturn));
+        float core = 540.0 * primary * exp(-377.0 * (1.0 - primaryReturn))
+          + 360.0 * oblique * exp(-377.0 * (1.0 - obliqueReturn));
         float caustic = (lensAngle - 0.91) * 46.0;
         float arc = 0.15 * exp(-caustic * caustic) * smoothstep(-0.24, 0.58, normal.y);
         float lensGlint = exp(-134.0 * (1.0 - lensAngle));
-        totalEmissiveRadiance += projectorFlux * (lowView * core + 0.32 * (lensGlint + arc)) * vec3(0.85, 0.94, 1.0);
+        totalEmissiveRadiance += projectorFlux * (lowView * mix(0.31, 1.0, vProjectorPrimary) * core
+          + 0.32 * (lensGlint + arc)) * vec3(0.85, 0.94, 1.0);
       `)
     },
   })
@@ -503,7 +522,10 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   add('centre duct core', face(mouth.throat, .076), m.housing)
   add('front rolled splitter', splitter(map.S, full), m.carbon)
 
-  const lensMaterial = m.optics ?? tag(new T.MeshPhysicalMaterial({ color: 0xc1c7cd, roughness: .06, transmission: 1, ior: 1.46, thickness: .003, side: T.FrontSide }), 'beads')
+  const lensMaterial = m.optics ?? new T.MeshPhysicalMaterial({ color: 0xc1c7cd, roughness: .06, transmission: 1, ior: 1.46, thickness: .003, side: T.FrontSide })
+  const lensSurface = m.surfaces?.find(surface => surface.material === lensMaterial)
+  if (lensSurface) lensSurface.wetness = 'beads'
+  else tag(lensMaterial, 'beads')
   const projector = m.projector ?? tag(new T.MeshPhysicalMaterial({ color: 0xbec6d0, roughness: .09, transmission: .96, ior: 1.51, thickness: .007 }), 'none')
   const lensFlux = { value: 0 }
   lensPickup(projector, lensFlux)
