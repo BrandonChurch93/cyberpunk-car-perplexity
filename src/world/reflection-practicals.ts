@@ -29,15 +29,15 @@ export function reflectionPracticalBuilder(labels: Label, metal: THREE.Material,
     plate(fixture,'sealed opal aperture',fixtureOpal(new THREE.Color(...rgb),segments),[0,0,.004],w,h)
     return fixture
   }
-  const cabinet = (parent: THREE.Object3D,name: string,at: Tuple,[w,h]: Size,rgb: Tuple,text: string) => {
+  const cabinet = (parent: THREE.Object3D,name: string,at: Tuple,[w,h]: Size,rgb: Tuple,text: string, vertical = false, radiance = 1) => {
     const allowed = config.signage.generic.find(s=>s===text)
     if (!allowed) throw new Error(`Unapproved reflection practical sign: ${text}`)
     const color = new THREE.Color(...rgb)
     const fixture = mount(parent,name,at,[w,h],Math.min(.56,h*.29))
-    const face = plate(fixture,'diffusing cabinet face',fixtureOpal(color.clone().multiplyScalar(.40),1),[0,0,.006],w,h)
-    const letters = labels(allowed,'World Condensed',[allowed],w/h)
+    const face = plate(fixture,'diffusing cabinet face',fixtureOpal(color.clone().multiplyScalar(.40*Math.sqrt(radiance)),1),[0,0,.006],w,h)
+    const letters = labels(allowed,'World Condensed',vertical ? [...allowed] : [allowed],w/h)
     if (letters) {
-      const material = signGlass(letters,color,w,h,true)
+      const material = signGlass(letters,color,w,h,true,radiance)
       material.transparent = true
       material.blending = THREE.AdditiveBlending
       material.depthWrite = false
@@ -70,8 +70,8 @@ export function addReflectionFrontages(root: THREE.Object3D, labels: Label) {
   const rear = group(frontage,'southeast parapet wayfinding')
   rear.rotation.y = heroCityYaw
   for (const [i,x] of [9.80,11.38,13.08].entries()) {
-    cabinet(rear,'recessed amber service sign',[x,.56,-9.804],[1.18,.42],[5.5,2.17,.45],['OPEN','24H','PARKING'][i])
-    opal(rear,'amber parapet inset glass',[x+.12,.21,-9.807],[.95,.092],[4.25,1.7,.32],1)
+    cabinet(rear,'recessed amber service sign',[x,.56,-9.804],[1.18,.42],[5.5,2.17,.45],['OPEN','24H','PARKING'][i],false,2.65)
+    opal(rear,'warm white parapet inset glass',[x+.12,.21,-9.807],[.95,.092],[8.3,6.7,4.9],1)
   }
   const flank = group(frontage,'east quarter street frontage',[65,0,-42])
   flank.rotation.y = Math.atan2(-flank.position.x,-flank.position.z)
@@ -87,7 +87,7 @@ export function addReflectionFrontages(root: THREE.Object3D, labels: Label) {
     }
   }
   for (const [i,x] of [-8.1,0,8.4].entries()) {
-    cabinet(flank,'stacked east retail box sign',[x,.94,.47],[5.82,1.03],[7.8,3.10,.62],['ARCADE','NOODLES','24H'][i])
+    cabinet(flank,'stacked east retail box sign',[x,.94,.47],[5.82,1.03],[7.8,3.10,.62],['ARCADE','NOODLES','24H'][i],false,2.8)
   }
   const near = group(frontage,'north deck cyan guidance',[0,0,18.35])
   near.rotation.y = Math.PI

@@ -119,7 +119,15 @@ export function addSky(root: THREE.Group): void {
         float cover = smoothstep(.26,.83,.58*banks+.39*layers+.16*cloudNoise(low*5.04));
         float pink = cloudNoise(low*.36+vec2(9.5,3.1));
         vec3 reflectedCity = mix(vec3(.28,.101,.39),vec3(.62,.186,.34),pink);
-        c += wash*cloudAngle*reflectedCity*(.24+.76*cover);
+        float upper = smoothstep(.185,.448,d.y);
+        float bankEdge = smoothstep(.23,.76,banks*.64+layers*.36);
+        float lowSpill = mix(.24+.76*cover, cover*bankEdge, upper);
+        c += wash*cloudAngle*reflectedCity*lowSpill;
+        float mass = smoothstep(.26,.78, coarse*.62+cloudNoise(bank*1.73+vec2(coarse,2.4))*.38);
+        float underside = max(0.0,cloudNoise(bank-vec2(0.0,.38))-coarse);
+        vec3 upperBase = mix(vec3(.0038,.0035,.0047),vec3(.0087,.0079,.0100),mass);
+        upperBase += vec3(.010,.007,.014)*smoothstep(.11,.42,underside)*(.24+.76*wash);
+        c = mix(c,upperBase,upper);
         gl_FragColor = vec4(c, 1.0);
       }
     `,

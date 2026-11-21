@@ -181,7 +181,7 @@ void main() {
   vec2 axis = len > 0.02 ? line / max(len, 0.02) : vec2(0.0, 1.0);
   vec2 normal = vec2(-axis.y, axis.x);
   vec2 pixelFocal = 0.5 * uViewport * vec2(projectionMatrix[0][0], projectionMatrix[1][1]);
-  float diameter = aDrop.w * pixelFocal.y / depth;
+  float diameter = aDrop.w * abs(pixelFocal.y) / depth;
   vec2 coc = uAperture * abs(1.0 - depth / uFocus) * pixelFocal / depth;
   float physical = diameter * 0.5;
   bool mist = uLayer < -1.5;
