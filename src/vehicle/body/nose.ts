@@ -3,7 +3,7 @@ import { coons, type Curve } from '../geom/coons'
 import type { Loft } from '../geom/loft'
 import { sample2, smin, SurfaceCurve, type Surface, type SurfaceMap } from '../geom/cuts'
 import type { TessResult } from '../geom/tessellate'
-import { add, addScaled, clamp, cross, dot, len, lerp3, mix, norm, rotate, scale, sub, type V2, type V3 } from '../geom/vec'
+import { add, addScaled, clamp, cross, dot, len, lerp3, mix, norm, scale, sub, type V2, type V3 } from '../geom/vec'
 import type { Cuts } from './cuts'
 import { elev, fasciaBreak, frontSection, map } from './lines'
 
@@ -62,104 +62,114 @@ export function fitFascia(browEdge: FasciaEdge, noseSide: FasciaEdge) {
   const brow = edgeCurve(uEdge, top.map(([, p]) => p))
   const side = edgeCurve(vEdge, flank.map(([, p]) => p))
   const fold = (1 - shieldV) / (1 - cheekV)
-  const chinTip: V3 = [0, side(0)[1], brow(0)[2] - .109]
+  const chinTip: V3 = [0, side(0)[1], plane(brow(0), brow(fold), foldBottom).depth(0, side(0)[1])]
   const chin = (u: number) => u < fold ? lerp3(chinTip, foldBottom, u / fold) : lerp3(foldBottom, side(0), (u - fold) / (1 - fold))
   return { surface: ruledFascia({ brow, chin, side, fold }), uEdge, vEdge }
 }
 
-function roundSection(p: V3, a: V3, b: V3, axis: V3, radius: number) {
-  const l = norm(sub(a, p)), r = norm(sub(b, p))
-  const lp = addScaled(l, axis, -dot(l, axis)), rp = addScaled(r, axis, -dot(r, axis))
-  const u = norm(lp), v = norm(rp)
-  const half = .5 * Math.acos(clamp(dot(u, v), -1, 1))
-  const setback = radius / Math.tan(half)
-  const left = addScaled(p, l, setback / Math.max(.1, len(lp)))
-  const right = addScaled(p, r, setback / Math.max(.1, len(rp)))
-  const bisector = norm(add(u, v))
-  if (len(bisector) < 1e-6 || Math.abs(Math.PI / 2 - half) < 1e-5) {
-    return { left: p, right: p, arc: segment(p, p) }
-  }
-  const c = addScaled(p, bisector, radius / Math.sin(half))
-  const s = sub(addScaled(p, u, setback), c)
-  const e = sub(addScaled(p, v, setback), c)
-  const angle = Math.atan2(dot(axis, cross(s, e)), dot(s, e))
-  const arc: Curve = t => addScaled(add(c, rotate(s, axis, angle * t)), axis,
-    mix(dot(sub(left, p), axis), dot(sub(right, p), axis), t))
-  return { left, right, arc }
+function plane(a: V3, b: V3, c: V3) {
+  const n = norm(cross(sub(b, a), sub(c, a)))
+  const dx = -n[0] / n[2], dy = -n[1] / n[2]
+  return { dx, dy, depth: (x: number, y: number) => a[2] + dx * (x - a[0]) + dy * (y - a[1]) }
 }
 
-function fairDepth(border: readonly V3[]): (p: V3) => number {
-  return ([x, y]) => {
-    let depth = 0, weight = 0
-    for (let i = 0; i < border.length; i++) {
-      const a = border[i], b = border[(i + 1) % border.length]
-      const ax = a[0] - x, ay = a[1] - y, bx = b[0] - x, by = b[1] - y
-      const ra = Math.hypot(ax, ay), rb = Math.hypot(bx, by)
-      if (ra < 1e-10) return a[2]
-      if (rb < 1e-10) return b[2]
-      const cross = ax * by - ay * bx, dot = ax * bx + ay * by
-      if (Math.abs(cross) < 1e-12 && dot < 0) return mix(a[2], b[2], ra / (ra + rb))
-      const t = dot < 0 ? (ra * rb - dot) / cross : cross / (ra * rb + dot)
-      const wa = t / ra, wb = t / rb
-      depth += wa * a[2] + wb * b[2]
-      weight += wa + wb
-    }
-    return depth / weight
+function facet(points: V3[], field = plane(points[0], points[1], points[2])) {
+  const perimeter = points.map(([x, y]): V2 => [x, y])
+  const sign = ShapeUtils.area(perimeter.map(p => new Vector2(...p))) < 0 ? -1 : 1
+  const tests = perimeter.map((a, i) => {
+    const b = perimeter[(i + 1) % points.length]
+    const k = sign / Math.hypot(b[0] - a[0], b[1] - a[1])
+    return (p: V2) => area(a, b, p) * k
+  })
+  return { ...field, margin: (p: V2) => Math.min(...tests.map(t => t(p))) }
+}
+
+const creaseRoll = .003
+function rolledCrease(name: string, a: V3, b: V3, left: ReturnType<typeof plane>, right: ReturnType<typeof plane>) {
+  const axis = sub(b, a)
+  const span = Math.hypot(axis[0], axis[1])
+  const tx = axis[0] / span, ty = axis[1] / span, nx = -ty, ny = tx
+  const vertical = span / len(axis)
+  const ml = (left.dx * nx + left.dy * ny) * vertical, mr = (right.dx * nx + right.dy * ny) * vertical
+  const l = norm([-1, 0, -ml]), r = norm([1, 0, mr])
+  const half = .5 * Math.acos(clamp(dot(l, r), -1, 1))
+  const inset = creaseRoll / Math.tan(half), c = scale(norm(add(l, r)), creaseRoll / Math.sin(half))
+  const low = l[0] * inset, high = r[0] * inset
+  const q = ([x, y]: V2) => (x - a[0]) * nx + (y - a[1]) * ny
+  const along = ([x, y]: V2) => (x - a[0]) * tx + (y - a[1]) * ty
+  return {
+    name, a, b, angle: Math.PI - 2 * half,
+    stops: [low, mix(low, high, .25), mix(low, high, .5), mix(low, high, .75), high].map(k => (p: V2) => q(p) - k),
+    sample: (p: V2) => {
+      const d = q(p), t = along(p) / span
+      if (t < 0 || t > 1 || d < low || d > high) return undefined
+      const h = Math.sqrt(Math.max(0, creaseRoll ** 2 - (d - c[0]) ** 2))
+      const base = (d < 0 ? left : right).depth(...p)
+      const cap = Math.min(1, t * span / creaseRoll, (1 - t) * span / creaseRoll)
+      const arc = mix(a[2], b[2], t) + (c[2] - Math.sign(c[2]) * h) / vertical
+      return { weight: Math.abs(d) / Math.max(1e-7, d < 0 ? -low : high), z: mix(base, arc, cap) }
+    },
   }
 }
+
+const fasciaCreases = new WeakMap<Surface, ReturnType<typeof rolledCrease>[]>()
+export const fittedFasciaCreases = (s: Surface) => fasciaCreases.get(s) ?? []
 
 export function ruledFascia({ brow, chin, side, fold }: FasciaRails): FasciaSurface {
-  const center = segment(chin(0), brow(0)), edge = segment(chin(fold), brow(fold))
-  const top = (a: number) => brow(mix(fold, 1, a))
-  const bottom = (a: number) => chin(mix(fold, 1, a))
-  const chart = coons(bottom, top, edge, side)
-  const depth = fairDepth([
-    ...frontSection.brow.filter(k => k.v <= shieldV).map(k => brow((1 - k.v) / (1 - cheekV))),
-    ...frontSection.side.slice(1).map(k => side(k.v / cheekV)),
-    edge(0),
-  ])
-  const correction = (p: V3, q: V3) => (q[2] - depth(q)) * Math.max(0, 1 - Math.hypot(p[0] - q[0], p[1] - q[1]) / .075) ** 3
-  const cheek: Surface = (u, v) => {
-    if (u === 0) return edge(v)
-    if (u === 1) return side(v)
-    if (v === 0) return bottom(u)
-    if (v === 1) return top(u)
-    const p = chart(u, v)
-    return [p[0], p[1], depth(p) + correction(p, edge(v)) + correction(p, side(v)) + correction(p, top(u)) + correction(p, bottom(u))]
+  const topAt = (v: number) => brow((1 - v) / (1 - cheekV))
+  const nominal = (name: string) => {
+    const k = sectionKnots.find(k => k.name === name)!
+    const expected = addScaled([...k.p], fasciaDown(k.v), frontSection.roll)
+    const actual = k.v >= cheekV ? topAt(k.v) : side(k.v / cheekV)
+    return len(sub(actual, expected)) < .012 ? actual : expected
   }
-  const shield: Surface = (u, v) => {
-    const a = center(v), b = edge(v)
-    const t = u / fold, s = .16
-    const q = t / s
-    const ease = (t >= s ? t - s / 2 : s * q ** 3 * (1 - q / 2)) / (1 - s / 2)
-    return [mix(a[0], b[0], t), mix(a[1], b[1], ease), mix(a[2], b[2], ease)]
-  }
-  const axis1 = norm(sub(edge(1), edge(0)))
-  const radius = .003
-  const start = fold - .009, end = fold + .009
-  const fieldStops = [fold * .08, fold * .16, ...Array.from({ length: 7 }, (_, i) => mix(start, end, i / 6))]
-  const field: Surface = (u, v) => {
-    const f = edge(v)
-    const upper = roundSection(f, shield(fold - .001, v), cheek(.001, v), axis1, radius)
-    if (u < start) {
-      const t = u / start
-      const stop = 1 - clamp((f[0] - upper.left[0]) / (f[0] - center(v)[0]), 0, .05)
-      const p = shield(t * stop * fold, v)
-      return addScaled(p, sub(upper.left, shield(stop * fold, v)), t)
+  const tip = brow(0), vee = topAt(shieldV), corner = nominal('corner'), browTip = brow(1)
+  const outer = nominal('crease'), foot = side(0), split = chin(fold), centerFoot = chin(0)
+  const cheekPlane = plane(corner, foot, split)
+  const edge = side((frontSection.side[1].v + frontSection.side[2].v) / (2 * cheekV))
+  const shoulder: V3 = [edge[0], edge[1], cheekPlane.depth(edge[0], edge[1])]
+  const shield = facet([tip, vee, split, centerFoot])
+  const ramp = facet([vee, corner, split])
+  const duct = facet([corner, shoulder, foot, split], cheekPlane)
+  const eye = facet([corner, browTip, shoulder])
+  const wrap = facet([browTip, outer, shoulder])
+  const fields = [shield, ramp, duct, eye, wrap]
+  const creases = [
+    rolledCrease('shield center spine', centerFoot, tip, shield, { ...shield, dx: -shield.dx }),
+    rolledCrease('shield-to-cheek V', split, vee, ramp, shield),
+    rolledCrease('inboard intake fold', split, corner, duct, ramp),
+    rolledCrease('eye-to-duct facet', shoulder, corner, eye, duct),
+    rolledCrease('outer brow return', shoulder, browTip, wrap, eye),
+  ]
+  const field = (p: V2) => {
+    let pick = fields[0], best = -Infinity
+    for (const f of fields) {
+      const m = f.margin(p)
+      if (m > best) { best = m; pick = f }
     }
-    if (u <= end) return upper.arc((u - start) / (end - start))
-    const dist = len(sub(upper.right, f)), scaleU = len(sub(cheek(.001, v), f)) / .001
-    const right = scaleU > 1e-8 ? clamp(dist / scaleU, 0, .035) : 0
-    const a = mix(right, 1, (u - end) / (1 - end))
-    return addScaled(cheek(a, v), sub(upper.right, cheek(right, v)), (1 - a) / (1 - right))
+    let closest: ReturnType<ReturnType<typeof rolledCrease>['sample']>
+    for (const c of creases) {
+      const sample = c.sample(p)
+      if (sample && (!closest || sample.weight < closest.weight)) closest = sample
+    }
+    return closest?.z ?? pick.depth(...p)
+  }
+  const center = segment(centerFoot, tip), crease = segment(split, vee)
+  const inner = coons(u => chin(u * fold), u => brow(u * fold), center, crease)
+  const outerChart = coons(u => chin(mix(fold, 1, u)), u => brow(mix(fold, 1, u)), crease, side)
+  const lift = (p: V3, q: V3) => {
+    const t = Math.max(0, 1 - Math.hypot(p[0] - q[0], p[1] - q[1]) / (2 * frontSection.roll))
+    return (q[2] - field([q[0], q[1]])) * t * t * (3 - 2 * t)
   }
   const surface: Surface = (u, v) => {
     if (v === 1) return brow(u)
     if (u === 1) return side(v)
-    const s = field(u, v)
-    return v > .68 ? addScaled(s, sub(brow(u), field(u, 1)), ((v - .68) / .32) ** 3) : s
+    if (v === 0) return chin(u)
+    const p = u <= fold ? inner(u / fold, v) : outerChart((u - fold) / (1 - fold), v)
+    return [p[0], p[1], field([p[0], p[1]]) + lift(p, brow(u)) + lift(p, side(v))]
   }
-  return Object.assign(surface, { fieldStops })
+  fasciaCreases.set(surface, creases)
+  return Object.assign(surface, { fieldStops: [] })
 }
 
 export function frontFace(loft: Loft): (a: number, b: number) => V3 {
@@ -323,7 +333,7 @@ export function noseCuts(fm: SurfaceMap): { cuts: Cuts; curves: Record<'eye' | '
     const shape = acrossCenter ? splitAt(outline, p => p[0])[1] : outline
     return new SurfaceCurve(fm.S, shape.map(([x, y]) => fasciaUV(fm, x, y)), closed, acrossCenter)
   }
-  const eye = project(lines.eye, true, .005, .012)
+  const eye = project(lines.eye.map(([x, y]) => [x - .009, y]), true, .005, .012)
   const outer = project(lines.outerIntake, true, .006, .020)
   const center = project(lines.centerIntake, true, .006, .020, true)
   const drlU = project(lines.drlUpper, false, .004, .01)
@@ -434,14 +444,28 @@ function gradeTriangles(input: PlaneTriangle[]): PlaneTriangle[] {
 }
 
 function triangulate(border: V2[], holes: V2[][], stops: readonly Stop[], emit: (a: V2, b: V2, c: V2) => void): void {
-  const asVectors = (loop: V2[]) => loop.map(p => new Vector2(...p))
   const points = [...border, ...holes.flat()]
-  const tris = ShapeUtils.triangulateShape(asVectors(border), holes.map(asVectors))
+  let start = 0
+  const loops = [border, ...holes]
+  // Earcut can drop near-collinear stations, so restore them on their owning chord.
+  const anchors = loops.map(loop => {
+    const ids = loop.flatMap((p, i) => {
+      const a = loop[(i + loop.length - 1) % loop.length], b = loop[(i + 1) % loop.length]
+      const between = (p[0] - a[0]) * (p[0] - b[0]) + (p[1] - a[1]) * (p[1] - b[1]) < 0
+      return between && Math.abs(area(a, b, p)) < 1e-6 * Math.hypot(b[0] - a[0], b[1] - a[1]) ? [] : [start + i]
+    })
+    start += loop.length
+    return ids
+  })
+  const [outline, ...inner] = anchors.map(ids => ids.map(i => new Vector2(...points[i])))
+  const kept = anchors.flat()
+  const tris = ShapeUtils.triangulateShape(outline, inner)
+    .map(ids => ids.map(i => kept[i]))
     .filter(([a, b, c]) => Math.abs(area(points[a], points[b], points[c])) > 1e-13)
   const used = new Set(tris.flat())
   const omitted = new Map<string, number[]>()
-  let start = 0
-  for (const loop of [border, ...holes]) {
+  start = 0
+  for (const loop of loops) {
     const n = loop.length
     for (let i = 0; i < n; i++) {
       if (!used.has(start + i)) continue
@@ -458,11 +482,13 @@ function triangulate(border: V2[], holes: V2[][], stops: readonly Stop[], emit: 
     }
     start += n
   }
-  const bands = Array.from({ length: stops.length + 1 }, (): PlaneTriangle[] => [])
+  const bands = new Map<number, PlaneTriangle[]>()
   const fan = (poly: V2[], band: number) => {
     if (poly.length < 3) return
+    const batch = bands.get(band) ?? []
+    bands.set(band, batch)
     if (poly.length === 3) {
-      bands[band].push([poly[0], poly[1], poly[2]])
+      batch.push([poly[0], poly[1], poly[2]])
       return
     }
     const c: V2 = [0, 0]
@@ -470,24 +496,23 @@ function triangulate(border: V2[], holes: V2[][], stops: readonly Stop[], emit: 
       c[0] += p[0] / poly.length
       c[1] += p[1] / poly.length
     }
-    for (const [i, p] of poly.entries()) bands[band].push([c, p, poly[(i + 1) % poly.length]])
+    for (const [i, p] of poly.entries()) batch.push([c, p, poly[(i + 1) % poly.length]])
+  }
+  const clip = (poly: V2[], i: number, band: number): void => {
+    if (poly.length < 3) return
+    if (i === stops.length) return fan(poly, band)
+    const stop = stops[i], bit = 2 ** i
+    if (!poly.some(p => stop(p) < -1e-10)) return clip(poly, i + 1, band + bit)
+    if (!poly.some(p => stop(p) > 1e-10)) return clip(poly, i + 1, band)
+    const [a, b] = splitAt(poly, stop)
+    clip(a, i + 1, band)
+    clip(b, i + 1, band + bit)
   }
   for (const ids of tris) {
-    let poly = ids.flatMap((a, i) => [a, ...(omitted.get(`${a}:${ids[(i + 1) % 3]}`) ?? [])]).map(i => points[i])
-    for (const [i, stop] of stops.entries()) {
-      if (!poly.some(p => stop(p) < -1e-10)) continue
-      if (!poly.some(p => stop(p) > 1e-10)) {
-        fan(poly, i)
-        poly = []
-        break
-      }
-      const [a, b] = splitAt(poly, stop)
-      fan(a, i)
-      poly = b
-    }
-    fan(poly, stops.length)
+    const poly = ids.flatMap((a, i) => [a, ...(omitted.get(`${a}:${ids[(i + 1) % 3]}`) ?? [])]).map(i => points[i])
+    clip(poly, 0, 0)
   }
-  for (const band of bands) for (const tri of gradeTriangles(band)) emit(...tri)
+  for (const band of bands.values()) for (const tri of gradeTriangles(band)) emit(...tri)
 }
 
 const rollDepth = .014
@@ -552,10 +577,19 @@ export function tessellateFascia(map: SurfaceMap, openings: Cuts['holes'], uEdge
     exact.set(chartKey(xy), uv)
     return xy
   }
-  const stops = fieldStops.map((u): Stop => {
+  const numeric = fieldStops.map((u): Stop => {
     const atBrow = uEdge.reduce((best, next) => Math.abs(u - next) < Math.abs(u - best) ? next : best)
     const a = project([u, 0]), b = project([atBrow, 1])
     return p => -area(a, b, p)
+  })
+  const seam = [...vEdge.map((v): V2 => [1, v]), ...[...uEdge].reverse().slice(1).map((u): V2 => [u, 1])].map(project)
+  const stops = [...numeric, ...fittedFasciaCreases(map.S).flatMap(c => c.stops)].map(stop => {
+    const pins = new Set<string>()
+    for (let i = 1; i < seam.length; i++) {
+      const a = seam[i - 1], b = seam[i], da = stop(a), db = stop(b)
+      if (da * db < 0) pins.add(chartKey(Math.abs(da) < Math.abs(db) ? a : b))
+    }
+    return (p: V2) => pins.has(chartKey(p)) ? 0 : stop(p)
   })
   const sample = (p: V2) => {
     const uv = exact.get(chartKey(p)) ?? fasciaUV(map, ...p)
@@ -565,6 +599,7 @@ export function tessellateFascia(map: SurfaceMap, openings: Cuts['holes'], uEdge
   const holes = [eye, outer, slot, ...(notch.length ? [] : [grille])].map(loop => addStops(finish(loop.map(project)), stops))
   const skin = blank(), shell = blank()
   const cache = new Map<string, number>()
+  const floatKeys: string[] = []
   const id = (xy: V2) => {
     const k = chartKey(xy)
     let i = cache.get(k)
@@ -572,6 +607,7 @@ export function tessellateFascia(map: SurfaceMap, openings: Cuts['holes'], uEdge
       const { point: p, normal: n } = sample(xy)
       i = vertex(skin, p, n)
       vertex(shell, [p[0], p[1], p[2] - rollDepth], n)
+      floatKeys.push(p.map(Math.fround).join(':'))
       cache.set(k, i)
     }
     return i
@@ -580,6 +616,7 @@ export function tessellateFascia(map: SurfaceMap, openings: Cuts['holes'], uEdge
     const ar = area(a, b, c)
     if (Math.abs(ar) < 1e-13) return
     const abc = ar > 0 ? [id(a), id(b), id(c)] : [id(a), id(c), id(b)]
+    if (new Set(abc.map(i => floatKeys[i])).size < 3) return
     skin.indices.push(...abc)
     shell.indices.push(...abc)
   })
