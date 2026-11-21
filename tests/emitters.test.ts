@@ -2,8 +2,9 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import {
   airTransmittance, beadReference, createEmitterTable, emitterGlsl, emitterUniforms, glintReference, maxEmitters,
-  Occluders, rankEmitters, splitOf, waterF0, withEmitters, type Emitter,
+  mergeOverlays, Occluders, rankEmitters, splitOf, waterF0, withEmitters, type Emitter,
 } from '../src/core/emitters'
+import type { FilmLight } from '../src/core/contract'
 
 function face(name: string, width: number, height: number, tint: THREE.Color, at: THREE.Vector3, look: THREE.Vector3): THREE.Mesh {
   const material = new THREE.ShaderMaterial({ uniforms: { tint: { value: tint } } })
@@ -15,9 +16,9 @@ function face(name: string, width: number, height: number, tint: THREE.Color, at
 }
 
 /** Draws each face as its own `tint`, flat, so a tile's mean is the tint. */
-function fakeRenderer() {
+function fakeRenderer(count = { renders: 0, reads: 0 }) {
   let target: THREE.WebGLRenderTarget | null = null
-  const tiles: Array<{ x: number; y: number; w: number; h: number; color: THREE.Color }> = []
+  let tiles: Array<{ x: number; y: number; w: number; h: number; color: THREE.Color }> = []
   const renderer = {
     shadowMap: { autoUpdate: true },
     getRenderTarget: () => target,
@@ -27,16 +28,21 @@ function fakeRenderer() {
     getClearAlpha: () => 1,
     setRenderTarget: (t: THREE.WebGLRenderTarget | null) => { target = t },
     setClearColor: () => undefined,
-    clear: () => { tiles.length = 0 },
+    clear: () => {
+      const { x, y } = target!.scissor
+      tiles = tiles.filter((t) => t.x !== x || t.y !== y)
+    },
     render: (object: THREE.Object3D) => {
+      count.renders++
       const mesh = object as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>
       const { x, y, z: w, w: h } = target!.viewport
       tiles.push({ x, y, w, h, color: (mesh.material.uniforms.tint.value as THREE.Color).clone() })
     },
-    readRenderTargetPixels: (t: THREE.WebGLRenderTarget, _x: number, _y: number, width: number, _h: number, out: Float32Array) => {
+    readRenderTargetPixels: (t: THREE.WebGLRenderTarget, _x: number, y0: number, width: number, height: number, out: Float32Array) => {
+      count.reads++
       out.fill(0)
-      for (const tile of tiles) for (let j = tile.y; j < tile.y + tile.h; j++) for (let i = tile.x; i < tile.x + tile.w; i++) {
-        const at = (j * width + i) * 4
+      for (const tile of tiles) for (let j = Math.max(tile.y, y0); j < Math.min(tile.y + tile.h, y0 + height); j++) for (let i = tile.x; i < tile.x + tile.w; i++) {
+        const at = ((j - y0) * width + i) * 4
         out[at] = tile.color.r
         out[at + 1] = tile.color.g
         out[at + 2] = tile.color.b
@@ -47,7 +53,7 @@ function fakeRenderer() {
   return renderer as unknown as THREE.WebGLRenderer
 }
 
-function scene(options: { lit?: boolean; wall?: boolean } = {}) {
+function scene(options: { lit?: boolean; wall?: boolean; crowd?: number; count?: { renders: number; reads: number }; hold?: { world?: THREE.Group } } = {}) {
   const lit = options.lit ?? true
   const world = new THREE.Group()
   const off = new THREE.Color(0, 0, 0)
@@ -60,6 +66,19 @@ function scene(options: { lit?: boolean; wall?: boolean } = {}) {
   tower.position.set(0, 4, 20)
   world.add(tower)
   if (options.wall) world.add(face('second wall', 20, 10, new THREE.Color(1, 1, 1), new THREE.Vector3(30, 8, -40), new THREE.Vector3(0, 1, 0)))
+  for (let i = 0; i < (options.crowd ?? 0); i++) {
+    const fixture = new THREE.Group()
+    fixture.name = `fitting ${i}`
+    fixture.add(face('opal', 0.5, 0.5, new THREE.Color(300, 300, 300), new THREE.Vector3(i - 15, 3, -4), new THREE.Vector3(i - 15, 0, 0)))
+    world.add(fixture)
+  }
+  if (options.hold) options.hold.world = world
+  const screen = new THREE.Group()
+  screen.name = 'key screen'
+  screen.add(face('key mural', 60, 60, lit ? new THREE.Color(1.5, 0.3, 1.2) : off, new THREE.Vector3(-150, 50, -420), new THREE.Vector3(0, 1, 0)))
+  const keyLight = new THREE.Object3D()
+  screen.add(keyLight)
+  world.add(screen)
   const vehicle = new THREE.Group()
   const lampMaterial = new THREE.MeshStandardMaterial({ emissive: new THREE.Color(1, 0.9, 0.8), emissiveIntensity: lit ? 40 : 0 })
   const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.02), lampMaterial)
@@ -71,7 +90,8 @@ function scene(options: { lit?: boolean; wall?: boolean } = {}) {
   vehicle.add(lamp, origin)
   world.updateMatrixWorld(true)
   vehicle.updateMatrixWorld(true)
-  return createEmitterTable({ renderer: fakeRenderer(), world: { root: world }, vehicle: { root: vehicle, lamps: [{ object: origin, stage: 0, beam: true }] } })
+  const lights = [{ id: 'key', kind: 'area', object: keyLight, color: new THREE.Color(1, 1, 1), intensity: 1, size: [60, 60], range: 1000, shadow: false, beam: false, level: () => 1 }] as FilmLight[]
+  return createEmitterTable({ renderer: fakeRenderer(options.count), world: { root: world, lights }, vehicle: { root: vehicle, lamps: [{ object: origin, stage: 0, beam: true }] } })
 }
 
 function snapshot(list: readonly Emitter[]) {
@@ -94,7 +114,8 @@ describe('emitter table', () => {
     expect(sign.radiance.r).toBeCloseTo(3 * airTransmittance(sign.center.length()), 5)
     expect(sign.u.clone().cross(sign.v).dot(new THREE.Vector3(0, 0, 1))).toBeGreaterThan(0)
     expect(table.filter((e) => e.id.startsWith('amber wall'))).toHaveLength(4)
-    expect(splitOf(new THREE.Vector3(10, 0, 0), new THREE.Vector3(0, 1, 0))).toEqual([2, 1])
+    expect(splitOf(new THREE.Vector3(10, 0, 0), new THREE.Vector3(0, 1, 0))).toEqual([1, 1])
+    expect(splitOf(new THREE.Vector3(10, 0, 0), new THREE.Vector3(0, 5, 0))).toEqual([2, 2])
     const lamp = table.find((e) => e.id.startsWith('lamp/'))!
     expect(lamp.u.clone().cross(lamp.v).z).toBeGreaterThan(0)
   })
@@ -223,5 +244,109 @@ describe('occluders', () => {
     expect(occluders.blocked(new THREE.Vector3(), new THREE.Vector3(0, 0, -20))).toBe(true)
     expect(occluders.blocked(new THREE.Vector3(), new THREE.Vector3(8, 0, -20))).toBe(false)
     expect(occluders.blocked(new THREE.Vector3(), new THREE.Vector3(0, 0, -5))).toBe(false)
+  })
+})
+
+describe('emitter rank groups', () => {
+  it('keeps only a few rects of one fixture kind', () => {
+    const list: Emitter[] = Array.from({ length: 10 }, (_, i) => ({
+      id: `opal/${i}/00`, group: 'row|opal', center: new THREE.Vector3(i, 2, -5), u: new THREE.Vector3(0.2, 0, 0), v: new THREE.Vector3(0, 0.2, 0), radiance: new THREE.Color(9, 9, 9), visibility: 1,
+    }))
+    list.push({ id: 'far sign', group: 'tower|mural', center: new THREE.Vector3(0, 50, -400), u: new THREE.Vector3(15, 0, 0), v: new THREE.Vector3(0, 15, 0), radiance: new THREE.Color(2, 0.2, 1), visibility: 1 })
+    const ranked = rankEmitters(list, new THREE.Vector3(), 24, 4)
+    expect(ranked.filter((e) => e.group === 'row|opal')).toHaveLength(4)
+    expect(ranked.at(-1)!.id).toBe('far sign')
+  })
+})
+
+describe('emitter rank keys and cache', () => {
+  const rect = (id: string, center: THREE.Vector3, extra: Partial<Emitter> = {}): Emitter => ({
+    id, center, u: new THREE.Vector3(1, 0, 0), v: new THREE.Vector3(0, 1, 0), radiance: new THREE.Color(1, 1, 1), visibility: 1, ...extra,
+  })
+
+  it('always keeps the key light faces, split, however crowded the near fittings are', () => {
+    const table = scene({ crowd: 40 })
+    const ranked = table.update(new THREE.Vector3(0, 1.5, 8))
+    const keys = ranked.filter((e) => e.key)
+    expect(keys).toHaveLength(4)
+    expect(keys.every((e) => e.id.startsWith('key mural'))).toBe(true)
+    expect(ranked).toHaveLength(maxEmitters)
+    expect(ranked.filter((e) => e.group?.startsWith('fitting ')).length).toBeGreaterThan(10)
+  })
+
+  it('weights by solid angle at the car and Fresnel toward the camera', () => {
+    const eye = new THREE.Vector3(0, 1, 10)
+    const behindCar = rect('behind car', new THREE.Vector3(0, 1, -20))
+    const behindCamera = rect('behind camera', new THREE.Vector3(0, 1, 20), { v: new THREE.Vector3(0, -1, 0) })
+    expect(rankEmitters([behindCamera, behindCar], new THREE.Vector3(), 24, 2).map((e) => e.id)).toEqual(['behind camera', 'behind car'])
+    expect(rankEmitters([behindCamera, behindCar], new THREE.Vector3(), 24, 2, eye).map((e) => e.id)).toEqual(['behind car', 'behind camera'])
+    const near = rect('near', new THREE.Vector3(0, 1, -5))
+    const far = rect('far', new THREE.Vector3(0, 1, -50), { radiance: new THREE.Color(50, 50, 50) })
+    expect(rankEmitters([far, near], new THREE.Vector3()).map((e) => e.id)).toEqual(['near', 'far'])
+  })
+
+  it('keeps the best face of a few signs even when white practicals outshine them', () => {
+    const white = Array.from({ length: 30 }, (_, i) => rect(`flood ${i}/0/00`, new THREE.Vector3(i - 15, 3, -4), { group: `flood ${i}|diffuser`, radiance: new THREE.Color(200, 200, 200) }))
+    const signs = ['HOTEL', 'BAR', 'EXIT'].flatMap((name, k) => [0, 1].map((j) => rect(`lettering ${name}/${k}/0${j}`, new THREE.Vector3(k * 10 + j, 20, -300), { group: `${name}|lettering`, sign: true, radiance: new THREE.Color(2, 0.3, 1) })))
+    const ranked = rankEmitters([...white, ...signs], new THREE.Vector3())
+    expect(ranked).toHaveLength(maxEmitters)
+    expect(new Set(ranked.filter((e) => e.sign).map((e) => e.group))).toEqual(new Set(['HOTEL|lettering', 'BAR|lettering', 'EXIT|lettering']))
+    expect(ranked.filter((e) => e.sign)).toHaveLength(3)
+  })
+
+  it('caps the vehicle lamps', () => {
+    const lamps = Array.from({ length: 7 }, (_, i) => rect(`lamp ${i}`, new THREE.Vector3(i, 0.7, -3), { lamp: true }))
+    expect(rankEmitters(lamps, new THREE.Vector3()).length).toBe(4)
+  })
+
+  it('adds lettering drawn over its cabinet into one rect', () => {
+    const cabinet = rect('cabinet', new THREE.Vector3(0, 2, -6))
+    const lettering = rect('lettering', new THREE.Vector3(0, 2, -6.01), { radiance: new THREE.Color(2, 0, 0) })
+    const merged = mergeOverlays([cabinet, lettering, rect('beside', new THREE.Vector3(3, 2, -6))])
+    expect(merged.map((e) => e.id)).toEqual(['cabinet', 'beside'])
+    expect(merged[0].radiance.toArray()).toEqual([3, 1, 1])
+    expect(cabinet.radiance.toArray()).toEqual([1, 1, 1])
+  })
+
+  it('redraws only faces that changed and skips the readback when none did', () => {
+    const count = { renders: 0, reads: 0 }
+    const hold: { world?: THREE.Group } = {}
+    const table = scene({ count, hold })
+    const first = snapshot(table.update())
+    const drawn = count.renders
+    expect(drawn).toBeGreaterThan(3)
+    expect(count.reads).toBe(1)
+    expect(snapshot(table.update())).toEqual(first)
+    expect(count.renders).toBe(drawn)
+    expect(count.reads).toBe(1)
+    const sign = hold.world!.getObjectByName('magenta sign') as THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>
+    sign.material.uniforms.tint.value = new THREE.Color(0, 3, 0)
+    const after = table.update()
+    expect(count.renders).toBe(drawn + 1)
+    expect(count.reads).toBe(2)
+    expect(after.find((e) => e.id.startsWith('magenta sign'))!.radiance.g).toBeGreaterThan(2)
+    expect(after.find((e) => e.id.startsWith('cyan strip'))!.radiance.toArray()).toEqual(table.candidates.find((e) => e.id.startsWith('cyan strip'))!.radiance.toArray())
+  })
+})
+
+describe('vehicle lamps', () => {
+  it('glint on the world but not on the vehicle itself', () => {
+    const lamp = { center: new THREE.Vector3(0, 0.7, 2.2), u: new THREE.Vector3(0.15, 0, 0), v: new THREE.Vector3(0, 0.04, 0), radiance: new THREE.Color(100, 100, 100), visibility: 1, lamp: true }
+    const P = new THREE.Vector3(0, 0, 6)
+    const V = new THREE.Vector3(0, 0.3, 1).normalize()
+    const N = new THREE.Vector3(0, 1, 0)
+    expect(beadReference([lamp], P, N, V, 0.002, 4, 7e-4, waterF0, 0, false).r).toBeGreaterThan(0)
+    expect(beadReference([lamp], P, N, V, 0.002, 4, 7e-4, waterF0, 0, true).r).toBe(0)
+  })
+
+  it('flags lamps in the uniforms and fits the vehicle box', () => {
+    const table = scene()
+    const list = table.update()
+    const i = list.findIndex((e) => e.lamp)
+    expect(emitterUniforms.emitterAxisU.value[i].w).toBe(1)
+    expect(emitterUniforms.emitterAxisU.value[list.findIndex((e) => !e.lamp)].w).toBe(0)
+    expect(emitterUniforms.emitterVehicleHalf.value.x).toBeGreaterThan(0.15)
+    const inside = new THREE.Vector3(0.6, 0.7, 2.2).applyMatrix4(emitterUniforms.emitterVehicleInverse.value)
+    expect(Math.abs(inside.x)).toBeLessThan(emitterUniforms.emitterVehicleHalf.value.x)
   })
 })
