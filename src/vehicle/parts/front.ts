@@ -29,10 +29,10 @@ function grid(rows: T.Vector3[][], flip = false, ring = false): T.BufferGeometry
 }
 
 function append(builder: MeshBuilder, g: T.BufferGeometry): void {
-  const p = g.getAttribute('position'), n = g.getAttribute('normal'), idx = g.index
+  const p = g.getAttribute('position'), n = g.getAttribute('normal'), uv = g.getAttribute('uv'), idx = g.index
   const base = builder.pos.length / 3
   for (let i = 0; i < p.count; i++) {
-    builder.vertex([p.getX(i), p.getY(i), p.getZ(i)], [n.getX(i), n.getY(i), n.getZ(i)])
+    builder.vertex([p.getX(i), p.getY(i), p.getZ(i)], [n.getX(i), n.getY(i), n.getZ(i)], uv?.getX(i), uv?.getY(i))
   }
   for (let i = 0; i < (idx?.count ?? p.count); i += 3) {
     builder.tri(base + (idx?.getX(i) ?? i), base + (idx?.getX(i + 1) ?? i + 1), base + (idx?.getX(i + 2) ?? i + 2))
@@ -46,6 +46,28 @@ function merged(parts: T.BufferGeometry[]): T.BufferGeometry {
     g.dispose()
   }
   return b.geometry()
+}
+
+function cleanTriangles(g: T.BufferGeometry): T.BufferGeometry {
+  const p = g.getAttribute('position'), n = g.getAttribute('normal'), idx = g.index
+  const count = idx?.count ?? p.count
+  const valid: number[] = []
+  const a = new T.Vector3(), b = new T.Vector3(), c = new T.Vector3(), faceNormal = new T.Vector3()
+  for (let i = 0; i < count; i += 3) {
+    const j = idx?.getX(i) ?? i, k = idx?.getX(i + 1) ?? i + 1, l = idx?.getX(i + 2) ?? i + 2
+    a.fromBufferAttribute(p, j)
+    b.fromBufferAttribute(p, k).sub(a)
+    c.fromBufferAttribute(p, l).sub(a)
+    faceNormal.crossVectors(b, c)
+    if (!(faceNormal.lengthSq() > 1e-20)) continue
+    valid.push(j, k, l)
+    faceNormal.normalize()
+    for (const v of [j, k, l]) {
+      if (!(n.getX(v) ** 2 + n.getY(v) ** 2 + n.getZ(v) ** 2 > .01)) n.setXYZ(v, faceNormal.x, faceNormal.y, faceNormal.z)
+    }
+  }
+  if (valid.length !== count) g.setIndex(valid)
+  return g
 }
 
 function outline(curve: SurfaceCurve, acrossCenter = false): T.Vector3[] {
@@ -215,7 +237,10 @@ function splitter(S: Surface, full: boolean): T.BufferGeometry {
   }))
   const caps = [rows[0], rows.at(-1)!].map((ps, i) => face(ps.map(p => new T.Vector3(p.z * (i ? -1 : 1), p.y, 0)))
     .rotateY(i ? Math.PI / 2 : -Math.PI / 2).translate(ps[0].x, 0, 0))
-  return merged([grid(rows, false, true), ...caps])
+  const geometry = merged([grid(rows, false, true), ...caps])
+  const p = geometry.getAttribute('position'), uv = geometry.getAttribute('uv')
+  for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 2, p.getZ(i) / 2)
+  return geometry
 }
 
 export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials, full: boolean) {
@@ -225,7 +250,7 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
       mesh.name = name
       parent.add(mesh)
     }
-    install(name, g)
+    install(name, cleanTriangles(g))
     if (pair) install(name + ' right', mirrorGeometry(g))
   }
   const tag = <M extends T.Material>(material: M, wetness: WetnessKind): M => {
