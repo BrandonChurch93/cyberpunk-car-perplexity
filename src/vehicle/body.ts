@@ -70,7 +70,6 @@ const haunchShoulderFall = fairCurve([[.596, 0], [.609, 0], [.650, .030], [.675,
   interior: [.62, .665, .698, .743, .773], flatStart: true, flatEnd: true, penalty: 1e-8,
 })
 const shoulder = (s: number) => shoulderBase(s) - haunchShoulderFall(s)
-const haunchCeiling = curve([[.69, 1.050], [.74, 1.006], [.78, .977], [.82, .947], [.86, .935], [.90, .925], [.94, .921], [1.02, .928]])
 const hoodLine = fairCurve([[0, .431], [.028, .466], [.06, .523], [.105, .608], [.165, .716], [.225, .761], [.265, .769], [.33, .764], [.6, .83]], {
   interior: [.045, .111, .194, .275, .392],
 })
@@ -143,9 +142,10 @@ const haunchFold = fairCurve([[.631, 1.009], [.646, .975], [.682, .895], [.702, 
 const deckIn = fairCurve([[.610, .608], [.670, .641], [.750, .686], [.820, .729], [.856, .762], [.882, .746], [.923, .704]], {
   breaks: [[.856, .762]], pins: [[.750, .686]], controls: 5,
 })
-const deckOut = fairCurve([[.697, .942], [.741, .899], [.789, .849], [.828, .798], [.856, .762]], { pins: [[.789, .849]], controls: 5 })
-const haunchRidgeY = curve([[.625, 1.066], [.650, 1.063], [.697, 1.047], [.750, 1.015],
-  [.808, .975], [.851, .938], [.887, .918], [.922, .896]])
+const returnTurn = fairCurve([[.62, .36], [.70, .36], [.76, .39], [.79, .43], [.82, .49], [.86, .50], [.942, .50]], { controls: 6 })
+const deckOut = fairCurve([[.62, 1.0172], [.66, .9782], [.697, .942], [.741, .899], [.789, .849], [.828, .798], [.856, .762]], { pins: [[.789, .849]], controls: 5 })
+const haunchRidgeY = fairCurve([[.625, 1.066], [.650, 1.063], [.697, 1.047], [.750, 1.015],
+  [.808, .975], [.851, .938], [.887, .918], [.922, .896], [.942, .884]], { pins: [[.697, 1.047], [.750, 1.015], [.808, .975]], controls: 7 })
 const foldRadius = .004
 const foldAngle = T.MathUtils.degToRad(20)
 const foldSlope = Math.tan(foldAngle)
@@ -572,47 +572,28 @@ export function createBody(parent: T.Group, m: Palette, full: boolean): { paintP
 
     const deckShape = (s: number, v: number): Point => {
       const inside = bayEdge(s, 1)
-      const outside: Point = [shoulderX(s), shoulder(s), zAt(s)]
       const t = fairStep(s, .684, .716)
       const inX = mix(deckInnerX(s), inside[0], t)
       const inY = mix(deckInnerY(s), inside[1], t)
-      const x = mix(inX, outside[0], v)
+      const outX = shoulderX(s), outY = shoulder(s)
+      const x = mix(inX, outX, v)
       const ridge = deckIn(s)
-      const returnFold = 1 - smooth(s, .794, .874)
-      const bend = mix(foldHalf, .024, fairStep(s, .800, .852))
-      const section = (at: number) => hinge(at - ridge, bend) - returnFold * hinge(at - deckOut(s), bend)
-      const vane = section(x) - mix(section(inX), section(outside[0]), v)
-      const ridgeV = .86 - fairPositive(.72 - fairPositive((ridge - inX) / (outside[0] - inX) - .14, .05), .05)
-      const turn = -.37 * fairStep(s, .614, .672) * fairStep(ridge - inX, -.009, .055)
-        * (1 - smooth(s, .905, .937))
-      const ridgeFold = turn * (section(ridge) - mix(section(inX), section(outside[0]), ridgeV))
-      const fairCrest = smooth(s, .813, .880)
-      const correction = ridgeFold * fairCrest
-      const rawFall = (inY - haunchRidgeY(s) + ridgeFold - correction) / (inY - outside[1])
-      const fallAtRidge = .915 - fairPositive(.915 - .16 - fairPositive(rawFall - .16, .08), .03)
-      const reach = fairStep(inY - haunchRidgeY(s), -.05, .035)
-      const fall = mix(1, ridgeV * (1 - fallAtRidge) / (fallAtRidge * (1 - ridgeV)),
-        reach * fairStep(s, .635, .695) * (1 - smooth(s, .915, .939)))
-      const y = mix(inY, outside[1], v / (fall + (1 - fall) * v))
-      const high = Math.max(haunchCeiling(x), outside[1] + .005)
-      const crestBlend = smooth(v, 0, ridgeV) * (1 - smooth(v, ridgeV, 1))
-      const base = y + turn * vane - correction * crestBlend
-      const tBend = base - haunchFold(s)
-      const fade = fairStep(s, .631, .654) * (1 - fairStep(s, .715, .752))
-        * (1 - fairStep(Math.abs(tBend), .014, .105)) * Math.sin(Math.PI * v)
-      const shape = base + .22 * fade * (hinge(tBend, .006) - .5 * tBend)
-      const capBlend = smooth(s, .735, .782)
-      const cap = hinge(shape - high + mix(.008, .004, capBlend), mix(mix(.014, .004, capBlend), .012, fairStep(s, .800, .840)))
-      const crownTrim = .013 * smooth(s, .833, .874) * (1 - smooth(s, .895, .924))
-        * smooth(x, .598, .705) * (1 - smooth(x, .758, .852))
-      const sculpted = shape - cap * smooth(x, .695, .765) - crownTrim
-      const calm = mix(inY, outside[1], v * (.76 + .24 * v)) + .003 * Math.sin(Math.PI * v) ** 2
-      const fair = smooth(s, .758, .791) * (1 - smooth(s, .883, .924)) * (1 - smooth(x, .571, .610))
-      return [x, mix(sculpted, calm, fair), zAt(s)]
+      const back = s < .856 ? deckOut(s) : ridge
+      const bend = mix(mix(.012, foldHalf, fairStep(s, .640, .690)), .024, fairStep(s, .800, .852))
+      const ret = returnTurn(T.MathUtils.clamp(s, .62, .942)) * fairStep(s, .615, .690) * (1 - fairStep(s, .830, .900))
+      const section = (turn: number, at: number) => {
+        const facets = (p: number) => -turn * (hinge(p - ridge, bend) - hinge(inX - ridge, bend))
+          + ret * (hinge(p - back, bend) - hinge(inX - back, bend))
+        return inY + (outY - inY - facets(outX)) * (at - inX) / (outX - inX) + facets(at)
+      }
+      const flat = section(0, ridge), pinned = (haunchRidgeY(s) - flat) / (section(1, ridge) - flat)
+      const turn = mix(.43 * fairStep(s, .632, .690), pinned, fairStep(s, .675, .705))
+      const dish = .22 * fairStep(s, .660, .700) * (1 - fairStep(s, .860, .900)) * Math.max(0, x - inX) * Math.max(0, ridge - x)
+      return [x, section(turn, x) - dish, zAt(s)]
     }
     const deckSection = deckShape
     folded(sided((u, v) => deckSection(mix(.5984, .942 - .019 * v, u), v)),
-      [0, 1, 0], [haunchLine, lateralTrace(deckIn), lateralTrace(deckOut)])
+      [0, 1, 0], [lateralTrace(deckIn), lateralTrace(deckOut)])
     part(paint, sided((u, v) => {
       const s = mix(.594, .676, u)
       const t = smooth(s, .6, .68)
