@@ -13,10 +13,12 @@ export interface ThroatSpec {
   /** Rearward shift of the back of the throat. */
   back: number
   louvres: number
+  /** Gap from the paint edge to a separate vent insert frame, none when absent. */
+  frame?: number
 }
 
 export const sideIntake: ThroatSpec = { flange: 0.013, depth: 0.13, taper: 0.74, back: 0.07, louvres: 7 }
-export const upperIntake: ThroatSpec = { flange: 0.013, depth: 0.08, taper: 0.7, back: 0.035, louvres: 3 }
+export const upperIntake: ThroatSpec = { flange: 0.013, depth: 0.08, taper: 0.7, back: 0.035, louvres: 3, frame: 0.0035 }
 
 export interface Throat {
   wall: THREE.BufferGeometry
@@ -99,5 +101,40 @@ export function throat(S: Surface, c: SurfaceCurve, spec: ThroatSpec): Throat {
       louvres.quad(ii[0], ii[1], ii[2], ii[3])
     }
   }
+  if (spec.frame !== undefined) insert(louvres, L, N, center, spec.frame)
   return { wall: orient(wg), core: orient(core.geometry()), louvres: orient(louvres.geometry()) }
+}
+
+/** A vent insert frame inside a closed opening: an outer wall `gap` in from the paint edge, a rounded top a little under
+ * the skin and an inner wall that drops into the duct, smoothed normals smoothed so the corners keep an even radius. */
+function insert(b: MeshBuilder, L: V3[], N: V3[], center: V3, gap: number): void {
+  const m = L.length
+  const smooth = (a: V3[]): V3[] => a.map((_, i) => scale(add(add(a[(i - 1 + m) % m], a[(i + 1) % m]), scale(a[i], 2)), 0.25))
+  const P = L
+  let Q = N
+  for (let k = 0; k < 3; k++) Q = smooth(Q).map(norm)
+  const D = P.map((p, i) => {
+    const t = sub(P[(i + 1) % m], P[(i - 1 + m) % m])
+    let d = norm(cross(Q[i], t))
+    if (dot(d, sub(center, p)) < 0) d = scale(d, -1)
+    return d
+  })
+  const r = 0.0016
+  const w = 0.0062
+  const top = -0.0022
+  const prof: [number, number, number, number][] = [[0, -0.011, -1, 0], [0, top - r, -1, 0]]
+  for (let k = 1; k < 4; k++) {
+    const a = (k / 4) * (Math.PI / 2)
+    prof.push([r - r * Math.cos(a), top - r + r * Math.sin(a), -Math.cos(a), Math.sin(a)])
+  }
+  prof.push([r, top, 0, 1], [w - r, top, 0, 1])
+  for (let k = 1; k < 4; k++) {
+    const a = (k / 4) * (Math.PI / 2)
+    prof.push([w - r + r * Math.sin(a), top - r + r * Math.cos(a), Math.sin(a), Math.cos(a)])
+  }
+  prof.push([w, top - r, 1, 0], [w, -0.016, 1, 0])
+  b.grid(prof.length, m, (i, j) => {
+    const [x, y, nx, ny] = prof[i]
+    return { p: add(add(P[j], scale(D[j], gap + x)), scale(Q[j], y)), n: norm(add(scale(D[j], nx), scale(Q[j], ny))) }
+  }, true)
 }
