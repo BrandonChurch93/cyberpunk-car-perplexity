@@ -516,6 +516,21 @@ export const frontKeys = {
 
 /** Roll radius of every crease of the pass 2 body, meters: one even edge, whatever the crease's turn. */
 const creaseRoll = 0.003
+/** The waist crease runs into the rear arch twice, about 34 degrees off the lip, and a 3 mm roll there leaves a sharp
+ * tooth of paint between the lip and the crease. Over the last 0.12 m before each crossing the roll opens to 12 mm,
+ * so the crease eases into the lip and the edge turns round it. Between the crossings the crease is inside the
+ * opening. The crossings are where the arch circle of cuts.ts reaches the crease height. */
+const archCross = { front: -1.252, rear: -1.734, run: 0.12, roll: 0.012 }
+const waistRoll = ((): ReadonlyArray<readonly [number, number]> => {
+  const k: Array<readonly [number, number]> = [[0, creaseRoll]]
+  const ramp = (zA: number, zB: number, rA: number, rB: number): void => {
+    for (let i = 0; i <= 6; i++) k.push([uOf(zA + ((zB - zA) * i) / 6), rA + (rB - rA) * smoothstep(0, 1, i / 6)])
+  }
+  ramp(archCross.front + archCross.run, archCross.front, creaseRoll, archCross.roll)
+  ramp(archCross.rear, archCross.rear - archCross.run, archCross.roll, creaseRoll)
+  k.push([1, creaseRoll])
+  return k
+})()
 const cowlIn = uOf(1.53)
 const screenIn = uOf(1.4)
 
@@ -523,7 +538,7 @@ export const mainDef: LoftDef = {
   keys: [
     { fn: frontKeys.rocker },
     { fn: frontKeys.sill, round: 0.006, sharp: 1 },
-    { fn: frontKeys.crease, roll: creaseRoll, sharp: 1 },
+    { fn: frontKeys.crease, roll: waistRoll, sharp: 1 },
     { fn: frontKeys.shoulder, roll: creaseRoll, sharp: 1 },
     { fn: frontKeys.rail, roll: creaseRoll, sharp: 1 },
     // Crisp along the bonnet, dying out tangent under the windscreen.

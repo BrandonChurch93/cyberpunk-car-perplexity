@@ -570,10 +570,26 @@ function deckLuminaire(roof: THREE.Group, metal: THREE.Material, frame: THREE.Ma
   const intensity = lumens/(solidAngle*candelaPerUnit)
   const optic = new THREE.MeshBasicMaterial({ toneMapped: false })
   for (const dx of [-1,1]) plate(head,'opal LED optic',optic,[dx*.217,0,.003],.426,size[1])
+  if (x < 0) beadInsert(head,frame,'west nose cutoff',[.217,0,.015],0,0,[.066,.038],17_400)
   const object = group(head,'luminaire diode center',[0,0,.061])
   const film: FilmLight = { id, kind: 'spot', object, color, intensity, size, angle, penumbra, range: 33, shadow: true, beam: true, level: () => 1 }
   const set = (wide: boolean) => optic.color.copy(color).multiplyScalar(wide ? intensity/(size[0]*size[1]) : .024)
   return { film, set }
+}
+
+function beadInsert(
+  parent: THREE.Object3D, frame: THREE.Material, id: string, at: Tuple,
+  yaw: number, pitch: number, [width,height]: readonly [number,number], radiance: number,
+): void {
+  const insert = group(parent,id,at)
+  insert.rotation.set(pitch,yaw,0,'YXZ')
+  block(insert,'sealed optic backplate',frame,[0,0,-.031],[width+.034,height+.032,.069])
+  for (const side of [-1,1]) {
+    block(insert,'optic side rebate',frame,[side*(width*.5+.008),0,.019],[.016,height+.032,.044])
+    block(insert,'optic cutoff lip',frame,[0,side*(height*.5+.008),.022],[width+.032,.016,.050])
+  }
+  const optic = new THREE.MeshBasicMaterial({ color: new THREE.Color(.96,.96,1).multiplyScalar(radiance), toneMapped: false })
+  plate(insert,'compact bead optic',optic,[0,0,.008],width,height)
 }
 
 function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE.Material, frame: THREE.Material): { film: FilmLight; set(t: number, cutTime?: number): void } {
@@ -810,6 +826,7 @@ export function roofFixtures(roof: THREE.Group, city: THREE.Group, labels: Label
   const poles = roof.children.filter(o => o.name === 'deck light pole')
   rearRoofAccess(roof,poles[7]!,labels,metal,frame)
   const service = rearDeckPractical(poles[8]!,roof,metal,frame)
+  beadInsert(poles[0]!,frame,'west deck head cutoff',[.682,4.579,0],Math.PI*.5-.12,.26,[.061,.0315],13_400)
   const luminaires = [
     deckLuminaire(roof,metal,frame,service.film.id,[-13,7.58,2],[.04,.84,1.18],17_800),
     deckLuminaire(roof,metal,frame,'wheel deck pole',[8,7.14,11],[.37,1.10,.10],18_600),

@@ -472,10 +472,23 @@ function splitter(S: Surface, full: boolean): T.BufferGeometry {
   }
   const caps = [rows[0], rows.at(-1)!].map((ps, i) => face(ps.map(p => new T.Vector3(p.z * (i ? -1 : 1), p.y, 0)))
     .rotateY(i ? Math.PI / 2 : -Math.PI / 2).translate(ps[0].x, 0, 0))
-  const geometry = merged([grid(rows, false, true), ...caps])
-  const p = geometry.getAttribute('position'), uv = geometry.getAttribute('uv')
-  for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 2, p.getZ(i) / 2)
-  return geometry
+  const arcLengths = (points: T.Vector3[]) => {
+    let distance = 0
+    return points.map((p, i) => i === 0 ? 0 : distance += p.distanceTo(points[i - 1]))
+  }
+  const section = rows[count], cols = section.length
+  const u = arcLengths(positions)
+  // One cross-section metric keeps the tapered underside from shearing the tangent frame.
+  const v = arcLengths([...section, section[0]])
+  const wrapped = grid(rows, false, true)
+  const normal = wrapped.getAttribute('normal')
+  const shell = new MeshBuilder()
+  shell.grid(rows.length, v.length, (i, j) => {
+    const col = j % cols, k = i * cols + col
+    return { p: rows[i][col].toArray(), n: [normal.getX(k), normal.getY(k), normal.getZ(k)], u: u[i], v: v[j] }
+  })
+  wrapped.dispose()
+  return merged([shell.geometry(), ...caps])
 }
 
 export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials, full: boolean) {

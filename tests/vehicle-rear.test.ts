@@ -268,7 +268,7 @@ describe('rear module', () => {
 })
 
 describe('anisotropic tangent frames', () => {
-  const known = new Set(['cabin-carbon', 'front rolled splitter'])
+  const known = new Set<string>([])
   it('keeps tangent and bitangent apart on every face of every anisotropic vehicle material', async () => {
     const v = await createVehicle({ paint: paintById(defaultPaint), detail: 'full' })
     const e1 = new THREE.Vector3()

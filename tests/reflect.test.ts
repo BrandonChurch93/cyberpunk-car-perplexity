@@ -113,10 +113,10 @@ describe('quality', () => {
     const paint = config.beats.find(({ id }) => id === 'paint')!
     const macro = config.film.macroFrameSeconds
     expect(reflectionCaptureSize('draft', config.film.heroFrameSeconds)).toBe(quality.draft.captureSize)
-    expect(reflectionCaptureSize('draft', paint.start)).toBe(quality.review.captureSize)
-    expect(reflectionCaptureSize('draft', macro)).toBe(quality.review.captureSize)
+    expect(reflectionCaptureSize('draft', paint.start)).toBe(quality.final.captureSize)
+    expect(reflectionCaptureSize('draft', macro)).toBe(quality.final.captureSize)
     expect(reflectionCaptureSize('draft', paint.end)).toBe(quality.draft.captureSize)
-    expect(reflectionCaptureSize('review', macro)).toBe(quality.review.captureSize)
+    expect(reflectionCaptureSize('review', macro)).toBe(quality.final.captureSize)
     expect(reflectionCaptureSize('final', macro)).toBe(quality.final.captureSize)
   })
 })
