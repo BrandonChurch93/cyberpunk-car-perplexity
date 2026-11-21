@@ -206,7 +206,7 @@ export const mainDef: LoftDef = {
     {
       pts: keyLines.rail,
       monotone: true,
-      round: [[0, edge], [uz(keyLines.rail, 1.4), edge], [uz(keyLines.rail, 1.17), 0.008], [1, 0.008]],
+      round: edge,
       sharp: [[0, 0], [uz(keyLines.rail, 2.24), 0], [uz(keyLines.rail, 2.16), 1], [1, 1]],
     },
     // Crisp along the bonnet, dying out tangent under the windscreen.
@@ -225,12 +225,14 @@ export const mainDef: LoftDef = {
     { bulgeA: [[0, -0.06], [0.27, -0.06], [0.34, -0.3], [0.54, -0.3], [0.62, -0.06], [1, -0.06]] },
     // The upper flank: a plane.
     { bulgeA: [[0, 0.06], [0.2, 0.03], [0.3, 0.02], [1, 0.02]] },
-    // Wing top: a flat facet over the arch crown. Side glass: curved. Deck flank: nearly flat.
-    { bulgeA: [[0, 0], [0.225, 0], [0.3, 0.12], [0.72, 0.12], [0.84, 0.03], [1, 0.03]] },
-    // Bonnet side facet: flat. Roof and deck: crowned.
-    { bulgeA: [[0, 0], [0.17, 0], [0.27, 0.12], [1, 0.08]] },
-    // Bonnet center: a flat facet each side. Roof and deck: crowned.
-    { bulgeA: [[0, 0], [0.17, 0], [0.27, 0.08], [1, 0.08]] },
+    // Wing top: a flat facet over the arch crown. Pillar side and side glass: one flat plane leaning in. Deck flank:
+    // nearly flat.
+    { bulgeA: [[0, 0], [0.225, 0], [0.3, 0.03], [1, 0.03]] },
+    // Bonnet side facet, then the windscreen's outer part: flat, meeting the side glass at the A-pillar ridge. Roof:
+    // nearly flat. Deck: a little crowned.
+    { bulgeA: [[0, 0], [0.17, 0], [0.27, 0.02], [0.55, 0.03], [0.7, 0.06], [1, 0.06]] },
+    // Bonnet center, then the windscreen's middle: flat facets. Roof and deck: a little crowned.
+    { bulgeA: [[0, 0], [0.17, 0], [0.27, 0.02], [0.55, 0.03], [0.7, 0.06], [1, 0.06]] },
   ],
   vAt: [0, 0.1, 0.22, 0.4, 0.6, 0.78, 1],
   mirrorTop: true,

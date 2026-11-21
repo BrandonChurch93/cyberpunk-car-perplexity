@@ -7,7 +7,9 @@ import { dims } from './shape'
 
 const archFront = { z: dims.frontHubZ, y: dims.frontTire.radius, r: 0.405 }
 const archRear = { z: dims.rearHubZ, y: dims.rearTire.radius, r: 0.43 }
+/** Half the shut gap between the panel walls, and the roll radius of the panel edges either side of it. */
 export const gapHalf = 0.002
+export const gapRoll = 0.002
 
 /** Positive inside a wheel opening, in meters. A faceted arch: a circle flattened into six soft facets. */
 export function arches(p: V3): number {
@@ -87,7 +89,7 @@ export function paintTrim(c: Cuts, extra?: (p: V3) => number): (u: number, v: nu
   return (u, v, p) => {
     let d = extra ? extra(p) : -1
     for (const h of c.holes) d = Math.max(d, -h.c.signed(u, v, p, 0.3) - h.inset)
-    for (const g of c.gaps) d = Math.max(d, gapHalf - g.distance(p, 0.3))
+    for (const g of c.gaps) d = Math.max(d, gapHalf + gapRoll - g.distance(p, 0.3))
     for (const b of c.bands) d = Math.max(d, b.half - b.c.distance(p, 0.3))
     return d
   }
