@@ -8,7 +8,7 @@ import { createHaze, createHazeCapture } from '../src/core/haze'
 import type { applyLens } from '../src/core/lens'
 import { LightRig, patchFilmLighting } from '../src/core/lights'
 import { createReflections, planarTuning, quality } from '../src/core/reflect'
-import { probeLamps } from '../src/core/reflect/lamps'
+import { lampSources, probeLamps } from '../src/core/reflect/lamps'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
 import { Probe } from '../src/core/reflect/probe'
 import { boxPatch, planarPatch } from '../src/core/reflect/shaders'
@@ -116,6 +116,13 @@ it('tracks the ported guides, projector dies and tail through real lamp stages a
   const emitters = probe.root.children as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[]
   const active = () => emitters.filter((emitter) => emitter.visible)
   expect(emitters).toHaveLength(8)
+  const beams = vehicle.lamps.filter(({ beam }) => beam)
+  const published = lampSources(vehicle)
+  expect(published).toHaveLength(8)
+  for (const [index, { object }] of beams.entries()) {
+    const source = published.find(({ mesh }) => mesh === probe.mirrorApertures.get(`vehicle-beam-${index}`))
+    expect(source?.origin).toBe(object)
+  }
   expect([...probe.mirrorApertures].map(([id, mesh]) => [id, mesh.name]).sort()).toEqual([
     ['vehicle-beam-0', 'front projector LED dies 0'],
     ['vehicle-beam-1', 'front projector LED dies 0 right'],
