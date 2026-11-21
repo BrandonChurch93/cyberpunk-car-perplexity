@@ -26,7 +26,7 @@ import { makeMaterials, type Materials } from './materials'
  * closest point of the named part to that position, so every shot keeps its framing while the anchor stays on a real surface.
  */
 const filmAnchors: Record<AnchorId, { p: V3; n: V3; r: number }> = {
-  paint: { p: [0.9799, 0.7533, 1.55], n: [0.9971, 0.0623, 0.0433], r: 0.32 },
+  paint: { p: [-0.62, 0.976, -1.7], n: [-0.085, 0.989, -0.12], r: 0.32 },
   wheel: { p: [0.9563, 0.3405, 1.2852], n: [1, 0, 0], r: 0.36 },
   lamp: { p: [0.7508, 0.5352, 2.1672], n: [0.7111, 0, 0.7031], r: 0.2 },
   detail: { p: [-0.301, 1.008, -1.0389], n: [0.2285, 0.9725, 0.0438], r: 0.16 },
