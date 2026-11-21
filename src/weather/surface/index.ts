@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { circleScale, pupilIsActive } from '../../core/bokeh/pupil'
 import { config, type FormatSpec } from '../../config'
 import type { FrameContext, SampleContext, SceneSystem, WetnessKind } from '../../core/contract'
+import { probeHeight } from '../../core/reflect'
 import { cameraAt } from '../../director/shots'
 import { beatById, events, stateAt } from '../../director/timeline'
 import type { WeatherDeps } from '../contract'
@@ -16,8 +17,6 @@ import { rivuletPace, rivuletTravel, Runners } from './runners'
 import { applySheet, looksLikeRubber } from './sheet'
 
 const reliefSize = 1024
-// Mirrors the capture height in core/reflect, which keeps it private.
-const reflectProbeHeight = 0.6
 const shakeStart = events.engineStart + 0.15
 const refill = { start: beatById('return').start + 3, end: config.film.durationSeconds - 1 }
 
@@ -293,7 +292,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       cells.beginFrame(cam.position)
       drops.box.reflectBoxMin.value.copy(world.reflectionBox.min)
       drops.box.reflectBoxMax.value.copy(world.reflectionBox.max)
-      drops.box.reflectProbe.value.setFromMatrixPosition(vehicle.root.matrixWorld).y += reflectProbeHeight
+      drops.box.reflectProbe.value.setFromMatrixPosition(vehicle.root.matrixWorld).y += probeHeight
       drops.box.reflectBoxOn.value = 1
       const extra: ExtraImpact[] = runners.impacts(frameStart - 0.6, frameStart + shutter)
       ripples.update(frameStart, frameStart + shutter, center, extra)
