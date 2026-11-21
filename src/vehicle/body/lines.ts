@@ -46,7 +46,7 @@ export const frontSection = {
     { v: 1, p: [0, 0.41, 2.4737] as P3, name: 'tip' },
     { v: 0.86, p: [0.354, 0.4428, 2.384] as P3, name: 'vee' },
     { v: 0.72, p: [0.476, 0.515, 2.173] as P3, name: 'corner' },
-    { v: 0.6, p: [0.5, 0.522, 2.168] as P3, name: 'rail' },
+    { v: 0.6, p: [0.5, 0.5091, 2.168] as P3, name: 'rail' },
     { v: 0.4, p: [0.8, 0.598, 2.14] as P3, name: 'brow' },
   ],
   side: [
@@ -86,7 +86,8 @@ export const featureLines = {
     { z: 2.4737, x: 0, y: 0.41 },
     { z: 1.51, x: 0, y: 0.736 },
   ] as PathNode[],
-  /** Bonnet inner crease: straight from the bonnet corner to the windscreen base. */
+  /** Bonnet inner crease: straight from the bonnet corner to the windscreen base. The center facet stays level
+   * across; outboard of this line the bonnet's outer facet falls 17 degrees more steeply to the wing ridge. */
   inner: [
     { z: 2.173, x: 0.476, y: 0.515 },
     { z: 1.513, x: 0.29, y: 0.737 },
@@ -96,10 +97,21 @@ export const featureLines = {
     { z: 2.384, x: 0.354, y: 0.4428 },
     { z: 1.51, x: 0.15, y: 0.737 },
   ] as PathNode[],
-  /** Wing ridge: straight from the bonnet corner to the A-pillar base. */
+  /**
+   * Wing ridge: the valley where the bonnet's outer facet meets the wing top, straight from the front edge to the
+   * cowl. The outer facet is the plane through the bonnet corner turned 17 degrees down about the inner crease, the
+   * wing top the plane through this line's front end, the A-pillar base and the brow tip; the line is where they
+   * meet, so the crease turns 31 degrees along its whole length. Behind the cowl the line turns out along the
+   * windscreen's lower corner to the A-pillar base, staying in the wing top's plane: dy = 0.2751 dx - 0.2255 dz.
+   */
   rail: [
-    { z: 2.168, x: 0.5, y: 0.522 },
-    { z: 1.2, x: 0.8, y: 0.81 },
+    { z: 2.168, x: 0.5, y: 0.5091 },
+    { z: 1.513, x: 0.5312, y: 0.6655 },
+  ] as PathNode[],
+  /** The windscreen's lower corner, from the cowl out to the A-pillar base, in the wing top's plane. */
+  pillarFoot: [
+    { z: 1.513, x: 0.5312, y: 0.6655, d: [-2.0, -0.7757] },
+    { z: 1.2, x: 0.8, y: 0.81, d: [-0.4, -0.3355] },
   ] as PathNode[],
   /** A pillar, from its base on the wing ridge to the header. */
   pillar: [

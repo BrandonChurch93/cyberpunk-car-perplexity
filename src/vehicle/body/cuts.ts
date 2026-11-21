@@ -132,6 +132,26 @@ export interface BodyCuts {
   maps: { main: SurfaceMap; front: SurfaceMap; rear: SurfaceMap }
 }
 
+/**
+ * An open shut line drawn on past the edge of the skin, ended where it first leaves it. A projected point beyond the
+ * front edge clamps onto that edge, and one past the side of the skin in plan falls through to the flank below, so
+ * without this the line would run on along the edge, or jump down the flank, and its lips would stand up as spikes.
+ */
+function onSkin(S: Surface, c: SurfaceCurve, maxJump = 0.05): SurfaceCurve {
+  const uv = c.uv
+  const p = c.p
+  for (let k = 1; k < uv.length; k++) {
+    if (uv[k][0] < 5e-4) {
+      const a = uv[k - 1]
+      const b = uv[k]
+      const t = a[0] / Math.max(1e-9, a[0] - b[0])
+      return new SurfaceCurve(S, [...uv.slice(0, k), [0, a[1] + (b[1] - a[1]) * t]], false)
+    }
+    if (Math.hypot(p[k][0] - p[k - 1][0], p[k][1] - p[k - 1][1], p[k][2] - p[k - 1][2]) > maxJump) return new SurfaceCurve(S, uv.slice(0, k), false)
+  }
+  return c
+}
+
 /** The body's cuts. The front surface is made from the main cuts, because the fascia is fitted to the main skin's
  * tessellated front edge, and the main skin's trims never reach that edge. */
 export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, rear: Surface): BodyCuts {
@@ -147,8 +167,8 @@ export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, re
   const screen = projectCurve(mm, 'y', planLines.windscreen, true, 0.008, topWin, true, 0.03)
   const rearGlass = projectCurve(mm, 'y', planLines.rearGlass, true, 0.008, topWin, true, 0.03)
   const bay = projectCurve(mm, 'y', planLines.bay, true, 0.008, topWin, true, 0.06)
-  const bonnet = projectCurve(mm, 'y', planLines.bonnet, false, 0.006, topWin, false, 0.08)
-  const wing = projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08)
+  const bonnet = onSkin(main, projectCurve(mm, 'y', planLines.bonnet, false, 0.006, topWin, false, 0.08))
+  const wing = onSkin(main, projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08))
   const lampWrapCut = lampWrapHole(main)
   const mainCuts: Cuts = {
     holes: [

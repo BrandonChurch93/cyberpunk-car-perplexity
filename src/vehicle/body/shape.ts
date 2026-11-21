@@ -424,11 +424,12 @@ const centerPath = joined(
     ]),
   },
 )
-// Wing ridge: straight to the A-pillar base, then the pillar straight to the header, where the roof rail carries on
-// as it was.
+// Wing ridge: straight to the cowl, then out round the windscreen's lower corner to the A-pillar base, then the pillar
+// straight to the header, where the roof rail carries on as it was.
 const pillarBase = F.pillar[0]
 const railPath = joined(
   zPath(F.rail),
+  { z: F.pillarFoot[0].z, w: 0.02, f: zPath(F.pillarFoot) },
   {
     z: pillarBase.z,
     w: 0.06,
@@ -438,24 +439,26 @@ const railPath = joined(
     ]),
   },
 )
-/** On the screen a line at x between the center and the rail lies on one even crown through both. */
+/**
+ * On the screen a line at x between the center and the rail lies on one crown through both: a parabola across at the
+ * cowl, easing to the straight header at the top, so every section is convex and the crown fades evenly up the glass.
+ */
 const onScreen = (x: (z: number) => number): ZFn => (z) => {
   const c = centerPath(z)
   const r = railPath(z)
-  const xi = x(z)
-  return [xi, c[1] - (c[1] - r[1]) * (xi / r[0]) ** 2, z]
+  const xi = x(z) / r[0]
+  const w = smoothstep(1.51, zRoof, z)
+  return [x(z), c[1] - (c[1] - r[1]) * ((1 - w) * xi * xi + w * xi), z]
 }
 const lin = (z: number, za: number, a: number, zb: number, b: number): number => a + ((b - a) * (z - za)) / (zb - za)
 const innerPath = joined(
   zPath(F.inner),
   { z: 1.51, w: 0.02, f: onScreen((z) => lin(z, 1.513, 0.29, zRoof, old.inner.at(uOf(zRoof))[0])) },
-  { z: 0.73, w: 0.27, f: byZ(old.inner) },
 )
 const veeOld: ZFn = (z) => refVee(uOf(z))
 const veePath = joined(
   zPath(F.vee),
   { z: 1.51, w: 0.02, f: onScreen((z) => lin(z, 1.51, 0.15, zRoof, veeOld(zRoof)[0])) },
-  { z: 0.73, w: 0.27, f: veeOld },
 )
 // The arch shoulder: from the brow tip over the arch, into the old shoulder halfway down the door.
 const zShoulder = -0.34
@@ -494,8 +497,10 @@ export const mainDef: LoftDef = {
     { fn: frontKeys.inner, round: [[0, edge], [cowlIn, edge], [uOf(1.3), 0.08], [1, 0.08]], sharp: [[0, 1], [cowlIn, 1], [screenIn, 0], [1, 0]] },
     // Unseen: it only carries the V end of the front edge back inside the flat center facet.
     { fn: frontKeys.vee, sharp: [[0, 1], [cowlIn, 1], [screenIn, 0], [1, 0]] },
-    // The two center facets meet at a ridge too shallow to see; on the screen and roof the center line is smooth.
-    { fn: frontKeys.center, round: [[0, 0], [uCowl, 0], [uOf(1.3), 0.15], [1, 0.15]], sharp: [[0, 1], [uCowl, 1], [screenIn, 0], [1, 0]] },
+    // The two center facets meet at a ridge too shallow to see; on the screen and roof the center line is smooth. The
+    // screen's crown is level across the center line already, so it takes no blend there: a blend would bunch its
+    // curvature into a band down the middle of the glass.
+    { fn: frontKeys.center, round: [[0, 0], [uOf(zRoof), 0], [uOf(0.2), 0.15], [1, 0.15]], sharp: [[0, 1], [uCowl, 1], [screenIn, 0], [1, 0]] },
   ],
   segs: [
     refDef.segs[0],
