@@ -12,6 +12,17 @@ type Tint = keyof typeof colors
 const windowRadiance: Record<Tint,number> = { cyan: 3.7, magenta: 4.5, amber: 4.0, ivory: 2.25 }
 type Run = readonly [fraction: number, y: number, tint: Tint, count: number, w: number, h: number]
 type Window = { at: Tuple; size: readonly [number,number]; tint: Tint; gain: number }
+type OfficeFloor = readonly [x: number, y: number, tint: 'ivory' | 'amber', gains: readonly number[]]
+
+const eastOfficeFloors: readonly OfficeFloor[] = [
+  [-7.5,61.3,'ivory',[0,.38,.62,.25,.48,.08,0]],
+  [4.5,57.8,'amber',[.12,.46,.24,.07,.38,.54,0,.23]],
+  [-9.4,53.9,'ivory',[.10,.26,0,.28,.47,.30]],
+  [8,49.9,'ivory',[.42,.62,.34,.20,.54,0,.18]],
+  [-8.3,33.8,'amber',[.06,.34,.21,.38,0,.12]],
+  [9.7,30.4,'ivory',[0,.46,.55,.26,.09,.50]],
+  [10.6,18.2,'amber',[.12,0,.44,.19,.32]],
+]
 
 const floors: Partial<Record<string,readonly Run[]>> = {
   'hero left edge tower': [[.435,46,'ivory',3,1.44,.69],[.430,74,'cyan',4,1.27,.73],[.462,99,'magenta',2,1.06,.62]],
@@ -22,7 +33,7 @@ const floors: Partial<Record<string,readonly Run[]>> = {
   'c9 center clock stack': [[-.13,96,'cyan',3,1.39,1.15],[.16,109,'magenta',3,1.61,1.20]],
   'hero tower setback glass wing': [[-.15,48,'cyan',3,1.71,.78],[.22,59,'magenta',2,1.49,1.13]],
   'hero screen tower': [[-.456,69,'magenta',2,1.48,.93],[-.466,88,'cyan',2,1.64,1.12],[.47,62,'magenta',2,1.7,1.25],[.46,79,'ivory',2,1.94,1.31]],
-  'hero amber tower': [[.28,43,'amber',4,1.72,.94],[-.20,63,'magenta',3,1.65,1.21],[.24,83,'amber',4,1.81,1.19],[-.16,94,'ivory',3,1.89,1.3]],
+  'hero amber tower': [[.28,43,'amber',4,1.72,.94],[-.20,63,'magenta',3,1.65,1.21],[.252,70.2,'ivory',3,1.25,.94],[.24,83,'amber',4,1.81,1.19],[-.16,94,'ivory',3,1.89,1.3]],
   'hero near east garage bay': [[-.31,39,'cyan',3,1.12,.71],[.13,58,'magenta',3,1.47,.96],[-.20,75,'ivory',3,1.48,.81]],
   'hero right edge tower': [[-.448,60,'amber',3,1.58,.87],[-.42,79,'ivory',3,1.80,1.08],[-.32,101,'magenta',3,1.81,1.16]],
   'c9 east narrow stair': [[-.08,86,'cyan',3,1.57,1.22],[.06,103,'cyan',2,1.58,1.35]],
@@ -64,6 +75,17 @@ export function deckReflectionTrim(frame: THREE.Material, zinc: THREE.Material) 
       })))
     batch(bank,'recessed lit window apertures',slots,false)
   }
+  const eastOffices = (parent: THREE.Group, x: number, z: number) => {
+    const bank = group(parent,'east office curtain wall bays')
+    const slots = eastOfficeFloors.flatMap(([offset,y,tint,gains],row) => gains.map((gain,i): Window => {
+      const height = [1.24,1.08,.82,1.31][(i+2*row)%4]!
+      return {
+        at: [x+offset+(i-(gains.length-1)*.5)*1.64,y+(height-1.31)*.5,z+.248],
+        size: [1.28,height], tint, gain,
+      }
+    }))
+    batch(bank,'warm office window panes',slots,false)
+  }
   const parapet = (parent: THREE.Group) => {
     const run = group(parent,'parapet service lighting')
     const lamps = [
@@ -74,7 +96,7 @@ export function deckReflectionTrim(frame: THREE.Material, zinc: THREE.Material) 
       at: [x,y,-9.797], size: [w,h], tint: 'ivory', gain,
     })),true)
   }
-  return { tower, parapet }
+  return { eastOffices, tower, parapet }
 }
 
 export function paintBayLine(parent: THREE.Group, name: string, material: THREE.Material,

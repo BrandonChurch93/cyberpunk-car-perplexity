@@ -46,6 +46,7 @@ function snapAnchor(target: { p: V3; n: V3; r: number }, parts: THREE.Mesh[], us
   const na = new THREE.Vector3()
   const nb = new THREE.Vector3()
   const nc = new THREE.Vector3()
+  const sn = new THREE.Vector3()
   const best = { d: Infinity, p: new THREE.Vector3(), n: new THREE.Vector3() }
   for (const mesh of parts) {
     const pos = mesh.geometry.getAttribute('position')
@@ -64,16 +65,21 @@ function snapAnchor(target: { p: V3; n: V3; r: number }, parts: THREE.Mesh[], us
       tri.closestPointToPoint(q, c)
       const d = c.distanceToSquared(q)
       if (d >= best.d) continue
-      best.d = d
-      best.p.copy(c)
       tri.getBarycoord(c, bary)
       if (nor) {
         na.fromBufferAttribute(nor, ia)
         nb.fromBufferAttribute(nor, ib)
         nc.fromBufferAttribute(nor, ic)
-        best.n.copy(na.multiplyScalar(bary.x)).addScaledVector(nb, bary.y).addScaledVector(nc, bary.z).applyMatrix3(normalMatrix)
+        sn.copy(na.multiplyScalar(bary.x)).addScaledVector(nb, bary.y).addScaledVector(nc, bary.z).applyMatrix3(normalMatrix)
       }
-      if (!nor || best.n.lengthSq() < 1e-12) tri.getNormal(best.n)
+      if (!nor || sn.lengthSq() < 1e-12) tri.getNormal(sn)
+      // A surface anchor lands only on a face turned within 60 degrees of the film car's normal, either side: the
+      // nearest point can sit on a wall or edge beside the panel, and a camera aimed along that wall's normal sees
+      // the wrong side of the part.
+      if (useSurfaceNormal && Math.abs(sn.dot(hint)) < 0.5 * sn.length()) continue
+      best.d = d
+      best.p.copy(c)
+      best.n.copy(sn)
     }
   }
   const normal = useSurfaceNormal ? best.n.normalize() : hint.clone()
@@ -110,6 +116,7 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
 
   const body = buildBody({ maxEdge: 0.04, maxAngle: 0.06, tolerance: 0.0025, edgeLength: 0.012 })
   add(sprung, body.paint, m.paint, 'paint')
+  add(sprung, body.gapFloor, m.shell, 'gap-floor')
   const tess = { ...body.grids.main, maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, minEdge: 0.0012, edgeLength: 0.012 }
   const side = glazing(body.surfaces.main, [body.cuts.curves.dlo, body.cuts.curves.rearGlass], tess)
   const screen = glazing(body.surfaces.main, [body.cuts.curves.screen], tess)
@@ -137,6 +144,7 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const tl = taillamps(cuts.maps.rear, [cuts.curves.stem, cuts.curves.lampU, cuts.curves.lampL], cuts.curves.lens, cuts.curves.slot, { map: cuts.maps.main, curve: cuts.curves.lampWrap })
   addPair(tl.guide, m.tail, 'tail-guide')
   addPair(tl.housing, m.under, 'tail-housing')
+  addPair(tl.reflector, m.retro, 'tail-reflector')
 
   // Front module: eyes, Y guides, projectors, ducts, grille and splitter (parts/front.ts).
   // The registry accepts any material; the front module tags its own lens, guide and die finishes.
@@ -160,8 +168,8 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   add(sprung, by.mesh, m.mesh, 'bay-mesh')
 
   const ub = underbody()
-  addPair(ub.floor, m.under, 'diffuser')
-  addPair(ub.strakes, m.carbon, 'diffuser-fin')
+  addPair(ub.floor, m.darkCarbon, 'diffuser')
+  addPair(ub.strakes, m.satin, 'diffuser-fin')
   const va = valance(cuts.curves.lower, cuts.maps.rear)
   addPair(va.wall, m.under, 'diffuser-wall')
   addPair(va.panel, m.mesh, 'diffuser-mesh')
@@ -193,7 +201,9 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
     paint: snapAnchor(film.paint, meshes((n) => n === 'paint'), true),
     wheel: snapAnchor(film.wheel, meshes((n, g) => g === 'wheel-front-left' && (n === 'rim' || n === 'disc-hat')), false),
     lamp: snapAnchor(film.lamp, meshes((n) => n === 'front convex projector lenses'), true),
-    detail: snapAnchor(film.detail, meshes((n) => n.startsWith('bay-') || n.startsWith('cam-cover') || n === 'plenum'), true),
+    // The detail beat looks across the right-hand airbox grille. The anchor lands on that grille and keeps the film
+    // car's normal: the grille is a field of hex cell walls, and any one wall's normal aims the camera off the panel.
+    detail: snapAnchor(film.detail, meshes((n) => n === 'bay-grille-right'), false),
     exhaust: snapAnchor(film.exhaust, meshes((n) => n === 'paint' || n.startsWith('outlet-')), false),
   }
 
@@ -229,7 +239,10 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
     const a = 0.0015 * state.vibration
     sprung.position.y = a * (0.7 * Math.sin(2 * Math.PI * f1 * t) + 0.3 * Math.sin(2 * Math.PI * f2 * t + 1.3))
     sprung.rotation.z = a * 0.4 * Math.sin(2 * Math.PI * f2 * t)
-    const run = ramp(lampThresholds.running, state.lampStage)
+    // Running and tail lamps follow the stage continuously, as the square of it like the front running light, so
+    // they come up softly with the ramp and the lamps-off ramp leaves a last faint glow instead of a switch.
+    const stage = Math.min(1, Math.max(0, state.lampStage))
+    const run = stage * stage
     const beam = ramp(lampThresholds.beamStart, state.lampStage) * (0.3 + 0.7 * smoothstep(lampThresholds.beamStart, lampThresholds.beamFull, state.lampStage))
     const rising = engineCurve(t) > engineCurve(t - 0.02) ? 1 : 0
     const e = Math.min(1, Math.max(0, state.engine))

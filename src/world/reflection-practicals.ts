@@ -29,12 +29,12 @@ export function reflectionPracticalBuilder(labels: Label, metal: THREE.Material,
     plate(fixture,'sealed opal aperture',fixtureOpal(new THREE.Color(...rgb),segments),[0,0,.004],w,h)
     return fixture
   }
-  const cabinet = (parent: THREE.Object3D,name: string,at: Tuple,[w,h]: Size,rgb: Tuple,text: string, vertical = false, radiance = 1) => {
+  const cabinet = (parent: THREE.Object3D,name: string,at: Tuple,[w,h]: Size,rgb: Tuple,text: string, vertical = false, radiance = 1, diffusion = .40) => {
     const allowed = config.signage.generic.find(s=>s===text)
     if (!allowed) throw new Error(`Unapproved reflection practical sign: ${text}`)
     const color = new THREE.Color(...rgb)
     const fixture = mount(parent,name,at,[w,h],Math.min(.56,h*.29))
-    const face = plate(fixture,'diffusing cabinet face',fixtureOpal(color.clone().multiplyScalar(.40*Math.sqrt(radiance)),1),[0,0,.006],w,h)
+    const face = plate(fixture,'diffusing cabinet face',fixtureOpal(color.clone().multiplyScalar(diffusion*Math.sqrt(radiance)),1),[0,0,.006],w,h)
     const letters = labels(allowed,'World Condensed',vertical ? [...allowed] : [allowed],w/h)
     if (letters) {
       const material = signGlass(letters,color,w,h,true,radiance)
@@ -87,14 +87,20 @@ export function addReflectionFrontages(root: THREE.Object3D, labels: Label) {
     }
   }
   for (const [i,x] of [-8.1,0,8.4].entries()) {
+    block(flank,'retail sign receiver plate',[x,.94,.088],[5.96,1.14,.21],zinc)
     cabinet(flank,'stacked east retail box sign',[x,.94,.47],[5.82,1.03],[7.8,3.10,.62],['ARCADE','NOODLES','24H'][i],false,2.8)
   }
-  const near = group(frontage,'north deck cyan guidance',[0,0,18.35])
+  const northWall = root.getObjectByName('four-sided concrete parapet and steel rail')!.getObjectByName('north')!
+  const near = group(northWall,'north deck cyan guidance',[0,0,-.13])
   near.rotation.y = Math.PI
   for (const [i,x] of [-5.1,-1.55,2.4,7.7].entries()) {
     const fixture = [2.12,2.72,3.07,3.48][i]
-    block(near,'guardwall sign attachment',[x,.93,-.167],[fixture+.24,.18,.85])
-    opal(near,'reflected cyan north guardwall lamp',[x,.93,.288],[fixture,.124],[.16,4.4,7.2],1)
+    block(near,'guardwall sign attachment',[x,.89,.082],[fixture+.24,.214,.226])
+    for (const dx of [-.37,.37]) {
+      block(near,'guardwall sign anchored saddle',[x+fixture*dx,.699,.039],[.122,.424,.169],zinc)
+      block(near,'guardwall saddle footing',[x+fixture*dx,.547,-.045],[.185,.138,.204])
+    }
+    opal(near,'reflected cyan north guardwall lamp',[x,.89,.206],[fixture,.091],[.16,3.24,5.68],1)
   }
   const north = group(frontage,'northwest market media elevation',[-50,0,42])
   north.rotation.y = Math.atan2(-north.position.x,-north.position.z)
@@ -110,10 +116,13 @@ export function addReflectionFrontages(root: THREE.Object3D, labels: Label) {
   }
   const update = screen(north,'northwest animated LED wall',[-.8,24.8,1.37],[30,17.4],[7.6,.48,3.15],[1.87,.65,9.4],.84,.84)
   for (const [x,y,w] of [[-9,8.32,17.8],[9.4,10.19,16.7],[-6,42.2,17]]) {
-    opal(north,'horizontal cyan market fascia',[x,y,.55],[w,.51],[.12,6.7,11.6],1)
+    block(north,'recessed market fascia spandrel',[x,y,.13],[w+.54,.94,.32],spandrel)
+    opal(north,'horizontal cyan market fascia',[x,y,.39],[w,.27],[.12,4.97,8.8],1)
   }
   for (const [i,x] of [-9.5,6.4,15.6].entries()) {
-    cabinet(north,'market blade wayfinding',[x,12.9+i*1.24,.78],[4.66,1.53],[7.1,2.95,.63],['ARCADE','OPEN','24H'][i])
+    const y = 12.9+i*1.24
+    block(north,'market blade receiver plate',[x,y,.15],[4.94,1.78,.36],zinc)
+    cabinet(north,'market blade wayfinding',[x,y,.67],[4.66,1.53],[7.1,2.95,.63],['ARCADE','OPEN','24H'][i])
   }
   return { update, signs: ['OPEN','24H','PARKING','ARCADE','NOODLES'] }
 }

@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { SurfaceCurve } from '../geom/cuts'
 import { MeshBuilder } from '../geom/mesh'
 import { add, cross, dot, norm, scale, sub, type V2, type V3 } from '../geom/vec'
-import { merge, solid } from './solid'
+import { finish, merge, solid } from './solid'
 
 export interface Bay {
   tub: THREE.BufferGeometry
@@ -269,15 +269,15 @@ export function engineBay(edge: SurfaceCurve, cell: number): Bay {
   const mesh = honeycomb(meshFrame, hx, Math.abs(ms.z1 - ms.z0) / 2, cell, cell * 0.16, ms.thick, 0.0006, 0.008)
 
   return {
-    tub: tub.geometry(),
-    covers: covers.geometry(),
-    carbon: carbon.geometry(),
-    center: center.geometry(),
-    mesh: mesh.geometry(),
-    grille: grille.geometry(),
-    bezel: bezel.geometry(),
-    duct: duct.geometry(),
-    ledge: ledge.geometry(),
+    tub: finish(tub),
+    covers: finish(covers),
+    carbon: finish(carbon),
+    center: finish(center),
+    mesh: finish(mesh),
+    grille: finish(grille),
+    bezel: finish(bezel),
+    duct: finish(duct),
+    ledge: finish(ledge),
     grilleCenter: f.c,
     grilleNormal: f.n,
     meshCenter: [0, ms.y, mz],

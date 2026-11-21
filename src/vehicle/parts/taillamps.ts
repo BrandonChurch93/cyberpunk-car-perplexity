@@ -2,10 +2,13 @@ import type * as THREE from 'three'
 import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
 import { MeshBuilder } from '../geom/mesh'
 import { add, cross, dist, dot, lerp3, norm, scale, sub, type V3 } from '../geom/vec'
-import { bar, barOn, holePlane, merge, pocket, solid, tailNormal } from './solid'
+import { bar, barOn, finish, holePlane, merge, pocket, solid, tailNormal } from './solid'
 
 /** Light guide section, the depth of the dark lens recess it sits in, and of the slot below. */
 export const lampSpec = { guide: 0.012, thick: 0.016, front: 0.005, corner: 0.003, lens: 0.022, slot: 0.05, inset: 0.015 } as const
+
+/** The reflector in the slot: set back behind the paint flange, a slim plate with a rolled edge, a hair inside the slot wall. */
+const reflectorSpec = { front: 0.016, thick: 0.005, gap: 0.0015, roll: 0.0012 } as const
 
 /** The lamp's corner hole on the main skin and the map it lies on; its stretch along the skin's rear edge is open. */
 export interface LampWrap {
@@ -184,7 +187,7 @@ function wrapGuide(rm: SurfaceMap, upper: V3[], lower: V3[], top: Rim[], bottom:
  * With the corner hole given, the lens runs round the corner in one recess and the Y's arms join round its front tip;
  * strokes are then the stem, the upper and the lower arm.
  */
-export function taillamps(rm: SurfaceMap, strokes: SurfaceCurve[], lens: SurfaceCurve, slot: SurfaceCurve, wrap?: LampWrap): { guide: THREE.BufferGeometry; housing: THREE.BufferGeometry } {
+export function taillamps(rm: SurfaceMap, strokes: SurfaceCurve[], lens: SurfaceCurve, slot: SurfaceCurve, wrap?: LampWrap): { guide: THREE.BufferGeometry; housing: THREE.BufferGeometry; reflector: THREE.BufferGeometry } {
   const s = lampSpec
   const guide = new MeshBuilder()
   const housing = new MeshBuilder()
@@ -200,5 +203,43 @@ export function taillamps(rm: SurfaceMap, strokes: SurfaceCurve[], lens: Surface
     merge(housing, pocket(rm, lens, holePlane(rm, lens), s.lens))
   }
   merge(housing, pocket(rm, slot, holePlane(rm, slot), s.slot))
-  return { guide: guide.geometry(), housing: housing.geometry() }
+  return { guide: finish(guide), housing: finish(housing), reflector: finish(reflector(rm, slot)) }
+}
+
+/** A slim plate set into the slot, following the tail behind its outline, every edge rolled. */
+function reflector(rm: SurfaceMap, slot: SurfaceCurve): MeshBuilder {
+  const r = reflectorSpec
+  const pts = slot.p
+  const m = pts.length
+  const centre = pts.reduce<V3>((a, p) => add(a, scale(p, 1 / m)), [0, 0, 0])
+  const frame = pts.map((p, j) => {
+    const nn = tailNormal(rm, p)
+    const t = sub(pts[(j + 1) % m], pts[(j - 1 + m) % m])
+    let h = norm(cross(nn, t))
+    if (dot(sub(centre, p), h) < 0) h = scale(h, -1)
+    return { p, nn, h }
+  })
+  const ring = (inward: number, depth: number): V3[] => frame.map((e) => add(add(e.p, scale(e.h, inward)), scale(e.nn, -depth)))
+  const mid = (depth: number): V3[] => {
+    const c = ring(r.gap + r.roll, depth).reduce<V3>((a, p) => add(a, scale(p, 1 / m)), [0, 0, 0])
+    return frame.map(() => c)
+  }
+  const s0 = r.front
+  const s1 = r.front + r.thick
+  const rows: V3[][] = [mid(s0)]
+  const sharp: boolean[] = [true]
+  const k = 3
+  for (let i = 0; i <= k; i++) {
+    const a = (Math.PI / 2) * (i / k)
+    rows.push(ring(r.gap + r.roll * (1 - Math.sin(a)), s0 + r.roll * (1 - Math.cos(a))))
+    sharp.push(false)
+  }
+  for (let i = 0; i <= k; i++) {
+    const a = (Math.PI / 2) * (i / k)
+    rows.push(ring(r.gap + r.roll * (1 - Math.cos(a)), s1 - r.roll * (1 - Math.sin(a))))
+    sharp.push(false)
+  }
+  rows.push(mid(s1))
+  sharp.push(true)
+  return solid(rows, sharp, false)
 }
