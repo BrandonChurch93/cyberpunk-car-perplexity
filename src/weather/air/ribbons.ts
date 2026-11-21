@@ -7,6 +7,7 @@ import { stream } from '../../core/random'
 import type { WorldModule } from '../../world'
 import { fallCycle, prevailingWind, terminalSpeed } from './motion'
 import { clipBounds, rainFloor, ribbonCorners, worldRainMotion, WorldRibbonSelection } from './selection'
+import { RainSkyDepth } from './sky-depth'
 
 type Fade = readonly [number, number, number, number]
 interface RibbonField {
@@ -23,10 +24,17 @@ interface RibbonField {
 const scatter = /* glsl */ `
 ${filmLightsGlsl}
 
-vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool local, float paint, float hero, out vec3 flash, out vec3 trace) {
+float skyEmitterSupport(int i, float distance2) {
+  if (filmLightShape[i].w > 0.5 || (filmLightShape[i].z > 0.5 && filmLightShape[i].x > 0.0)) return 1.0;
+  return 1.0 - smoothstep(16.0, 144.0, distance2);
+}
+
+vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool local, float paint, float hero, bool skyAware, out vec3 flash, out vec3 trace, out float skyKeep) {
+  const vec3 luma = vec3(0.2126, 0.7152, 0.0722);
   vec3 light = vec3(0.0);
   flash = vec3(0.0);
   trace = vec3(1.0);
+  float skyLight = 0.0;
   vec3 beamExposure = vec3(0.0);
   bool sampleBeam = local && hero > 0.5;
   bool fineBeam = local && hero > 1.5;
@@ -58,7 +66,9 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
     if (media) {
       float spread = min(0.032, extent * extent * 0.38 / max(0.01, distance2));
       float forward = exp(-(1.0 - mu) / (0.019 + spread));
-      light += incident * forward;
+      vec3 scattered = incident * forward;
+      light += scattered;
+      if (skyAware) skyLight += dot(scattered, luma) * skyEmitterSupport(i, distance2);
       continue;
     }
     if (local) {
@@ -67,7 +77,6 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
       float reach = smoothstep(0.015, 0.16, distance2) * (1.0 - smoothstep(16.0, 42.25, distance2));
       float scatter = (forward + rim) * reach;
       if (sampleBeam) {
-        const vec3 luma = vec3(0.2126, 0.7152, 0.0722);
         beamExposure += vec3(dot(early, luma), dot(incident, luma), dot(late, luma)) * scatter;
         flash += max(incident, max(early, late)) * scatter;
       } else flash += incident * scatter;
@@ -90,10 +99,12 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
     float forwardGain = area ? 2.55 : compact ? (splash ? 2.0 : 3.45) : 2.16;
     float side = paint > 1.5 ? 0.10 + 0.28 * exp2(-12.0 * abs(mu + 0.19)) : paint > 0.5 ? 0.055 + 0.16 * exp2(-14.0 * abs(mu + 0.12)) : 0.0;
     vec3 scattered = incident * (0.002 + side + (forwardGain + 4.85 * distantPanel) * forward + (area ? 0.17 : compact ? 0.16 : 0.095) * rim);
+    if (skyAware) skyLight += dot(scattered, luma) * skyEmitterSupport(i, distance2);
     if (sharpSpot && field >= 0.0) flash += scattered;
     else light += scattered;
   }
   vec3 total = light + flash;
+  skyKeep = skyAware ? clamp(skyLight / max(1e-8, dot(total, luma)), 0.0, 1.0) : 1.0;
   if (sampleBeam) trace = beamExposure / max(1e-6, max(beamExposure.r, max(beamExposure.g, beamExposure.b)));
   float response = 1.0 + max(max(total.r, total.g), total.b) * 0.21;
   flash /= response;
@@ -121,6 +132,7 @@ uniform vec2 uAperture;
 uniform vec2 uFocusAperture;
 uniform vec2 uLensShift;
 uniform float uFilmView;
+uniform bool uSkyDepthEnabled;
 uniform float uPaint;
 uniform float uHero;
 uniform vec3 uOpticalEye;
@@ -133,6 +145,7 @@ flat out float vBead;
 flat out float vMist;
 flat out vec3 vBeamTrace;
 flat out vec2 vGlint;
+flat out float vSkyKeep;
 
 ${scatter}
 
@@ -230,7 +243,7 @@ void main() {
   float paint = uPaint;
   if (paint > 1.5 && depth > uFocus * 1.4) paint = 0.0;
   vec3 trace;
-  vec3 radiance = scatterRain(p, delta, normalize(eye - p), mist, uLayer, uLocalFine > 0.5, paint, uHero, flash, trace);
+  vec3 radiance = scatterRain(p, delta, normalize(eye - p), mist, uLayer, uLocalFine > 0.5, paint, uHero, uSkyDepthEnabled, flash, trace, vSkyKeep);
   if (all(equal(radiance + flash, vec3(0.0)))) return;
   float gain = uLayer < 0.0 ? (mist ? 1.0 : 0.64) : uGain;
   float paintDefocus = smoothstep(0.10, 0.34, abs(depth / uFocus - 1.0));
@@ -283,6 +296,8 @@ void main() {
 `
 
 const fragment = /* glsl */ `
+uniform bool uSkyDepthEnabled;
+uniform sampler2D uSkyDepth;
 flat in vec2 vHead;
 flat in vec2 vTail;
 flat in vec2 vSigma;
@@ -292,6 +307,7 @@ flat in float vBead;
 flat in float vMist;
 flat in vec3 vBeamTrace;
 flat in vec2 vGlint;
+flat in float vSkyKeep;
 out vec4 outColor;
 
 void main() {
@@ -316,6 +332,9 @@ void main() {
     float glint = (x - vGlint.x) / vGlint.y;
     beamTrace *= mix(0.095, 1.0, exp(-0.5 * glint * glint));
   }
+  if (uSkyDepthEnabled && texelFetch(uSkyDepth, ivec2(gl_FragCoord.xy), 0).r >= 1.0) {
+    beamTrace *= mix(0.04, 1.0, vSkyKeep);
+  }
   outColor = vec4(vRadiance * (envelope * profile * beamTrace), 0.0);
 }
 `
@@ -331,6 +350,7 @@ export function makeRibbonGeometry(drops: Float32Array, motion: Float32Array, dy
 }
 
 export class RibbonView {
+  private readonly skyDepth = new RainSkyDepth()
   private sample: SampleContext | undefined
   private paint = false
   private hero = false
@@ -353,6 +373,7 @@ export class RibbonView {
 
   beginSample(sample: SampleContext): void {
     this.sample = sample
+    this.skyDepth.beginSample()
   }
 
   registerPaintField(geometry: THREE.InstancedBufferGeometry): void {
@@ -385,6 +406,8 @@ export class RibbonView {
       uFocusAperture: { value: new THREE.Vector2() },
       uLensShift: { value: new THREE.Vector2() },
       uFilmView: { value: 0 },
+      uSkyDepthEnabled: { value: false },
+      uSkyDepth: { value: null as THREE.DepthTexture | null },
       uPaint: { value: 0 },
       uHero: { value: 0 },
       uOpticalEye: { value: new THREE.Vector3() },
@@ -418,6 +441,8 @@ export class RibbonView {
       uniform.uPhase.value = this.phase
       const s = this.sample
       uniform.uFilmView.value = s && camera === s.camera ? 1 : 0
+      uniform.uSkyDepth.value = uniform.uFilmView.value && layer >= 0 && !field?.local ? this.skyDepth.capture(renderer) : null
+      uniform.uSkyDepthEnabled.value = uniform.uSkyDepth.value !== null
       uniform.uPaint.value = this.paint && uniform.uFilmView.value ? field?.paint ? 1 : layer === -1 ? 2 : 0 : 0
       uniform.uHero.value = this.hero && uniform.uFilmView.value ? field?.hero === 'media' ? 3 : field?.hero ? 2 : 1 : 0
       uniform.uAperture.value.set(0, 0)
