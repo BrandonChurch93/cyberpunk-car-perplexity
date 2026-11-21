@@ -2,7 +2,13 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { dims } from '../src/vehicle/body/shape'
 import { openEdges, windingAgreement } from './vehicle-rear-mesh'
-import { centreY, floorY, sheet, strakes, tailZ, underbody } from '../src/vehicle/parts/diffuser'
+import { centreY, floorY, sheet, strakes, tailZ, underbody, valance } from '../src/vehicle/parts/diffuser'
+import { buildBody } from '../src/vehicle/body/body'
+import { mainLoft } from '../src/vehicle/body/shape'
+import { rearFace } from '../src/vehicle/body/tail'
+import { outlets } from '../src/vehicle/parts/outlets'
+import { taillamps } from '../src/vehicle/parts/taillamps'
+import { engineBay } from '../src/vehicle/parts/enginebay'
 
 describe('rear underbody', () => {
   const u = underbody()
@@ -52,5 +58,71 @@ describe('rear underbody', () => {
   it('runs the diffuser at 11 degrees in the centre', () => {
     const slope = (centreY(-2.2) - centreY(-2.0)) / 0.2
     expect((Math.atan(slope) * 180) / Math.PI).toBeCloseTo(11, 1)
+  })
+})
+
+describe('rear module', () => {
+  const body = buildBody({ maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, edgeLength: 0.007 })
+  const c = body.cuts.curves
+  const ex = outlets(c.surround)
+  const tl = taillamps(body.cuts.maps.rear, [c.stem, c.lampU, c.lampL, c.chev])
+  const va = valance(c.lower, body.cuts.maps.rear)
+  const bay = engineBay(c.bay, 0.02)
+  const closed: Array<[string, THREE.BufferGeometry]> = [
+    ['outlet lip', ex.lip], ['outlet pipes', ex.pipes], ['outlet back', ex.soot], ['outlet housing', ex.housing],
+    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['valance wall', va.wall],
+    ['bay covers', bay.covers], ['bay carbon', bay.carbon], ['plenum', bay.center], ['bay mesh', bay.mesh],
+    ['airbox grille', bay.grille], ['grille bezel', bay.bezel], ['grille duct', bay.duct], ['grille ledge', bay.ledge],
+  ]
+
+  it.each(closed)('builds the %s as a closed solid wound outward', (_, g) => {
+    expect(windingAgreement(g)).toBe(1)
+    expect(openEdges(g, 1e-6)).toBe(0)
+  })
+
+  it('meets the loft at the deck edge and the side, and stays level across the centre line', () => {
+    const loft = mainLoft()
+    const F = rearFace(loft)
+    const vK3 = loft.vAt[3]
+    for (let i = 0; i <= 10; i++) {
+      const t = i / 10
+      const side = F(0, t)
+      const want = loft.at(1, vK3 * t)
+      const top = F(t, 1)
+      const deck = loft.at(1, vK3 + t * (1 - vK3))
+      for (let k = 0; k < 3; k++) {
+        expect(Math.abs(side[k] - want[k])).toBeLessThan(1e-6)
+        expect(Math.abs(top[k] - deck[k])).toBeLessThan(1e-6)
+      }
+      const mid = F(1, t)
+      const near = F(0.98, t)
+      expect(Math.abs(mid[0])).toBeLessThan(1e-9)
+      expect(Math.abs((near[2] - mid[2]) / near[0])).toBeLessThan(0.05)
+    }
+  })
+
+  it('keeps the outlets inside the tail and the heat at their mouths, facing the rear', () => {
+    expect(ex.normal[2]).toBeLessThan(-0.9)
+    expect(ex.center[0]).toBeGreaterThan(0.05)
+    expect(ex.center[0]).toBeLessThan(0.3)
+    expect(ex.center[1]).toBeGreaterThan(0.6)
+    expect(ex.center[1]).toBeLessThan(0.95)
+    for (const g of [ex.lip, ex.pipes, ex.soot, ex.housing, tl.guide, tl.housing]) {
+      g.computeBoundingBox()
+      expect(g.boundingBox!.min.z).toBeGreaterThan(-dims.halfLength - 0.005)
+      expect(g.boundingBox!.max.x).toBeLessThan(dims.width / 2)
+    }
+  })
+
+  it('keeps every bay part under the deck and inside the opening', () => {
+    for (const g of [bay.covers, bay.carbon, bay.center, bay.mesh, bay.grille, bay.bezel, bay.duct]) {
+      const pos = g.getAttribute('position')
+      for (let i = 0; i < pos.count; i += 7) {
+        const [x, y, z] = [pos.getX(i), pos.getY(i), pos.getZ(i)]
+        const uv = body.cuts.maps.main.invert('y', z, Math.abs(x), [0, 1, 0.45, 1])
+        expect(y).toBeLessThan(body.cuts.maps.main.S(uv[0], uv[1])[1] - 0.01)
+      }
+    }
+    expect(bay.grilleNormal[1]).toBeGreaterThan(0.9)
   })
 })
