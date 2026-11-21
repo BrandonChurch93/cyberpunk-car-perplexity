@@ -572,7 +572,7 @@ describe('full roof world', () => {
     const map = deck.heightMap as THREE.DataTexture
     expect(map.format).toBe(THREE.RedFormat)
     expect(map.type).toBe(THREE.FloatType)
-    expect(deckHeight(.92, 3.13)).toBeLessThan(0)
+    expect(deckHeight(.55, 1.95)).toBeLessThan(-.008)
     expect(deckHeight(1.21, 1.64)).toBeLessThan(-.003)
     expect(deckHeight(.96, 1.285)).toBeGreaterThan(0)
     expect(deckHeight(.18, -3.71)).toBeLessThan(0)
@@ -582,8 +582,8 @@ describe('full roof world', () => {
     const samples = map.image.data as Float32Array
     const w = map.image.width
     const h = map.image.height
-    const ix = Math.floor((.92 - deck.bounds.min.x) / (deck.bounds.max.x - deck.bounds.min.x) * w)
-    const iz = Math.floor((3.13 - deck.bounds.min.y) / (deck.bounds.max.y - deck.bounds.min.y) * h)
+    const ix = Math.floor((.55 - deck.bounds.min.x) / (deck.bounds.max.x - deck.bounds.min.x) * w)
+    const iz = Math.floor((1.95 - deck.bounds.min.y) / (deck.bounds.max.y - deck.bounds.min.y) * h)
     expect(samples[iz * w + ix]).toBeLessThan(0)
     expect(deck.meshes.every(m => m.material === deck.material)).toBe(true)
     expect(world.surfaces.some(s => s.material === deck.material && s.wetness === 'porous')).toBe(true)
