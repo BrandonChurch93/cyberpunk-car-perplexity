@@ -75,7 +75,7 @@ export function diffuser(zTail: number): { roof: THREE.BufferGeometry; fins: THR
     const base = fins.pos.length / 3
     fins.pos.push(...g.pos)
     fins.nor.push(...g.nor)
-    fins.uv.push(...g.uv)
+    fins.uv.push(...g.uvs())
     for (const k of g.idx) fins.idx.push(base + k)
   }
   return { roof: roof.geometry(), fins: fins.geometry() }

@@ -20,6 +20,11 @@ export interface TessOptions {
   maxDepth?: number
   /** Flip winding so the front face is S_v x S_u instead of S_u x S_v. */
   flip?: boolean
+  /**
+   * Unit normal in place of S_u x S_v, for a surface whose own tangents are not reliable, such as an offset that folds
+   * where a convex crease is tighter than the offset.
+   */
+  normal?: (u: number, v: number) => V3
 }
 
 export interface Boundary {
@@ -59,6 +64,10 @@ export function tessellate(S: SurfaceFn, o: TessOptions): TessResult {
   const trim = o.trim
 
   const normalAt = (u: number, v: number, p: V3): V3 => {
+    if (o.normal) {
+      const r = o.normal(u, v)
+      if (len(r) > 0.5) return [r[0] * flip, r[1] * flip, r[2] * flip]
+    }
     const hu = 1e-5
     const hv = 1e-5
     const u0 = Math.max(o.us[0], u - hu)
@@ -68,17 +77,22 @@ export function tessellate(S: SurfaceFn, o: TessOptions): TessResult {
     let su = sub(S(u1, v), S(u0, v))
     let sv = sub(S(u, v1), S(u, v0))
     let n = cross(su, sv)
-    if (len(n) < 1e-16) {
-      const uc = (o.us[0] + o.us[o.us.length - 1]) / 2
-      const vc = (o.vs[0] + o.vs[o.vs.length - 1]) / 2
-      const du = (uc - u) * 0.002
-      const dv = (vc - v) * 0.002
+    // On a collapsed edge or a pole the tangents vanish. The normal there is the limit from inside the patch, so step
+    // toward the patch centre until the tangent plane is defined again.
+    const uc = (o.us[0] + o.us[o.us.length - 1]) / 2
+    const vc = (o.vs[0] + o.vs[o.vs.length - 1]) / 2
+    for (const step of [0.002, 0.01, 0.03, 0.1]) {
+      if (len(n) > 1e-13) break
+      const du = (uc - u) * step
+      const dv = (vc - v) * step
       su = sub(S(u1 + du, v + dv), S(u0 + du, v + dv))
       sv = sub(S(u + du, v1 + dv), S(u + du, v0 + dv))
       n = cross(su, sv)
     }
     void p
-    const r = norm(n)
+    // The tangents are 2e-5 long in parameter, so a regular point gives |n| near 1e-10; normalise without norm()'s floor.
+    const l = len(n)
+    const r: V3 = l > 0 ? [n[0] / l, n[1] / l, n[2] / l] : [0, 0, 0]
     return [r[0] * flip, r[1] * flip, r[2] * flip]
   }
 

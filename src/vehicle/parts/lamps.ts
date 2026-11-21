@@ -9,8 +9,10 @@ import { elev } from '../body/lines'
 /** A flat faced light guide following a curve on the body, sunk by `depth` below the surface. */
 export function guide(S: Surface, c: SurfaceCurve, depth: number, w: number, h: number): THREE.BufferGeometry {
   const b = new MeshBuilder()
-  const ns = c.uv.map(([u, v]) => surfaceNormal(S, u, v))
-  const path = c.p.map((p, i) => add(p, scale(ns[i], -depth - h / 2)))
+  // A trimmed curve can repeat a point where it meets the trim. A repeated point has no tangent, so it is dropped.
+  const keep = c.p.map((p, i) => i === 0 || Math.hypot(p[0] - c.p[i - 1][0], p[1] - c.p[i - 1][1], p[2] - c.p[i - 1][2]) > 1e-5)
+  const ns = c.uv.filter((_, i) => keep[i]).map(([u, v]) => surfaceNormal(S, u, v))
+  const path = c.p.filter((_, i) => keep[i]).map((p, i) => add(p, scale(ns[i], -depth - h / 2)))
   sweep(b, path, ns, roundRect(w, h, Math.min(w, h) * 0.3, 3))
   for (const end of [0, path.length - 1]) {
     const p = path[end]

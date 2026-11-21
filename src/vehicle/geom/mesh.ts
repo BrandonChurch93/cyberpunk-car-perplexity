@@ -37,12 +37,16 @@ export class MeshBuilder {
   readonly nor: number[] = []
   readonly uv: number[] = []
   readonly idx: number[] = []
+  /** Vertices made without a texture coordinate. */
+  private readonly unmapped: number[] = []
 
-  vertex(p: readonly number[], n: readonly number[], u = 0, v = 0): number {
+  vertex(p: readonly number[], n: readonly number[], u?: number, v?: number): number {
+    const id = this.pos.length / 3
     this.pos.push(p[0], p[1], p[2])
     this.nor.push(n[0], n[1], n[2])
-    this.uv.push(u, v)
-    return this.pos.length / 3 - 1
+    this.uv.push(u ?? 0, v ?? 0)
+    if (u === undefined && v === undefined) this.unmapped.push(id)
+    return id
   }
 
   tri(a: number, b: number, c: number): void {
@@ -76,7 +80,23 @@ export class MeshBuilder {
     }
   }
 
+  /** Final texture coordinates. */
+  uvs(): number[] {
+    // A vertex with no texture coordinate is mapped by box projection in metres onto the plane its normal faces most.
+    // Shading that needs a tangent direction (anisotropy, normal maps) has none on a triangle with a constant coordinate.
+    for (const i of this.unmapped) {
+      const [x, y, z] = [this.pos[3 * i], this.pos[3 * i + 1], this.pos[3 * i + 2]]
+      const [ax, ay, az] = [Math.abs(this.nor[3 * i]), Math.abs(this.nor[3 * i + 1]), Math.abs(this.nor[3 * i + 2])]
+      const [u, v] = ax >= ay && ax >= az ? [z, y] : ay >= az ? [x, z] : [x, y]
+      this.uv[2 * i] = u
+      this.uv[2 * i + 1] = v
+    }
+    this.unmapped.length = 0
+    return this.uv
+  }
+
   geometry(): THREE.BufferGeometry {
+    this.uvs()
     const g = new THREE.BufferGeometry()
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3))
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3))
