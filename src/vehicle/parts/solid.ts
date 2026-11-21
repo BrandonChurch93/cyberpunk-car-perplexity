@@ -100,6 +100,11 @@ export function tailNormal(rm: SurfaceMap, p: V3): V3 {
 
 /** A closed bar of rounded rectangular section along a path on the tail, set into it by `depth` at its front face. */
 export function bar(rm: SurfaceMap, path: V3[], height: number, thick: number, depth: number, corner: number): MeshBuilder {
+  return barOn(path, path.map((p) => tailNormal(rm, p)), height, thick, depth, corner)
+}
+
+/** The same bar along a path with its own outward normals, for paths that leave the tail face. */
+export function barOn(path: V3[], normals: V3[], height: number, thick: number, depth: number, corner: number): MeshBuilder {
   const sec: Array<[number, number]> = []
   const k = 4
   const hw = height / 2 - corner
@@ -110,7 +115,7 @@ export function bar(rm: SurfaceMap, path: V3[], height: number, thick: number, d
     sec.push([cx + corner * Math.cos(a), cy + corner * Math.sin(a)])
   }
   const frames = path.map((p, j) => {
-    const n = tailNormal(rm, p)
+    const n = normals[j]
     const t = sub(path[Math.min(path.length - 1, j + 1)], path[Math.max(0, j - 1)])
     const h = norm(cross(n, t))
     return { p, n, h }

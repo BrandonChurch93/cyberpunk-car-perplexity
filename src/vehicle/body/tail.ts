@@ -74,13 +74,13 @@ export const cornerFront = -1.85
 
 /**
  * Rear elevation outlines in metres (|x|, y), left half, after the patent rear view: one dark housing round both
- * outlets under the deck nose, a lamp lens out to the corner, a dark slot under it, and the lower tail open from the
+ * outlets under the deck nose, a lamp lens run off the corner edge into the hole round it, a dark slot under it, and the lower tail open from the
  * bumper edge down and out through the corner.
  */
 export const lines: Record<'exhaust' | 'surround' | 'lens' | 'slot' | 'lower', V2[]> = {
   exhaust: [[0.03, 0.787], [0.064, 0.843], [0.286, 0.843], [0.32, 0.787], [0.286, 0.731], [0.064, 0.731]],
   surround: [[-0.03, 0.85], [0.006, 0.85], [0.046, 0.872], [0.33, 0.872], [0.372, 0.83], [0.372, 0.75], [0.33, 0.706], [-0.03, 0.706]],
-  lens: [[0.388, 0.774], [0.388, 0.8], [0.5, 0.812], [0.598, 0.868], [0.598, 0.748], [0.5, 0.762]],
+  lens: [[0.565, 0.868], [0.5, 0.812], [0.388, 0.8], [0.388, 0.774], [0.5, 0.762], [0.565, 0.748]],
   slot: [[0.395, 0.704], [0.59, 0.704], [0.59, 0.731], [0.395, 0.734]],
   lower: [[-0.03, bumper], [0.72, bumper], [0.72, 0], [-0.03, 0]],
 }
@@ -119,11 +119,46 @@ class EdgeHole extends CentreHole {
     }
   }
 
+  override inside(u: number, v: number): boolean {
+    return super.inside(Math.max(u, 1e-6), Math.min(1 - 1e-6, Math.max(v, 1e-6)))
+  }
+
   override distance(q: V3, cap = 1): number {
     let best = cap
     for (const [a, b] of this.segs) best = Math.min(best, seg(q, a, b))
     return best
   }
+}
+
+/** Heights at which the lamp lens leaves the tail over its corner edge into the corner hole on the main skin. */
+export const lensEdge = { top: 0.868, bottom: 0.748 }
+
+/** Face parameter b of the corner edge (a = 0) at height y. */
+function edgeB(rm: SurfaceMap, y: number): number {
+  let lo = 0
+  let hi = 1
+  for (let i = 0; i < 50; i++) {
+    const m = (lo + hi) / 2
+    if (rm.S(0, m)[1] < y) lo = m
+    else hi = m
+  }
+  return (lo + hi) / 2
+}
+
+/**
+ * A hole outline that runs off the face over its corner edge: the open line from the edge at `edge.top` round to the
+ * edge at `edge.bottom`, each end continued level to the edge, closed along the edge itself.
+ */
+function offEdge(rm: SurfaceMap, line: V2[], edge: { top: number; bottom: number }, round: number): V2[] {
+  const b0 = edgeB(rm, edge.top)
+  const b1 = edgeB(rm, edge.bottom)
+  const pts: V2[] = [[rm.S(0, b0)[0] - 0.002, edge.top], ...line, [rm.S(0, b1)[0] - 0.002, edge.bottom]]
+  const open = projectCurve(rm, '-z', pts, false, 0.004, undefined, false, round).uv
+  open[0] = [0, b0]
+  open[open.length - 1] = [0, b1]
+  const n = Math.max(2, Math.ceil((edge.top - edge.bottom) / 0.004))
+  for (let i = 1; i < n; i++) open.push([0, b1 + ((b0 - b1) * i) / n])
+  return open
 }
 
 type TailCurve = 'lampU' | 'lampL' | 'chev' | 'stem' | 'surround' | 'lens' | 'slot' | 'lower'
@@ -134,7 +169,7 @@ export function tailCuts(rm: SurfaceMap): { cuts: Cuts; curves: Record<TailCurve
   const hole = (p: V2[], round: number): SurfaceCurve => projectCurve(rm, '-z', p, true, 0.004, undefined, false, round)
   const surroundRaw = projectCurve(rm, '-z', lines.surround, true, 0.004, undefined, true, 0.012)
   const surround = new CentreHole(rm.S, surroundRaw.uv, true, true)
-  const lens = hole(lines.lens, 0.008)
+  const lens = new EdgeHole(rm.S, offEdge(rm, lines.lens, lensEdge, 0.008))
   const slot = hole(lines.slot, 0.008)
   const lowerRaw = projectCurve(rm, '-z', lines.lower, true, 0.006, undefined, true, 0.03)
   const lower = new EdgeHole(rm.S, lowerRaw.uv)

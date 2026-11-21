@@ -5,7 +5,8 @@ import { openEdges, windingAgreement } from './vehicle-rear-mesh'
 import { centreY, floorY, meshZ, sheet, strakes, tailZ, underbody, valance } from '../src/vehicle/parts/diffuser'
 import { buildBody } from '../src/vehicle/body/body'
 import { mainLoft } from '../src/vehicle/body/shape'
-import { bumper, cornerCut, cornerFront, rearFace } from '../src/vehicle/body/tail'
+import { bumper, cornerCut, cornerFront, lensEdge, rearFace } from '../src/vehicle/body/tail'
+import { lampWrap } from '../src/vehicle/body/cuts'
 import { outlets } from '../src/vehicle/parts/outlets'
 import { taillamps } from '../src/vehicle/parts/taillamps'
 import { engineBay } from '../src/vehicle/parts/enginebay'
@@ -71,7 +72,7 @@ describe('rear module', () => {
   const body = buildBody({ maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, edgeLength: 0.007 })
   const c = body.cuts.curves
   const ex = outlets(body.cuts.maps.rear, c.surround)
-  const tl = taillamps(body.cuts.maps.rear, [c.stem, c.lampU, c.lampL, c.chev], c.lens, c.slot)
+  const tl = taillamps(body.cuts.maps.rear, [c.stem, c.lampU, c.lampL], c.lens, c.slot, { map: body.cuts.maps.main, curve: c.lampWrap })
   const va = valance(c.lower, body.cuts.maps.rear)
   const bay = engineBay(c.bay, 0.02)
   const closed: Array<[string, THREE.BufferGeometry]> = [
@@ -117,6 +118,18 @@ describe('rear module', () => {
       g.computeBoundingBox()
       expect(g.boundingBox!.min.z).toBeGreaterThan(-dims.halfLength - 0.005)
       expect(g.boundingBox!.max.x).toBeLessThan(dims.width / 2)
+    }
+  })
+
+  it('runs the lamp lens off the tail edge at the corner hole heights and the guide round the corner', () => {
+    expect(lensEdge.top).toBe(lampWrap.top)
+    expect(lensEdge.bottom).toBe(lampWrap.bottom)
+    const edge = c.lens.p.filter((_, i) => c.lens.uv[i][0] < 1e-4).map((p) => p[1])
+    expect(Math.min(...edge)).toBeCloseTo(lampWrap.bottom, 3)
+    expect(Math.max(...edge)).toBeCloseTo(lampWrap.top, 3)
+    for (const g of [tl.guide, tl.housing]) {
+      g.computeBoundingBox()
+      expect(g.boundingBox!.max.x).toBeGreaterThan(lampWrap.outX - 0.03)
     }
   })
 

@@ -30,7 +30,7 @@ const filmAnchors: Record<AnchorId, { p: V3; n: V3; r: number }> = {
   wheel: { p: [0.9563, 0.3405, 1.2852], n: [1, 0, 0], r: 0.36 },
   lamp: { p: [0.7508, 0.5352, 2.1672], n: [0.7111, 0, 0.7031], r: 0.2 },
   detail: { p: [-0.301, 1.008, -1.0389], n: [0.2285, 0.9725, 0.0438], r: 0.16 },
-  exhaust: { p: [0, 0.787, -2.4724], n: [0, 0, -1], r: 0.34 },
+  exhaust: { p: [0, 0.787, -2.415], n: [0, 0, -1], r: 0.34 },
 }
 
 /**
@@ -134,7 +134,7 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const { cuts } = body
   const S = body.surfaces
 
-  const tl = taillamps(cuts.maps.rear, [cuts.curves.stem, cuts.curves.lampU, cuts.curves.lampL, cuts.curves.chev], cuts.curves.lens, cuts.curves.slot)
+  const tl = taillamps(cuts.maps.rear, [cuts.curves.stem, cuts.curves.lampU, cuts.curves.lampL], cuts.curves.lens, cuts.curves.slot, { map: cuts.maps.main, curve: cuts.curves.lampWrap })
   addPair(tl.guide, m.tail, 'tail-guide')
   addPair(tl.housing, m.under, 'tail-housing')
 
