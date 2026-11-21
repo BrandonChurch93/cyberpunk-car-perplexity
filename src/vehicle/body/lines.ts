@@ -44,7 +44,7 @@ export type P3 = readonly [number, number, number]
 export const frontSection = {
   brow: [
     { v: 1, p: [0, 0.41, 2.4737] as P3, name: 'tip' },
-    { v: 0.86, p: [0.354, 0.432, 2.384] as P3, name: 'vee' },
+    { v: 0.86, p: [0.354, 0.4428, 2.384] as P3, name: 'vee' },
     { v: 0.72, p: [0.476, 0.515, 2.173] as P3, name: 'corner' },
     { v: 0.6, p: [0.5, 0.522, 2.168] as P3, name: 'rail' },
     { v: 0.4, p: [0.8, 0.598, 2.14] as P3, name: 'brow' },
@@ -62,13 +62,14 @@ export const frontSection = {
 /** The fascia's plane breaks, from the splitter up to the V end of the brow. */
 export const fasciaBreak: P3[] = [
   [0.285, 0.15, 2.282],
-  [0.354, 0.432, 2.384],
+  [0.354, 0.4428, 2.384],
 ]
 
 /**
- * The feature lines of the front, each a path in z: (z, x, y) nodes, straight between nodes unless a node carries its
- * own slope (dx/dz, dy/dz). Every crease is one line from its start on the front edge to its end, shared by the two
- * fields either side of it.
+ * The feature lines of the front, each a path in z through (z, x, y) nodes. Two nodes make a straight span; an
+ * interior node without its own slope (dx/dz, dy/dz) is passed through smoothly. Every crease is one line from its
+ * start on the front edge to its end, shared by the two fields either side of it. The center facets are one plane
+ * through the nose tip, the cowl center and the bonnet corner, so the V end and the cowl lie on it.
  */
 export interface PathNode {
   z: number
@@ -88,12 +89,12 @@ export const featureLines = {
   /** Bonnet inner crease: straight from the bonnet corner to the windscreen base. */
   inner: [
     { z: 2.173, x: 0.476, y: 0.515 },
-    { z: 1.513, x: 0.29, y: 0.72 },
+    { z: 1.513, x: 0.29, y: 0.737 },
   ] as PathNode[],
   /** V end: the outer end of the leading V, carried straight back to the cowl inside the flat center facet. */
   vee: [
-    { z: 2.384, x: 0.354, y: 0.432 },
-    { z: 1.51, x: 0.15, y: 0.73 },
+    { z: 2.384, x: 0.354, y: 0.4428 },
+    { z: 1.51, x: 0.15, y: 0.737 },
   ] as PathNode[],
   /** Wing ridge: straight from the bonnet corner to the A-pillar base. */
   rail: [
@@ -108,7 +109,7 @@ export const featureLines = {
   /** Cowl: the windscreen base, straight across. */
   cowl: [
     [0, 0.736, 1.51],
-    [0.29, 0.72, 1.513],
+    [0.29, 0.737, 1.513],
   ] as P3[],
   /** Header: the windscreen top, straight and level across. */
   header: [
@@ -117,7 +118,18 @@ export const featureLines = {
   ] as P3[],
   /** Arch shoulder: the outer crease from the brow tip over the front arch to the door. */
   shoulder: [
-    { z: 2.14, x: 0.8, y: 0.598 },
-    { z: 1.0, x: 0.955, y: 0.8 },
+    { z: 2.14, x: 0.8, y: 0.598, d: [-0.727, -0.427] },
+    { z: 1.4, x: 0.982, y: 0.808 },
+    { z: 0.6, x: 0.922, y: 0.772 },
+  ] as PathNode[],
+  /** Waist crease, from the cheek's outer edge back to the door. */
+  crease: [
+    { z: 1.8, x: 0.965, y: 0.5, d: [-0.083, -0.1] },
+  ] as PathNode[],
+  sill: [
+    { z: 1.8, x: 0.955, y: 0.3, d: [-0.067, 0] },
+  ] as PathNode[],
+  rocker: [
+    { z: 1.8, x: 0.93, y: 0.15, d: [-0.05, 0.033] },
   ] as PathNode[],
 }

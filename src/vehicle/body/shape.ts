@@ -1,5 +1,7 @@
 import { Loft, type LoftDef } from '../geom/loft'
-import { smoothstep } from '../geom/vec'
+import { Track3 } from '../geom/spline'
+import { add, dot, len, norm, scale, smoothstep, sub, type V3 } from '../geom/vec'
+import { featureLines, frontSection, type PathNode } from './lines'
 
 export const dims = {
   length: 4.947,
@@ -48,6 +50,7 @@ function line(pts: Zxy[]): Array<[number, number, number, number]> {
   return pts.map(([z, x, y]) => [uAt(z, zf, zr), x, y, z])
 }
 
+/** The key lines as drawn before pass 2. Behind the front they still carry the body unchanged. */
 export const keyLines = {
   rocker: line([
     [1.8, 0.93, 0.15],
@@ -194,7 +197,8 @@ const uz = (k: ReadonlyArray<readonly [number, number, number, number]>, z: numb
 /** Crease radius: small and even everywhere, so every edge catches a highlight. */
 const edge = 0.004
 
-export const mainDef: LoftDef = {
+/** The body before pass 2: still the reference behind the front, where the V end key runs unseen. */
+const refDef: LoftDef = {
   keys: [
     { pts: keyLines.rocker },
     { pts: keyLines.sill, round: 0.006, sharp: 1 },
@@ -240,6 +244,287 @@ export const mainDef: LoftDef = {
   ],
   vAt: [0, 0.1, 0.22, 0.4, 0.6, 0.78, 1],
   mirrorTop: true,
+}
+
+
+/*
+ * Pass 2 front construction. Each feature line is one curve from lines.ts, built once and shared by the two fields
+ * either side of it: a field is the surface swept between its two lines with one constant crown, so neighbours share
+ * every boundary sample. On the bonnet and wing the lines are straight and the fields flat; on the windscreen every
+ * section is a plane of constant z, so the screen is one fair surface. The first 4 mm of every line is a quarter round
+ * from the fascia up onto the bonnet or wing, so the front edge is one even roll.
+ */
+
+const len0 = dims.length
+const uOf = (z: number): number => (zFront - z) / len0
+/** Windscreen base. From here back the screen lines share sections of constant z. */
+const uCowl = uOf(1.51)
+/** The windscreen header: where the rebuilt screen lines hand back to the roof as it was. */
+const zRoof = featureLines.header[0][2]
+/** Where the rebuilt flank lines hand back to the door as it was: the end of the old front blend. */
+const uDoor = blend
+const zDoor = zFront - len0 * uDoor
+/** u over which the front edge rolls onto the fascia. */
+const uRoll = 0.002
+const roll = frontSection.roll
+
+type ZFn = (z: number) => V3
+
+/** A path through nodes in z: straight between two nodes, smooth through interior nodes without a slope, and
+ * carried on straight past its ends. */
+function zPath(nodes: ReadonlyArray<PathNode>): ZFn {
+  const n = [...nodes].sort((a, b) => b.z - a.z)
+  const slope = (i: number): [number, number] => {
+    const d = n[i].d
+    if (d) return [d[0], d[1]]
+    const a = n[Math.max(0, i - 1)]
+    const b = n[Math.min(n.length - 1, i + 1)]
+    if (a === b) return [0, 0]
+    return [(b.x - a.x) / (b.z - a.z), (b.y - a.y) / (b.z - a.z)]
+  }
+  const m = n.map((_, i) => slope(i))
+  return (z) => {
+    if (n.length === 1 || z >= n[0].z) {
+      const dz = z - n[0].z
+      return [n[0].x + m[0][0] * dz, n[0].y + m[0][1] * dz, z]
+    }
+    const last = n.length - 1
+    if (z <= n[last].z) {
+      const dz = z - n[last].z
+      return [n[last].x + m[last][0] * dz, n[last].y + m[last][1] * dz, z]
+    }
+    let i = 0
+    while (z < n[i + 1].z) i++
+    const a = n[i]
+    const b = n[i + 1]
+    const h = b.z - a.z
+    const t = (z - a.z) / h
+    const h00 = (1 + 2 * t) * (1 - t) * (1 - t)
+    const h10 = t * (1 - t) * (1 - t)
+    const h01 = t * t * (3 - 2 * t)
+    const h11 = t * t * (t - 1)
+    return [
+      h00 * a.x + h10 * h * m[i][0] + h01 * b.x + h11 * h * m[i + 1][0],
+      h00 * a.y + h10 * h * m[i][1] + h01 * b.y + h11 * h * m[i + 1][1],
+      z,
+    ]
+  }
+}
+
+/** Pieces in z, each handing to the next through a smooth blend of half width `w` around `z`. */
+function joined(first: ZFn, ...rest: Array<{ z: number; w: number; f: ZFn }>): ZFn {
+  return (z) => {
+    let p = first(z)
+    for (const r of rest) {
+      if (z >= r.z + r.w) break
+      const s = smoothstep(r.z + r.w, r.z - r.w, z)
+      const q = r.f(z)
+      p = [p[0] + (q[0] - p[0]) * s, p[1] + (q[1] - p[1]) * s, z]
+    }
+    return p
+  }
+}
+
+/** An old key line read by z, valid behind the front blend. */
+function byZ(t: Track3): ZFn {
+  return (z) => {
+    let lo = 0
+    let hi = 1
+    for (let i = 0; i < 48; i++) {
+      const m = (lo + hi) / 2
+      if (t.at(m)[2] > z) lo = m
+      else hi = m
+    }
+    return t.at((lo + hi) / 2)
+  }
+}
+
+/** Slope (dx/dz, dy/dz) of an old key line at u. */
+function oldSlopeAt(t: Track3, u: number): [number, number] {
+  const a = t.at(u - 1e-4)
+  const b = t.at(u + 1e-4)
+  return [(a[0] - b[0]) / (a[2] - b[2]), (a[1] - b[1]) / (a[2] - b[2])]
+}
+const oldSlope = (t: Track3, z: number): [number, number] => oldSlopeAt(t, uOf(z))
+
+const node = (p: V3, d?: readonly [number, number]): PathNode => ({ z: p[2], x: p[0], y: p[1], d })
+
+/** Down the fascia from the front edge: a stand-in for the front module's own until it lands. Constant per edge
+ * interval, averaged at the knots; on the brow the fascia rakes 23 degrees back, on the side it faces forward. */
+export function fasciaDownStandIn(v: number): V3 {
+  const rake = (23 * Math.PI) / 180
+  const intervals: Array<{ a: number; b: number; d: V3 }> = []
+  const edge = (pts: typeof frontSection.brow, g: V3): void => {
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const e = norm(sub(pts[i + 1].p as V3, pts[i].p as V3))
+      intervals.push({ a: pts[i + 1].v, b: pts[i].v, d: norm(sub(g, scale(e, dot(g, e)))) })
+    }
+  }
+  edge(frontSection.brow, [0, -Math.cos(rake), -Math.sin(rake)])
+  edge(frontSection.side, [-1, 0, 0])
+  const hits = intervals.filter((i) => v >= i.a - 1e-9 && v <= i.b + 1e-9)
+  let d = norm(hits.reduce<V3>((s, i) => add(s, i.d), [0, 0, 0]))
+  if (v >= 1 - 1e-9) d = norm([0, d[1], d[2]])
+  return d
+}
+
+const fasciaDown = fasciaDownStandIn
+
+/**
+ * One key line: the roll at the front edge, then the path, then from `uJoin` the old key line unchanged. Until `uMerge`
+ * the path is walked with its own smooth spacing in z; from there on it keeps the old key line's spacing, which is the
+ * body's common spacing to within a few millimeters, so every key line from the cowl back shares sections of nearly
+ * constant z and hands over to the old line with the same position, direction and speed.
+ */
+function keyFn(v: number, zC: number, path: ZFn, uMerge: number, zJoin: number, old?: Track3): (u: number) => V3 {
+  const C = path(zC)
+  const d1 = sub(path(zC - 1e-4), path(zC + 1e-4))
+  const speedZ = len(d1) / 2e-4
+  const z0 = zC - roll / speedZ
+  const P0 = path(z0)
+  const E = add(C, scale(fasciaDown(v), roll))
+  const zOld = (u: number): number => (old ? old.at(u)[2] : zFront - len0 * u)
+  const zM = zOld(uMerge)
+  const rate = (zOld(uMerge - 1e-4) - zOld(uMerge + 1e-4)) / 2e-4
+  const span = uMerge - uRoll
+  const m = (rate * span) / (z0 - zM)
+  const q = Math.min(2.5, Math.max(0.3, ((2 * roll) / uRoll) * span / (speedZ * (z0 - zM))))
+  const uJoin = old ? uOf(zJoin) : Infinity
+  return (u) => {
+    if (u <= uRoll) {
+      const s = Math.max(0, u / uRoll)
+      const a = (1 - s) * (1 - s)
+      const b = 2 * (1 - s) * s
+      const c = s * s
+      return [a * E[0] + b * C[0] + c * P0[0], a * E[1] + b * C[1] + c * P0[1], a * E[2] + b * C[2] + c * P0[2]]
+    }
+    if (old && u >= uJoin - 1e-9) return old.at(u)
+    if (u >= uMerge) return path(zOld(u))
+    const t = (u - uRoll) / span
+    const h = (t * t * t - 2 * t * t + t) * q + (-2 * t * t * t + 3 * t * t) + (t * t * t - t * t) * m
+    return path(z0 - (z0 - zM) * h)
+  }
+}
+
+const old = {
+  rocker: new Track3(keyLines.rocker),
+  sill: new Track3(keyLines.sill),
+  crease: new Track3(keyLines.crease),
+  shoulder: new Track3(keyLines.shoulder),
+  rail: new Track3(keyLines.rail, true),
+  inner: new Track3(keyLines.inner, true),
+  center: new Track3(keyLines.center),
+}
+
+const F = featureLines
+const ref = new Loft(refDef)
+/** The V end key behind the screen: on the old surface, a third of the way out from the center line. */
+const refVee = (u: number): V3 => ref.at(u, 0.78 + 0.22 * (2 / 3))
+
+// Center line: bonnet straight to the cowl, then the screen as one convex arc into the old roof.
+const centerPath = joined(
+  zPath(F.center),
+  {
+    z: 1.51,
+    w: 0.02,
+    f: zPath([
+      { z: 1.51, x: 0, y: 0.736, d: [0, -0.5] },
+      { ...node(old.center.at(uOf(zRoof))), d: oldSlope(old.center, zRoof) },
+    ]),
+  },
+)
+// Wing ridge: straight to the A-pillar base, then the pillar straight to the header, where the roof rail carries on
+// as it was.
+const pillarBase = F.pillar[0]
+const railPath = joined(
+  zPath(F.rail),
+  {
+    z: pillarBase.z,
+    w: 0.06,
+    f: zPath([
+      { ...pillarBase, d: [(F.pillar[1].x - pillarBase.x) / (F.pillar[1].z - pillarBase.z), (F.pillar[1].y - pillarBase.y) / (F.pillar[1].z - pillarBase.z)] },
+      { ...node(old.rail.at(uOf(zRoof))), d: oldSlope(old.rail, zRoof) },
+    ]),
+  },
+)
+/** On the screen a line at x between the center and the rail lies on one even crown through both. */
+const onScreen = (x: (z: number) => number): ZFn => (z) => {
+  const c = centerPath(z)
+  const r = railPath(z)
+  const xi = x(z)
+  return [xi, c[1] - (c[1] - r[1]) * (xi / r[0]) ** 2, z]
+}
+const lin = (z: number, za: number, a: number, zb: number, b: number): number => a + ((b - a) * (z - za)) / (zb - za)
+const innerPath = joined(
+  zPath(F.inner),
+  { z: 1.51, w: 0.02, f: onScreen((z) => lin(z, 1.513, 0.29, zRoof, old.inner.at(uOf(zRoof))[0])) },
+  { z: 0.73, w: 0.27, f: byZ(old.inner) },
+)
+const veeOld: ZFn = (z) => refVee(uOf(z))
+const veePath = joined(
+  zPath(F.vee),
+  { z: 1.51, w: 0.02, f: onScreen((z) => lin(z, 1.51, 0.15, zRoof, veeOld(zRoof)[0])) },
+  { z: 0.73, w: 0.27, f: veeOld },
+)
+// The arch shoulder: from the brow tip over the arch, into the old shoulder halfway down the door.
+const zShoulder = -0.34
+const shoulderPath = zPath([...F.shoulder, { ...node(old.shoulder.at(uOf(zShoulder))), d: oldSlope(old.shoulder, zShoulder) }])
+const toDoor = (nodes: PathNode[], t: Track3): ZFn => zPath([...nodes, { ...node(t.at(uDoor)), d: oldSlopeAt(t, uDoor) }])
+
+const knot = (name: string): { v: number; p: readonly [number, number, number] } => [...frontSection.brow, ...frontSection.side].find((k) => k.name === name)!
+const keyAt = (name: string, path: ZFn, uMerge: number, zJoin: number, t?: Track3): ((u: number) => V3) =>
+  keyFn(knot(name).v, knot(name).p[2], path, uMerge, zJoin, t)
+
+const veeKey = (u: number): V3 => (u >= uOf(zRoof) ? refVee(u) : veeFront(u))
+const veeFront = keyAt('vee', veePath, uCowl, -Infinity, undefined)
+
+export const frontKeys = {
+  rocker: keyAt('rocker', toDoor(F.rocker, old.rocker), uDoor, zDoor, old.rocker),
+  sill: keyAt('sill', toDoor(F.sill, old.sill), uDoor, zDoor, old.sill),
+  crease: keyAt('crease', toDoor(F.crease, old.crease), uDoor, zDoor, old.crease),
+  shoulder: keyAt('brow', shoulderPath, uDoor, zShoulder, old.shoulder),
+  rail: keyAt('rail', railPath, uCowl, zRoof, old.rail),
+  inner: keyAt('corner', innerPath, uCowl, zRoof, old.inner),
+  vee: veeKey,
+  center: keyAt('tip', centerPath, uCowl, zRoof, old.center),
+}
+
+const cowlIn = uOf(1.53)
+const screenIn = uOf(1.4)
+
+export const mainDef: LoftDef = {
+  keys: [
+    { fn: frontKeys.rocker },
+    { fn: frontKeys.sill, round: 0.006, sharp: 1 },
+    { fn: frontKeys.crease, round: edge, sharp: 1 },
+    { fn: frontKeys.shoulder, round: edge, sharp: 1 },
+    { fn: frontKeys.rail, round: edge, sharp: 1 },
+    // Crisp along the bonnet, dying out tangent under the windscreen.
+    { fn: frontKeys.inner, round: [[0, edge], [cowlIn, edge], [uOf(1.3), 0.08], [1, 0.08]], sharp: [[0, 1], [cowlIn, 1], [screenIn, 0], [1, 0]] },
+    // Unseen: it only carries the V end of the front edge back inside the flat center facet.
+    { fn: frontKeys.vee, sharp: [[0, 1], [cowlIn, 1], [screenIn, 0], [1, 0]] },
+    // The two center facets meet at a ridge too shallow to see; on the screen and roof the center line is smooth.
+    { fn: frontKeys.center, round: [[0, 0], [uCowl, 0], [uOf(1.3), 0.15], [1, 0.15]], sharp: [[0, 1], [uCowl, 1], [screenIn, 0], [1, 0]] },
+  ],
+  segs: [
+    refDef.segs[0],
+    refDef.segs[1],
+    // The wing side and the upper flank: one surface with one even crown.
+    { bulgeA: [[0, 0.025], [0.3, 0.02], [1, 0.02]] },
+    refDef.segs[3],
+    refDef.segs[4],
+    // Bonnet center, then the windscreen's middle: flat facets. Roof and deck: a little crowned, the old crown split
+    // over the two halves.
+    { bulgeA: [[0, 0], [0.4, 0], [0.47, 0.01], [0.55, 0.015], [0.7, 0.03], [1, 0.03]] },
+    { bulgeA: [[0, 0], [0.4, 0], [0.47, 0.01], [0.55, 0.015], [0.7, 0.03], [1, 0.03]] },
+  ],
+  vAt: [0, 0.1, 0.22, 0.4, 0.6, 0.72, 0.86, 1],
+  mirrorTop: true,
+}
+
+/** The reference body before pass 2, for comparisons behind the front. */
+export function refLoft(): Loft {
+  return new Loft(refDef)
 }
 
 export function mainLoft(): Loft {

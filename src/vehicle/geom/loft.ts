@@ -5,7 +5,9 @@ type Knots = number | ReadonlyArray<readonly [number, number]>
 
 export interface KeyDef {
   /** (u, x, y, z) points the key line passes through. */
-  pts: ReadonlyArray<readonly [number, number, number, number]>
+  pts?: ReadonlyArray<readonly [number, number, number, number]>
+  /** The key line as an exact curve over u, used instead of `pts`. */
+  fn?: (u: number) => V3
   /** Distance from the key line over which the section is rounded, meters. 0 keeps a crease. */
   round?: Knots
   /** 0 bends the section through the key line smoothly, 1 keeps the two segment tangents. */
@@ -39,7 +41,7 @@ interface Section {
 
 /** A surface swept across key lines. S(u, v): u runs along the key lines, v across them. */
 export class Loft {
-  private readonly keys: Track3[]
+  private readonly keys: Array<{ at(u: number): V3 }>
   private readonly round: Array<(u: number) => number>
   private readonly sharp: Array<(u: number) => number>
   private readonly bulgeA: Array<(u: number) => number>
@@ -50,7 +52,7 @@ export class Loft {
   readonly mirrorTop: boolean
 
   constructor(def: LoftDef) {
-    this.keys = def.keys.map((k) => new Track3(k.pts, k.monotone ?? false))
+    this.keys = def.keys.map((k) => (k.fn ? { at: k.fn } : new Track3(k.pts ?? [], k.monotone ?? false)))
     this.round = def.keys.map((k) => scalar(k.round ?? 0))
     this.sharp = def.keys.map((k) => scalar(k.sharp ?? 0))
     this.bulgeA = def.segs.map((s) => scalar(s.bulgeA))
