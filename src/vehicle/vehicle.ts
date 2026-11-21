@@ -46,6 +46,7 @@ function snapAnchor(target: { p: V3; n: V3; r: number }, parts: THREE.Mesh[], us
   const na = new THREE.Vector3()
   const nb = new THREE.Vector3()
   const nc = new THREE.Vector3()
+  const sn = new THREE.Vector3()
   const best = { d: Infinity, p: new THREE.Vector3(), n: new THREE.Vector3() }
   for (const mesh of parts) {
     const pos = mesh.geometry.getAttribute('position')
@@ -64,16 +65,21 @@ function snapAnchor(target: { p: V3; n: V3; r: number }, parts: THREE.Mesh[], us
       tri.closestPointToPoint(q, c)
       const d = c.distanceToSquared(q)
       if (d >= best.d) continue
-      best.d = d
-      best.p.copy(c)
       tri.getBarycoord(c, bary)
       if (nor) {
         na.fromBufferAttribute(nor, ia)
         nb.fromBufferAttribute(nor, ib)
         nc.fromBufferAttribute(nor, ic)
-        best.n.copy(na.multiplyScalar(bary.x)).addScaledVector(nb, bary.y).addScaledVector(nc, bary.z).applyMatrix3(normalMatrix)
+        sn.copy(na.multiplyScalar(bary.x)).addScaledVector(nb, bary.y).addScaledVector(nc, bary.z).applyMatrix3(normalMatrix)
       }
-      if (!nor || best.n.lengthSq() < 1e-12) tri.getNormal(best.n)
+      if (!nor || sn.lengthSq() < 1e-12) tri.getNormal(sn)
+      // A surface anchor lands only on a face turned within 60 degrees of the film car's normal, either side: the
+      // nearest point can sit on a wall or edge beside the panel, and a camera aimed along that wall's normal sees
+      // the wrong side of the part.
+      if (useSurfaceNormal && Math.abs(sn.dot(hint)) < 0.5 * sn.length()) continue
+      best.d = d
+      best.p.copy(c)
+      best.n.copy(sn)
     }
   }
   const normal = useSurfaceNormal ? best.n.normalize() : hint.clone()
@@ -194,7 +200,9 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
     paint: snapAnchor(film.paint, meshes((n) => n === 'paint'), true),
     wheel: snapAnchor(film.wheel, meshes((n, g) => g === 'wheel-front-left' && (n === 'rim' || n === 'disc-hat')), false),
     lamp: snapAnchor(film.lamp, meshes((n) => n === 'front convex projector lenses'), true),
-    detail: snapAnchor(film.detail, meshes((n) => n.startsWith('bay-') || n.startsWith('cam-cover') || n === 'plenum'), true),
+    // The detail beat looks across the right-hand airbox grille. The anchor lands on that grille and keeps the film
+    // car's normal: the grille is a field of hex cell walls, and any one wall's normal aims the camera off the panel.
+    detail: snapAnchor(film.detail, meshes((n) => n === 'bay-grille-right'), false),
     exhaust: snapAnchor(film.exhaust, meshes((n) => n === 'paint' || n.startsWith('outlet-')), false),
   }
 
