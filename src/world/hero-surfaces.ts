@@ -28,9 +28,10 @@ export type FacadeLayer = 'near' | 'middle' | 'far'
 export function towerSurface(id: string, level: number, facade: Facade, screen: ScreenReflection, spills: readonly SignSpill[] = [], layer: FacadeLayer = 'middle'): THREE.MeshStandardMaterial {
   const r = stream(`world/hero/tower/${id}`)
   const cell = new THREE.Vector2(layer === 'near' ? r.range(1.63, 1.79) : r.range(1.29, 1.77), r.range(3.12, 3.58))
-  const density = r.range(.14, .48)
+  const whiteBalance = r.range(.14, .48)
   const seed = r.range(0, 61)
   const mechanicalPitch = 15+r.int(11)
+  const roomDepthMeters = new THREE.Vector2(4,8)
   const family = ({ curtain: 0, concrete: 1, banded: 2, hotel: 3 })[facade]
   const paneHalfWidth = .416 - (facade === 'concrete' || facade === 'hotel' ? .061 : 0) + (facade === 'banded' ? .012 : 0)
   const facadeTint = /left edge|hotel tower|parking tower|west garage|west distance/.test(id)
@@ -54,10 +55,12 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   mat.userData.distanceLayer = layer
   mat.userData.clearPaneWidth = paneHalfWidth*2*cell.x
   mat.userData.mechanicalFloorPitch = mechanicalPitch
+  mat.userData.roomDepthMeters = roomDepthMeters.toArray()
   patchMaterial(mat, {
     id: 'hero tower cladding and window rooms',
     uniforms: {
-      bay: { value: cell }, roomDensity: { value: density }, salt: { value: seed }, facadeFamily: { value: family }, shellLuma: { value: level },
+      bay: { value: cell }, roomDepthMeters: { value: roomDepthMeters }, salt: { value: seed }, facadeFamily: { value: family },
+      shellLuma: { value: level }, whiteBalance: { value: whiteBalance },
       paneHalfWidth: { value: paneHalfWidth },
       facadeTint: { value: facadeTint }, windowTail: { value: windowTail }, claddingShade: { value: claddingShade },
       mechanicalPitch: { value: mechanicalPitch }, distanceLayer: { value: layer === 'near' ? 0 : layer === 'middle' ? 1 : 2 },
@@ -78,8 +81,8 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
       `)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', /* glsl */ `
         ${prefix}
-        uniform vec2 bay;
-        uniform float roomDensity, salt, facadeFamily, shellLuma, mechanicalPitch, distanceLayer, stripFloors, horizontalFloors, windowTail, paneHalfWidth, claddingShade;
+        uniform vec2 bay, roomDepthMeters;
+        uniform float salt, facadeFamily, shellLuma, whiteBalance, mechanicalPitch, distanceLayer, stripFloors, horizontalFloors, windowTail, paneHalfWidth, claddingShade;
         uniform vec3 screenPoint,screenNormal,facadeTint;
         uniform vec3 spillPoint[2],spillTint[2];
         uniform vec2 screenSize,spillSize[2];
@@ -87,6 +90,28 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         float windowMask(vec2 p,vec2 halfPane,vec2 aa) {
           vec2 w=1.0-smoothstep(halfPane-aa,halfPane+aa,abs(p));
           return w.x*w.y;
+        }
+        float interior(vec2 pane, vec2 viewSlope, vec2 aa, float depth, float fixture, float room) {
+          vec2 low=vec2(.021,.165), high=vec2(.979,.902);
+          vec2 start=clamp(pane,low+.001,high-.001);
+          vec2 inset=-viewSlope;
+          vec2 bound=mix(low,high,step(vec2(0.0),inset));
+          vec2 exitDistance=abs(bound-start)*bay/max(abs(inset),vec2(.0001));
+          float distanceIn=min(depth,min(exitDistance.x,exitDistance.y));
+          vec2 hit=start+inset*distanceIn/bay;
+          float horizontal=step(exitDistance.y,min(exitDistance.x,depth));
+          float ceiling=horizontal*step(0.0,inset.y);
+          float back=step(depth,min(exitDistance.x,exitDistance.y));
+          vec2 fixtureCenter=vec2(.35+.29*fixture,.42+fixture*.95+room*.12);
+          vec2 opening=vec2(.24+.095*room,.28+.38*fixture);
+          vec2 filterWidth=min(vec2(.27,.46),vec2(aa.x*1.1,aa.y*bay.y/max(abs(inset.y),.17)));
+          float troffer=windowMask(vec2(hit.x,distanceIn)-fixtureCenter,opening,filterWidth);
+          vec2 toLight=(vec2(hit.x,distanceIn)-fixtureCenter)*vec2(1.7,.57);
+          float bounce=1.0/(1.0+dot(toLight,toLight));
+          float darkerFloor=mix(1.0,.46,horizontal-ceiling);
+          float returnWall=.22+.44*bounce+.17*hit.y+.10*back;
+          float reveal=smoothstep(.02,.34,distanceIn);
+          return (returnWall*darkerFloor+ceiling*.98*troffer)*(.58+.42*reveal);
         }
       `)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <color_fragment>', /* glsl */ `
@@ -109,32 +134,27 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         float concrete=1.0-step(.5,abs(facadeFamily-1.0));
         float banded=1.0-step(.5,abs(facadeFamily-2.0));
         float curtain=1.0-max(concrete,max(banded,hotel));
-        float activeFloor=step(.30+roomDensity*.27,stack)*step(.15,floorState);
-        float tenantOn=max(step(.56+roomDensity*.13,suite),step(.951,floorState));
-        float broadTenant=horizontalFloors*step(.89,floorState)*step(.21,stack);
-        float officeLamp=max(activeFloor*tenantOn*step(.23,roomId),broadTenant);
-        float hotelLamp=max(step(.789+roomDensity*.15,roomId)*step(.16,floorState),broadTenant);
+        float rowBias=(floorState-.5)*.23+(suite-.5)*.22;
+        float occupied=step(.59+.02*hotel,roomId+rowBias)*step(.16,floorState);
+        float broadTenant=horizontalFloors*step(.955,floorState)*step(.31,stack)*step(.09,roomId);
         float mechanical=1.0-step(1.0,mod(roomCell.y+floor(salt),mechanicalPitch));
         float podium=(1.0-smoothstep(.56,.74,wallUnit.y));
-        float accentRun=stripFloors*podium*step(.79,stack)*step(.08,roomId)*step(.28,suite);
-        float lamp=max(mix(officeLamp,hotelLamp,hotel),accentRun*.75)*(1.0-mechanical);
+        float accentRun=stripFloors*podium*step(.79,stack)*step(.28,suite);
+        float lamp=max(occupied,broadTenant)*(1.0-mechanical);
         vec2 width=vec2(paneHalfWidth,.325-.046*banded-.025*concrete);
         float glass=wallSide*windowMask(pane-vec2(.5,.55),width,glazingAA);
         float mullion=1.0-(.53-.24*concrete)*windowMask(pane-vec2(.5,.55),vec2(.017,.36),aa);
         vec3 toEye=normalize(cameraPosition-wallPoint);
         float faceOn=max(dot(toEye,wallNormal),.08);
         vec2 viewSlope=vec2(dot(toEye,wallTangent),toEye.y)/faceOn;
-        float dw=2.8+exposure*.9;
-        vec2 roomRay=pane-viewSlope*vec2(dw)/bay;
-        float depth=windowMask(roomRay-vec2(.5,.52),vec2(.46,.39),glazingAA);
-        float blindDrop=mix(.11,.69,hash21(roomCell+vec2(5.1,salt)));
-        float blindHalf=step(.58,roomTintId)*smoothstep(.675-blindDrop,.695-blindDrop+aa.y,pane.y);
-        float slats=1.0-smoothstep(.29,.47,abs(fract((pane.y-.68)*32.0)-.5));
+        float roomPlan=hash21(roomCell+vec2(5.1,salt));
+        float roomDepth=mix(roomDepthMeters.x,roomDepthMeters.y,roomPlan);
+        float blindBottom=.55+width.y*(1.0-2.0*mix(.15,.63,roomPlan));
+        float blindHalf=step(.56,roomTintId)*smoothstep(blindBottom-aa.y,blindBottom+aa.y,pane.y);
+        float slats=1.0-smoothstep(.29,.47,abs(fract((pane.y-blindBottom)*32.0)-.5));
         float slatAA=1.0-smoothstep(.24,1.04,pixelFootprint.y*32.0);
-        float blind=1.0-blindHalf*(.52+.22*slats*slatAA);
-        float warmth=clamp(1.04-length((roomRay-vec2(.33+exposure*.31,.72))*vec2(1.29,.98)),.13,1.0);
-        float roomLight=mix(.60,.28+.78*warmth,mix(.28,depth,surfaceDetail));
-        roomLight*=mix(.69,blind,surfaceDetail);
+        float blind=.27-.12*slats*slatAA;
+        float roomLight=mix(.46,mix(interior(pane,viewSlope,aa,roomDepth,roomTintId,roomId),blind,blindHalf),surfaceDetail);
         float spandrel=1.0-smoothstep(.093,.117+aa.y,abs(pane.y-.105));
         float sill=wallSide*(1.0-smoothstep(.016,.026+aa.y,abs(pane.y-.216)));
         float pilaster=windowMask(vec2(fract(pane.x+.5)-.5,pane.y-.5),vec2(.025+.045*concrete,.499),aa);
@@ -146,8 +166,8 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         diffuseColor.rgb*=max(.12,.68+.19*panelGrain+.22*panelPatina+(.29*banded-.26)*spandrel-.37*pilaster-.30*rib-.55*glass-.38*mechanical+.38*corner);
       `)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', /* glsl */ `
-        vec3 tungsten=mix(vec3(1.29,.62,.263),vec3(1.11,.87,.61),roomTintId);
-        vec3 roomTint=mix(tungsten,vec3(.48,.75,1.16),smoothstep(.91,.98,roomTintId));
+        vec3 tungsten=mix(vec3(1.28,.61,.23),vec3(1.10,.91,.67),clamp(roomTintId+(whiteBalance-.31),0.0,1.0));
+        vec3 roomTint=mix(tungsten,vec3(.48,.75,1.16),smoothstep(.91,.98,roomId));
         roomTint=mix(roomTint,vec3(1.07,.23,.65),step(.989,suite));
         roomTint=mix(roomTint,vec3(.042,.69,1.16),accentRun*.68);
         vec3 reflected=reflect(-toEye,wallNormal);
@@ -177,7 +197,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
         float panelReflectance=max(.12,.47+.25*panelPatina+.13*panelGrain-.22*spandrel-.33*mechanical-.32*rib-.22*glass);
         totalEmissiveRadiance+=wallSide*(claddingShade*envelope*skyGlass*panelReflectance+farVeil+signGlow*(.048+.11*glass));
         totalEmissiveRadiance+=(sill+pilaster*.32+corner*.44)*skyGlass*(.33+.16*floorState)*(.52+.59*curtain+.35*banded);
-        float lampRadiance=.14+1.91*exposure*exposure+23.0*pow(exposure,11.0)+windowTail*pow(exposure,16.0);
+        float lampRadiance=.13+1.35*exposure*exposure+13.4*pow(exposure,11.0)+.51*windowTail*pow(exposure,17.0);
         vec3 litRoom=roomTint*lamp*lampRadiance*roomLight;
         vec3 subpixelRooms=mix(vec3(.165,.104,.075),vec3(.125,.132,.190),distanceLayer*.5)*(1.0-mechanical);
         totalEmissiveRadiance+=glass*((.28+.75*curtain+.28*banded)*
