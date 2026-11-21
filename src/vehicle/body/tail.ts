@@ -32,7 +32,10 @@ function solve(A: number[][], r: number[]): number[] {
   return M.map((row, i) => row[n] / row[i])
 }
 
-const terms = (x: number, y: number): number[] => [1, y, y * y, x * x, x * x * x * x]
+/** The centre line leans in this far per metre of drop below the deck edge, so the tail never stands proud of it. */
+const plumb = 0.02
+
+const terms = (x: number, y: number): number[] => [1, y, y * y, x * x, x * x * x * x, x * x * y, x * x * y * y]
 
 /** The tail below the deck edge, from the corner (a = 0) to the center line (a = 1), bottom (b = 0) to top. */
 export function rearFace(loft: Loft): (a: number, b: number) => V3 {
@@ -59,6 +62,10 @@ export function rearFace(loft: Loft): (a: number, b: number) => V3 {
   for (let i = 0; i <= 60; i++) {
     fit(L(i / 60), 1)
     fit(T(i / 60), 1)
+  }
+  for (let i = 0; i <= 20; i++) {
+    const y = yB + ((p11[1] - yB) * i) / 20
+    fit([0, y, p11[2] + plumb * (p11[1] - y)], 2)
   }
   const c = solve(A, r)
   const Z = (x: number, y: number): number => terms(x, y).reduce((s, t, i) => s + t * c[i], 0)
