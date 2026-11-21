@@ -22,6 +22,10 @@ The patch adds `varying vec3 vReflectWorld` (world position, after batching and 
 
 Drawn from the mirrored camera with an oblique near plane on y = 0, deck hidden and `layers.scene` only. Review draws once at frame center with no lens jitter so a page resuming at any sample index rebuilds the same mirror. Draft and final use the sample camera, lights and time. The `reflect-planar` patch on `world.deck.material` replaces the specular environment term (`radiance` and `clearcoatRadiance` after `#include <lights_fragment_maps>`) with GGX taps into the mirror image. It reads `geometryNormal`, `geometryClearcoatNormal` and `material.*`, so normal and roughness changes made earlier in the shader bend and blur it.
 
+An analytic area light with a visible aperture in the mirror supplies diffuse light, but no second specular image on the mirrored deck. This covers the cabinet screens and paired practical opals. Weather-sealed opals use the area's on-axis intensity divided by area as their mirror tint, then restore their original tint before the unmirrored draw. An unpaired light or a directional projector still supplies direct specular.
+
+Puddles read the sharp level of the mirror, letting the reflected rays provide the spread. Rougher film progressively uses mip filtering. The firefly limiter still bounds ordinary taps, but allows physical opal radiance inside an aperture's projected footprint.
+
 | Uniform | Meaning |
 | --- | --- |
 | `reflectMap` | HDR mirror image, half float, with mips |
@@ -31,6 +35,8 @@ Drawn from the mirrored camera with an oblique near plane on y = 0, deck hidden 
 | `reflectLodMax` | Last mip level |
 | `reflectSeed` | Per sub-render seed of the tap pattern |
 | `reflectOn` | 0 while the mirror itself is drawn, so nothing sees its own reflection |
+| `reflectEmitters` | Current analytic sample positions and ownership flags for mirrored apertures |
+| `reflectEmitterBounds`, `reflectEmitterPeaks` | Projected opal bounds and physical luma ceilings |
 
 A world point `x` is found in the mirror image at `(reflectViewProjection * vec4(x, 1)).xy / w * 0.5 + 0.5`.
 
@@ -40,7 +46,7 @@ A world point `x` is found in the mirror image at `(reflectViewProjection * vec4
 
 | Tier | Cube face | Camera planar scale | Camera planar cadence |
 | --- | --- | --- | --- |
-| draft | 256 px | 0.25 | First sample |
+| draft | 256 px | 0.5 | First sample |
 | review | 512 px | 0.5 | Frame center |
 | final | 1024 px | 0.5 | Every sample |
 

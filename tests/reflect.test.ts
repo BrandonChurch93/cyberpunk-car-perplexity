@@ -2,10 +2,11 @@ import * as THREE from 'three'
 import { createServer } from 'vite'
 import { describe, expect, it } from 'vitest'
 import { config } from '../src/config'
+import type { FilmLight, SampleContext } from '../src/core/contract'
 import type { FrameEngine, Stage } from '../src/core/engine'
 import { createHaze, createHazeCapture } from '../src/core/haze'
 import type { applyLens } from '../src/core/lens'
-import { LightRig } from '../src/core/lights'
+import { LightRig, patchFilmLighting } from '../src/core/lights'
 import { createReflections, planarTuning, quality } from '../src/core/reflect'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
 import { Probe } from '../src/core/reflect/probe'
@@ -100,6 +101,8 @@ describe('quality', () => {
     expect(quality.final.bounce).toBe(true)
     expect(quality.draft.captureSize).toBeLessThan(quality.review.captureSize)
     expect(quality.review.captureSize).toBeLessThan(quality.final.captureSize)
+    expect(quality.draft.planarScale).toBe(quality.review.planarScale)
+    expect(quality.review.planarScale).toBe(quality.final.planarScale)
     for (const q of Object.values(quality)) expect(Math.log2(q.captureSize) % 1).toBe(0)
   })
 })
@@ -108,12 +111,19 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   const scene = new THREE.Scene()
   const world = new THREE.Group()
   const body = new THREE.Group()
+  const housing = new THREE.Group()
+  const tint = new THREE.Color(.15, .03, .23)
+  const aperture = new THREE.Mesh(new THREE.PlaneGeometry(4, 6), new THREE.ShaderMaterial({ uniforms: { tint: { value: tint } } }))
+  aperture.name = 'weather-sealed opal face'
+  aperture.position.set(2, 6, -31)
   const emitter = new THREE.Object3D()
   emitter.position.set(2, 6, -31)
-  const rig = new LightRig([{
-    id: 'magenta violet tower screen', kind: 'area', object: emitter, color: new THREE.Color(1, 0, 1),
-    intensity: 2, range: 60, size: [4, 6], shadow: false, beam: false, level: () => 1,
-  }], 32)
+  housing.add(aperture, emitter)
+  const practical: FilmLight = {
+    id: 'test luminous opal', kind: 'area', object: emitter, color: new THREE.Color(1, 0, 1),
+    intensity: 48, range: 60, size: [4, 6], shadow: false, beam: false, level: () => 1,
+  }
+  const rig = new LightRig([practical], 32)
   const dark = new THREE.MeshStandardMaterial()
   const zinc = new THREE.MeshStandardMaterial()
   const floor = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshStandardMaterial())
@@ -128,9 +138,10 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   const slot = new THREE.Mesh(new THREE.BoxGeometry(), dark)
   slot.name = 'recessed slot bed'
   grate.add(rim, slot)
-  world.add(floor, stripe, rail, grate)
-  scene.add(world, body, emitter, rig.group)
+  world.add(floor, stripe, rail, grate, housing)
+  scene.add(world, body, rig.group)
   const visibility: boolean[][] = []
+  const radiance: number[][] = []
   const renderer = {
     coordinateSystem: THREE.WebGLCoordinateSystem,
     getRenderTarget: () => null,
@@ -141,26 +152,39 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
     setRenderTarget: () => undefined,
     setClearColor: () => undefined,
     clear: () => undefined,
-    render: () => visibility.push([floor.visible, stripe.visible, rim.visible, slot.visible, rail.visible]),
+    render: () => {
+      visibility.push([floor.visible, stripe.visible, rim.visible, slot.visible, rail.visible])
+      radiance.push(tint.toArray())
+    },
   } as unknown as THREE.WebGLRenderer
   const part = createReflections({
     renderer, scene, rig,
     vehicle: { root: body, lamps: [] },
-    world: { root: world, deck: { material: floor.material, meshes: [floor] }, reflectionBox: new THREE.Box3() },
+    world: { root: world, lights: [practical], deck: { material: floor.material, meshes: [floor] }, reflectionBox: new THREE.Box3() },
   })
   const fmt = config.formats.preview
   const eye = camera()
   const state = { position: eye.position, quaternion: eye.quaternion, focalMm: 35, sensorWidthMm: 36, focusDistance: 4, fNumber: 2, near: .1, far: 50 }
   rig.update(0, [.75, .25])
-  part.beforeSample!({
+  const sample: SampleContext = {
     camera: eye, state, timeSeconds: 0,
     sample: {
       frame: { format: fmt, frameIndex: 195, frameKey: 195, tier: 'draft', samples: 1, timeSeconds: 0 },
       sampleIndex: 0, timeSeconds: 0, shutter: .5, aperture: [0, 0], misc: [0, 0], pixel: [0, 0], light: [0, 0],
     },
-  })
+  }
+  part.beforeSample!(sample)
   expect(visibility).toEqual([[false, false, false, false, true]])
-  expect(part.planar.reflectBillboard.value.toArray()).toEqual([3, 4.5, -31, 1])
+  expect(radiance).toEqual([[2, 0, 2]])
+  expect(tint.toArray()).toEqual([.15, .03, .23])
+  expect(part.planar.reflectEmitters.value.map(position => position.toArray())).toEqual([[3, 4.5, -31, 1]])
+  const { x: u0, y: v0, z: u1, w: v1 } = part.planar.reflectEmitterBounds.value[0]!
+  expect(u1).toBeGreaterThan(u0)
+  expect(v1).toBeGreaterThan(v0)
+  expect(part.planar.reflectEmitterPeaks.value[0]).toBeCloseTo(.5696, 4)
+  housing.visible = false
+  part.beforeSample!(sample)
+  expect(part.planar.reflectEmitters.value[0]!.w).toBe(0)
   expect([floor.visible, stripe.visible, rim.visible, slot.visible, rail.visible]).toEqual([true, true, true, true, true])
   expect(patchesOf(floor.material)).toEqual(['reflect-box', 'reflect-planar'])
   expect(patchesOf(stripe.material)).toEqual(['reflect-box', 'reflect-planar-deck-detail'])
@@ -448,7 +472,7 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
 }
 
 function captureWetDeck(three: typeof THREE, reflections: typeof createReflections, porous: typeof applyPorous,
-  fmt: typeof config.formats.preview) {
+  fmt: typeof config.formats.preview, draft: typeof quality.draft) {
   const renderer = new three.WebGLRenderer()
   const scene = new three.Scene()
   const root = new three.Group()
@@ -480,8 +504,8 @@ function captureWetDeck(three: typeof THREE, reflections: typeof createReflectio
     renderer, scene, vehicle: { root, lamps: [] },
     world: { root: world, deck: { material: deck.material, meshes: [deck] }, reflectionBox: new three.Box3() },
   })
-  const size = 256
-  const format = { ...fmt, width: size * 4, height: size * 4 }
+  const size = draft.captureSize
+  const format = { ...fmt, width: size / draft.planarScale, height: size / draft.planarScale }
   ref.resize(format)
   const frame = { format, frameIndex: 195, frameKey: 195, tier: 'draft' as const, samples: 1, timeSeconds: 0 }
   const sample = { frame, sampleIndex: 0, timeSeconds: 0, shutter: .5, aperture: [0, 0] as [number, number],
@@ -581,7 +605,8 @@ function sweepPlanarLimiter(three: typeof THREE, box: typeof boxPatch, planar: t
     reflectMap: { value: image }, reflectDepth: { value: depth },
     reflectViewProjection: { value: projection }, reflectInverseViewProjection: { value: projection.clone().invert() },
     reflectSize: { value: new three.Vector2(edge, edge) }, reflectLodMax: { value: Math.log2(edge) },
-    reflectSeed: noise, reflectOn: { value: 1 }, reflectBillboard: { value: new three.Vector4() },
+    reflectSeed: noise, reflectOn: { value: 1 }, reflectEmitters: { value: [] },
+    reflectEmitterBounds: { value: [] }, reflectEmitterPeaks: { value: [] },
   }, tuning))
   patch(material, {
     id: 'measure planar limiter',
@@ -674,6 +699,83 @@ function resumeMirror(three: typeof THREE, reflections: typeof createReflections
   return { sum, count }
 }
 
+function verifyEmitterOwnership(three: typeof THREE, reflections: typeof createReflections, Rig: typeof LightRig,
+  patch: typeof patchMaterial, filmLighting: typeof patchFilmLighting) {
+  const renderer = new three.WebGLRenderer()
+  const size = 64
+  const target = new three.WebGLRenderTarget(size, size, { type: three.FloatType })
+  const scene = new three.Scene()
+  const world = new three.Group()
+  const body = new three.Group()
+  const aperture = new three.Mesh(new three.PlaneGeometry(.9, 1.7), new three.MeshBasicMaterial({ color: new three.Color(8, 0, 0) }))
+  aperture.name = 'graded opal face'
+  aperture.position.set(0, 2, -4)
+  const anchor = new three.Object3D()
+  anchor.position.copy(aperture.position)
+  const housing = new three.Group()
+  housing.add(aperture, anchor)
+  const paired: FilmLight = {
+    id: 'paired aperture', kind: 'area', object: anchor, color: new three.Color(1, 0, 0),
+    intensity: 25, range: 20, size: [.9, 1.7], shadow: false, beam: false, level: () => 1,
+  }
+  const secondAnchor = anchor.clone()
+  secondAnchor.position.x += 1.2
+  const unpaired: FilmLight = { ...paired, id: 'unpaired flood', object: secondAnchor, color: new three.Color(0, 0, 1) }
+  const rig = new Rig([paired, unpaired], 32)
+  const material = new three.MeshPhysicalMaterial({ roughness: .22, color: new three.Color(.6, .6, .6) })
+  filmLighting(material)
+  const floor = new three.Mesh(new three.PlaneGeometry(10, 15), material)
+  floor.rotation.x = -Math.PI / 2
+  floor.position.z = -2
+  world.add(floor, housing, secondAnchor)
+  scene.add(world, body, rig.group)
+  const format = { id: 'test', width: size, height: size }
+  const eye = new three.PerspectiveCamera(47, 1, .05, 100)
+  eye.position.set(0, 1.3, 3)
+  eye.lookAt(0, 0, 0)
+  eye.updateMatrixWorld(true)
+  const state = { position: eye.position, quaternion: eye.quaternion, focalMm: 35, sensorWidthMm: 36, focusDistance: 4, fNumber: 2, near: .05, far: 100 }
+  const part = reflections({ renderer, scene, rig, world: { root: world, lights: [paired, unpaired],
+    deck: { meshes: [floor], material }, reflectionBox: new three.Box3() }, vehicle: { root: body, lamps: [] } })
+  patch(material, {
+    id: 'inspect deck light ownership',
+    apply(shader) {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `
+        outgoingLight = vec3(reflectedLight.directDiffuse.r, reflectedLight.directSpecular.r, reflectedLight.directSpecular.b);
+        #include <opaque_fragment>
+      `)
+    },
+  })
+  rig.update(0, [.5, .5])
+  part.resize(format)
+  part.beforeSample!({
+    camera: eye, state, timeSeconds: 0,
+    sample: {
+      frame: { format, frameIndex: 195, frameKey: 195, tier: 'draft', samples: 1, timeSeconds: 0 },
+      sampleIndex: 0, timeSeconds: 0, shutter: .5, aperture: [0, 0], misc: [0, 0], pixel: [0, 0], light: [.5, .5],
+    },
+  })
+  const values = new Float32Array(size * size * 4)
+  function measure(): number[] {
+    renderer.setRenderTarget(target)
+    renderer.render(scene, eye)
+    renderer.readRenderTargetPixels(target, 0, 0, size, size, values)
+    const peaks = [0, 0, 0]
+    for (let y = 10; y < 43; y++) for (let x = 8; x < size - 8; x++) {
+      const p = (y * size + x) * 4
+      if (!values[p]) continue
+      for (let channel = 0; channel < 3; channel++) peaks[channel] = Math.max(peaks[channel], values[p + channel])
+    }
+    return peaks
+  }
+  const owned = measure()
+  part.planar.reflectEmitters.value[0]!.w = 0
+  const analytic = measure()
+  target.dispose()
+  renderer.dispose()
+  return { owned, analytic }
+}
+
 it('matches camera and probe reflections, bounds planar taps, and resumes review mirrors on fresh pages', async () => {
   const id = '/reflect-test-entry.js'
   const app = await createServer({
@@ -686,7 +788,7 @@ it('matches camera and probe reflections, bounds planar taps, and resumes review
         import * as THREE from 'three'
         import { createHaze, createHazeCapture } from '/src/core/haze/index.ts'
         import { LightRig, filmLightsGlsl, patchFilmLighting, projectorHalfAngle } from '/src/core/lights.ts'
-        import { createReflections, planarTuning } from '/src/core/reflect/index.ts'
+        import { createReflections, planarTuning, quality } from '/src/core/reflect/index.ts'
         import { Probe } from '/src/core/reflect/probe.ts'
         import { boxPatch, planarPatch } from '/src/core/reflect/shaders.ts'
         import { mirrorCamera } from '/src/core/reflect/mirror.ts'
@@ -699,8 +801,9 @@ it('matches camera and probe reflections, bounds planar taps, and resumes review
         export const run = () => (${captureLamp.toString()})(THREE, createReflections, config.formats.preview)
         export const air = () => (${captureAir.toString()})(THREE, createHaze, createHazeCapture, LightRig, Probe, config.formats.preview)
         export const projector = () => (${captureProjector.toString()})(THREE, createHaze, LightRig, config.formats.preview, projectorHalfAngle, filmLightsGlsl, patchFilmLighting)
-        export const deck = () => (${captureWetDeck.toString()})(THREE, createReflections, applyPorous, config.formats.preview)
+        export const deck = () => (${captureWetDeck.toString()})(THREE, createReflections, applyPorous, config.formats.preview, quality.draft)
         export const limiter = () => (${sweepPlanarLimiter.toString()})(THREE, boxPatch, planarPatch, patchMaterial, mirrorCamera, planarTuning, hash01, streamSeed('reflect'))
+        export const ownership = () => (${verifyEmitterOwnership.toString()})(THREE, createReflections, LightRig, patchMaterial, patchFilmLighting)
         export const review = (frameIndex, take, saved) =>
           (${resumeMirror.toString()})(THREE, createReflections, FrameEngine, applyLens, config.formats.preview, frameIndex, take, saved)
       ` : null,
@@ -763,6 +866,15 @@ it('matches camera and probe reflections, bounds planar taps, and resumes review
       const wet: ReturnType<typeof captureWetDeck> = await page.evaluate(`import("${id}").then(module => module.deck())`)
       expect(errors).toEqual([])
       expect(wet.rebound && wet.cameraRestored && wet.deckVisible && wet.parapetVisible).toBe(true)
+      const { owned, analytic }: ReturnType<typeof verifyEmitterOwnership> =
+        await page.evaluate(`import("${id}").then(module => module.ownership())`)
+      expect(errors).toEqual([])
+      expect(analytic[0]).toBeGreaterThan(.0001)
+      expect(analytic[1]).toBeGreaterThan(.0001)
+      expect(analytic[2]).toBeGreaterThan(.0001)
+      expect(owned[0]).toBeCloseTo(analytic[0], 6)
+      expect(owned[1]).toBeLessThan(analytic[1] * .01)
+      expect(owned[2]).toBeCloseTo(analytic[2], 6)
       for (const [i, direct] of wet.direct.entries()) {
         const cube = wet.cube[i]
         expect(direct[0], `wet deck ray ${i}`).toBeGreaterThan(.002)
