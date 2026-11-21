@@ -247,12 +247,15 @@ void main() {
     float narrow = (1.0 - wide) * (1.0 - longTrail);
     float defocused = uLayer < 0.5 ? 0.065 + 0.14 * smoothstep(0.91, 0.99, aMotion.w) : 0.038;
     if (uHero > 1.5) {
+      bool beamGrain = uHero < 2.5;
+      if (beamGrain) sigmaSide *= mix(0.72, 1.0, wide);
       float oscillations = floor(78.0 * uDuration * pow(0.001 / aDrop.w, 1.5) + 0.5);
       float crest = 0.5 + 0.31 * sin(6.28318530718 * (uPhase * oscillations + aMotion.w));
-      float glintSigma = length(vec2(sigmaEnd, min(len * 0.24, 0.00245 * longSide)));
+      float crestSpan = beamGrain ? min(len * 0.16, 0.00160 * longSide) : min(len * 0.24, 0.00245 * longSide);
+      float glintSigma = length(vec2(sigmaEnd, crestSpan));
       vGlint = vec2(crest * len, glintSigma);
       float clean = (1.0 - smoothstep(0.00016, 0.00047, opticalWidth)) * (1.0 - 0.51 * smoothstep(0.016, 0.033, frameTravel));
-      gain *= uHero > 2.5 ? 17.8 * clean : mix(0.003, 2.28, clean);
+      gain *= beamGrain ? mix(0.003, 2.65, clean) : 17.8 * clean;
     } else gain *= uLocalFine > 0.5 ? mix(0.008, 0.82, narrow) : mix(defocused, 0.77, narrow);
   }
   float nearVeil = smoothstep(0.009, 0.028, frameTravel);
