@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { config } from '../config'
 import type { FilmLight } from '../core/contract'
+import { deckReflectionTrim, paintBayLine } from './deck-reflection-trim'
 import { plate, type Label } from './fixtures'
 import { group, heroCityYaw, heroDrainLayout, streetY, type Tuple } from './forms'
 import { heroPoint, heroScale as scale, heroSize } from './hero-scale'
@@ -61,7 +62,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   root.rotation.y = heroCityYaw
   const city = group(root, 'hero tower layout')
   const roof = group(root, 'hero parapet and near deck layout')
-  const { heroWall, zinc, stripe, tar } = materials
+  const { heroWall, zinc, heroStripe, tar } = materials
   const frame = new THREE.MeshStandardMaterial({ color: new THREE.Color(.035,.039,.048), roughness: .54, metalness: .59 })
   const glass = new THREE.MeshStandardMaterial({ color: new THREE.Color(.025,.027,.039), roughness: .33, metalness: .22 })
   const distantGlass = glass.clone()
@@ -75,6 +76,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const lights = new Map<string, FilmLight>()
   const signs: string[] = []
   const practical = reflectionPracticalBuilder(labels, frame, zinc)
+  const deckTrim = deckReflectionTrim(frame,zinc)
   const animation: ((time: number) => void)[] = []
   const survey = approvedHeroSourceSurvey()
   const screen = survey.find(source => source.id === 'magenta violet tower screen')!
@@ -129,6 +131,8 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     ['c9 east relay court', 198.1, -586, 14.4, 38, 112, .070, 1],
     ['c9 east glass exchange', 235.7, -784, 18.0, 48, 153, .070, 1],
     ['c9 east lit switchyard', 271.8, -1033, 15.4, 36, 148, .058, 1],
+    ['c9 center exchange stairs', -53.8, -639, 10.1, 22, 106, .057, 1],
+    ['c9 center clock stack', -36.4, -654, 12.1, 24, 112, .065, 1],
   ] as const
   const towers = [
     ['hero left edge tower', -33.25, -75.2, 16.1, 3.3, 99.8, .069, scale.leftEdge],
@@ -190,6 +194,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     groundedBox(tower,name,x,top,z,width,depth,shell,k)
     const [wx,wy,wz] = heroPoint([x,top,z],k)
     const w = width*k, d = depth*k
+    deckTrim.tower(tower,name,wx,wz+d*.5,w)
     box(tower,'folded coping band',[wx,wy-.52,wz],[w+.28,1.5,d+.28],frame)
     if (faceZ >= -50 && width >= 1) {
       for (const side of [-1,1]) groundedBox(tower,'rainwater jamb',x+side*(width/2-.068),top,faceZ+.021,.092,.092,frame,k)
@@ -359,8 +364,8 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
         practical.cabinet(tower,'small cyan center lift sign',[wx-w*.12,67.4,pz+.58],[3.91,2.50],[.08,3.2,5.7],'OPEN')
       } else if (name === 'c9 center fluted offices') {
         practical.cabinet(tower,'thin magenta tenant mast',[wx+w*.29,94.2,pz+.54],[1.62,12.6],[4.45,.30,1.65],'BAR',true)
-        practical.opal(tower,'amber clock floor slot',[wx-w*.16,95.3,pz+.60],[5.2,1.12],[4.9,2.5,.51],2)
-      } else if (name === 'c9 center communications') {
+        practical.opal(tower,'amber clock floor slot',[wx+w*.17,103.6,pz+.60],[4.28,1.12],[4.9,2.5,.51],2)
+      } else if (name === 'c9 center clock stack') {
         practical.opal(tower,'small cyan mechanical floor datum',[wx+w*.07,73.2,pz+.61],[6.89,1.06],[.15,3.5,5.4],3)
       }
     }
@@ -392,6 +397,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   box(roof, 'hero concrete wall cap', [0, 1.047, -10.02], [29, .048, .377], heroWall)
   box(roof, 'hero full span steel top rail', [0, 1.228, -10.015], [29, .034, .052], zinc)
   box(roof, 'hero steel intermediate rail', [0, 1.145, -10.015], [29, .020, .032], zinc)
+  deckTrim.parapet(roof)
   for (let i = -6; i <= 6; i++) {
     box(roof, 'hero rail post', [i * 2.35, 1.149, -10.015], [.057, .178, .057], zinc)
     box(roof, 'hero steel post mounting plate', [i * 2.35, 1.075, -10.015], [.125,.016,.112], zinc)
@@ -472,7 +478,9 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       for (const side of [-1,1]) box(housing, 'sealed parapet light end bracket', [side*(width/2+.012),0,-.022], [.045,height+.037,.15], zinc)
     }
   }
-  box(roof, 'hero near bay line', [.48, .0014, 3.06], [.113, .0028, 2.85], stripe).rotation.y = .342
+  paintBayLine(roof,'hero near bay line',heroStripe,[.021,1.718],[.946,4.365],.113)
+  paintBayLine(roof,'west bay edge marking',heroStripe,[-2.74,3.78],[-1.76,2.41],.095)
+  paintBayLine(roof,'west bay edge continuation',heroStripe,[-1.67,2.27],[-1.44,1.95],.095)
   const drain = group(roof,'hero near drain grate',[heroDrainLayout[0],0,heroDrainLayout[1]])
   drain.rotation.y = -.08
   for (const x of [-.253,.253]) box(drain,'iron grate end rim',[x,.0041,0],[.025,.0082,.24],zinc)
