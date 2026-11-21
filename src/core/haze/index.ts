@@ -52,6 +52,12 @@ export const atmosphere = {
   projectorWakeFraction: 0.27,
   projectorWakeSlope: [-0.062, -0.012, 0.17, 0.24],
   projectorWakeScatter: [0.53, 0.54],
+  projectorCoreCosine: [0.987688, 0.997564],
+  projectorCoreSpan: [0.12, 0.28, 1.40, 2.85],
+  projectorCoreClearance: [0.045, 0.24],
+  projectorCoreAnisotropy: 0.45,
+  projectorCoreScatter: 0.92,
+  projectorOffAxisLoss: 0.32,
   projectorOpeningFraction: 0.17,
   projectorOpeningAngle: [0.58, 0.86],
   projectorOpeningHeight: [-0.12, -0.045],
@@ -492,6 +498,16 @@ vec4 scatterToDepth(vec2 uv, float depth) {
         ) * onset + body);
         inScatter *= 1.0 - ${atmosphere.projectorDeckScatterLoss} * frontDeck.y
           * (1.0 - smoothstep(${atmosphere.projectorDeckScatterHeight.join(', ')}, p.y));
+        if (wakeGain > 0.0 && frontDeck.y < 1.0) {
+          float beamCore = smoothstep(${atmosphere.projectorCoreCosine.join(', ')}, dot(-toLight, axis.xyz));
+          float beamSpan = smoothstep(${atmosphere.projectorCoreSpan.slice(0, 2).join(', ')}, distanceToLight)
+            * (1.0 - smoothstep(${atmosphere.projectorCoreSpan.slice(2).join(', ')}, distanceToLight));
+          float coreWeight = beamSpan * smoothstep(${atmosphere.projectorCoreClearance.join(', ')}, clearance)
+            * (1.0 - frontDeck.y) * wakeGain;
+          inScatter += coreWeight * (${atmosphere.projectorCoreScatter} * beamCore
+            * phase(cosine, ${atmosphere.projectorCoreAnisotropy}) * (densities.x + densities.y)
+            - ${atmosphere.projectorOffAxisLoss} * (1.0 - beamCore) * inScatter);
+        }
         if (opening > 0.0) {
           float span = smoothstep(${atmosphere.projectorOpeningReach.slice(0, 2).join(', ')}, distanceToLight)
             * (1.0 - smoothstep(${atmosphere.projectorOpeningReach.slice(2).join(', ')}, distanceToLight));
