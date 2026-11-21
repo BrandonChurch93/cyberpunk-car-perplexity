@@ -10,6 +10,7 @@ import { clipBounds, rainFloor, ribbonCorners, worldRainMotion, WorldRibbonSelec
 import { RainSkyDepth } from './sky-depth'
 
 type Fade = readonly [number, number, number, number]
+export const deckGlintLayer = -3
 interface RibbonField {
   fade: Fade
   gain: number
@@ -235,7 +236,7 @@ void main() {
   float diameter = aDrop.w * abs(pixelFocal.y) / depth;
   vec2 coc = uAperture * abs(1.0 - depth / uFocus) * pixelFocal / depth;
   float physical = diameter * 0.5;
-  bool mist = uLayer < -1.5;
+  bool mist = uLayer == -2.0;
   float sigma = physical * physical * (mist ? 0.5 : 0.25) + (uHero > 1.5 ? 1.0 / 12.0 : 0.17);
   float sigmaSide = sqrt(pow(length(normal * coc) * 0.5, 2.0) + sigma);
   float sigmaEnd = sqrt(pow(length(axis * coc) * 0.5, 2.0) + sigma);
@@ -300,7 +301,10 @@ void main() {
   flash *= amount * gain * coverage;
   peak += flash / (1.0 + (uLocalFine > 0.5 ? 5.5 : 20.0) * max(flash.r, max(flash.g, flash.b)));
   if (mist) peak /= 1.0 + 76.0 * max(peak.r, max(peak.g, peak.b));
-  if (uLayer < 0.0 && !mist) peak /= 1.0 + (paint > 1.5 ? 9.0 : 32.0) * max(peak.r, max(peak.g, peak.b));
+  if (uLayer < 0.0 && !mist) {
+    float knee = uLayer == ${deckGlintLayer.toFixed(1)} ? 17.0 : paint > 1.5 ? 9.0 : 32.0;
+    peak /= 1.0 + knee * max(peak.r, max(peak.g, peak.b));
+  }
   vRadiance = veilHighlights(peak, veil);
   vVeil = veil;
   vBead = uLayer < 0.0 ? 0.0 : clamp((aDrop.w - 0.0017) * 450.0, 0.0, 0.28);
@@ -455,7 +459,7 @@ export class RibbonView {
     })
     const mesh = new THREE.Mesh(geometry, material)
     mesh.frustumCulled = false
-    mesh.layers.set(layer === 0 || field?.hero ? layers.cameraOnly : layers.scene)
+    mesh.layers.set(layer === 0 || layer === deckGlintLayer || field?.hero ? layers.cameraOnly : layers.scene)
     const viewport = new THREE.Vector4()
     const offset = new THREE.Vector3()
     const inverse = new THREE.Quaternion()
