@@ -11,7 +11,7 @@ import { engineBay } from './parts/enginebay'
 import { mirror } from './parts/mirror'
 import { underbody, valance } from './parts/diffuser'
 import { outlets } from './parts/outlets'
-import { taillamps } from './parts/taillamps'
+import { lampGlow, taillamps } from './parts/taillamps'
 import { guide } from './parts/lamps'
 import { buildFront } from './parts/front'
 import { buildLiners } from './parts/liners'
@@ -146,6 +146,9 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   addPair(tl.housing, m.tailRecess, 'tail-housing')
   addPair(tl.reflector, m.retro, 'tail-reflector')
   addPair(tl.optic, m.tailInner, 'tail-optic')
+  addPair(tl.lens, m.rearOptics, 'tail-lens')
+  lampGlow(m.tail)
+  lampGlow(m.tailInner)
 
   // Front module: eyes, Y guides, projectors, ducts, grille and splitter (parts/front.ts).
   // The registry accepts any material; the front module tags its own lens, guide and die finishes.
