@@ -2,7 +2,7 @@ import { join } from 'node:path'
 import sharp, { type OverlayOptions } from 'sharp'
 import { defaultPaint, formatById, isTier, paintById } from '../src/config.ts'
 import { args, config, ensureDir, workDir } from './lib/env.ts'
-import { RenderSession, runTool } from './lib/render.ts'
+import { RenderSession, runTool, stillName } from './lib/render.ts'
 
 /** A quick look at chosen frames: one montage, plus the camera and the anchors as numbers. */
 void runTool(async () => {
@@ -38,7 +38,13 @@ void runTool(async () => {
           stage.cameraOverride = camera
         })()`)
       }
-      const { file } = await session.still(spec, { force: true })
+      let file: string
+      if (probes) {
+        file = join(ensureDir(join(workDir, 'look', 'probes')), `${a.name ?? format.id}-${i}-${stillName(spec)}.png`)
+        await session.renderTo(spec, file, { force: true })
+      } else {
+        file = (await session.still(spec, { force: true })).file
+      }
       const input = await sharp(file).resize(cellWidth, cellHeight).toBuffer()
       const label = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${cellWidth}" height="18"><rect width="110" height="18" fill="#15161a"/><text x="4" y="13" font-family="monospace" font-size="12" fill="#d8d8d8">${probes ? `probe ${i}` : `${frame} ${(frame / config.film.fps).toFixed(2)} s`}</text></svg>`)
       const left = (i % columns) * cellWidth

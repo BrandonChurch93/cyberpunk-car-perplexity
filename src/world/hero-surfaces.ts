@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { config } from '../config'
 import { stream } from '../core/random'
 import { insertAfter, insertBefore, patchMaterial } from '../materials/patch'
-import { muralMean, muralPainting, pictureLookup } from './mural-picture'
+import { muralMean, muralPainting, muralRise, muralRows, pictureLookup } from './mural-picture'
 
 const opalVertex = /* glsl */ `
   varying vec2 face;
@@ -411,13 +411,14 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
     magenta: { value: magenta }, violet: { value: violet }, banded: { value: banded },
     travel: { value: travel }, relief: { value: relief }, picture: { value: Number(picture) },
     artwork: { value: artworkGain > 0 ? muralPainting(picture) : null }, artworkGain: { value: artworkGain },
+    rise: { value: picture ? muralRise : 1 }, rows: { value: picture ? muralRows : 1 },
   }
   const material = new THREE.ShaderMaterial({
     uniforms, toneMapped: false, vertexShader: opalVertex,
     fragmentShader: /* glsl */ `
       varying vec2 face;
       uniform vec2 flow, pixelCount, cabinetCount;
-      uniform float cabinetSalt, banded, travel, relief, picture, artworkGain;
+      uniform float cabinetSalt, banded, travel, relief, picture, artworkGain, rise, rows;
       uniform sampler2D artwork;
       uniform vec3 magenta, violet;
       ${noise}
@@ -453,7 +454,7 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
         led=mix(led,led*.81+vec3(.83,.44,1.27),banded*lightwell*.66);
         level*=mix(1.0,.065+.935*lightwell*cap,banded);
         if (artworkGain>0.0) {
-          led=muralPicture(artwork,face,flow,travel)*artworkGain;
+          led=muralPicture(artwork,face,flow,travel,rise,rows)*artworkGain;
           level=tile*mix(1.0,.68+.32*diode,pixelAA)*mix(1.0,.12+.88*lightwell*cap,banded);
           if (picture>0.0) {
             vec2 driver=cells/8.0;

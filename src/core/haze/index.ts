@@ -70,6 +70,10 @@ export const atmosphere = {
   projectorDeckScatterHeight: [0.30, 0.57],
   projectorDeckScatterLoss: 0.75,
   projectorDeckExtinctionLoss: 0.55,
+  projectorNoseWingPath: [7.20, 8.65],
+  projectorNoseWingHeight: [0.40, 0.78],
+  projectorNoseWingReach: [0.12, 0.45],
+  projectorNoseWingLoss: 0.52,
   projectorDeckWingPath: [8.1, 10.5],
   projectorDeckWingView: [0.012, 0.026],
   projectorDeckWingReach: [0.40, 1.05],
@@ -375,6 +379,7 @@ vec4 scatterToDepth(vec2 uv, float depth) {
   vec2 frontDeck = frontDeckWeights(hit, ray, far, wakeGain);
   #ifdef SIGN_AIR
   float farDeck = deckHitWeight(hit) * smoothstep(${atmosphere.projectorDeckWingPath.join(', ')}, far) * wakeGain;
+  float noseDeck = frontDeck.y * (1.0 - smoothstep(${atmosphere.projectorNoseWingPath.join(', ')}, far));
   #endif
   // The short deck path hands off scatter to Air without changing extinction.
   float localScatterWeight = 1.0 - frontDeck.y;
@@ -471,13 +476,15 @@ vec4 scatterToDepth(vec2 uv, float depth) {
       * smoothstep(${atmosphere.projectorOpeningAngle.join(', ')}, dot(-ray, axis.xyz)) : 0.0;
     #ifdef SIGN_AIR
     float deckWingLoss = 0.0;
-    if (projector && farDeck > 0.0) {
+    float noseWingLoss = 0.0;
+    if (projector && (farDeck > 0.0 || noseDeck > 0.0)) {
       // Protect the shaft in the plane through the lens and the emitter axis.
       vec3 plane = cross(toSource, axis.xyz);
       float separation = abs(dot(plane, ray)) * inversesqrt(max(dot(plane, plane), 1e-6));
       float outside = smoothstep(${atmosphere.projectorDeckWingView.join(', ')}, separation);
       float facing = smoothstep(${atmosphere.projectorDeckFacing.join(', ')}, dot(-ray, axis.xyz));
       deckWingLoss = ${atmosphere.projectorDeckWingLoss} * farDeck * outside * facing;
+      noseWingLoss = ${atmosphere.projectorNoseWingLoss} * noseDeck * outside;
     }
     #endif
     float beamRadius = sqrt(perp2 + min(shape.y * shape.y, 0.01));
@@ -532,6 +539,8 @@ vec4 scatterToDepth(vec2 uv, float depth) {
         }
         #ifdef SIGN_AIR
         inScatter *= 1.0 - deckWingLoss * smoothstep(${atmosphere.projectorDeckWingReach.join(', ')}, distanceToLight);
+        inScatter *= 1.0 - noseWingLoss * (1.0 - smoothstep(${atmosphere.projectorNoseWingHeight.join(', ')}, p.y))
+          * smoothstep(${atmosphere.projectorNoseWingReach.join(', ')}, distanceToLight);
         #endif
         if (opening > 0.0) {
           float span = smoothstep(${atmosphere.projectorOpeningReach.slice(0, 2).join(', ')}, distanceToLight)
