@@ -8,14 +8,14 @@ import { dims } from './body/shape'
 import { mirrorGeometry } from './geom/mesh'
 import { smoothstep, type V3 } from './geom/vec'
 import { engineBay } from './parts/enginebay'
-import { liner } from './parts/chassis'
 import { mirror } from './parts/mirror'
 import { underbody, valance } from './parts/diffuser'
 import { outlets } from './parts/outlets'
 import { taillamps } from './parts/taillamps'
 import { guide } from './parts/lamps'
 import { buildFront } from './parts/front'
-import { buildWheel, type WheelSpec } from './parts/wheel'
+import { buildLiners } from './parts/liners'
+import { buildWheels } from './parts/wheel'
 import { glazing } from './parts/glass'
 import { cabin } from './parts/cabin'
 import { makeMaterials, type Materials } from './materials'
@@ -89,8 +89,9 @@ function pair(g: THREE.BufferGeometry): THREE.BufferGeometry[] {
 
 export async function buildVehicle(options: VehicleOptions): Promise<VehicleModule> {
   const full = options.detail === 'full'
-  const q = full ? 1 : 0.5
   const m: Materials = await makeMaterials(options.detail, options.paint)
+  const tag = (material: THREE.Material, wetness: Parameters<Materials['tag']>[1]): THREE.Material =>
+    m.tag(material as THREE.MeshStandardMaterial, wetness)
   const root = new THREE.Group()
   root.name = 'vehicle'
   const sprung = new THREE.Group()
@@ -106,7 +107,6 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
     for (const [i, x] of pair(g).entries()) add(sprung, x, mat, `${name}-${i ? 'right' : 'left'}`)
   }
 
-  void full
   const body = buildBody({ maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, edgeLength: 0.007 })
   add(sprung, body.paint, m.paint, 'paint')
   const tess = { ...body.grids.main, maxEdge: 0.08, maxAngle: 0.2, tolerance: 0.0025, minEdge: 0.0012, edgeLength: 0.007 }
@@ -133,7 +133,7 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
 
   // Front module: eyes, Y guides, projectors, ducts, grille and splitter (parts/front.ts).
   // The registry accepts any material; the front module tags its own lens, guide and die finishes.
-  const front = buildFront(sprung, cuts, { ...m, tag: (material, wetness) => m.tag(material as THREE.MeshStandardMaterial, wetness) }, full)
+  const front = buildFront(sprung, cuts, { ...m, tag }, full)
 
   const ex = outlets(cuts.curves.surround)
   addPair(ex.lip, m.ceramic, 'outlet-lip')
@@ -158,45 +158,13 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   const va = valance(cuts.curves.lower, cuts.maps.rear)
   addPair(va.wall, m.under, 'diffuser-wall')
   addPair(va.panel, m.mesh, 'diffuser-mesh')
-  addPair(liner(dims.frontHubZ, dims.frontTire.radius, 0.415, 0.5, 0.99), m.under, 'liner-front')
-  addPair(liner(dims.rearHubZ, dims.rearTire.radius, 0.44, 0.5, 1.01), m.under, 'liner-rear')
+  buildLiners(sprung, S.main, { ...m, tag }, full)
   const mr = mirror(body.surfaces.main, body.cuts.maps.main)
   addPair(mr.head, m.paint, 'mirror-head')
   addPair(mr.glass, m.mirror, 'mirror-glass')
   addPair(mr.stalk, m.matte, 'mirror-stalk')
 
-  const wheelSpec = (front: boolean): WheelSpec => {
-    const t = front ? dims.frontTire : dims.rearTire
-    return {
-      radius: t.radius,
-      width: t.width,
-      rim: t.rim,
-      disc: front ? { radius: 0.205, thickness: 0.038 } : { radius: 0.195, thickness: 0.032 },
-      flat: 0.008,
-      caliperAngle: front ? Math.PI - 0.35 : 0.35,
-      caliperLength: front ? 1.0 : 0.85,
-      quality: q,
-    }
-  }
-  for (const front of [true, false]) {
-    const spec = wheelSpec(front)
-    const w = buildWheel(spec)
-    const hubX = front ? dims.frontHubX : dims.rearHubX
-    const hubZ = front ? dims.frontHubZ : dims.rearHubZ
-    const hubY = spec.radius - spec.flat
-    for (const side of [1, -1]) {
-      const g = new THREE.Group()
-      g.name = `wheel-${front ? 'front' : 'rear'}-${side > 0 ? 'left' : 'right'}`
-      g.position.set(side * hubX, hubY, hubZ)
-      const geo = (x: THREE.BufferGeometry): THREE.BufferGeometry => (side > 0 ? x : mirrorGeometry(x))
-      add(g, geo(w.tire), m.tire, 'tire')
-      add(g, geo(w.rim), m.rim, 'rim')
-      add(g, geo(w.disc), m.disc, 'disc')
-      add(g, geo(w.hat), m.hat, 'disc-hat')
-      add(g, geo(w.caliper), m.caliper, 'caliper')
-      root.add(g)
-    }
-  }
+  buildWheels(root, { ...m, tag }, full)
 
   root.traverse((o) => {
     o.castShadow = true
