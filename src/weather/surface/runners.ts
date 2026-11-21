@@ -17,14 +17,23 @@ const wheel = beatById('wheel')
 /** The hero rivulet lets go a little before the macro frame, so it is running there with its neck and bead line behind it. */
 const breakLoose = config.film.macroFrameSeconds - 1.2
 
-/** Distance the hero rivulet has run by time t, before it meets the end of its path. It sits until it lets go, then slips in short surges, as runners on wax do. */
-export function rivuletTravel(t: number): number {
+/** A runner on wax goes at full speed on faces this steep or more, and stays pinned on faces flatter than the hold. */
+const runSlope = { full: 0.5, hold: Math.sin(THREE.MathUtils.degToRad(4)) }
+const runSpeed = 0.05
+
+/** Share of the full running speed on a face whose fall line drops sinSlope per unit length: above the hold, speed grows with the pull. */
+export function rivuletPace(sinSlope: number): number {
+  return THREE.MathUtils.clamp((sinSlope - runSlope.hold) / (runSlope.full - runSlope.hold), 0, 1)
+}
+
+/** Distance the hero rivulet has run by time t, before it meets the end of its path. It sits until it lets go, then slips in short surges, as runners on wax do; on a near level face it only creeps. */
+export function rivuletTravel(t: number, pace = 1): number {
   const age = t - breakLoose
   if (age <= 0 || t > paint.end + 6) return 0
-  const speed = 0.05
+  const speed = runSpeed * pace
   const ramp = Math.min(age, 0.6)
   const base = 0.5 * (speed / 0.6) * ramp * ramp + speed * Math.max(0, age - 0.6)
-  const surge = 0.0025 * Math.sin(age * 9) * Math.min(1, age)
+  const surge = 0.0025 * pace * Math.sin(age * 9) * Math.min(1, age)
   return Math.max(0, base + surge)
 }
 /** Drips leave the wheel arch lip at these times, in the wheel beat. */
@@ -42,6 +51,8 @@ const pathSteps = 160
 const trailAcross = 9
 /** Behind the head the trail stays a continuous neck this long, then pinches off into a line of small drops, as it does on wax. */
 const trailNeck = 0.03
+/** A creeping drop keeps its neck in proportion to its speed, but never shorter than this share of the full neck. */
+const creepNeck = 0.15
 
 interface Tri {
   a: THREE.Vector3
@@ -79,6 +90,8 @@ export class Runners {
   private readonly lower: Array<{ p: THREE.Vector3; n: THREE.Vector3 }> = []
   private readonly dripMesh: THREE.InstancedMesh
   private active = false
+  private pace = 1
+  private neck = trailNeck
 
   /** `start` is where the rivulet waits on the panel, the point the macro focus rests on. */
   constructor(private readonly vehicle: VehicleModule, private readonly material: THREE.Material, plain: THREE.Material, start: THREE.Vector3, private readonly format: FormatSpec) {
@@ -121,6 +134,11 @@ export class Runners {
       }
     })
     this.tracePath(tris, start)
+    const n0 = this.pathNormals[0]
+    if (n0) {
+      this.pace = rivuletPace(Math.sqrt(Math.max(0, 1 - n0.y * n0.y)))
+      this.neck = trailNeck * Math.max(this.pace, creepNeck)
+    }
     // Instanced like every other drop: the lens shader shares one program variant across all of them.
     this.runner = new THREE.InstancedMesh(capTemplate(100, 9, 22), this.material, 1)
     this.runner.layers.set(layers.cameraOnly)
@@ -131,7 +149,7 @@ export class Runners {
     const random = stream('surface trail beads')
     const length = Math.max(0, this.path.length - 1) * pathStep
     const stations: number[] = []
-    for (let at = trailNeck * 0.5; at < length && stations.length < 220; at += random.range(0.0026, 0.0048)) stations.push(at)
+    for (let at = this.neck * 0.5; at < length && stations.length < 220; at += random.range(0.0026, 0.0048)) stations.push(at)
     this.trailBeads = new THREE.InstancedMesh(capTemplate(100, 5, 12), this.material, Math.max(1, stations.length))
     this.trailBeads.layers.set(layers.cameraOnly)
     this.trailBeads.frustumCulled = false
@@ -269,7 +287,7 @@ export class Runners {
     const across = trailAcross
     const tilt = new THREE.Vector3()
     for (let i = from; i <= to && i < this.path.length; i++) {
-      const behind = THREE.MathUtils.clamp((s - i * pathStep) / trailNeck, 0, 1)
+      const behind = THREE.MathUtils.clamp((s - i * pathStep) / this.neck, 0, 1)
       const width = THREE.MathUtils.lerp(0.0011, headRadius * 0.62, 1 - behind * behind)
       const height = THREE.MathUtils.lerp(0.0006, headRadius * 0.34, 1 - behind)
       const p = this.path[i]
@@ -495,7 +513,7 @@ export class Runners {
 
   /** Distance traveled along the path at time t. */
   travel(t: number): number {
-    return Math.min(rivuletTravel(t), Math.max(0, (this.path.length - 1) * pathStep))
+    return Math.min(rivuletTravel(t, this.pace), Math.max(0, (this.path.length - 1) * pathStep))
   }
 
   beginSample(t: number): void {
@@ -514,11 +532,11 @@ export class Runners {
       this.runner.setMatrixAt(0, m)
       this.runner.instanceMatrix.needsUpdate = true
       const steps = Math.floor(s / pathStep)
-      const from = Math.max(0, Math.floor((s - trailNeck) / pathStep))
+      const from = Math.max(0, Math.floor((s - this.neck) / pathStep))
       this.shapeTrail(s, from, steps, r)
       this.trail.geometry.setDrawRange(from * (trailAcross - 1) * 6, Math.max(0, steps - 1 - from) * (trailAcross - 1) * 6)
       let beads = 0
-      for (let i = 0; i < this.trailBeadAt.length; i++) if (this.trailBeadAt[i] < s - trailNeck) beads = i + 1
+      for (let i = 0; i < this.trailBeadAt.length; i++) if (this.trailBeadAt[i] < s - this.neck) beads = i + 1
       this.trailBeads.count = beads
     }
     const drips = this.allDrips()

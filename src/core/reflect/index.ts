@@ -41,7 +41,7 @@ export function reflectionCaptureSize(tier: TierId, time: number): number {
 
 /** The first bounce that lights the deck inside the capture only needs the broad shapes of the sky and signs. */
 const bounceSize = 128
-const probeHeight = 0.6
+export const probeHeight = 0.6
 const captureNear = 0.05
 const captureFar = 1500
 const cubePlanarGuard = 1.18

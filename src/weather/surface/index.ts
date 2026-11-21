@@ -12,10 +12,12 @@ import { DropGeometry, geometryAngle, geometryRange } from './drop-geometry'
 import { applyPorous, type Uniforms } from './porous'
 import { heroBasin, SyntheticRelief, type Basin } from './relief'
 import { type ExtraImpact, RippleField } from './ripples'
-import { rivuletTravel, Runners } from './runners'
+import { rivuletPace, rivuletTravel, Runners } from './runners'
 import { applySheet, looksLikeRubber } from './sheet'
 
 const reliefSize = 1024
+// Mirrors the capture height in core/reflect, which keeps it private.
+const reflectProbeHeight = 0.6
 const shakeStart = events.engineStart + 0.15
 const refill = { start: beatById('return').start + 3, end: config.film.durationSeconds - 1 }
 
@@ -73,7 +75,6 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
     return (q: THREE.Vector3) => circle * Math.abs(1 / state.focusDistance - 1 / new THREE.Vector3().subVectors(q, state.position).dot(forward))
   }
   const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion)
-  const lead = rivuletTravel(config.film.macroFrameSeconds)
   const blurAt = blurFor(camera)
   const laterBlurAt = blurFor(later)
   const paint = new Set(vehicle.surfaces.filter((s) => s.wetness === 'beads' && !s.material.transparent).map((s) => s.material))
@@ -118,7 +119,11 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
       const p = a.clone().add(b).add(c).divideScalar(3)
       const toLens = camera.position.clone().sub(p).normalize()
       if (n.dot(toLens) < 0) n.negate()
-      if (n.dot(toLens) < 0.2 || n.y < -0.3 || n.y > 0.985) continue
+      if (n.dot(toLens) < 0.2 || n.y < -0.3) continue
+      const pace = rivuletPace(Math.sqrt(Math.max(0, 1 - n.y * n.y)))
+      if (pace <= 0) continue
+      const lead = rivuletTravel(config.film.macroFrameSeconds, pace)
+      const ahead = rivuletTravel(config.film.macroFrameSeconds + 0.6, pace) - lead
       const down = new THREE.Vector3(0, -1, 0).addScaledVector(n, n.y).normalize()
       const head = p.clone().addScaledVector(down, lead)
       const blur = Math.max(blurAt(head), blurAt(head.clone().addScaledVector(down, 0.014)), blurAt(p) / 3)
@@ -127,7 +132,7 @@ export function rivuletStart(vehicle: WeatherDeps['vehicle'], format: FormatSpec
       ndc.copy(head).project(film)
       if (blur > 1 || Math.abs(ndc.x) > 0.7 || Math.abs(ndc.y) > 0.7) continue
       const centre = Math.hypot(ndc.x, ndc.y)
-      const run = head.clone().addScaledVector(down, 0.035)
+      const run = head.clone().addScaledVector(down, ahead)
       ndc.copy(run).project(laterFilm)
       const runBlur = laterBlurAt(run)
       if (runBlur > 5 || Math.abs(ndc.x) > 0.75 || Math.abs(ndc.y) > 0.75) continue
@@ -223,6 +228,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
   vehicle.root.updateMatrixWorld(true)
   for (const { mesh } of beaded) addDripEdges(mesh)
   const drops = new DropGeometry(beaded, uniforms)
+  const paintCoat = beaded.map(({ mesh }) => mesh.material).find((m): m is THREE.MeshPhysicalMaterial => (m as THREE.MeshPhysicalMaterial).isMeshPhysicalMaterial === true && (m as THREE.MeshPhysicalMaterial).clearcoat > 0)
   root.add(drops.group)
   const cells = new CellDrops(vehicle, drops.runner)
   // Each format frames its own macro and wheel inserts, so each places its own rivulet and arch drips for its lens.
@@ -285,6 +291,10 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
       const center = new THREE.Vector2(cam.position.x, cam.position.z).addScaledVector(flat, ahead)
       runners.beginFrame(cam, t)
       cells.beginFrame(cam.position)
+      drops.box.reflectBoxMin.value.copy(world.reflectionBox.min)
+      drops.box.reflectBoxMax.value.copy(world.reflectionBox.max)
+      drops.box.reflectProbe.value.setFromMatrixPosition(vehicle.root.matrixWorld).y += reflectProbeHeight
+      drops.box.reflectBoxOn.value = 1
       const extra: ExtraImpact[] = runners.impacts(frameStart - 0.6, frameStart + shutter)
       ripples.update(frameStart, frameStart + shutter, center, extra)
       drops.update(cam, frame.format.width, frame.format.width / frame.format.height, (p, r) => runners.sweptDistance(p, t) < trackClear + r)
@@ -305,6 +315,7 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
     },
     beginSample(sample: SampleContext) {
       sampleState(sample.timeSeconds)
+      if (paintCoat) drops.shareEnvironment(paintCoat)
     },
     setDiagnostic(view: string) {
       uniforms.surfDiag.value = view === 'wetness' ? 1 : 0

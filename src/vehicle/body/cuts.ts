@@ -1,6 +1,6 @@
 import { projectCurve, smax, SurfaceCurve, SurfaceMap, type Surface } from '../geom/cuts'
 import { add, dot, scale, sub, type V2, type V3 } from '../geom/vec'
-import { gapCut } from './gaps'
+import { gapCut, withRoll } from './gaps'
 import { planLines, sideLines } from './lines'
 import { noseCuts } from './nose'
 import { cornerCut, tailCuts } from './tail'
@@ -294,7 +294,8 @@ export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, re
   const bay = projectCurve(mm, 'y', planLines.bay, true, 0.008, topWin, true, 0.06)
   const bonnet = onSkin(main, projectCurve(mm, 'y', planLines.bonnet, false, 0.006, topWin, false, 0.08), 0.006)
   const lampWrapCut = lampWrapHole(main)
-  const wing = intoTip(main, onSkin(main, projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08), 0.006), lampWrapCut)
+  // The rear deck shut line crosses the paint macro at 0.75 m, so its edges roll over 5 mm and hold the reflection.
+  const wing = withRoll(intoTip(main, onSkin(main, projectCurve(mm, 'y', planLines.wing, false, 0.006, topWin, false, 0.08), 0.006), lampWrapCut), 0.005)
   const mainCuts: Cuts = {
     holes: [
       { c: dlo, inset: 0 },
