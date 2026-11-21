@@ -39,7 +39,7 @@ export interface CropManifest {
   crops: Array<CropPlan & { file: string }>
 }
 
-export const cropPlanVersion = 4
+export const cropPlanVersion = 5
 const limit = (): number => config.critics.maxImageLongEdgePx
 
 export function gridShape(format: FormatSpec): { columns: number; rows: number } {

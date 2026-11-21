@@ -134,7 +134,7 @@ export async function extraCropPoints(): Promise<CropPoint[]> {
   const scene = await nodeScene()
   const out: CropPoint[] = []
   scene?.traverse((o) => {
-    if (out.length || !(o instanceof THREE.Mesh) || !/^(windscreen|windshield)$/i.test(o.name)) return
+    if (out.length || !(o instanceof THREE.Mesh) || !/^(windscreen|windshield|glass-screen)$/i.test(o.name)) return
     const sphere = new THREE.Box3().setFromObject(o).getBoundingSphere(new THREE.Sphere())
     out.push({ id: 'glass', position: sphere.center, radius: sphere.radius * 0.6 })
   })
