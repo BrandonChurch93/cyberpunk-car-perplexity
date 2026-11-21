@@ -15,6 +15,7 @@ import { approvedHeroSourceSurvey, heroScreenMount } from '../src/world/hero-lay
 import { heroLayoutEye, heroPoint, heroScale } from '../src/world/hero-scale'
 import { heroCityYaw, streetY } from '../src/world/forms'
 import { deckHeight } from '../src/world/roof-look'
+import { judgedFrames } from '../tools/lib/judged'
 
 const [world, { anchors, root: vehicle }] = await Promise.all([
   createWorld({ detail: 'full' }),
@@ -426,13 +427,26 @@ describe('full roof world', () => {
       }
     })
     expect(openings.length).toBeGreaterThan(85)
-    const ray = new THREE.Raycaster(), direction = new THREE.Vector3()
+    const candidates: { mesh: THREE.Mesh; box: THREE.Box3 }[] = []
+    for (const root of [world.root,vehicle]) root.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return
+      if (object instanceof THREE.InstancedMesh && !object.boundingBox) object.computeBoundingBox()
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox()
+      const bounds = object instanceof THREE.InstancedMesh ? object.boundingBox! : object.geometry.boundingBox!
+      candidates.push({mesh: object, box: bounds.clone().applyMatrix4(object.matrixWorld)})
+    })
+    const ray = new THREE.Raycaster(), direction = new THREE.Vector3(), entry = new THREE.Vector3()
+    const hits: THREE.Mesh[] = []
     const firstHit = (a: THREE.Vector3,b: THREE.Vector3,slack = 0) => {
       direction.subVectors(b,a)
       ray.far = direction.length()+slack
       ray.near = .001
       ray.set(a,direction.normalize())
-      return ray.intersectObjects([world.root,vehicle],true)[0]
+      hits.length = 0
+      for (const { mesh,box } of candidates) {
+        if (box.containsPoint(a) || (ray.ray.intersectBox(box,entry) && entry.distanceToSquared(a)<=ray.far**2)) hits.push(mesh)
+      }
+      return ray.intersectObjects(hits,false)[0]
     }
     const { master } = config.formats
     const lens = new THREE.PerspectiveCamera()
@@ -554,6 +568,91 @@ describe('full roof world', () => {
     expect(strip.material).toBeInstanceOf(THREE.ShaderMaterial)
     expect(strip.getWorldPosition(new THREE.Vector3()).x).toBeLessThan(-9)
     expect(new THREE.Vector3(0, 0, 1).applyQuaternion(strip.getWorldQuaternion(new THREE.Quaternion())).x).toBeCloseTo(1, 10)
+    expect(world.lights).toHaveLength(8)
+  })
+
+  it('backs the rear reflection optics at every judged camera in both formats', () => {
+    world.root.updateMatrixWorld(true)
+    const required = (id: string, parent: THREE.Object3D = world.root) => parent.getObjectByName(id)!
+    const bounds = (object: THREE.Object3D) => new THREE.Box3().setFromObject(object)
+    const floodBank = required('rear service flood bank')
+    const floodPole = floodBank.parent!
+    const collar = bounds(required('worklight bolted base collar',floodPole))
+    expect(collar.intersectsBox(bounds(required('pole base plate',floodPole)))).toBe(true)
+    expect(collar.intersectsBox(bounds(required('tapered steel post',floodPole)))).toBe(true)
+    expect(bounds(required('worklight bracket plate',floodBank)).intersectsBox(bounds(required('worklight mast socket',floodPole)))).toBe(true)
+    const ramp = required('west ramp luminous barrier')
+    const extension = required('precast ramp barrier extension',ramp)
+    const channel = required('recessed barrier lighting channel',ramp)
+    expect(bounds(extension).intersectsBox(bounds(channel))).toBe(true)
+    expect(ramp.parent!.getObjectsByProperty('name','ramp guard wall').some(wall=>bounds(wall).intersectsBox(bounds(extension)))).toBe(true)
+    const north = required('north deck cyan guidance')
+    const parapet = required('solid concrete',north.parent!)
+    const footings = north.getObjectsByProperty('name','guardwall saddle footing')
+    expect(footings).toHaveLength(8)
+    expect(footings.every(foot=>bounds(parapet).intersectsBox(bounds(foot)))).toBe(true)
+    const west = required('west low block')
+    const penthouse = required('roof plant and duct enclosure',west)
+    const westWalls = west.children.filter(o=>o.name==='building mass').map(bounds)
+    expect(westWalls.some(wall=>wall.intersectsBox(bounds(penthouse)))).toBe(true)
+    const westMarkerBacks = west.getObjectsByProperty('name','recessed frontage beacon mount')
+    expect(westMarkerBacks).toHaveLength(4)
+    expect(westMarkerBacks.every(back=>westWalls.some(wall=>wall.intersectsBox(bounds(back))))).toBe(true)
+    for (const [elevationId,wallId,fixtureId,receiverId] of [
+      ['northwest market media elevation','market media podium','northwest animated LED wall','market media podium'],
+      ['northwest market media elevation','market media podium','recessed market window bay','market media podium'],
+      ['northwest market media elevation','market media podium','horizontal cyan market fascia','recessed market fascia spandrel'],
+      ['northwest market media elevation','market media podium','market blade wayfinding','market blade receiver plate'],
+      ['east quarter street frontage','brick retail and office wing','stacked east retail box sign','retail sign receiver plate'],
+    ]) {
+      const elevation = required(elevationId!)
+      const localBounds = (object: THREE.Object3D) => {
+        const mesh = object as THREE.Mesh<THREE.BoxGeometry>
+        mesh.geometry.computeBoundingBox()
+        return mesh.geometry.boundingBox!.clone().applyMatrix4(new THREE.Matrix4().copy(elevation.matrixWorld).invert().multiply(mesh.matrixWorld))
+      }
+      const wall = localBounds(required(wallId!,elevation))
+      const receivers = elevation.getObjectsByProperty('name',receiverId!).map(localBounds)
+      expect(receivers.every(receiver=>receiver.intersectsBox(wall))).toBe(true)
+      for (const fixture of elevation.getObjectsByProperty('name',fixtureId!)) {
+        const cleats = fixture.getObjectsByProperty('name','fixture mounting cleat').map(localBounds)
+        expect(cleats).toHaveLength(2)
+        expect(cleats.every(cleat=>receivers.some(receiver=>receiver.intersectsBox(cleat))),fixtureId).toBe(true)
+      }
+    }
+    const supported: [THREE.Mesh<THREE.PlaneGeometry>,THREE.Box3][] = [
+      ['west ramp luminous barrier','graded ramp opal strip','recessed barrier lighting channel'],
+      ['west parking fascia return','feathered LED ribbon','ribbon casing'],
+      ['west roof wayfinding crown','feathered LED ribbon','ribbon casing'],
+      ['northwest concourse ribbon','feathered LED ribbon','ribbon casing'],
+      ['east glazed concourse return','feathered LED ribbon','ribbon casing'],
+      ['west upper service LED cabinet','segmented cool white LED face','sealed practical casing'],
+    ].map(([id,optic,back])=>[required(optic!,required(id!)) as THREE.Mesh<THREE.PlaneGeometry>,bounds(required(back!,required(id!)))])
+    for (const fixture of north.getObjectsByProperty('name','reflected cyan north guardwall lamp')) {
+      supported.push([required('sealed opal aperture',fixture) as THREE.Mesh<THREE.PlaneGeometry>,bounds(required('sealed metal housing',fixture))])
+    }
+    const camera = new THREE.PerspectiveCamera()
+    const point = new THREE.Vector3(), projected = new THREE.Vector3(), direction = new THREE.Vector3()
+    const ray = new THREE.Ray()
+    const seen = new Set<THREE.Mesh>()
+    for (const format of [config.formats.master,config.formats.vertical]) for (const { frame } of judgedFrames()) {
+      const state = cameraAt(frame/config.film.fps,format,anchors)
+      applyLens(camera,state,format.width,format.height,{pixel:[0,0],aperture:[0,0]},1)
+      camera.updateMatrixWorld(true)
+      for (const [face,backing] of supported) {
+        if (direction.set(0,0,1).transformDirection(face.matrixWorld).dot(point.setFromMatrixPosition(face.matrixWorld).sub(state.position))>=0) continue
+        const { width,height } = face.geometry.parameters
+        for (const [u,v] of [[0,0],[-.35,-.30],[.35,-.30],[-.35,.30],[.35,.30]] as const) {
+          face.localToWorld(point.set(u*width,v*height,0))
+          projected.copy(point).project(camera)
+          if (Math.max(Math.abs(projected.x),Math.abs(projected.y),Math.abs(projected.z))>1) continue
+          ray.set(state.position,direction.copy(point).sub(state.position).normalize())
+          expect(ray.intersectsBox(backing),format.id+' '+frame+' '+face.parent?.name).toBe(true)
+          seen.add(face)
+        }
+      }
+    }
+    expect(seen.size).toBeGreaterThanOrEqual(6)
     expect(world.lights).toHaveLength(8)
   })
 
