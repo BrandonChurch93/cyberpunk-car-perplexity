@@ -529,7 +529,7 @@ export const mainDef: LoftDef = {
     // Crisp along the bonnet, dying out tangent under the windscreen.
     {
       fn: frontKeys.inner,
-      roll: [[0, creaseRoll], [cowlIn, creaseRoll], [uOf(1.3), 0], [1, 0]],
+      roll: creaseRoll,
       sharp: [[0, 1], [cowlIn, 1], [screenIn, 0], [1, 0]],
     },
     // Unseen: it only carries the V end of the front edge back inside the flat center facet.
@@ -543,7 +543,10 @@ export const mainDef: LoftDef = {
     refDef.segs[0],
     refDef.segs[1],
     // The wing side and the upper flank: one surface with one even crown.
-    { bulgeA: [[0, 0.025], [0.3, 0.02], [1, 0.02]] },
+    // Behind the eye the cheek edge leans the field back 46 degrees at the waist crease; leaving the crease 0.2 rad
+    // fuller there and easing to the door spreads that lean over the whole face instead of a tight band above the
+    // crease.
+    { bulgeA: [[0, 0.2], [0.1, 0.1], [0.2, 0.02], [1, 0.02]], bulgeB: [[0, 0.025], [0.3, 0.02], [1, 0.02]] },
     refDef.segs[3],
     // Bonnet outer facet, flat; on the screen the span from the A-pillar ridge carries the screen's crown right out to
     // the ridge.
@@ -562,16 +565,35 @@ export function refLoft(): Loft {
   return new Loft(refDef)
 }
 
-/** The last few centimetres of the loft eased onto the tail cap, so its last section lies on the cap exactly. */
+/** The last few centimetres of the loft eased onto the tail cap, so its last section lies on the cap exactly. The
+ * correction is read off the last section by height on the side and by half width on the deck, so it follows the
+ * body and not the parameter, which slides across a crease as its roll fades. */
 class TailLoft extends Loft {
+  /** The cap's correction at the last section's point level with p: at the same height on the side, the same half
+   * width on the deck. */
+  private residual(v: number, p: V3): number {
+    const vK3 = this.vAt[3]
+    const side = v <= vK3
+    let lo = side ? 0 : vK3
+    let hi = side ? vK3 : 1
+    const key = (q: V3): number => (side ? q[1] : -q[0])
+    const k = key(p)
+    for (let i = 0; i < 48; i++) {
+      const m = (lo + hi) / 2
+      if (key(super.at(1, m)) < k) lo = m
+      else hi = m
+    }
+    const e = super.at(1, (lo + hi) / 2)
+    return capZ(e[0], e[1]) - e[2]
+  }
+
   override at(u: number, v: number): V3 {
     const p = super.at(u, v)
     const du = 0.025
     if (u <= 1 - du) return p
-    const e = super.at(1, v)
     const t = (u - (1 - du)) / du
     const w = t * t * t * (t * (6 * t - 15) + 10)
-    return [p[0], p[1], p[2] + w * (capZ(e[0], e[1]) - e[2])]
+    return [p[0], p[1], p[2] + w * this.residual(v, p)]
   }
 }
 

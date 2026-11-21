@@ -234,3 +234,79 @@ export function holePlane(rm: SurfaceMap, c: SurfaceCurve): Plane {
   const ey = norm(cross(z, ex))
   return { o, ex, ey, ez: z }
 }
+
+const triArea = (p: number[][], i: number, j: number, k: number): number => {
+  const a = p[i], b = p[j], c = p[k]
+  const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]]
+  const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]]
+  return Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]) / 2
+}
+
+/**
+ * Removes every triangle without area, as the geometry stores it: those with two corners in one place are dropped, and
+ * a sliver with three corners on a line is split with its neighbour across the long edge, which keeps the shell closed.
+ */
+export function heal(b: MeshBuilder, minArea = 1e-12): void {
+  const p: number[][] = []
+  for (let i = 0; i < b.pos.length; i += 3) p.push([Math.fround(b.pos[i]), Math.fround(b.pos[i + 1]), Math.fround(b.pos[i + 2])])
+  const key = p.map((q) => q.join(','))
+  const weld = new Map<string, number>()
+  const w = key.map((k, i) => {
+    const h = weld.get(k)
+    if (h !== undefined) return h
+    weld.set(k, i)
+    return i
+  })
+  let tris: number[][] = []
+  for (let t = 0; t < b.idx.length; t += 3) tris.push([b.idx[t], b.idx[t + 1], b.idx[t + 2]])
+  const bad = (t: number[]): boolean => w[t[0]] === w[t[1]] || w[t[1]] === w[t[2]] || w[t[0]] === w[t[2]] || triArea(p, t[0], t[1], t[2]) < minArea
+  for (let pass = 0; pass < 32; pass++) {
+    tris = tris.filter((t) => !(w[t[0]] === w[t[1]] || w[t[1]] === w[t[2]] || w[t[0]] === w[t[2]]))
+    if (!tris.some(bad)) break
+    const edges = new Map<string, number[]>()
+    tris.forEach((t, n) => {
+      for (let e = 0; e < 3; e++) {
+        const k = `${w[t[e]]}>${w[t[(e + 1) % 3]]}`
+        const l = edges.get(k)
+        if (l) l.push(n)
+        else edges.set(k, [n])
+      }
+    })
+    const gone = new Set<number>()
+    const add: number[][] = []
+    tris.forEach((t, n) => {
+      if (gone.has(n) || !bad(t)) return
+      const len = [0, 1, 2].map((e) => {
+        const a = p[t[e]], c = p[t[(e + 1) % 3]]
+        return Math.hypot(a[0] - c[0], a[1] - c[1], a[2] - c[2])
+      })
+      const e = len.indexOf(Math.max(...len))
+      const back = (edges.get(`${w[t[(e + 1) % 3]]}>${w[t[e]]}`) ?? []).filter((o) => o !== n)
+      const ahead = (edges.get(`${w[t[e]]}>${w[t[(e + 1) % 3]]}`) ?? []).filter((o) => o !== n)
+      const flipped = back.length === 0 && ahead.length > 0
+      const u = flipped ? t[(e + 1) % 3] : t[e], v = flipped ? t[e] : t[(e + 1) % 3], m = t[(e + 2) % 3]
+      const near = flipped ? ahead : back
+      if (near.length === 0) {
+        gone.add(n)
+        return
+      }
+      const across = near.find((o) => !gone.has(o))
+      if (across === undefined) return
+      gone.add(n)
+      const o = tris[across]
+      const r = o.findIndex((q) => w[q] === w[v])
+      const ov = o[r], ou = o[(r + 1) % 3], ox = o[(r + 2) % 3]
+      gone.add(across)
+      add.push([ou, ox, m], [ox, ov, m])
+    })
+    tris = tris.filter((_, n) => !gone.has(n)).concat(add)
+  }
+  b.idx.length = 0
+  for (const t of tris) b.idx.push(t[0], t[1], t[2])
+}
+
+/** The builder's geometry with every triangle that has no area taken out. */
+export function finish(b: MeshBuilder): THREE.BufferGeometry {
+  heal(b)
+  return b.geometry()
+}
