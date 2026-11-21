@@ -94,6 +94,11 @@ describe('rear module', () => {
     expect(openEdges(g, 1e-6)).toBe(0)
   })
 
+  it.each(closed)('gives every vertex of the %s a unit normal', (_, g) => {
+    const n = g.getAttribute('normal')
+    for (let i = 0; i < n.count; i++) expect(Math.abs(Math.hypot(n.getX(i), n.getY(i), n.getZ(i)) - 1)).toBeLessThan(1e-4)
+  })
+
   it('meets the loft at the deck edge and the side, and stays level across the centre line', () => {
     const loft = mainLoft()
     const F = rearFace(loft)
