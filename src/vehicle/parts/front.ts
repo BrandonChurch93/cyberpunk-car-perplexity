@@ -1,5 +1,6 @@
 import * as T from 'three'
 import { lampThresholds } from '../../director/timeline'
+import { insertAfter, patchMaterial } from '../../materials/patch'
 import type { BodyCuts } from '../body/cuts'
 import { fasciaReturn, fasciaThroat, fasciaUV, guideProfile, guideWidth } from '../body/nose'
 import type { VehicleModule, WetnessKind } from '../contract'
@@ -7,7 +8,7 @@ import type { Surface, SurfaceCurve, SurfaceMap } from '../geom/cuts'
 import { MeshBuilder, mirrorGeometry } from '../geom/mesh'
 import type { V2, V3 } from '../geom/vec'
 import { floorY } from './diffuser'
-import { forward, guideOptics, projectorOptics, projectorParts } from './front-optics'
+import { forward, projectorOptics, projectorParts } from './front-optics'
 
 type FrontMaterials = Pick<import('../materials').Materials, 'housing' | 'mesh' | 'carbon' | 'drl' | 'beamLens'> & {
   optics?: T.Material
@@ -221,35 +222,65 @@ function cover(loop: T.Vector3[], map: SurfaceMap, full: boolean): T.BufferGeome
   return merged([grid(rows, false, true), face(rows.at(-1)!)])
 }
 
-function guide(map: SurfaceMap, radius: number, depth: number, crown: number): T.BufferGeometry {
+function guide(map: SurfaceMap, radius: number, depth: number, rise: number): T.BufferGeometry {
   const arms = guideProfile(radius)
-  const point = ([x, y]: V2, rise = 0) => new T.Vector3(x, y, map.S(...fasciaUV(map, x, y))[2] - depth + rise)
+  const point = ([x, y]: V2, lift = 0): V3 => [x, y, map.S(...fasciaUV(map, x, y))[2] - depth + lift]
   const blend = (a: V2, b: V2, t: number): V2 => [T.MathUtils.lerp(a[0], b[0], t), T.MathUtils.lerp(a[1], b[1], t)]
-  const across = (a: V2, b: V2, bulge: number) => Array.from({ length: 5 }, (_, j) => {
-    const t = j / 4
-    return point(blend(a, b, t), bulge * (4 * t * (1 - t)))
-  })
-  const parts = [face(arms.flatMap(({ base }) => across(...base, 0).slice(0, -1)))]
+  const section = [0, .14, .4, .6, .86, 1]
+  const builder = new MeshBuilder()
+  const hub = arms.map(a => a.base[0]).reduce<V2>((a, b) => [a[0] + b[0] / 3, a[1] + b[1] / 3], [0, 0])
+  const center = builder.vertex(point(hub, rise), [0, 0, 1], -.08, .5)
   for (const { base: [a, b], tip, cap } of arms) {
-    const c = cap[0], d = cap.at(-1)!
-    const mid = blend(a, b, .5)
-    const count = Math.max(2, Math.ceil(Math.hypot(tip[0] - mid[0], tip[1] - mid[1]) / .007))
-    const rows = Array.from({ length: count + 1 }, (_, i) => {
-      const t = i / count
-      return across(blend(a, c, t), blend(b, d, t), crown * Math.min(1, 4 * t))
-    })
-    parts.push(grid(rows, true))
-    const builder = new MeshBuilder()
-    const axis = Math.hypot(tip[0] - mid[0], tip[1] - mid[1])
-    const inside = builder.vertex(point(blend(mid, tip, 1 + .4 * radius / axis), .8 * crown).toArray(), [0, 0, 1])
-    const ring = [...cap.map(q => point(q)), ...rows.at(-1)!.slice(1, -1).reverse()]
-    const ids = ring.map(q => builder.vertex(q.toArray(), [0, 0, 1]))
-    for (let i = 0; i < ids.length; i++) builder.tri(inside, ids[i], ids[(i + 1) % ids.length])
-    const g = builder.geometry()
-    g.computeVertexNormals()
-    parts.push(g)
+    const end = blend(tip, cap[6], .56)
+    const length = Math.hypot(end[0] - hub[0], end[1] - hub[1])
+    const taper = Math.min(.33, .029 / length)
+    const count = Math.max(4, Math.ceil(length / .004))
+    const first = builder.pos.length / 3
+    builder.grid(count, section.length, (i, j) => {
+      const u = i / count, v = section[j]
+      const width = Math.min(1, (1 - u) / taper)
+      const c = blend(blend(a, b, .5), end, u)
+      const p = blend(blend(a, cap[0], u), blend(b, cap.at(-1)!, u), v)
+      const mid = blend(blend(a, cap[0], u), blend(b, cap.at(-1)!, u), .5)
+      const xy: V2 = [c[0] + width * (p[0] - mid[0]), c[1] + width * (p[1] - mid[1])]
+      const deck = j === 0 || j === section.length - 1 ? 0 : rise
+      return { p: point(xy, deck * width * Math.min(1, 8 * u)), n: [0, 0, 1], u, v }
+    }, false, true)
+    const apex = builder.vertex(point(end), [0, 0, 1], 1, .5)
+    const last = first + (count - 1) * section.length
+    for (let j = 0; j < section.length - 1; j++) {
+      builder.tri(center, first + j, first + j + 1)
+      builder.tri(last + j, apex, last + j + 1)
+    }
   }
-  return merged(parts)
+  const g = builder.geometry()
+  g.computeVertexNormals()
+  return g
+}
+
+function bladeOptics(material: T.MeshPhysicalMaterial): void {
+  patchMaterial(material, {
+    id: 'front-prism-blade',
+    apply(shader) {
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec2 vBladeUV;')
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', 'vBladeUV = uv;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'varying vec2 vBladeUV;')
+      shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
+        float bladeU = clamp(vBladeUV.x, 0.0, 1.0);
+        float bladeEdge = abs(2.0 * vBladeUV.y - 1.0);
+        float aperture = 1.0 - smoothstep(0.64, 0.94, bladeEdge);
+        float core = 1.0 - smoothstep(0.16, 0.62, bladeEdge);
+        float ribPhase = bladeU * 23.0 - 0.34 * bladeEdge;
+        float ribs = pow(max(0.0, cos(PI2 * ribPhase)), 3.0)
+          * (1.0 - smoothstep(0.24, 0.66, fwidth(ribPhase)));
+        float source = 0.25 + 0.67 * exp(-5.8 * bladeU) + 0.29 * exp(-11.0 * abs(bladeU - 0.68));
+        float outline = 1.0 - 0.87 * smoothstep(0.82, 1.0, bladeU);
+        float facing = gl_FrontFacing ? max(0.0, dot(normal, normalize(vViewPosition))) : 0.0;
+        diffuseColor.rgb *= 0.12 + aperture * (0.51 + 0.14 * ribs);
+        totalEmissiveRadiance *= source * outline * facing * aperture * (0.16 + 1.19 * core + 0.32 * ribs);
+      `)
+    },
+  })
 }
 
 function reflectorReturns(g: T.BufferGeometry): T.BufferGeometry {
@@ -364,17 +395,20 @@ export function buildFront(parent: T.Object3D, cuts: BodyCuts, m: FrontMaterials
   add('front clear contoured eye lens', cover(signedArea(coverRing) < 0 ? coverRing.reverse() : coverRing, map, full), lensMaterial, true)
   const drl = tag(m.drl.clone(), 'none')
   drl.emissive.setHex(0xe5f3ff)
-  drl.color.setHex(0x939ca1)
-  drl.roughness = .28
+  drl.color.setHex(0x7e868a)
+  drl.roughness = .22
+  drl.clearcoat = .26
+  drl.clearcoatRoughness = .16
   drl.emissiveIntensity = 0
-  guideOptics(drl, [cuts.curves.drlU, drlL, cuts.curves.drlS], guideWidth.lens)
+  bladeOptics(drl)
   const slot = fasciaReturn(map, 'slot')?.map(vector)
   if (slot) {
     const low = slot.map(p => p.clone().addScaledVector(forward, -.014))
     const flip = signedArea(slot) < 0
     add('front Y guide seat', merged([grid([slot, low], flip, true), face(flip ? [...low].reverse() : low)]), m.housing, true)
-  } else add('front Y guide seat', guide(map, guideWidth.seat, .019, 0), m.housing, true)
-  add('front Y running guide', guide(map, guideWidth.lens, -.001, .001), drl, true)
+  }
+  add('front Y guide bezel', guide(map, guideWidth.seat, .0045, .0003), m.housing, true)
+  add('front Y running guide', guide(map, guideWidth.lens, -.0004, .00032), drl, true)
   emit('front running guide', vector(drlL.p[0]).addScaledVector(forward, .008), false, drl, 3.99)
   const beam = tag(m.beamLens.clone(), 'none')
   beam.emissive.setHex(0xe4f3ff)
