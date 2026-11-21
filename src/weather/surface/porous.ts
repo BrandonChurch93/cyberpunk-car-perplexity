@@ -18,6 +18,12 @@ export type Uniforms = Record<string, THREE.IUniform>
  * left near the car, so only the basins hold deep water there, and the low fall around the car, in world X and Z meters.
  */
 const sheet = { filmMm: -0.3, baseMm: -4, nearNoise: 0.4, farMm: 4.5, broadMm: 16, patchMm: 7, low: [-2.6, -0.5, 3.0, 5.4], fallMeters: 2.5 }
+/**
+ * The car's body hides most of the sky from the deck beneath it: the indirect light there falls to a floor inside the footprint,
+ * grown by a margin to the body's edge, and recovers within a reach outside it. The planar mirror already sees the underside, so
+ * only the rough environment term is occluded.
+ */
+const occlusion = { margin: [0.2, 0.25], floor: 0.15, inside: 0.3, reach: 0.35 }
 /** Undulation of the slab below a puddle's scale: wavelengths in meters and slope amplitude of each. */
 const undulation = [
   [0.045, 0.045],
@@ -192,6 +198,8 @@ const porousFragment = /* glsl */ `
     float surfGround = 1.0;
     #ifdef SURF_GROUNDED
       surfGround = 1.0 - smoothstep(0.01, 0.03, abs(surfWorldPos.y));
+      // Paint laid on the slab stands proud of the film by its own thickness.
+      surfH += 1000.0 * max(surfWorldPos.y, 0.0);
     #endif
     surfDepth = max(-surfH, 0.0);
     surfWater = surfGround * surfUp * mix(surfCover, 1.0, smoothstep(0.5, 2.0, surfDepth)) * smoothstep(0.0, -0.35, surfH);
@@ -224,7 +232,8 @@ const porousFragment = /* glsl */ `
   surfDark *= mix(1.0, mix(0.55, 0.45, smoothstep(0.0, 3.0, surfDepth)), surfWater * mix(0.3, 1.0, surfPorosity));
   float surfNv = clamp(dot(surfToView(vec3(0.0, 1.0, 0.0)), normalize(vViewPosition)), 0.0, 1.0);
   float surfExit = 1.0 - (0.02 + 0.98 * pow(1.0 - surfNv, 5.0));
-  surfDark *= mix(1.0, surfExit * surfExit, max(surfWater, 0.7 * surfDamp));
+  // Light trapped under the film needs pores to fill; sealed paint keeps only the surface film.
+  surfDark *= mix(1.0, surfExit * surfExit, max(surfWater, 0.7 * surfDamp * surfPorosity));
   float surfL = surfLuma(diffuseColor.rgb);
   diffuseColor.rgb = max(mix(vec3(surfL), diffuseColor.rgb, 1.0 + 0.15 * surfDamp), 0.0) * surfDark;
   float surfRoughWet = mix(0.18, 0.32, smoothstep(0.35, 0.75, surfAgg));
@@ -237,9 +246,17 @@ const porousFragment = /* glsl */ `
   vec3 surfWorldN = normalize(surfFlat + vec3(-surfSlope.x, 0.0, -surfSlope.y));
   normal = surfToView(surfWorldN);
   surfWaterOut = surfWater;
+  vec2 surfBodyQ = abs(surfXZ - 0.5 * (surfShelter.xy + surfShelter.zw)) - 0.5 * (surfShelter.zw - surfShelter.xy) - vec2(${occlusion.margin[0].toFixed(2)}, ${occlusion.margin[1].toFixed(2)});
+  float surfBodyD = length(max(surfBodyQ, 0.0)) + min(max(surfBodyQ.x, surfBodyQ.y), 0.0);
+  surfAOOut = mix(${occlusion.floor.toFixed(2)}, 1.0, smoothstep(-${occlusion.inside.toFixed(2)}, ${occlusion.reach.toFixed(2)}, surfBodyD));
   surfDiagOut = vec4(mix(vec3(1.0, 0.45, 0.1) * (0.25 + 0.75 * surfDamp), vec3(0.15, 0.45, 1.0), surfWater), 1.0);
   surfDiagOut.rgb = mix(surfDiagOut.rgb, vec3(0.1, 0.25, 0.9), surfFringe * 0.4);
 }
+`
+
+const bodyOcclusion = /* glsl */ `
+reflectedLight.indirectDiffuse *= surfAOOut;
+reflectedLight.indirectSpecular *= mix(1.0, computeSpecularOcclusion(saturate(dot(geometryNormal, geometryViewDir)), surfAOOut, material.roughness), smoothstep(0.15, 0.4, material.roughness));
 `
 
 /** Water F0 0.02 over standing water, set after the material's own specular so the surface reads as water and not as a varnish. */
@@ -269,9 +286,10 @@ export function applyPorous(material: THREE.Material, uniforms: Uniforms, deck: 
       shader.vertexShader = surfaceVaryingsGlsl(false) + insertAfter(shader.vertexShader, '#include <project_vertex>', surfaceVertexGlsl(false))
       let f = shader.fragmentShader
       f = surfaceVaryingsGlsl(false) + surfaceCommonGlsl + ripplesGlsl + porousGlsl + f
-      f = insertBefore(f, '#include <map_fragment>', 'float surfWaterOut = 0.0;\nvec4 surfDiagOut = vec4(0.0);')
+      f = insertBefore(f, '#include <map_fragment>', 'float surfWaterOut = 0.0;\nfloat surfAOOut = 1.0;\nvec4 surfDiagOut = vec4(0.0);')
       f = insertAfter(f, '#include <clearcoat_normal_fragment_maps>', porousFragment)
       f = insertAfter(f, '#include <lights_physical_fragment>', waterSpecular)
+      f = insertBefore(f, '#include <aomap_fragment>', bodyOcclusion)
       f = insertBefore(f, '#include <opaque_fragment>', diagnosticFragment)
       shader.fragmentShader = f
     },

@@ -84,12 +84,12 @@ function bay(t: number, a: Anchors, focalMm: number, reach: number): Shot {
   }
 }
 
-const shoulderAim = v(-0.62, 0.976, -1.7)
-const muralMirror = v(0.288, 0.38, 0.878).normalize()
+const shoulderAim = v(-0.809, 0.928, -1.947)
+const muralMirror = v(-0.463, 0.57, 0.679).normalize()
 
 function shoulder(t: number, focalMm: number): Shot {
   const p = glide(t, paint.start, paint.end, 1.2, 1.2)
-  const target = shoulderAim.clone().add(v(mix(0.011, -0.011, p), 0, mix(0.055, -0.055, p)))
+  const target = shoulderAim.clone().add(v(0, mix(0.01, -0.01, p), mix(0.0275, -0.0275, p)))
   return {
     position: target.clone().addScaledVector(muralMirror, 0.75),
     target,

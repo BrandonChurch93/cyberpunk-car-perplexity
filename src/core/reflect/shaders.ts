@@ -202,6 +202,11 @@ vec3 planarRadiance( vec3 normalView, float roughness, vec3 fallback ) {
       }
     }
     vec2 uv = reflectUv( p + r * tapDistance );
+    // A tilted facet sees past the hit of the flat mirror, often over the car to the signs, so its distance is refined on its own ray.
+    for ( int i = 0; i < 2; i ++ ) {
+      if ( any( lessThan( uv, vec2( 0.0 ) ) ) || any( greaterThan( uv, vec2( 1.0 ) ) ) ) break;
+      uv = reflectUv( p + r * planarDistance( p, uv ) );
+    }
     vec2 delta = ( uv - uvCenter ) * reflectSize;
     float spread = mix( length( delta ), abs( dot( delta, acrossDir ) ), filmBlend ) * REFLECT_TAIL;
     vec2 edge = min( uv, 1.0 - uv );
