@@ -16,7 +16,7 @@ const fade = (t: number): number => {
 const band = { side: 0.35, top: 0.3 }
 
 /** The cap field: the centre of the deck edge, the crown that brings the corners forward, the lean below the deck. */
-export const cap = { z: -2.4778, y: 0.8855, crown: 0.1594, lean: 0.02 }
+export const cap = { z: -2.4744, y: 0.8855, crown: 0.1594, lean: 0.02 }
 
 /** z of the tail cap at (|x|, y): one plain crown, no inflection. The loft's last section lies on it. */
 export const capZ = (x: number, y: number): number => cap.z + cap.crown * x * x + cap.lean * (cap.y - y)

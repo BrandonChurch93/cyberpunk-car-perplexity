@@ -32,9 +32,9 @@ const tailEdge: V2[] = [
 /** The plate stops this far inside the body skin. */
 const tuck = 0.01
 
-/** Plan outline of the flat floor as half width over z, nose to rear axle. */
+/** Plan outline of the flat floor as half width over z, nose to rear axle; the nose sits 15 mm behind the splitter's trailing edge. */
 const floorPlan: V2[] = [
-  [2.3, 0.3], [2.25, 0.5], [dims.frontHubZ + 0.5, 0.62], [dims.frontHubZ + 0.42, 0.65], [dims.frontHubZ - 0.42, 0.65],
+  [2.22, 0.15], [2.12, 0.3], [1.97, 0.5], [dims.frontHubZ + 0.5, 0.62], [dims.frontHubZ + 0.42, 0.65], [dims.frontHubZ - 0.42, 0.65],
   [dims.frontHubZ - 0.5, 0.93], [dims.rearHubZ + 0.5, 0.95], [dims.rearHubZ + 0.44, 0.65],
 ]
 
@@ -173,7 +173,7 @@ function floorWidth(z: number): number {
 function centreRows(): number[] {
   const zs = new Set<number>()
   for (const [z] of floorPlan) zs.add(z)
-  for (let z = 2.3; z > centre.start; z -= 0.25) zs.add(z)
+  for (let z = floorPlan[0][0]; z > centre.start; z -= 0.25) zs.add(z)
   for (let i = 0; i <= 40; i++) zs.add(centre.start - (i / 40) * (centre.start - -2.2))
   return [...zs].filter((z) => z >= -2.2).sort((a, b) => b - a)
 }
