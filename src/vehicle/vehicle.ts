@@ -143,8 +143,9 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
 
   const tl = taillamps(cuts.maps.rear, [cuts.curves.stem, cuts.curves.lampU, cuts.curves.lampL], cuts.curves.lens, cuts.curves.slot, { map: cuts.maps.main, curve: cuts.curves.lampWrap })
   addPair(tl.guide, m.tail, 'tail-guide')
-  addPair(tl.housing, m.under, 'tail-housing')
+  addPair(tl.housing, m.tailRecess, 'tail-housing')
   addPair(tl.reflector, m.retro, 'tail-reflector')
+  addPair(tl.optic, m.tailInner, 'tail-optic')
 
   // Front module: eyes, Y guides, projectors, ducts, grille and splitter (parts/front.ts).
   // The registry accepts any material; the front module tags its own lens, guide and die finishes.
@@ -154,16 +155,18 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   addPair(ex.lip, m.ceramic, 'outlet-lip')
   addPair(ex.pipes, m.soot, 'outlet-pipe')
   addPair(ex.soot, m.soot, 'outlet-back')
-  addPair(ex.housing, m.under, 'outlet-housing')
+  addPair(ex.housing, m.exhaust, 'outlet-housing')
 
   const by = engineBay(cuts.curves.bay, full ? 0.012 : 0.02)
   addPair(by.tub, m.matte, 'bay-tub')
   addPair(by.covers, m.covers, 'cam-cover')
   addPair(by.carbon, m.carbon, 'bay-carbon')
   addPair(by.grille, m.mesh, 'bay-grille')
-  addPair(by.bezel, m.matte, 'bay-bezel')
+  addPair(by.bezel, m.satin, 'bay-bezel')
   addPair(by.duct, m.soot, 'bay-duct')
-  addPair(by.ledge, m.matte, 'bay-ledge')
+  addPair(by.ledge, m.carbon, 'bay-ledge')
+  addPair(by.hose, m.seal, 'bay-hose')
+  addPair(by.clamp, m.hat, 'bay-clamp')
   add(sprung, by.center, m.covers, 'plenum')
   add(sprung, by.mesh, m.mesh, 'bay-mesh')
 
@@ -171,8 +174,8 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
   addPair(ub.floor, m.darkCarbon, 'diffuser')
   addPair(ub.strakes, m.satin, 'diffuser-fin')
   const va = valance(cuts.curves.lower, cuts.maps.rear)
-  addPair(va.wall, m.under, 'diffuser-wall')
-  addPair(va.panel, m.mesh, 'diffuser-mesh')
+  addPair(va.wall, m.exhaust, 'diffuser-wall')
+  addPair(va.panel, m.diffuserMesh, 'diffuser-mesh')
   buildLiners(sprung, S.main, { ...m, tag }, full)
   const mr = mirror(body.surfaces.main, body.cuts.maps.main)
   addPair(mr.head, m.paint, 'mirror-head')

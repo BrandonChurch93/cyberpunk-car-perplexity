@@ -15,6 +15,9 @@ export interface Bay {
   bezel: THREE.BufferGeometry
   duct: THREE.BufferGeometry
   ledge: THREE.BufferGeometry
+  /** Intake hose from the airbox well to the plenum, and its band clamp. */
+  hose: THREE.BufferGeometry
+  clamp: THREE.BufferGeometry
   /** Centre of the left airbox grille on its top face, and its outward normal. */
   grilleCenter: V3
   grilleNormal: V3
@@ -23,13 +26,19 @@ export interface Bay {
 
 export const baySpec = {
   floorY: 0.7,
-  grille: { center: [0.301, 1.008, -1.0389] as V3, slope: -0.1, length: 0.42, width: 0.184, cell: 0.017, gauge: 0.0028, thick: 0.006, chamfer: 0.0009 },
+  grille: { center: [0.301, 1.008, -1.0389] as V3, slope: -0.1, length: 0.42, width: 0.184, cell: 0.017, gauge: 0.0022, thick: 0.0025, chamfer: 0.0006 },
   bezel: { inset: 0.006, corner: 0.016, wide: 0.022, rise: 0.005, drop: 0.009, round: 0.003 },
-  duct: { top: 0.014, bottom: 0.032 },
-  covers: { x: 0.1, width: 0.12, height: 0.07, bank: 0.35, z0: -1.0, z1: -1.7, y0: 0.99, y1: 0.905, ribs: 6 },
+  duct: { top: 0.008, bottom: 0.078, wall: 0.003, floor: 0.005 },
+  brace: { front: -0.76, back: -1.95, width: 0.064, crown: 0.02, under: -0.03, tuck: 0.002 },
+  covers: { x: 0.1, width: 0.12, height: 0.07, bank: 0.35, z0: -1.0, z1: -1.7, y0: 0.99, y1: 0.905, ribs: 10, rib: 0.0022, ribHeight: 0.0045 },
+  hose: { radius: 0.022, along: -0.09, depth: 0.05, end: [0.028, 0.935, -1.05] as V3, entry: [-0.6, 0, -0.8] as V3 },
+  clamp: { at: 0.32, width: 0.012, band: 0.0022, housing: [0.007, 0.008, 0.009] as V3, screw: 0.003 },
   plenum: { width: 0.09, height: 0.06, z0: -1.02, z1: -1.66, y0: 0.97, y1: 0.895 },
   mesh: { z0: -1.72, z1: -1.94, y: 0.9, thick: 0.004 },
 }
+
+/** Twill scale: the weave texture holds 20 tows a tile and repeats 31 times a unit, so one uv unit spans 620 tows of 3.5 mm. */
+const twill = 1 / (620 * 0.0035)
 
 interface Frame {
   c: V3
@@ -154,6 +163,57 @@ function prism(path: V3[], side: V3[], up: V3[], sec: V2[]): MeshBuilder {
   return solid(sec.map(([s, d]) => path.map((p, j) => add(add(p, scale(side[j], s)), scale(up[j], d)))), sec.map(() => false), true, false)
 }
 
+/** Replaces a swept solid's uv with lengths in twill units: along the path and around the section. */
+function meterUV(b: MeshBuilder, path: V3[], sec: V2[] | V3[]): void {
+  const along = [0]
+  for (let j = 1; j < path.length; j++) along.push(along[j - 1] + Math.hypot(...sub(path[j], path[j - 1])))
+  const around = [0]
+  const gap = (p: V2 | V3, q: V2 | V3): number => Math.hypot(...p.map((x, k) => x - q[k]))
+  for (let i = 1; i <= sec.length; i++) around.push(around[i - 1] + gap(sec[i % sec.length], sec[i - 1]))
+  const m = path.length
+  const nr = sec.length
+  for (let k = 0; k < b.uv.length / 2; k++) {
+    const j = Math.min(m - 1, Math.round(b.uv[2 * k] * m))
+    const i = Math.min(nr, Math.round(b.uv[2 * k + 1] * nr))
+    b.uv[2 * k] = along[j] * twill
+    b.uv[2 * k + 1] = around[i] * twill
+  }
+}
+
+/** Cubic Bezier through four points, n + 1 samples. */
+function bezier(p0: V3, p1: V3, p2: V3, p3: V3, n: number): V3[] {
+  const out: V3[] = []
+  for (let i = 0; i <= n; i++) {
+    const t = i / n
+    const u = 1 - t
+    out.push(add(add(scale(p0, u * u * u), scale(p1, 3 * u * u * t)), add(scale(p2, 3 * u * t * t), scale(p3, t * t * t))))
+  }
+  return out
+}
+
+/** Frames along a path by parallel transport, starting square to `up`. */
+function transport(path: V3[], up: V3): Array<{ t: V3; s: V3; u: V3 }> {
+  const out: Array<{ t: V3; s: V3; u: V3 }> = []
+  let u = up
+  for (let j = 0; j < path.length; j++) {
+    const t = norm(sub(path[Math.min(path.length - 1, j + 1)], path[Math.max(0, j - 1)]))
+    u = norm(sub(u, scale(t, dot(u, t))))
+    out.push({ t, s: norm(cross(t, u)), u })
+  }
+  return out
+}
+
+/** A closed tube of radius `rad` along a path, capped at both ends. */
+function tube(path: V3[], rad: number, k = 18): MeshBuilder {
+  const fr = transport(path, [0, 1, 0])
+  const rows: V3[][] = []
+  for (let i = 0; i < k; i++) {
+    const a = (2 * Math.PI * i) / k
+    rows.push(path.map((p, j) => add(p, add(scale(fr[j].s, rad * Math.cos(a)), scale(fr[j].u, rad * Math.sin(a))))))
+  }
+  return solid(rows, rows.map(() => false), true, false)
+}
+
 export function grilleFrame(side = 1): Frame {
   const g = baySpec.grille
   const c: V3 = [side * g.center[0], g.center[1], g.center[2]]
@@ -204,7 +264,9 @@ export function engineBay(edge: SurfaceCurve, cell: number): Bay {
   const sec = roundSection(0, bz.wide, -bz.drop, bz.rise, bz.round)
   const bezel = solid(sec.map(([s, d]) => lp.map((p, j) => add(add(p, scale(lo[j], s)), scale(f.n, d)))), sec.map(() => false), true, true)
   const d = baySpec.duct
-  const duct = slab(f, ha - bz.inset, hb - bz.inset, bz.corner, -d.bottom, -d.top)
+  const duct = slab(f, ha - bz.inset, hb - bz.inset, bz.corner, -d.bottom, -d.bottom + d.floor)
+  const wellSec = roundSection(-d.wall, 0, -d.bottom + 0.001, -d.top, 0.001, 2)
+  merge(duct, solid(wellSec.map(([s0, dd]) => lp.map((p, j) => add(add(p, scale(lo[j], s0)), scale(f.n, dd)))), wellSec.map(() => false), true, true))
 
   const ledgeRows: V3[][] = [[], [], [], []]
   for (let i = 0; i <= 24; i++) {
@@ -218,22 +280,35 @@ export function engineBay(edge: SurfaceCurve, cell: number): Bay {
     ledgeRows[3].push(sub(inner, scale(f.n, 0.004)))
   }
   const ledge = solid(ledgeRows, [true, true, true, true], true, false)
+  meterUV(ledge, ledgeRows[0], ledgeRows.map((row) => row[12]))
 
   const carbon = new MeshBuilder()
-  const panelPath: V3[] = []
-  for (let i = 0; i <= 24; i++) panelPath.push(at(f, -ha - 0.03 + ((2 * ha + 0.06) * i) / 24, 0, 0))
+  const br = baySpec.brace
+  const aOf = (z: number): number => (z - f.c[2]) / f.a[2]
   const lipIn = -hb + bz.inset - 0.004
-  const panelSec: V2[] = [[0.002, -0.006], [-0.02, -0.006], [-0.022, -0.03], [-0.045, -0.032], [-0.048, -0.09], [-0.053, -0.09], [-0.05, -0.037], [-0.027, -0.035], [-0.025, -0.011], [0.002, -0.011]]
+  const panelPath: V3[] = []
+  for (let i = 0; i <= 64; i++) panelPath.push(at(f, aOf(br.front) + ((aOf(br.back) - aOf(br.front)) * i) / 64, lipIn, 0))
+  const panelSec: V2[] = []
+  const ks = 16
+  for (let i = 0; i <= ks; i++) {
+    const t = i / ks
+    panelSec.push([br.tuck - (br.width + br.tuck) * t, -0.004 + (br.crown + 0.004) * Math.sin(Math.PI * t) ** 0.6])
+  }
+  panelSec.push([-br.width - 0.002, -0.012], [-br.width + 0.004, br.under], [br.tuck - 0.004, br.under], [br.tuck + 0.002, -0.012])
   const flat = panelPath.map((): V3 => [1, 0, 0])
   const vert = panelPath.map((): V3 => [0, 1, 0])
-  const lipBase = panelPath.map((p): V3 => add(p, scale(f.b, lipIn)))
-  merge(carbon, solid(panelSec.map(([s, dd]) => lipBase.map((p, j) => add(add(p, scale(flat[j], s)), scale(vert[j], dd)))), panelSec.map(() => true), true, false))
+  const braceBeam = solid(panelSec.map(([s0, dd]) => panelPath.map((p, j) => add(add(p, scale(flat[j], s0)), scale(vert[j], dd)))), panelSec.map((_, i) => i > ks), true, false)
+  meterUV(braceBeam, panelPath, panelSec)
+  merge(carbon, braceBeam)
   const braceZ = -0.9
   const lip = at(f, (f.c[2] - braceZ) / -f.a[2], lipIn, -0.006)
   const braceX = lip[0] - 0.005
   const bracePath: V3[] = []
   for (let i = 0; i <= 12; i++) bracePath.push([(braceX * i) / 12, lip[1] + 0.009, braceZ])
-  merge(carbon, prism(bracePath, bracePath.map((): V3 => [0, 0, -1]), bracePath.map((): V3 => [0, 1, 0]), roundSection(-0.025, 0.025, -0.009, 0.007, 0.003)))
+  const crossSec = roundSection(-0.025, 0.025, -0.009, 0.007, 0.003)
+  const crossBar = prism(bracePath, bracePath.map((): V3 => [0, 0, -1]), bracePath.map((): V3 => [0, 1, 0]), crossSec)
+  meterUV(crossBar, bracePath, crossSec)
+  merge(carbon, crossBar)
 
   const cv = baySpec.covers
   const covers = new MeshBuilder()
@@ -250,8 +325,33 @@ export function engineBay(edge: SurfaceCurve, cell: number): Bay {
   const ribPath = coverPath.slice(1, -1)
   for (let k = 0; k < cv.ribs; k++) {
     const s = -cv.width / 2 + 0.02 + ((cv.width - 0.04) * k) / (cv.ribs - 1)
-    merge(covers, prism(ribPath, ribPath.map(() => ex), ribPath.map(() => ey), roundSection(s - 0.003, s + 0.003, -0.002, 0.004, 0.0015, 2)))
+    merge(covers, prism(ribPath, ribPath.map(() => ex), ribPath.map(() => ey), roundSection(s - cv.rib, s + cv.rib, -0.002, cv.ribHeight, 0.0012, 2)))
   }
+
+  const hs = baySpec.hose
+  const start = at(f, hs.along, -(hb - bz.inset) + 0.012, -hs.depth)
+  const entry = norm(hs.entry)
+  const hosePath = bezier(start, add(start, [-0.07, -0.035, 0]), sub(hs.end, scale(entry, 0.08)), hs.end, 40)
+  const hose = tube(hosePath, hs.radius)
+  const cl = baySpec.clamp
+  const fr = transport(hosePath, [0, 1, 0])
+  const ci = Math.round(cl.at * (hosePath.length - 1))
+  const cc = hosePath[ci]
+  const cf = fr[ci]
+  const ring = (dr: number, da: number): V3[] => {
+    const out: V3[] = []
+    for (let i = 0; i < 36; i++) {
+      const a = (2 * Math.PI * i) / 36
+      out.push(add(add(cc, scale(cf.t, da)), add(scale(cf.s, (hs.radius + dr) * Math.cos(a)), scale(cf.u, (hs.radius + dr) * Math.sin(a)))))
+    }
+    return out
+  }
+  const bandSec: V2[] = [[0, -cl.width / 2], [cl.band, -cl.width / 2], [cl.band, cl.width / 2], [0, cl.width / 2]]
+  const clamp = solid(bandSec.map(([dr, da]) => ring(dr - 0.0002, da)), bandSec.map(() => true), true, true)
+  const [qx, hy, hz] = cl.housing
+  merge(clamp, slab({ c: cc, a: cf.t, b: cf.s, n: cf.u }, qx, hy, 0.002, hs.radius + cl.band - 0.001, hs.radius + cl.band + hz))
+  const screwAt = add(cc, scale(cf.u, hs.radius + cl.band + hz / 2))
+  merge(clamp, tube([sub(screwAt, scale(cf.s, hy + 0.004)), screwAt, add(screwAt, scale(cf.s, hy + 0.004))], cl.screw, 10))
 
   const center = new MeshBuilder()
   const pl = baySpec.plenum
@@ -278,6 +378,8 @@ export function engineBay(edge: SurfaceCurve, cell: number): Bay {
     bezel: finish(bezel),
     duct: finish(duct),
     ledge: finish(ledge),
+    hose: finish(hose),
+    clamp: finish(clamp),
     grilleCenter: f.c,
     grilleNormal: f.n,
     meshCenter: [0, ms.y, mz],
