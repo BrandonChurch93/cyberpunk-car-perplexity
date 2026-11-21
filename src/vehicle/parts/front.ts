@@ -388,29 +388,32 @@ function lensPickup(material: T.Material, flux: T.IUniform<number>): void {
     id: 'front-projector-internal-pickup',
     uniforms: { projectorFlux: flux },
     apply(shader) {
-      shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec3 vProjectorAxis;')
+      const rayFrame = 'varying vec3 vProjectorAxis; varying vec3 vProjectorUp;'
+      shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', rayFrame)
       shader.vertexShader = insertAfter(shader.vertexShader, '#include <begin_vertex>', `
         vProjectorAxis = normalMatrix * (vec3(sign(position.x), 1.0, 1.0) * vec3(${projectorAxis.toArray().join(', ')}));
+        vProjectorUp = normalMatrix[1];
       `)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', `
         uniform float projectorFlux;
-        varying vec3 vProjectorAxis;
+        ${rayFrame}
       `)
       shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <emissivemap_fragment>', `
         vec3 lensView = normalize(vViewPosition);
         vec3 opticalAxis = normalize(vProjectorAxis);
         float lensAngle = dot(normal, lensView);
         float incidence = dot(opticalAxis, lensView);
-        float primary = smoothstep(0.971, 0.983, incidence) * (1.0 - smoothstep(0.9877, 0.98865, incidence));
+        float primary = smoothstep(0.971, 0.983, incidence) * (1.0 - smoothstep(0.991, 0.996, incidence));
         float oblique = smoothstep(0.23, 0.38, incidence) * (1.0 - smoothstep(0.48, 0.62, incidence));
         float primaryReturn = dot(normal, normalize(lensView + opticalAxis));
         float obliqueReturn = dot(normal, normalize(lensView + 2.2 * opticalAxis));
+        float lowView = 1.0 - smoothstep(0.072, 0.105, dot(normalize(vProjectorUp), lensView));
         float core = 540.0 * primary * exp(-285.0 * (1.0 - primaryReturn))
           + 360.0 * oblique * exp(-285.0 * (1.0 - obliqueReturn));
         float caustic = (lensAngle - 0.91) * 46.0;
         float arc = 0.15 * exp(-caustic * caustic) * smoothstep(-0.24, 0.58, normal.y);
         float lensGlint = exp(-134.0 * (1.0 - lensAngle));
-        totalEmissiveRadiance += projectorFlux * (core + 0.32 * (lensGlint + arc)) * vec3(0.85, 0.94, 1.0);
+        totalEmissiveRadiance += projectorFlux * (lowView * core + 0.32 * (lensGlint + arc)) * vec3(0.85, 0.94, 1.0);
       `)
     },
   })
