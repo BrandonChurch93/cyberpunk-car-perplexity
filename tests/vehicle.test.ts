@@ -171,4 +171,28 @@ describe('vehicle', () => {
     expect(sum).toBeCloseTo(250)
     full.update(stateAt(0))
   })
+
+  it('gives every vertex of every mesh a finite position and uv and a unit normal and tangent, in both details', () => {
+    const bad: string[] = []
+    for (const [detail, v] of [['blockout', a], ['full', full]] as const) {
+      v.root.traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return
+        const g = o.geometry as THREE.BufferGeometry
+        for (const name of ['position', 'uv', 'normal', 'tangent']) {
+          const at = g.getAttribute(name)
+          if (!at) continue
+          let n = 0
+          for (let i = 0; i < at.count; i++) {
+            const x = at.getX(i)
+            const y = at.getY(i)
+            const z = at.itemSize > 2 ? at.getZ(i) : 0
+            if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) n++
+            else if ((name === 'normal' || name === 'tangent') && Math.abs(Math.hypot(x, y, z) - 1) > 1e-3) n++
+          }
+          if (n) bad.push(`${detail} ${o.name} ${name} ${n}`)
+        }
+      })
+    }
+    expect(bad).toEqual([])
+  })
 })
