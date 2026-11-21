@@ -631,6 +631,21 @@ describe('full roof world', () => {
 
   it('keeps parapet trim warm white and authors HDR on faces rather than duplicating lights', () => {
     const trim = world.root.getObjectByName('parapet warm strip lenses') as THREE.InstancedMesh
+    const wall = world.root.getObjectByName('hero full span concrete parapet') as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
+    expect(patchesOf(wall.material)).toContain('parapet opal downwash')
+    expect(patchesOf(world.deck.material)).not.toContain('parapet opal downwash')
+    expect(wall.material.color.b/wall.material.color.r).toBeGreaterThan(.85)
+    const tints = new Set<THREE.Color>()
+    for (const id of ['left warm parapet strip','right warm parapet strip']) {
+      const slot = world.root.getObjectByName(id)
+      const face = slot?.getObjectByName('weather-sealed opal face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+      const tint = face.material.uniforms.tint!.value as THREE.Color
+      tints.add(tint)
+      expect(tint.r).toBeGreaterThan(15)
+      expect(tint.b/tint.r).toBeGreaterThan(.68)
+      expect(face.geometry.parameters.height).toBe(approvedHeroSourceSurvey().find(source=>source.id===id)!.size[1])
+    }
+    expect(tints.size).toBe(2)
     const color = new THREE.Color()
     expect(world.root.getObjectByName('parapet marker lenses')).toBeUndefined()
     expect(trim.count).toBeGreaterThan(2)
