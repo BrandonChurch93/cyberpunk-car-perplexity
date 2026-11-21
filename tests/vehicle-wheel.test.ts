@@ -31,6 +31,14 @@ function assertValidTangentUVs(g: THREE.BufferGeometry, label: string): void {
   const nv = new THREE.Vector3()
   const issues: string[] = []
 
+  for (let v = 0; v < nrm.count && issues.length < 5; v++) {
+    nv.fromBufferAttribute(nrm, v)
+    const len = nv.length()
+    if (!Number.isFinite(len) || Math.abs(len - 1) > 1e-3) {
+      issues.push(`vtx ${v} non-unit normal len=${len}`)
+    }
+  }
+
   for (let i = 0; i < index.count && issues.length < 5; i += 3) {
     const ia = index.getX(i)
     const ib = index.getX(i + 1)

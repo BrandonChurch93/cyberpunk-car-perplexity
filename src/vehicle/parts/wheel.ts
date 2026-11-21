@@ -233,6 +233,39 @@ export function ensureValidWheelGeometry(g: THREE.BufferGeometry): THREE.BufferG
     }
   }
 
+  const curVertCount = g.getAttribute('position').count
+  const remap = new Int32Array(curVertCount).fill(-1)
+  let compactCount = 0
+  for (let i = 0; i < validTris.length; i++) {
+    const v = validTris[i]
+    if (remap[v] === -1) remap[v] = compactCount++
+  }
+  if (compactCount < curVertCount) {
+    for (const name of Object.keys(g.attributes)) {
+      const attr = g.getAttribute(name)
+      const itemSize = attr.itemSize
+      const src = attr.array as ArrayLike<number>
+      const dst = new Float32Array(compactCount * itemSize)
+      for (let v = 0; v < curVertCount; v++) {
+        const nv = remap[v]
+        if (nv === -1) continue
+        for (let c = 0; c < itemSize; c++) dst[nv * itemSize + c] = src[v * itemSize + c]
+      }
+      g.setAttribute(name, new THREE.Float32BufferAttribute(dst, itemSize))
+    }
+    for (let i = 0; i < validTris.length; i++) validTris[i] = remap[validTris[i]]
+  }
+
+  const finalNrm = g.getAttribute('normal')
+  for (let v = 0; v < finalNrm.count; v++) {
+    const nx = finalNrm.getX(v)
+    const ny = finalNrm.getY(v)
+    const nz = finalNrm.getZ(v)
+    const len = Math.hypot(nx, ny, nz)
+    if (Number.isFinite(len) && len > 1e-6) finalNrm.setXYZ(v, nx / len, ny / len, nz / len)
+    else finalNrm.setXYZ(v, 0, 1, 0)
+  }
+
   const finalVertCount = g.getAttribute('position').count
   const idxArray = finalVertCount > 65535 ? new Uint32Array(validTris) : new Uint16Array(validTris)
   g.setIndex(new THREE.BufferAttribute(idxArray, 1))
