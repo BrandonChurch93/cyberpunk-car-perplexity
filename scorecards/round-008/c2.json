@@ -1,0 +1,105 @@
+{
+ "critic": "C2",
+ "score": 5,
+ "pass": false,
+ "issues": [
+  {
+   "severity": "severe",
+   "file": "set-A-02.png",
+   "where": "center of the paint panel across the magenta-violet reflection",
+   "what": "The hero rivulet in set-C-02 is absent: the frame has isolated caps and faint straight airborne streaks, but no connected water path, downhill bead head, or swept trail. The still cannot prove motion, but it does not show the physical evidence of the required run.",
+   "fix": "Show a downslope merged bead feeding a connected, irregular refractive run with a cleared wake and small pinned edge beads."
+  },
+  {
+   "severity": "major",
+   "file": "set-B-10.png",
+   "where": "in front of the bumper and immediately above the deck",
+   "what": "The bright air under the front fascia reads as a smooth horizontal fog strip. Concentrated headlamp-lit drops fade too little into nearby dark areas, and the soft component is not convincingly anchored to the individual optical sources.",
+   "fix": "Shape the airborne scattering from each projector's beam, with fine bright streaks near its axis and softer, lower-contrast rain that drops out beyond it."
+  },
+  {
+   "severity": "major",
+   "file": "set-B-06.png",
+   "where": "upper sky and across the left skyline",
+   "what": "Long diagonal streaks remain similarly legible across dark sky, bright sign faces and distant towers, without the board's distinct foreground ribbons, sharper lit middle tier and unresolved distant haze.",
+   "fix": "Separate foreground defocus, middle-depth streaks and distant atmospheric scattering, letting the streaks dim markedly away from emitters."
+  },
+  {
+   "severity": "major",
+   "file": "set-B-09.png",
+   "where": "foreground around the cyan and warm reflections",
+   "what": "The deck is broadly wrinkled like one water sheet. Thin wet film and standing water are not distinguished by sharp patches, aggregate sparkle, irregular shorelines or damp margins.",
+   "fix": "Define depressions and localized irregular pooled edges, showing the original image between ripple crests in deeper water and weaker granular reflection on the surrounding film."
+  },
+  {
+   "severity": "major",
+   "file": "set-B-10.png",
+   "where": "foreground below the lit bumper",
+   "what": "A few broad single arcs and general corrugation do not explain the density of falling rain; visible multi-crest impact packets, fresh rebound points and low illuminated splash glints are scarce.",
+   "fix": "Add scale-varied overlapping packets, small close crown and rebound accents, and a shallow spray layer brightest in the headlamp-lit area."
+  },
+  {
+   "severity": "major",
+   "file": "set-B-11.png",
+   "where": "both slotted covers in the lower right",
+   "what": "The grates read as raised slabs on top of the wet pavement, with exposed near edges and dark gaps, rather than flush inlets recessed at the deck low point.",
+   "fix": "Set the grates into framed deck recesses with visible slot depth, surface falls toward them and a construction joint distinct from the drain slots."
+  },
+  {
+   "severity": "major",
+   "file": "set-B-12.png",
+   "where": "large in-focus beads across the center and right",
+   "what": "Most large beads remain neat flattened capsules or smooth ovals; some are dark and metallic-looking or nearly transparent outlines. Large real coalesced beads should show pinned irregular lobes and grounded menisci, and large caps should visibly refract the local paint and source colors.",
+   "fix": "Keep rounded small caps, but give merged drops irregular flatter profiles, readable local transmitted color and a light-dependent rim and caustic."
+  },
+  {
+   "severity": "major",
+   "file": "set-B-14.png",
+   "where": "central billboard reflection and upper horizontal break",
+   "what": "The board reflects as a broad rectangle with uneven, smeared edges and little geometry-driven change; the dotted field dominates while the layered paint and panel curvature in the target are hard to read.",
+   "fix": "Give the clearcoat a coherent reflection between drops, bend or split the reflection along modeled body creases, and reserve granular texture for the basecoat and local water distortion."
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-03.png",
+   "where": "front light assembly",
+   "what": "The bright drivable-light signature clips into a flat white strip and the circular emitters look like surface dots rather than optics behind separate wet glass; the upright top branch barely reads against the target's clear lamp structure.",
+   "fix": "Hold distinct luminance for the projector, light guide and cover lens, preserving housing depth and a few local refractive highlights on wet glass."
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-05.png",
+   "where": "windshield and adjacent black paint",
+   "what": "The windshield is an almost opaque mirror with evenly spread paint-like points, rather than showing smaller, softer glass water and a trace of transmitted cabin depth.",
+   "fix": "Use a finer glass bead and film mix and allow restrained visibility of cabin silhouettes through the reflected sign bands."
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-02.png",
+   "where": "front tire shoulder and contact edge",
+   "what": "Continuous bright cyan-white rim glints give the rubber a hard glossy outline; the intervening rubber, tread water pockets and loaded contact break are difficult to distinguish.",
+   "fix": "Keep the tread body matte, break the edge light into local bead and rib glints, and give the contact patch a grounded dark break."
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-07.png",
+   "where": "center skyline and magenta-violet cloud background",
+   "what": "Building depth is suggested, but similar lit dashes repeat across the towers and the sky is a smooth mauve field, with little layered cloud or loss of distant roof edges.",
+   "fix": "Vary facade module sizes and lit window groups by building, and grade haze and cloud height so some distant tops dissolve rather than blur uniformly."
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-08.png",
+   "where": "billboard border, cyan accents and warm signs",
+   "what": "Several graphic-like sign elements have little visible localized spill on nearby support surfaces, especially the large saturated board against its dark surround.",
+   "fix": "Keep the legible sign borders, but add limited light on cabinet returns, mounting rails and neighboring cladding, distinct from the optical halo."
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-11.png",
+   "where": "right half of the deck near the wheel and drains",
+   "what": "Sparse bay markings and a mostly single dark seam do not establish the organized paint and slab layout of a used car park as clearly as the target. The pale marks lack enough grain and wear to separate them from specular artifacts.",
+   "fix": "Make the visible bay line continuous in perspective, embedded in worn matte paint, with correctly scaled recessed slab joints."
+  }
+ ]
+}

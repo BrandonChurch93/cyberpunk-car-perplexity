@@ -1,0 +1,1 @@
+You will see one image. It is either a photograph or a computer generated image. Give a likelihood from 0 to 100 that it is a photograph, and the one thing that most influenced your answer.

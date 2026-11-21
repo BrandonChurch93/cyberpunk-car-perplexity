@@ -1,0 +1,35 @@
+{
+ "critic": "C8",
+ "score": 8,
+ "pass": true,
+ "issues": [
+  {
+   "severity": "minor",
+   "file": "set-A-01.png",
+   "where": "upper center, immediately above the roofline",
+   "what": "The oversized magenta billboard competes with the car for first read and makes its dark roofline harder to separate from the city.",
+   "fix": "Reduce the billboard's luminance in frame and preserve a narrow rim along the roof so the front three-quarter silhouette leads."
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-01.png",
+   "where": "upper third and bottom quarter",
+   "what": "The car is clear of the top and bottom edges, but the combined expanses of sky and soft pavement make it feel undersized for a vertical hero shot.",
+   "fix": "Frame slightly tighter around the car, keeping one tower and the strongest puddle reflection as vertical bookends."
+  },
+  {
+   "severity": "minor",
+   "file": "set-A-02.png",
+   "where": "center and upper panel seam",
+   "what": "The shallow focus isolates the water convincingly, but the broad rectangular reflection reads more strongly than the curvature of the body panel.",
+   "fix": "Shift the macro angle so the reflected sign visibly bends over a shoulder or crease within the sharp band."
+  },
+  {
+   "severity": "minor",
+   "file": "set-B-02.png",
+   "where": "middle focus band and lower foreground",
+   "what": "The sharp beads sit safely clear of both vertical edges, but the long blurred foreground adds little and no single droplet or rivulet anchors the macro.",
+   "fix": "Give the portrait frame a distinct focal point by placing a large bead or rivulet at the intersection of the panel diagonal and the sharp band."
+  }
+ ]
+}

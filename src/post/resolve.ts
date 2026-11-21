@@ -9,7 +9,7 @@ import { opticsGlsl } from './optics'
 import { Scatter, BLOOM_WEIGHT, HALATION_WEIGHT, SCATTER_DECODE, STREAK_WEIGHT } from './scatter'
 import { FILM_CURVE, toneMapGlsl } from './tone'
 
-export const FILM_EXPOSURE = 0.78
+export const FILM_EXPOSURE = 0.84
 const GRAIN_SIZE_PX = 1.8
 const GRAIN_LUMA = 0.010
 const GRAIN_CHROMA = 0.0025

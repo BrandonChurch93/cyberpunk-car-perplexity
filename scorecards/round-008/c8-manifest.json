@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "file": "set-A-01.png",
+      "shows": "frame at 6.50 s, beat 2 of 8 (wake), wide frame"
+    },
+    {
+      "file": "set-A-02.png",
+      "shows": "frame at 12.00 s, beat 3 of 8 (paint), wide frame"
+    },
+    {
+      "file": "set-B-01.png",
+      "shows": "frame at 6.50 s, beat 2 of 8 (wake), tall frame"
+    },
+    {
+      "file": "set-B-02.png",
+      "shows": "frame at 12.00 s, beat 3 of 8 (paint), tall frame"
+    }
+  ]
+}

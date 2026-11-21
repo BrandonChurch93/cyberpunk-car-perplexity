@@ -1,0 +1,188 @@
+{
+  "files": [
+    {
+      "file": "set-A-01.png",
+      "shows": "frame at 6.50 s, beat 2 of 8 (wake), wide frame"
+    },
+    {
+      "file": "set-B-01.png",
+      "shows": "full size detail of the frame at 6.50 s, centered on the paint, 540 x 540 from left 859, top 182"
+    },
+    {
+      "file": "set-B-02.png",
+      "shows": "full size detail of the frame at 6.50 s, centered on the wheel, 540 x 540 from left 1002, top 404"
+    },
+    {
+      "file": "set-B-03.png",
+      "shows": "full size detail of the frame at 6.50 s, centered on the lamp, 540 x 540 from left 816, top 343"
+    },
+    {
+      "file": "set-B-04.png",
+      "shows": "full size detail of the frame at 6.50 s, centered on the detail and exhaust, 540 x 540 from left 1036, top 167"
+    },
+    {
+      "file": "set-B-05.png",
+      "shows": "full size detail of the frame at 6.50 s, centered on the glass, 609 x 609 from left 680, top 156"
+    },
+    {
+      "file": "set-A-02.png",
+      "shows": "frame at 12.00 s, beat 3 of 8 (paint), wide frame"
+    },
+    {
+      "file": "set-B-06.png",
+      "shows": "full size detail of the frame at 12.00 s, centered on the paint, 1400 x 1080 from left 258, top 0"
+    },
+    {
+      "file": "set-C-01.png",
+      "shows": "frame at 6.50 s, beat 2 of 8 (wake), wide frame, plain gray view"
+    },
+    {
+      "file": "set-D-01.png",
+      "shows": "full size detail of the frame at 6.50 s (plain gray view), centered on the paint, 540 x 540 from left 859, top 182"
+    },
+    {
+      "file": "set-D-02.png",
+      "shows": "full size detail of the frame at 6.50 s (plain gray view), centered on the wheel, 540 x 540 from left 1002, top 404"
+    },
+    {
+      "file": "set-D-03.png",
+      "shows": "full size detail of the frame at 6.50 s (plain gray view), centered on the lamp, 540 x 540 from left 816, top 343"
+    },
+    {
+      "file": "set-D-04.png",
+      "shows": "full size detail of the frame at 6.50 s (plain gray view), centered on the detail and exhaust, 540 x 540 from left 1036, top 167"
+    },
+    {
+      "file": "set-D-05.png",
+      "shows": "full size detail of the frame at 6.50 s (plain gray view), centered on the glass, 609 x 609 from left 680, top 156"
+    },
+    {
+      "file": "set-C-02.png",
+      "shows": "frame at 12.00 s, beat 3 of 8 (paint), wide frame, plain gray view"
+    },
+    {
+      "file": "set-D-06.png",
+      "shows": "full size detail of the frame at 12.00 s (plain gray view), centered on the paint, 1400 x 1080 from left 258, top 0"
+    },
+    {
+      "file": "set-E-01.png",
+      "shows": "frame at 6.50 s, beat 2 of 8 (wake), wide frame, black and white stripe view"
+    },
+    {
+      "file": "set-F-01.png",
+      "shows": "full size detail of the frame at 6.50 s (black and white stripe view), centered on the paint, 540 x 540 from left 859, top 182"
+    },
+    {
+      "file": "set-F-02.png",
+      "shows": "full size detail of the frame at 6.50 s (black and white stripe view), centered on the wheel, 540 x 540 from left 1002, top 404"
+    },
+    {
+      "file": "set-F-03.png",
+      "shows": "full size detail of the frame at 6.50 s (black and white stripe view), centered on the lamp, 540 x 540 from left 816, top 343"
+    },
+    {
+      "file": "set-F-04.png",
+      "shows": "full size detail of the frame at 6.50 s (black and white stripe view), centered on the detail and exhaust, 540 x 540 from left 1036, top 167"
+    },
+    {
+      "file": "set-F-05.png",
+      "shows": "full size detail of the frame at 6.50 s (black and white stripe view), centered on the glass, 609 x 609 from left 680, top 156"
+    },
+    {
+      "file": "set-E-02.png",
+      "shows": "frame at 12.00 s, beat 3 of 8 (paint), wide frame, black and white stripe view"
+    },
+    {
+      "file": "set-F-06.png",
+      "shows": "full size detail of the frame at 12.00 s (black and white stripe view), centered on the paint, 1400 x 1080 from left 258, top 0"
+    },
+    {
+      "file": "set-C-03.png",
+      "shows": "frame at 35.33 s, beat 7 of 8 (ignition), wide frame, plain gray view"
+    },
+    {
+      "file": "set-D-07.png",
+      "shows": "full size detail of the frame at 35.33 s (plain gray view), centered on the paint and exhaust, 540 x 540 from left 1059, top 218"
+    },
+    {
+      "file": "set-D-08.png",
+      "shows": "full size detail of the frame at 35.33 s (plain gray view), centered on the wheel and lamp, 540 x 540 from left 209, top 476"
+    },
+    {
+      "file": "set-D-09.png",
+      "shows": "full size detail of the frame at 35.33 s (plain gray view), centered on the detail, 540 x 540 from left 609, top 212"
+    },
+    {
+      "file": "set-D-10.png",
+      "shows": "full size detail of the frame at 35.33 s (plain gray view), centered on the glass, 540 x 540 from left 499, top 326"
+    },
+    {
+      "file": "set-C-04.png",
+      "shows": "frame at 0.00 s, beat 1 of 8 (arrival), wide frame, plain gray view"
+    },
+    {
+      "file": "set-D-11.png",
+      "shows": "full size detail of the frame at 0.00 s (plain gray view), centered on the paint, 540 x 540 from left 824, top 198"
+    },
+    {
+      "file": "set-D-12.png",
+      "shows": "full size detail of the frame at 0.00 s (plain gray view), centered on the wheel, 540 x 540 from left 913, top 363"
+    },
+    {
+      "file": "set-D-13.png",
+      "shows": "full size detail of the frame at 0.00 s (plain gray view), centered on the lamp, 540 x 540 from left 779, top 318"
+    },
+    {
+      "file": "set-D-14.png",
+      "shows": "full size detail of the frame at 0.00 s (plain gray view), centered on the detail and exhaust, 540 x 540 from left 957, top 189"
+    },
+    {
+      "file": "set-D-15.png",
+      "shows": "full size detail of the frame at 0.00 s (plain gray view), centered on the glass, 540 x 540 from left 710, top 209"
+    },
+    {
+      "file": "set-E-03.png",
+      "shows": "frame at 35.33 s, beat 7 of 8 (ignition), wide frame, black and white stripe view"
+    },
+    {
+      "file": "set-F-07.png",
+      "shows": "full size detail of the frame at 35.33 s (black and white stripe view), centered on the paint and exhaust, 540 x 540 from left 1059, top 218"
+    },
+    {
+      "file": "set-F-08.png",
+      "shows": "full size detail of the frame at 35.33 s (black and white stripe view), centered on the wheel and lamp, 540 x 540 from left 209, top 476"
+    },
+    {
+      "file": "set-F-09.png",
+      "shows": "full size detail of the frame at 35.33 s (black and white stripe view), centered on the detail, 540 x 540 from left 609, top 212"
+    },
+    {
+      "file": "set-F-10.png",
+      "shows": "full size detail of the frame at 35.33 s (black and white stripe view), centered on the glass, 540 x 540 from left 499, top 326"
+    },
+    {
+      "file": "set-E-04.png",
+      "shows": "frame at 0.00 s, beat 1 of 8 (arrival), wide frame, black and white stripe view"
+    },
+    {
+      "file": "set-F-11.png",
+      "shows": "full size detail of the frame at 0.00 s (black and white stripe view), centered on the paint, 540 x 540 from left 824, top 198"
+    },
+    {
+      "file": "set-F-12.png",
+      "shows": "full size detail of the frame at 0.00 s (black and white stripe view), centered on the wheel, 540 x 540 from left 913, top 363"
+    },
+    {
+      "file": "set-F-13.png",
+      "shows": "full size detail of the frame at 0.00 s (black and white stripe view), centered on the lamp, 540 x 540 from left 779, top 318"
+    },
+    {
+      "file": "set-F-14.png",
+      "shows": "full size detail of the frame at 0.00 s (black and white stripe view), centered on the detail and exhaust, 540 x 540 from left 957, top 189"
+    },
+    {
+      "file": "set-F-15.png",
+      "shows": "full size detail of the frame at 0.00 s (black and white stripe view), centered on the glass, 540 x 540 from left 710, top 209"
+    }
+  ]
+}

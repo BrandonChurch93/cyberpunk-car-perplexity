@@ -1,0 +1,91 @@
+{
+ "critic": "C4",
+ "score": 3,
+ "pass": false,
+ "issues": [
+  {
+   "severity": "severe",
+   "file": "set-D-03.png",
+   "where": "center",
+   "what": "a paper-thin stray triangular polygon stretches across the outer corner of the headlamp cavity, intersecting directly through the lit DRL spur in set-B-03.png, while the upper headlamp brow breaks into jagged sawtooth polygons",
+   "fix": "delete the stray intersecting triangle, rebuild the headlamp opening with clean quad loops and real sheet-metal return thickness, and model the DRL as separate lens geometry in its own housing"
+  },
+  {
+   "severity": "severe",
+   "file": "set-D-15.png",
+   "where": "center left and center right",
+   "what": "both rear corners of the hood crease below the windshield have jagged mesh tears and dark pinched holes that break zebra stripe continuity in set-F-15.png",
+   "fix": "retopologize the hood and cowl as separate panels with clean supporting edge loops and an even shutline gap"
+  },
+  {
+   "severity": "severe",
+   "file": "set-C-03.png",
+   "where": "center and lower center",
+   "what": "the rear underbody reads as an un-assembled hollow shell: missing wheelhouse liners leave the upper rear tires exposed inside an empty void beneath a thin bumper skirt, and a primitive rectangular box with honeycomb sliced mid-cell at its 90-degree corner (set-D-09.png) sits atop flat slab diffuser fins",
+   "fix": "add full rear inner fender liners, replace the stamped box with a framed mesh grille recessed into a housing, and model the diffuser with real wall thickness, fillets, and mounting joins"
+  },
+  {
+   "severity": "severe",
+   "file": "set-F-05.png",
+   "where": "upper half and lower half",
+   "what": "the windshield, roof, A-pillars, cowl, hood, fenders, and front bumper are one continuous connected mesh; zebra stripes wrap across beveled steps from glass to body with no separate glass pane, rubber seal, cowl vent, wipers, or front hood and bumper shutlines",
+   "fix": "split the windshield glass, weatherstripping, cowl, wipers, hood, fenders, and front bumper into separate geometry with rolled panel thickness and real joins"
+  },
+  {
+   "severity": "severe",
+   "file": "set-D-06.png",
+   "where": "upper center to upper right",
+   "what": "panel seams are shallow V-grooves indented into a single continuous surface rather than open gaps between separate panels with edge thickness, with water droplets sitting inside the groove and the rear quarter seam in set-D-09.png dead-ending abruptly at the taillight",
+   "fix": "cut body panels into distinct shells with rolled return flanges and maintain an even-width physical gap along the full perimeter of every panel"
+  },
+  {
+   "severity": "severe",
+   "file": "set-D-02.png",
+   "where": "upper center",
+   "what": "the side mirror stalk is a bare tube that intersects directly into the door skin and mirror housing without a mounting base, collar, or gasket, causing severe zebra pinching on the door in set-F-04.png",
+   "fix": "model the mirror base, gasket, stalk, and cap as separate parts meeting at a recessed door mount with a real join and no self-intersection"
+  },
+  {
+   "severity": "severe",
+   "file": "set-F-08.png",
+   "where": "lower center and lower right",
+   "what": "both front and rear tires intersect and clip flat into the ground plane with a sharp horizontal cut edge instead of flattening slightly with a natural sidewall contact bulge",
+   "fix": "place the tires tangent to the deck and deform the contact patch with a subtle flat spot and lower-sidewall bulge so nothing intersects the ground"
+  },
+  {
+   "severity": "severe",
+   "file": "set-E-03.png",
+   "where": "lower center",
+   "what": "zebra reflections break across raw diagonal triangulation creases splitting the rear diffuser bays corner to corner, with similar flat-triangle facets and X-pinched quads under the taillights (set-F-09.png) and around the front bumper DRL and intake (set-F-13.png)",
+   "fix": "rebuild the diffuser, rear fascia, and front bumper with clean quad topology, support loops, and smooth normals so zebra stripes flow without kinks or triangle breaks"
+  },
+  {
+   "severity": "major",
+   "file": "set-D-09.png",
+   "where": "upper edge",
+   "what": "curved silhouettes break into straight polygon segments with visible vertices along the rear haunch arch, the upper windshield roofline (set-F-05.png), the macro panel silhouette (set-E-02.png upper left), and the wheel arch lips (set-D-02.png center), which also terminate in an abrupt square step",
+   "fix": "increase subdivision density along all curved body silhouettes and wheel arches so curves hold up at macro distance, and blend the wheel-arch lip smoothly into the rocker"
+  },
+  {
+   "severity": "major",
+   "file": "set-F-07.png",
+   "where": "upper center",
+   "what": "the four exhaust pipes are thin-walled open cylinders floating inside flat-backed hexagonal pockets with no internal pipework join, and the narrow bridge between the two hexagonal bezels has pinched, kinked bevels",
+   "fix": "give the exhaust tips rolled-edge wall thickness, connect them to recessed exhaust piping, and clean up the bevel topology between the dual surrounds"
+  },
+  {
+   "severity": "major",
+   "file": "set-C-04.png",
+   "where": "lower right and center right",
+   "what": "the concrete parking wheel-stop block and storm-drain grates are miniature relative to the car (roughly 20 to 30 cm long, narrower than a single tire), and the grates sit as raised plates on top of the pavement casting an edge shadow (set-D-02.png lower right) rather than sitting flush",
+   "fix": "scale wheel stops and drain grates to real-world dimensions relative to the vehicle and recess each grate flush into a framed deck opening"
+  },
+  {
+   "severity": "minor",
+   "file": "set-F-04.png",
+   "where": "upper right",
+   "what": "the small trapezoidal pocket on the rear haunch above the side intake has pinched corners and wobbling zebra stripes instead of a separate filler door or vent insert with an even shutline",
+   "fix": "model the filler door or vent insert as separate geometry with clean corner fillets and an even perimeter gap"
+  }
+ ]
+}
