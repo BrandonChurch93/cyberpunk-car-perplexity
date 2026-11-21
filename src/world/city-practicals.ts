@@ -62,7 +62,7 @@ function rod(parent: THREE.Object3D, from: Tuple, to: Tuple, radius: number, mat
 }
 
 function mountedText(city: THREE.Group, labels: Label, signs: string[]): void {
-  const registry = [...config.signage.generic, ...config.signage.invented.filter(s => ['VAPOR SILL HOTEL', 'SHUTTER HUSH CLUB', 'BRINESCALE SUSHI'].includes(s))]
+  const registry = [...config.signage.generic, ...config.signage.invented.filter(s => ['SHUTTER HUSH CLUB', 'BRINESCALE SUSHI'].includes(s))]
   const add = (fixture: THREE.Object3D, allowed: string, type: 'led' | 'lightbox' | 'paint', w: number, h: number, color: THREE.Color, rows?: readonly string[], standoff = 0) => {
     const text = registry.find(s => s === allowed)
     if (!text) throw new Error(`Unapproved sign text: ${allowed}`)
@@ -98,7 +98,6 @@ function mountedText(city: THREE.Group, labels: Label, signs: string[]): void {
 
   const signsRoot = group(city, 'supported commercial blade signs')
   for (const spec of [
-    { text: 'VAPOR SILL HOTEL', lines: ['VAPOR SILL','HOTEL'], tower: 'south lift tower', x: 27.1, y: 24.72, rot: 0, w: 5.9, h: 2.1, type: 'lightbox', col: [.86,1.95,2.38] },
     { text: 'SHUTTER HUSH CLUB', lines: ['SHUTTER','HUSH CLUB'], tower: 'southwest exchange', x: -18.0, y: 9.8, rot: 0, w: 4.65, h: 1.78, type: 'led', col: [1.32,1.84,2.7] },
     { text: 'BRINESCALE SUSHI', lines: ['BRINESCALE','SUSHI'], tower: 'north sign terrace', x: -27.04, y: 9.89, rot: Math.PI, w: 3.48, h: 1.9, type: 'lightbox', col: [2.55,1.55,.89], standoff: .46 },
     { text: 'PHARMACY', tower: 'northwest tower', x: -47.0, y: 17.1, rot: Math.PI, w: 4.78, h: 1.08, type: 'led', col: [.73,1.85,2.01] },

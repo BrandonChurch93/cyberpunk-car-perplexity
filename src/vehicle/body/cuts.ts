@@ -293,6 +293,7 @@ export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, re
   const rearGlass = projectCurve(mm, 'y', planLines.rearGlass, true, 0.008, topWin, true, 0.03)
   const bay = projectCurve(mm, 'y', planLines.bay, true, 0.008, topWin, true, 0.06)
   const bonnet = onSkin(main, projectCurve(mm, 'y', planLines.bonnet, false, 0.006, topWin, false, 0.08), 0.006)
+  const cowl = projectCurve(mm, 'y', planLines.cowl, true, 0.006, topWin, true, 0.02)
   const lampWrapCut = lampWrapHole(main)
   // The rear deck shut line crosses the paint macro at 0.75 m, so its edges roll a little wider, over 2 mm, and hold the
   // reflection there.
@@ -301,6 +302,7 @@ export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, re
     holes: [
       { c: dlo, inset: 0 },
       { c: screen, inset: 0 },
+      { c: cowl, inset: 0 },
       { c: rearGlass, inset: 0 },
       { c: bay, inset: 0 },
       { c: intake, inset: 0 },
@@ -318,7 +320,7 @@ export function makeCuts(main: Surface, frontOf: (mainCuts: Cuts) => Surface, re
     front: nose.cuts,
     rear: tail.cuts,
     maps: { main: mm, front: fm, rear: rm },
-    curves: { dlo, intake, upper, door, screen, rearGlass, bay, bonnet, wing, lampWrap: lampWrapCut, ...nose.curves, ...tail.curves },
+    curves: { dlo, intake, upper, door, screen, cowl, rearGlass, bay, bonnet, wing, lampWrap: lampWrapCut, ...nose.curves, ...tail.curves },
   }
 }
 

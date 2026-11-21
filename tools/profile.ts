@@ -1,7 +1,7 @@
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { defaultPaint, formatById, paintById } from '../src/config.ts'
-import { launchBrowser } from './lib/browser.ts'
+import { grabCanvas, launchBrowser } from './lib/browser.ts'
 import { args, ensureDir, readJson, workDir, writeJson } from './lib/env.ts'
 import { benchPrograms, installProfiler, sceneFacts, type CompileTime, type ProfileDump, type ProfileProgram } from './lib/profile-page.ts'
 import { markdownTable, tabulate } from './lib/profile-report.ts'
@@ -97,9 +97,15 @@ void runTool(async () => {
       const cold = k === 0
       await run(cold ? 'frame begin cold' : 'frame begin', frame, true, '', () => page.evaluate(([f, t]) => window.showcase!.beginFrame(f as number, t as string), [frame, tier] as const))
       await run(cold ? 'sample cold' : 'sample', frame, true, 'add', () => page.evaluate(() => window.showcase!.addSamples(1)))
+      if (a.keep) {
+        session.rawHarness.sumPath = join(ensureDir(join(workDir, 'profile', 'keep')), `${a.keep}-${format.id}-${diag}-f${frame}.sum`)
+        await page.evaluate(() => window.showcase!.saveSum())
+        session.rawHarness.sumPath = null
+      }
       for (let i = 0; i < warm; i++) await run('sample warm', frame, true, 'add', () => page.evaluate(() => window.showcase!.addSamples(1)))
       for (let i = 0; i < plain; i++) await run('sample plain', frame, false, '', () => page.evaluate(() => window.showcase!.addSamples(1)))
       await run(cold ? 'finish cold' : 'finish', frame, true, 'post', () => page.evaluate(() => window.showcase!.finishFrame()))
+      if (a.keep) writeFileSync(join(workDir, 'profile', 'keep', `${a.keep}-${format.id}-${diag}-f${frame}.png`), await grabCanvas(page, session.rawHarness))
     }
     const info = await page.evaluate(() => window.showcase!.info())
     const programs = (await page.evaluate(() => (window as unknown as { __profile: { dump(sources: boolean): Promise<ProfileDump> } }).__profile.dump(true))).programs

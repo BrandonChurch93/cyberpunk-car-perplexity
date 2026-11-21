@@ -6,6 +6,7 @@ import { plate, type Label } from './fixtures'
 import { group, heroCityYaw, heroDrainLayout, streetY, type Tuple } from './forms'
 import { heroFrontageDistance, heroPoint, heroScale as scale, heroSize } from './hero-scale'
 import { billboardMural, fixtureOpal, signGlass, towerSurface, type Facade, type FacadeLayer, type SignSpill } from './hero-surfaces'
+import { dressHeroSign } from './hero-signs'
 import { washHeroParapet } from './parapet-wash'
 import { reflectionPracticalBuilder } from './reflection-practicals'
 import type { finishRoof } from './roof-look'
@@ -56,7 +57,7 @@ export const approvedHeroSources = [
   { id: 'cyan garage rise', at: [-8.88, 3.55, -25.23], size: [.26, 2.16], tint: 'cyan', scale: scale.westFrontage },
   { id: 'cyan garage return', at: [-6.92, 3.40, -25.23], size: [.19, 2.42], tint: 'cyan', scale: scale.westFrontage },
   { id: 'hotel rooftop cabinet', at: [-9.48, hotelRoof+.425, -32.10], size: [2.03, .66], tint: 'cyan', text: 'HOTEL', scale: scale.hotel },
-  { id: 'white parking blade', at: [-9.93, 3.20, -26.35], size: [.61, 3.43], tint: 'white', text: 'PARKING', scale: scale.parking },
+  { id: 'white parking blade', at: [-9.93, 2.855, -26.35], size: [.61, 2.42], tint: 'white', text: 'PARKING', scale: scale.parking },
   { id: 'cyan hotel facade strip', at: [-8.43, 2.74, -25.23], size: [.07, 3.72], tint: 'cyan', scale: scale.westFrontage },
   { id: 'far cyan bar cabinet', at: [-6.10, 4.01, -43.40], size: [1.98, 1.11], tint: 'cyan', text: 'BAR', scale: scale.bar },
   { id: 'violet mid distance blade', at: [-1.48, 5.38, -31.64], size: [.44, 2.58], tint: 'violet', scale: scale.screen },
@@ -669,6 +670,14 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
       if (!allowed) throw new Error(`Unapproved hero layout sign: ${source.text}`)
       const rows = allowed === 'PARKING' ? [...allowed] : [allowed]
       plate(housing, 'recessed sign face', source.scale ? distantGlass : glass, [0,0,.002],width,height)
+      const dressed = dressHeroSign(housing,source.id,color,setback,box,frame,zinc,m=>source.scale ? offset(m,-5) : m)
+      if (dressed) {
+        signs.push(dressed)
+        if (allowed === 'PARKING' || allowed === '24H' || allowed === 'OPEN' || allowed === 'BAR') {
+          for (const dir of [-1,1]) box(housing, 'facade sign mount cleat', [dir*width*.34,-height*.24,-.195], [.10,.11,.30], zinc)
+        }
+        continue
+      }
       const exit = allowed === 'EXIT'
       const radiance = signRadiance[allowed] ?? 1
       const textWidth = width * (exit ? .56 : .98), textHeight = height*.962

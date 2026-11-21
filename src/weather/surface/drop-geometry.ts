@@ -5,7 +5,7 @@ import { patchFilmLighting } from '../../core/lights'
 import { boxPatch, type BoxUniforms } from '../../core/reflect/shaders'
 import { layers } from '../../core/contract'
 import { insertAfter, patchMaterial, replaceOnce } from '../../materials/patch'
-import { type BeadClass, beadLayers, cellDrops, dominantAxis, geometryMinMm, maxDensity, runSwept } from './beads'
+import { type BeadClass, beadLayers, cellDrops, dominantAxis, gapAttribute, gapReach, geometryMinMm, maxDensity, runSwept } from './beads'
 import { surfHash3 } from './hash'
 
 /** Beyond this distance from the lens a drop is small enough on screen, and soft enough in focus, for the shader field. */
@@ -24,6 +24,8 @@ interface Source {
   mesh: THREE.Mesh
   bead: BeadClass
   positions: Float32Array
+  /** The body's gap mask per vertex, or null where the mesh has none. */
+  gap: Float32Array | null
   normals: Float32Array
   centroids: Float32Array
   triRadius: Float32Array
@@ -220,7 +222,9 @@ export class DropGeometry {
         positions.set([pos.getX(i), pos.getY(i), pos.getZ(i)], i * 3)
         normals.set([nor.getX(i), nor.getY(i), nor.getZ(i)], i * 3)
       }
-      this.sources.push({ mesh, bead, positions, normals, centroids, triRadius, triangles, index, edges: edgeGrid(pos, index, triangles) })
+      const gapAttr = geometry.getAttribute(gapAttribute)
+      const gap = gapAttr ? Float32Array.from({ length: pos.count }, (_, i) => gapAttr.getX(i)) : null
+      this.sources.push({ mesh, bead, positions, gap, normals, centroids, triRadius, triangles, index, edges: edgeGrid(pos, index, triangles) })
     }
   }
 
@@ -333,6 +337,8 @@ export class DropGeometry {
                 const w1 = ((cv - av) * (pu - cu) + (au - cu) * (pv - cv)) / det
                 const w2 = 1 - w0 - w1
                 if (w0 < 0 || w1 < 0 || w2 < 0) continue
+                const gapAt = src.gap ? w0 * src.gap[ia] + w1 * src.gap[ib] + w2 * src.gap[ic] : 0
+                if (gapAt >= 0.999) continue
                 n.set(0, 0, 0).addScaledVector(na, w0).addScaledVector(nb, w1).addScaledVector(nc, w2).normalize()
                 if (dominantAxis(n) !== axis) continue
                 const level = -n.dot(gObj)
@@ -345,6 +351,7 @@ export class DropGeometry {
                 for (const drop of drops) {
                   if (drop.layer === 0 || drops[0].diameterMm < geometryMinMm) continue
                   const plane = new THREE.Vector3().addScaledVector(pa, w0).addScaledVector(pb, w1).addScaledVector(pc, w2)
+                  if (drop.lobe === 0 && gapAt > 0 && (1 - gapAt) * gapReach < drop.radius * 1.25) break
                   if (drop.lobe === 0 && runSwept(plane, n, down, slope, bead.salt, drop.radius, layer)) break
                   center.copy(plane)
                   if (drop.lobe > 0) {
@@ -482,26 +489,29 @@ const lensFragment = /* glsl */ `
     through *= 0.04 + 0.96 * pow(1.0 - min(-leave, 1.0), 5.0);
   }
   // The lens packs half the sky into the drop's disk: a pixel spans this much of it, so the image is filtered to that.
-  float lensRough = min(sqrt(0.5 * length(fwidth(dirW))), 0.7);
+  float lensRough = min(sqrt(0.5 * length(fwidth(dirW)) / surfSampleRoot), 0.7);
   vec3 capW = surfLin * o + surfLensT;
   vec3 capN = normalize(transpose(inverse(surfLin)) * (o - c));
   vec3 capV = normalize(cameraPosition - capW);
   float capR = SURF_CAP_R * length(surfLensM0);
+  // Out of focus the samples land a defocus cell apart; a light face imaged tighter than that would sum to separate sparks.
+  float cocCell = surfPupil * surfCocScale * abs(1.0 / surfFocus - 1.0 / max(vViewPosition.z, 1e-3)) / surfSampleRoot;
+  float spark = 0.85 * smoothstep(0.15, 0.8, cocCell * length(vViewPosition) * emitterPixelAngle / max(capR, 1e-6));
   #ifdef USE_ENVMAP
     vec3 dirV = normalize((viewMatrix * vec4(dirW, 0.0)).xyz);
     vec3 side = normalize(abs(dirV.y) < 0.9 ? cross(dirV, vec3(0.0, 1.0, 0.0)) : cross(dirV, vec3(1.0, 0.0, 0.0)));
-    seen += through * max(getIBLRadiance(-dirV, side, lensRough), emitterGlintF0(capW, dirW, dirW, lensRough, -1.0, vec3(1.0)));
+    seen += through * max(getIBLRadiance(-dirV, side, lensRough), emitterGlintF0(capW, dirW, dirW, max(lensRough, spark), -1.0, vec3(1.0)));
   #endif
   float cosIn = clamp(dot(-d, sn), 0.0, 1.0);
   float fresnel = 0.02 + 0.98 * pow(1.0 - cosIn, 5.0);
   #ifdef USE_ENVMAP
     // The cube holds the lights blurred; on the cap each face the drop mirrors is drawn sharp at its own place.
     vec3 capNV = normalize((viewMatrix * vec4(capN, 0.0)).xyz);
-    vec3 sharp = emitterGlint(capW, capN, capV, 0.02, capR);
+    vec3 sharp = emitterGlint(capW, capN, capV, max(0.02, spark), capR);
     totalEmissiveRadiance += max(sharp - fresnel * getIBLRadiance(normalize(-vViewPosition), capNV, 0.02), vec3(0.0));
   #endif
   float meniscus = smoothstep(0.0, 0.08, surfLensPos.y / SURF_CAP_HS);
-  totalDiffuse = seen * (1.0 - fresnel) * mix(0.25, 1.0, meniscus);
+  totalDiffuse = seen * (1.0 - fresnel) * mix(0.6, 1.0, meniscus);
 }
 `
 

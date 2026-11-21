@@ -6,7 +6,7 @@ import { probeHeight } from '../../core/reflect'
 import { cameraAt } from '../../director/shots'
 import { beatById, events, stateAt } from '../../director/timeline'
 import type { WeatherDeps } from '../contract'
-import { applyBeads, type BeadClass, trackClear, trackPoints } from './beads'
+import { applyBeads, type BeadClass, gapAttribute, trackClear, trackPoints } from './beads'
 import { CellDrops } from './cells'
 import { addDripEdges } from './drip-edges'
 import { DropGeometry, geometryAngle, geometryRange } from './drop-geometry'
@@ -228,7 +228,12 @@ export async function createSurface(deps: WeatherDeps): Promise<SceneSystem> {
 
   const beaded = vehicleMeshes(vehicle.root, beadMaterials)
   vehicle.root.updateMatrixWorld(true)
-  for (const { mesh } of beaded) addDripEdges(mesh)
+  for (const { mesh } of beaded) {
+    addDripEdges(mesh)
+    // Every beaded mesh carries a gap mask, so no draw reads a stale default for it.
+    const count = mesh.geometry.getAttribute('position').count
+    if (!mesh.geometry.getAttribute(gapAttribute)) mesh.geometry.setAttribute(gapAttribute, new THREE.BufferAttribute(new Float32Array(count), 1))
+  }
   const drops = new DropGeometry(beaded, uniforms)
   const paintCoat = beaded.map(({ mesh }) => mesh.material).find((m): m is THREE.MeshPhysicalMaterial => (m as THREE.MeshPhysicalMaterial).isMeshPhysicalMaterial === true && (m as THREE.MeshPhysicalMaterial).clearcoat > 0)
   root.add(drops.group)
