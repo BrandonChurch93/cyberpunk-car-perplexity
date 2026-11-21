@@ -334,7 +334,10 @@ export function tessellate(S: SurfaceFn, o: TessOptions): TessResult {
       if (pin !== qin) out.push({ x: cutPoint(p, q), cut: true })
     }
     const ids = out.map((o2) => emit(o2.x))
-    for (let i = 1; i < ids.length - 1; i++) indices.push(ids[0], ids[i], ids[i + 1])
+    // A kept corner a hair inside the trim puts both cut points on top of it; that fan triangle has no area, so it is left out.
+    for (let i = 1; i < ids.length - 1; i++) {
+      if (len(cross(sub(out[i].x.p, out[0].x.p), sub(out[i + 1].x.p, out[0].x.p))) > 2e-12) indices.push(ids[0], ids[i], ids[i + 1])
+    }
     for (let i = 0; i < out.length; i++) {
       const p = out[i]
       const q = out[(i + 1) % out.length]
