@@ -51,8 +51,8 @@ Renders the frames at the width given (the height follows the format) and writes
 ## Farm
 
 ```
-npm run farm -- --phase P --shard i/n --budget 0
+npm run farm -- --phase P --shard i/n [--review] --budget 0
 npm run farm -- --unbundle <folder or a.tar,b.tar>
 ```
 
-The plan is every judged frame in the wide format at the final tier, the vertical ones in the tall format, and the plain gray and stripe views of each judged frame that has a vehicle anchor crop. `--list` prints it with the shard of each still. Still k goes to shard (k mod n) + 1. Each machine renders its share into `out/work/stills/` and writes `out/work/farm/farm-pP-final-iofn-NN-of-MM.tar`, each under the attachment limit. Exit 75 with a `CONTINUE` line means the budget ran out: the same command keeps finished stills and continues the open one from its saved samples. On the assembling machine `--unbundle` puts every still into `out/work/stills/`, compares any still already there byte for byte, refuses another build and lists what the plan still misses. `npm run pack` then reuses those stills and cuts the crops from them.
+The plan is every judged frame in the wide format at the final tier, the vertical ones in the tall format, and the plain gray and stripe views of each judged frame that has a vehicle anchor crop. With `--review` (Phase 4 only) the plan also holds the review tier cells of every contact sheet, every event run and the phone previews in both formats; a shard renders its final stills first. `--list` prints it with the shard of each still. Still k goes to shard (k mod n) + 1. Each machine renders its share into `out/work/stills/` and writes `out/work/farm/farm-pP-final-iofn-NN-of-MM.tar`, each under the attachment limit. Exit 75 with a `CONTINUE` line means the budget ran out: the same command keeps finished stills and continues the open one from its saved samples. On the assembling machine `--unbundle` puts every still into `out/work/stills/`, compares any still already there byte for byte, refuses another build and lists what the plan still misses. `npm run pack` then reuses those stills and cuts the crops from them.

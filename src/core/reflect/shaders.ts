@@ -52,11 +52,31 @@ vec3 reflectBoxProject( vec3 dir ) {
 }
 `
 
+const paintCoatPars = /* glsl */ `
+#ifdef USE_ENVMAP
+uniform float reflectPaintCoatDetail;
+
+vec3 reflectPaintCoat( vec3 viewDir, vec3 normal, float roughness ) {
+  #ifdef ENVMAP_TYPE_PMREM
+    if ( reflectPaintCoatDetail > 0.5 && ENVMAP_MAX_LOD >= 1.0 && roughnessToMip( roughness ) < 1.0 ) {
+      float firstMipRoughness = 1.0 - sqrt( 1.0 - 1.0 / ENVMAP_MAX_LOD );
+      // Interpolate the narrow part of the filtered lobe by squared GGX slope scale.
+      float mip = pow4( clamp( roughness / firstMipRoughness, 0.0, 1.0 ) );
+      vec3 dir = normalize( mix( reflect( -viewDir, normal ), normal, pow4( roughness ) ) );
+      dir = reflectBoxProject( transformDirectionByInverseViewMatrix( dir, viewMatrix ) );
+      return textureLod( envMap, envMapRotation * dir, mip ).rgb * envMapIntensity;
+    }
+  #endif
+  return getIBLRadiance( viewDir, normal, roughness );
+}
+#endif
+`
+
 /** Parallax correction of the environment lookup to the reflection box. Applies to every standard and physical material. */
-export function boxPatch(uniforms: BoxUniforms): MaterialPatch {
+export function boxPatch(uniforms: BoxUniforms, paintCoatDetail?: { value: number }): MaterialPatch {
   return {
-    id: 'reflect-box',
-    uniforms: uniforms as unknown as Record<string, THREE.IUniform>,
+    id: paintCoatDetail ? 'reflect-box-paint-coat' : 'reflect-box',
+    uniforms: (paintCoatDetail ? { ...uniforms, reflectPaintCoatDetail: paintCoatDetail } : uniforms) as unknown as Record<string, THREE.IUniform>,
     apply(shader) {
       shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', worldVarying)
       shader.vertexShader = insertAfter(shader.vertexShader, '#include <project_vertex>', worldVertex)
@@ -66,7 +86,15 @@ export function boxPatch(uniforms: BoxUniforms): MaterialPatch {
         'reflectVec = transformDirectionByInverseViewMatrix( reflectVec, viewMatrix );',
         'reflectVec = reflectBoxProject( transformDirectionByInverseViewMatrix( reflectVec, viewMatrix ) );',
       )
-      shader.fragmentShader = replaceOnce(shader.fragmentShader, '#include <envmap_physical_pars_fragment>', chunk)
+      shader.fragmentShader = replaceOnce(shader.fragmentShader, '#include <envmap_physical_pars_fragment>', paintCoatDetail ? chunk + paintCoatPars : chunk)
+      if (paintCoatDetail) {
+        const maps = replaceOnce(
+          THREE.ShaderChunk.lights_fragment_maps,
+          'getIBLRadiance( geometryViewDir, geometryClearcoatNormal, material.clearcoatRoughness )',
+          'reflectPaintCoat( geometryViewDir, geometryClearcoatNormal, material.clearcoatRoughness )',
+        )
+        shader.fragmentShader = replaceOnce(shader.fragmentShader, '#include <lights_fragment_maps>', maps)
+      }
     },
   }
 }

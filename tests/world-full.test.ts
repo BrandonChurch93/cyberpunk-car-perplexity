@@ -139,6 +139,7 @@ describe('full roof world', () => {
     const city = world.root.getObjectByName('hero tower layout')!
     const facadeFamilies = new Set<string>()
     const claddingRoughness = new Map<string,number>()
+    const occupancy = new Map<string,readonly number[]>()
     let rooms = 0
     let finRows = 0
     let roofShafts = 0
@@ -153,6 +154,10 @@ describe('full roof world', () => {
       expect(shell.material.userData.mechanicalFloorPitch).toBeGreaterThanOrEqual(15)
       expect(shell.material.userData.mechanicalFloorPitch).toBeLessThanOrEqual(25)
       expect(shell.material.userData.roomDepthMeters).toEqual([4,8])
+      const { distanceLayer, tenantGate } = shell.material.userData
+      const existingGate = occupancy.get(distanceLayer)
+      if (existingGate) expect(tenantGate).toEqual(existingGate)
+      occupancy.set(distanceLayer,tenantGate)
       const [openingWidth,openingHeight] = shell.material.userData.litOpeningMeters as [number,number]
       expect(openingWidth).toBeGreaterThanOrEqual(.90)
       expect(openingWidth).toBeLessThanOrEqual(shell.material.userData.clearPaneWidth)
@@ -173,6 +178,10 @@ describe('full roof world', () => {
     expect(rooms).toBeGreaterThan(10_000)
     expect(facadeFamilies).toEqual(new Set(['curtain','concrete','banded','hotel']))
     expect(claddingRoughness.get('concrete')!).toBeGreaterThan(claddingRoughness.get('curtain')!)
+    for (const [i,gate] of occupancy.get('near')!.entries()) {
+      expect(gate).toBeLessThan(occupancy.get('middle')![i])
+      expect(occupancy.get('middle')![i]).toBeLessThan(occupancy.get('far')![i])
+    }
     expect(finRows).toBeGreaterThan(30)
     expect(roofShafts).toBeGreaterThan(5)
     const probe = new THREE.Vector3(0,.6,0)

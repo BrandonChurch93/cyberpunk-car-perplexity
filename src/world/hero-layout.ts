@@ -98,9 +98,9 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
   const survey = approvedHeroSourceSurvey()
   const screen = survey.find(source => source.id === 'magenta violet tower screen')!
   const mural = billboardMural(...screen.size,new THREE.Color(...screen.rgb),{ travel: .166, laps: 2, picture: true, artworkGain: .98 })
-  const screenReflection = { point: new THREE.Vector3(...screen.at), normal: new THREE.Vector3(...screen.normal),
-    size: new THREE.Vector2(...screen.size), picture: mural.picture }
   const muralSpill = new THREE.Color()
+  const screenReflection = { point: new THREE.Vector3(...screen.at), normal: new THREE.Vector3(...screen.normal),
+    size: new THREE.Vector2(...screen.size), picture: mural.picture, spill: muralSpill }
   const muralCloud = new THREE.Color()
   const ambientCloud = new THREE.Color(1.02,.39,1.05)
   animation.push(time => {
@@ -110,23 +110,23 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     muralSpill.multiplyScalar(.68)
   })
   const washes = [
-    ['left edge','left cyan facade sail'],
+    ['left edge','left cyan facade sail','left cyan secondary strip'],
     ['hotel tower','hotel rooftop cabinet'],
-    ['parking tower','white parking blade'],
-    ['west garage','cyan garage rise'],
+    ['parking tower','white parking blade','cyan hotel facade strip'],
+    ['west garage','cyan garage rise','cyan garage return'],
     ['bar tower','far cyan bar cabinet'],
     ['setback','violet mid distance blade'],
-    ['screen tower','magenta violet tower screen'],
-    ['amber tower','amber upper tower cabinet'],
+    ['violet tower','violet mid distance blade'],
+    ['amber tower','amber upper tower cabinet','amber lower tower cabinet'],
     ['right edge','right amber facade sail'],
-    ['east garage','amber garage rise'],
+    ['east garage','amber garage rise','amber garage return'],
   ] as const
   const spillAt = (name: string): SignSpill[] => {
-    const key = washes.find(([fragment]) => name.includes(fragment))?.[1]
-    const amber = key === 'amber upper tower cabinet'
-    return survey.filter(source => source.id === key || amber && source.id === 'amber lower tower cabinet').map(entry => {
-      const color = entry.id === screen.id ? muralSpill : new THREE.Color(...entry.rgb)
-      if (color !== muralSpill) color.multiplyScalar((amber ? 1.65 : .68)/Math.max(color.r,color.g,color.b))
+    const keys: readonly string[] = washes.find(([fragment]) => name.includes(fragment))?.slice(1) ?? []
+    const amber = keys[0] === 'amber upper tower cabinet'
+    return survey.filter(source => keys.includes(source.id)).map(entry => {
+      const color = new THREE.Color(...entry.rgb)
+      color.multiplyScalar((amber ? .97 : .62)/Math.max(color.r,color.g,color.b))
       return { point: new THREE.Vector3(...entry.at), size: new THREE.Vector2(...entry.size), color }
     })
   }
