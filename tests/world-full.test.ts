@@ -10,13 +10,12 @@ import { cameraAt } from '../src/director/shots'
 import { patchesOf } from '../src/materials/patch'
 import { createVehicle } from '../src/vehicle'
 import { createWorld } from '../src/world'
-import { heroDrain } from '../src/world/deck'
 import { billboardState } from '../src/world/fixtures'
 import { approvedHeroSourceSurvey, heroScreenMount } from '../src/world/hero-layout'
 import { muralLuma, muralMean, muralPainting } from '../src/world/mural-picture'
 import { heroLayoutEye, heroPoint, heroScale } from '../src/world/hero-scale'
 import { heroCityYaw, streetY } from '../src/world/forms'
-import { deckHeight } from '../src/world/roof-look'
+import { deckHeight, heroGrate } from '../src/world/roof-look'
 import { judgedFrames } from '../tools/lib/judged'
 
 const [world, { anchors, root: vehicle }] = await Promise.all([
@@ -681,8 +680,8 @@ describe('full roof world', () => {
     expect(deckHeight(.96, 1.285)).toBeGreaterThan(0)
     expect(deckHeight(.18, -3.71)).toBeLessThan(0)
     expect(deckHeight(0, 0)).toBeGreaterThan(0)
-    expect(deckHeight(...heroDrain)).toBeLessThan(-.002)
-    expect(deckHeight(heroDrain[0], heroDrain[1] - .42)).toBeGreaterThan(deckHeight(...heroDrain))
+    expect(deckHeight(...heroGrate)).toBeLessThan(-.002)
+    expect(deckHeight(heroGrate[0], heroGrate[1] - .42)).toBeGreaterThan(deckHeight(...heroGrate))
     const samples = map.image.data as Float32Array
     const w = map.image.width
     const h = map.image.height

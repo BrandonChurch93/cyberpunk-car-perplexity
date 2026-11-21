@@ -198,6 +198,8 @@ const porousFragment = /* glsl */ `
     float surfGround = 1.0;
     #ifdef SURF_GROUNDED
       surfGround = 1.0 - smoothstep(0.01, 0.03, abs(surfWorldPos.y));
+      // Paint laid on the slab stands proud of the film by its own thickness.
+      surfH += 1000.0 * max(surfWorldPos.y, 0.0);
     #endif
     surfDepth = max(-surfH, 0.0);
     surfWater = surfGround * surfUp * mix(surfCover, 1.0, smoothstep(0.5, 2.0, surfDepth)) * smoothstep(0.0, -0.35, surfH);
@@ -230,7 +232,8 @@ const porousFragment = /* glsl */ `
   surfDark *= mix(1.0, mix(0.55, 0.45, smoothstep(0.0, 3.0, surfDepth)), surfWater * mix(0.3, 1.0, surfPorosity));
   float surfNv = clamp(dot(surfToView(vec3(0.0, 1.0, 0.0)), normalize(vViewPosition)), 0.0, 1.0);
   float surfExit = 1.0 - (0.02 + 0.98 * pow(1.0 - surfNv, 5.0));
-  surfDark *= mix(1.0, surfExit * surfExit, max(surfWater, 0.7 * surfDamp));
+  // Light trapped under the film needs pores to fill; sealed paint keeps only the surface film.
+  surfDark *= mix(1.0, surfExit * surfExit, max(surfWater, 0.7 * surfDamp * surfPorosity));
   float surfL = surfLuma(diffuseColor.rgb);
   diffuseColor.rgb = max(mix(vec3(surfL), diffuseColor.rgb, 1.0 + 0.15 * surfDamp), 0.0) * surfDark;
   float surfRoughWet = mix(0.18, 0.32, smoothstep(0.35, 0.75, surfAgg));
