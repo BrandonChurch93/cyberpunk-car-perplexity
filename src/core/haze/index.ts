@@ -12,6 +12,10 @@ export const atmosphere = {
   layerHeight: 0.27,
   cityExtinction: 0.00054,
   cityLayerHeight: 170.0,
+  cityFillRange: [475.0, 765.0],
+  cityFillAltitude: [54.0, 108.0],
+  cityFillUpperFraction: 0.23,
+  cityFillAirlight: [0.185, 0.155, 0.196],
   outerCityStart: 610.0,
   outerCityExtinction: 0.00156,
   distantHaloStart: 80.0,
@@ -72,6 +76,10 @@ const float deckDensity = ${atmosphere.deckExtinction};
 const float layerHeight = ${atmosphere.layerHeight};
 const float cityDensity = ${atmosphere.cityExtinction};
 const float cityLayerHeight = ${atmosphere.cityLayerHeight.toFixed(1)};
+const vec2 cityFillRange = vec2(${atmosphere.cityFillRange.map((distance) => distance.toFixed(1)).join(', ')});
+const vec2 cityFillAltitude = vec2(${atmosphere.cityFillAltitude.map((height) => height.toFixed(1)).join(', ')});
+const float cityFillUpperFraction = ${atmosphere.cityFillUpperFraction};
+const vec3 cityFillAirlight = vec3(${atmosphere.cityFillAirlight.join(', ')});
 const float outerCityStart = ${atmosphere.outerCityStart.toFixed(1)};
 const float outerCityDensity = ${atmosphere.outerCityExtinction};
 const float distantHaloStart = ${atmosphere.distantHaloStart.toFixed(1)};
@@ -227,6 +235,15 @@ vec3 cityRadiance(vec3 origin, vec3 ray, float cityStart, float far, vec2 layers
   vec2 transmission = exp(-layers);
   vec3 radiance = cityAirlight * (1.0 - transmission.x)
     + transmission.x * outerCityAirlight * (1.0 - transmission.y);
+  float fillEntry = max(cityStart, cityFillRange.x);
+  float fillExit = min(far, cityFillRange.y);
+  if (fillExit > fillEntry) {
+    float fillNear = cityOpticalDepth(origin, ray, cityStart, fillEntry);
+    float fillFar = cityOpticalDepth(origin, ray, cityStart, fillExit);
+    float fillAltitude = origin.y + ray.y * 0.5 * (cityFillRange.x + cityFillRange.y);
+    float fillLight = mix(1.0, cityFillUpperFraction, smoothstep(cityFillAltitude.x, cityFillAltitude.y, fillAltitude));
+    radiance += cityFillAirlight * fillLight * (exp(-fillNear) - exp(-fillFar));
+  }
   float entry = max(cityStart, cloudStart);
   float exit = min(far, cloudEnd);
   if (exit > entry) {
