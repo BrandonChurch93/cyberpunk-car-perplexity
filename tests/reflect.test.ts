@@ -142,17 +142,21 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   scene.add(world, body, rig.group)
   const visibility: boolean[][] = []
   const radiance: number[][] = []
+  const targets: THREE.WebGLRenderTarget[] = []
+  let activeTarget: THREE.WebGLRenderTarget | null = null
   const renderer = {
     coordinateSystem: THREE.WebGLCoordinateSystem,
-    getRenderTarget: () => null,
+    getRenderTarget: () => activeTarget,
     getActiveCubeFace: () => 0,
     getActiveMipmapLevel: () => 0,
     getClearColor: (color: THREE.Color) => color,
     getClearAlpha: () => 1,
-    setRenderTarget: () => undefined,
+    setRenderTarget: (target: THREE.WebGLRenderTarget | null) => { activeTarget = target },
     setClearColor: () => undefined,
     clear: () => undefined,
-    render: () => {
+    render: (object: THREE.Object3D) => {
+      targets.push(activeTarget!)
+      if (object !== scene) return
       visibility.push([floor.visible, stripe.visible, rim.visible, slot.visible, rail.visible])
       radiance.push(tint.toArray())
     },
@@ -160,7 +164,11 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   const part = createReflections({
     renderer, scene, rig,
     vehicle: { root: body, lamps: [] },
-    world: { root: world, lights: [practical], deck: { material: floor.material, meshes: [floor] }, reflectionBox: new THREE.Box3() },
+    world: {
+      root: world, lights: [practical],
+      deck: { material: floor.material, meshes: [floor], bounds: new THREE.Box2(new THREE.Vector2(-10, -10), new THREE.Vector2(10, 10)) },
+      reflectionBox: new THREE.Box3(),
+    },
   })
   const fmt = config.formats.preview
   const eye = camera()
@@ -174,6 +182,15 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
     },
   }
   part.beforeSample!(sample)
+  expect(targets).toHaveLength(2)
+  const [raw, finished] = targets
+  expect(raw).not.toBe(finished)
+  expect(raw!.depthTexture).not.toBeNull()
+  expect(raw!.texture.generateMipmaps).toBe(false)
+  expect(finished!.texture.generateMipmaps).toBe(true)
+  expect(part.planar.reflectDepth.value).toBe(raw!.depthTexture)
+  expect(part.planar.reflectMap.value).toBe(finished!.texture)
+  expect(activeTarget).toBeNull()
   expect(visibility).toEqual([[false, false, false, false, true]])
   expect(radiance).toEqual([[2, 0, 2]])
   expect(tint.toArray()).toEqual([.15, .03, .23])
