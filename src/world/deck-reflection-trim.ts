@@ -12,6 +12,17 @@ type Tint = keyof typeof colors
 const windowRadiance: Record<Tint,number> = { cyan: 3.7, magenta: 4.5, amber: 4.0, ivory: 2.25 }
 type Run = readonly [fraction: number, y: number, tint: Tint, count: number, w: number, h: number]
 type Window = { at: Tuple; size: readonly [number,number]; tint: Tint; gain: number }
+type OfficeFloor = readonly [x: number, y: number, tint: 'ivory' | 'amber', gains: readonly number[]]
+
+const eastOfficeFloors: readonly OfficeFloor[] = [
+  [-7.5,61.3,'ivory',[0,.38,.62,.25,.48,.08,0]],
+  [4.5,57.8,'amber',[.12,.46,.24,.07,.38,.54,0,.23]],
+  [-9.4,53.9,'ivory',[.10,.26,0,.28,.47,.30]],
+  [8,49.9,'ivory',[.42,.62,.34,.20,.54,0,.18]],
+  [-8.3,33.8,'amber',[.06,.34,.21,.38,0,.12]],
+  [9.7,30.4,'ivory',[0,.46,.55,.26,.09,.50]],
+  [10.6,18.2,'amber',[.12,0,.44,.19,.32]],
+]
 
 const floors: Partial<Record<string,readonly Run[]>> = {
   'hero left edge tower': [[.435,46,'ivory',3,1.44,.69],[.430,74,'cyan',4,1.27,.73],[.462,99,'magenta',2,1.06,.62]],
@@ -64,6 +75,17 @@ export function deckReflectionTrim(frame: THREE.Material, zinc: THREE.Material) 
       })))
     batch(bank,'recessed lit window apertures',slots,false)
   }
+  const eastOffices = (parent: THREE.Group, x: number, z: number) => {
+    const bank = group(parent,'east office curtain wall bays')
+    const slots = eastOfficeFloors.flatMap(([offset,y,tint,gains],row) => gains.map((gain,i): Window => {
+      const height = [1.43,1.19,.82,1.57][(i+2*row)%4]!
+      return {
+        at: [x+offset+(i-(gains.length-1)*.5)*1.64,y+(height-1.57)*.5,z+.248],
+        size: [1.38,height], tint, gain,
+      }
+    }))
+    batch(bank,'warm office window panes',slots,false)
+  }
   const parapet = (parent: THREE.Group) => {
     const run = group(parent,'parapet service lighting')
     const lamps = [
@@ -74,7 +96,7 @@ export function deckReflectionTrim(frame: THREE.Material, zinc: THREE.Material) 
       at: [x,y,-9.797], size: [w,h], tint: 'ivory', gain,
     })),true)
   }
-  return { tower, parapet }
+  return { eastOffices, tower, parapet }
 }
 
 export function paintBayLine(parent: THREE.Group, name: string, material: THREE.Material,
