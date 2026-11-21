@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { stream } from '../core/random'
 import { type Box, Forms, group, streetY, type Tone, type Tuple } from './forms'
 import { heroSightline } from './hero-scale'
+import { northSkylineClaims } from './north-claims'
 
 export const primaryBillboardSize = [5.72, 3.55] as const
 export const billboardTerraceRoof = 2.35
@@ -189,6 +190,7 @@ function outerCity(forms: Forms, city: THREE.Group, full: boolean): void {
         const width = rng.range(layer.minWidth, layer.maxWidth)
         const depth = rng.range(layer.minWidth, layer.maxWidth)
         if (full && heroSightline(x,z,width,depth)) continue
+        if (full && northSkylineClaims(x,z,width,depth)) continue
         if (layer.name === 'middle city') {
           if (Math.abs(z - track.z) < (track.width + depth) / 2 + 2.5) continue
           if ([...(full ? heroPlots : nearPlots), ...featured].some((p) => Math.abs(p.x - x) < (p.width + width) / 2 + 5 &&
