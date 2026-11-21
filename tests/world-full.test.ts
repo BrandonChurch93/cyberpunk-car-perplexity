@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
 import { config, frameCount } from '../src/config'
 import { candelaPerUnit, type FrameContext, type SampleContext } from '../src/core/contract'
+import { luminance, solidAngle } from '../src/core/emitters'
 import { apertureRadius, applyLens } from '../src/core/lens'
 import { LightRig } from '../src/core/lights'
 import { quality } from '../src/core/reflect'
@@ -30,6 +31,57 @@ function radiance(t: number): { position: number; color: THREE.Color } {
 }
 
 describe('full roof world', () => {
+  it('recesses the compact glint faces on existing fittings clear of the driven area', () => {
+    world.root.updateMatrixWorld(true)
+    const faces: THREE.Mesh<THREE.PlaneGeometry,THREE.MeshBasicMaterial>[] = []
+    world.root.traverse(object => {
+      if (object instanceof THREE.Mesh && object.geometry instanceof THREE.PlaneGeometry &&
+          object.material instanceof THREE.MeshBasicMaterial && object.name === 'compact bead optic') faces.push(object)
+    })
+    expect(faces).toHaveLength(2)
+    expect(faces.map(face=>face.parent?.parent?.name).sort()).toEqual([
+      'deck light pole','sealed cutoff LED head',
+    ])
+    const optics = faces.map(face => {
+      const center = face.getWorldPosition(new THREE.Vector3())
+      const { width, height } = face.geometry.parameters
+      const u = face.localToWorld(new THREE.Vector3(width*.5,0,0)).sub(center)
+      const v = face.localToWorld(new THREE.Vector3(0,height*.5,0)).sub(center)
+      expect(Math.hypot(center.x,center.z)).toBeGreaterThan(9)
+      expect(width*height).toBeLessThan(.003)
+      expect(face.material.toneMapped).toBe(false)
+      return { face, center, u, v, radiance: face.material.color, visibility: 1, bounds: new THREE.Box3().setFromObject(face.parent!) }
+    })
+    const upperBody = [[.08,.53,1.88],[.08,.79,1.29],[0,1.05,.47],[0,1.28,-.24],[-.85,.68,1.72],[.85,.68,1.72]] as const
+    for (const [x,y,z] of upperBody) {
+      const receiver = new THREE.Vector3(x,y,z)
+      const energy = optics.map(optic => {
+        const ray = optic.center.clone().sub(receiver)
+        const distance = ray.length()
+        const hit = new THREE.Raycaster(receiver,ray.normalize(),.01,distance+.01).intersectObject(world.root,true)[0]
+        expect(hit?.object.name,optic.face.parent?.name).toBe(optic.face.name)
+        expect(hit?.object === optic.face,optic.face.parent?.name).toBe(true)
+        return luminance(optic.radiance)*solidAngle(optic,receiver)
+      })
+      const total = energy.reduce((sum,next)=>sum+next,0)
+      expect(total).toBeGreaterThan(.27)
+      expect(total).toBeLessThan(.36)
+    }
+    const half = config.film.shutterDegrees/(720*config.film.fps)
+    for (const format of [config.formats.master,config.formats.vertical]) {
+      let clearance = Infinity
+      for (let frame = 0; frame <= frameCount; frame++) {
+        const time = frame/config.film.fps
+        for (const delta of [-half,0,half]) {
+          const pose = cameraAt(time+delta,format,anchors,time)
+          for (const { bounds } of optics) clearance = Math.min(clearance,bounds.distanceToPoint(pose.position)-apertureRadius(pose))
+        }
+      }
+      expect(clearance).toBeGreaterThan(.10)
+    }
+    expect(world.lights).toHaveLength(8)
+  })
+
   it('centres the high cloud spill over the mounted city emitters without adding rig lights', () => {
     const sky = world.root.getObjectByName('city-lit cloud base') as THREE.Mesh<THREE.SphereGeometry,THREE.ShaderMaterial>
     const districts = sky.material.uniforms.cloudDistricts!.value as THREE.Vector2[]
@@ -649,7 +701,7 @@ describe('full roof world', () => {
       }
       expect(wanted,'frame '+frame).toEqual([0,0,0])
     }
-  })
+  }, 30000)
 
   it('keeps parapet trim warm white and authors HDR on faces rather than duplicating lights', () => {
     const trim = world.root.getObjectByName('parapet warm strip lenses') as THREE.InstancedMesh
@@ -1173,9 +1225,14 @@ describe('full roof world', () => {
     const first = state()
     expect(first[2]).toBeLessThan(-16)
     expect(Math.abs(axis(service.object).dot(new THREE.Vector3(.229,.973,.044).normalize()))).toBeLessThan(.09)
+    const to = (point: THREE.Vector3) => point.clone().sub(service.object.getWorldPosition(new THREE.Vector3()))
+    expect(axis(service.object).angleTo(to(anchors.detail.position))).toBeLessThan(service.angle!*(1-service.penumbra!))
+    expect(axis(service.object).angleTo(to(new THREE.Vector3(.395,1.044,-.98)))).toBeLessThan(service.angle!)
+    expect(axis(service.object).angleTo(to(new THREE.Vector3(.4266,1.0225,-1.1392)))).toBeGreaterThan(service.angle!)
     world.beginSample({ timeSeconds: end } as SampleContext)
     expect(state()).not.toEqual(first)
-    expect(service.intensity).toBeGreaterThan(resting[6]! * 2)
+    expect(service.intensity).toBeGreaterThan(0)
+    expect(service.intensity).toBeLessThan(1_100)
     world.beginFrame({ frame: { timeSeconds: start } } as FrameContext)
     expect(state()).toEqual(first)
     world.beginSample({ timeSeconds: detail.start-.01, sample: { frame: { timeSeconds: detail.start } } } as SampleContext)

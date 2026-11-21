@@ -106,12 +106,6 @@ export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector
         vec2 q=f*f*(3.0-2.0*f);
         return mix(mix(cloudHash(i),cloudHash(i+vec2(1,0)),q.x),mix(cloudHash(i+vec2(0,1)),cloudHash(i+1.0),q.x),q.y);
       }
-      float cloudLayer(vec2 p) {
-        float lobe = cloudNoise(p*vec2(.71,1.31));
-        float roll = cloudNoise(p*vec2(1.59,2.10)+vec2(lobe*1.18,-lobe*.93));
-        float curl = cloudNoise(p*3.82+vec2(roll,-lobe));
-        return .54*lobe+.32*roll+.14*curl;
-      }
       void main() {
         vec3 d = normalize(skyDirection);
         float horizon = exp(-max(d.y, 0.0)*4.2);
@@ -126,71 +120,27 @@ export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector
         float canopy = pow(max(0.0,dot(d,normalize(vec3(-.68,.54,-.34)))), 5.2);
         float cloudBase = smoothstep(.05,.32,d.y+.05*(coarse-.5))*(.48+.55*cloud);
         c += cloudBase*(vec3(.003,.007,.012)+canopy*vec3(.017,.030,.052));
-        vec2 skyPlane = normalize(d.xz+vec2(.0001,0.0));
-        float wash = pow(max(dot(skyPlane,normalize(vec2(-.55,-.84))),0.0), 4.8);
-        float cloudAngle = smoothstep(-.025,.058,d.y) * (1.0-smoothstep(.26,.58,d.y));
-        vec2 low = vec2(d.x*11.2+d.z*6.0,(d.y+.036)*24.0);
-        float banks = cloudNoise(low*.85);
-        float layers = cloudNoise(low*2.55+vec2(3.1,banks*1.67));
-        float cover = smoothstep(.26,.83,.58*banks+.39*layers+.16*cloudNoise(low*5.04));
-        float pink = cloudNoise(low*.36+vec2(9.5,3.1));
-        vec3 reflectedCity = mix(vec3(.28,.101,.39),vec3(.62,.186,.34),pink);
         float upper = smoothstep(.185,.448,d.y);
-        float bankEdge = smoothstep(.23,.76,banks*.64+layers*.36);
-        float lowSpill = mix(.24+.76*cover, cover*bankEdge, upper);
-        c += wash*cloudAngle*reflectedCity*lowSpill;
         float mass = smoothstep(.26,.78, coarse*.62+cloudNoise(bank*1.73+vec2(coarse,2.4))*.38);
         float underside = max(0.0,cloudNoise(bank-vec2(0.0,.38))-coarse);
         vec3 upperBase = mix(vec3(.0038,.0035,.0047),vec3(.0087,.0079,.0100),mass);
-        upperBase += vec3(.010,.007,.014)*smoothstep(.11,.42,underside)*(.24+.76*wash);
+        upperBase += vec3(.0024,.0017,.0034)*smoothstep(.11,.42,underside);
         c = mix(c,upperBase,upper);
-        float azimuth = atan(d.x/max(-d.z,.001));
-        float southClouds = smoothstep(.04,.31,-d.z)*smoothstep(-.93,-.76,azimuth)*(1.0-smoothstep(-.22,-.04,azimuth));
-        float lowerSky = smoothstep(.024,.078,d.y)*(1.0-smoothstep(.192,.240,d.y));
-        vec2 bankPoint = vec2((azimuth+.50)*24.3,(d.y-.155)*49.8);
-        float windShear = cloudNoise(bankPoint*.51+vec2(7.1,3.9));
-        float loftDrift = cloudNoise(bankPoint*.69+vec2(-4.3,8.2));
-        vec2 advected = mat2(.96,-.21,.21,.96)*bankPoint+
-          vec2(5.32+1.56*(windShear-.5),3.81+1.38*(loftDrift-.5));
-        float cloudBody = cloudLayer(advected);
-        float shadowLayer = cloudLayer(advected*vec2(.73,.88)+vec2(-3.17,2.81));
-        float overlap = smoothstep(.33,.74,.59*shadowLayer+.41*cloudBody);
-        float belly = smoothstep(.25,.67,cloudBody);
-        float edge = cloudLayer(advected+vec2(.038,.28))-cloudBody;
-        float crumbs = cloudNoise(advected*vec2(5.4,7.2)+vec2(3.31,-6.18));
-        float openSeam = cloudNoise(advected*vec2(2.44,4.75)+vec2(-1.63,8.05));
-        float illuminatedEdge = smoothstep(.012,.124,edge)*(.44+.56*crumbs)*
-          smoothstep(.25,.61,cloudBody+.12*openSeam)*smoothstep(.23,.73,openSeam);
-        float shadow = smoothstep(.35,.80,.72*overlap+.28*belly);
-        float westCrest = (1.0-smoothstep(-.66,-.51,azimuth))*smoothstep(.124,.177,d.y);
-        float arc = (azimuth+.498)*6.83;
-        float loft = (d.y-.155-.031*(loftDrift-.5)-.018*(windShear-.5))*19.8;
-        float field = exp(-arc*arc-loft*loft);
-        vec3 dusk = mix(vec3(.097,.093,.125),vec3(.048,.054,.078),shadow*(.69+.31*westCrest));
-        vec3 litCloud = muralCloud*mix(vec3(1.22,2.35,.72),vec3(1.95,3.37,.92),crumbs);
-        float underlit = ((.166+.40*belly)*(1.0-.68*shadow)+2.23*illuminatedEdge*(1.0-.37*shadow))*(1.0-.52*westCrest);
-        float underSky = smoothstep(.020,.066,d.y)*(1.0-smoothstep(.168,.208,d.y));
-        c = mix(c,dusk,southClouds*lowerSky*(.72+.13*westCrest)) + litCloud*field*underlit*southClouds*underSky*.71;
-        float highBand = smoothstep(.275,.457,d.y)*(1.0-smoothstep(.68,.84,d.y))*smoothstep(.07,.36,-d.z);
-        if (highBand > .0) {
-          vec2 cloudFoot = d.xz*(382.0/d.y);
-          vec2 southOffset = (cloudFoot-cloudDistricts[0])/vec2(178.0,235.0);
-          vec2 westOffset = (cloudFoot-cloudDistricts[1])/vec2(96.0,162.0);
-          float mainUpglow = pow(1.0+dot(southOffset,southOffset),-1.56);
-          float cyanUpglow = pow(1.0+dot(westOffset,westOffset),-1.72);
-          vec2 wind = mat2(.88,.47,-.47,.88)*(cloudFoot/132.0);
-          vec2 curl = vec2(cloudNoise(wind*.67+vec2(13.6,-4.2)),cloudNoise(wind*.83+vec2(-6.1,11.3)));
-          vec2 fold = wind+1.38*(curl-.5);
-          float lobe = cloudNoise(fold*vec2(.91,1.22)+vec2(6.2,3.3));
-          float billows = cloudNoise(fold*2.35+vec2(3.3,lobe*.91));
-          float thread = cloudNoise(fold*5.72-vec2(billows,-lobe));
-          float density = .54*lobe+.34*billows+.12*thread;
-          float canopyBelly = smoothstep(.29,.70,density);
-          float slots = smoothstep(.34,.61,cloudNoise(fold*1.65+vec2(-4.8,8.6)));
-          float rim = smoothstep(.018,.26,cloudNoise(fold*2.35+vec2(3.55,lobe*.91-.29))-billows);
-          float radiance = (.043+.41*canopyBelly)*(.31+.69*slots)+.88*pow(rim,1.6)*(.32+.68*slots);
-          vec3 magentaCloud = muralCloud*mix(vec3(1.38,1.02,.69),vec3(.66,.97,1.33),smoothstep(.23,.73,curl.y));
-          c += highBand*radiance*(mainUpglow*magentaCloud+cyanUpglow*vec3(.013,.046,.105));
+        float southSky = smoothstep(.15,.67,-d.z)*smoothstep(-.064,.045,d.y);
+        if (southSky > .0) {
+          float az = atan(d.x,-d.z);
+          float bill = atan(cloudDistricts[0].x,-cloudDistricts[0].y);
+          float west = atan(cloudDistricts[1].x,-cloudDistricts[1].y);
+          float haze = smoothstep(.13,.57,d.y);
+          float hazeBank = cloudNoise(vec2(az*3.9,d.y*6.6)+vec2(7.3,4.1))-.5;
+          vec3 base = mix(vec3(.137,.125,.168),vec3(.026,.020,.047),haze);
+          base += vec3(.030,.022,.043)*hazeBank*(1.0-.73*haze);
+          vec2 spread = vec2((az-bill+.10)/.235,(d.y-.155+.033*hazeBank)/.207);
+          vec2 cyanSpread = vec2((az-west)/.23,(d.y-.118)/.16);
+          float magenta = exp(-dot(spread,spread));
+          float cyan = exp(-dot(cyanSpread,cyanSpread));
+          vec3 spill = muralCloud*vec3(.193,.100,.086)*magenta*(.94+.09*hazeBank);
+          c = mix(c,base+spill+vec3(.0015,.008,.020)*cyan,southSky);
         }
         float northBand = northGlow*smoothstep(.15,.36,d.y)*(1.0-smoothstep(.80,.96,d.y))*smoothstep(0.0,.32,d.z);
         if (northBand > .0) {
@@ -620,10 +570,26 @@ function deckLuminaire(roof: THREE.Group, metal: THREE.Material, frame: THREE.Ma
   const intensity = lumens/(solidAngle*candelaPerUnit)
   const optic = new THREE.MeshBasicMaterial({ toneMapped: false })
   for (const dx of [-1,1]) plate(head,'opal LED optic',optic,[dx*.217,0,.003],.426,size[1])
+  if (x < 0) beadInsert(head,frame,'west nose cutoff',[.217,0,.015],0,0,[.066,.038],17_400)
   const object = group(head,'luminaire diode center',[0,0,.061])
   const film: FilmLight = { id, kind: 'spot', object, color, intensity, size, angle, penumbra, range: 33, shadow: true, beam: true, level: () => 1 }
   const set = (wide: boolean) => optic.color.copy(color).multiplyScalar(wide ? intensity/(size[0]*size[1]) : .024)
   return { film, set }
+}
+
+function beadInsert(
+  parent: THREE.Object3D, frame: THREE.Material, id: string, at: Tuple,
+  yaw: number, pitch: number, [width,height]: readonly [number,number], radiance: number,
+): void {
+  const insert = group(parent,id,at)
+  insert.rotation.set(pitch,yaw,0,'YXZ')
+  block(insert,'sealed optic backplate',frame,[0,0,-.031],[width+.034,height+.032,.069])
+  for (const side of [-1,1]) {
+    block(insert,'optic side rebate',frame,[side*(width*.5+.008),0,.019],[.016,height+.032,.044])
+    block(insert,'optic cutoff lip',frame,[0,side*(height*.5+.008),.022],[width+.032,.016,.050])
+  }
+  const optic = new THREE.MeshBasicMaterial({ color: new THREE.Color(.96,.96,1).multiplyScalar(radiance), toneMapped: false })
+  plate(insert,'compact bead optic',optic,[0,0,.008],width,height)
 }
 
 function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE.Material, frame: THREE.Material): { film: FilmLight; set(t: number, cutTime?: number): void } {
@@ -683,16 +649,17 @@ function rearDeckPractical(pole: THREE.Object3D, roof: THREE.Group, metal: THREE
     const active = cutTime >= detailBeat.start && cutTime < detailBeat.end
     rake.position.y = active ? source.y : .38
     const progress = active ? ease(t,detailBeat.start,detailBeat.end) : 0
-    aim.set(-.358+.12*progress,1.011,-1.22+.38*progress).sub(source).normalize()
+    aim.set(.300,1.008,-1.005-.068*progress).sub(source).normalize()
     head.quaternion.setFromUnitVectors(forward,aim)
     film.object = active ? low : anchor
-    film.size[0] = active ? .85 : 1.42
-    film.size[1] = active ? .10 : .35
-    film.penumbra = active ? .64 : .39
-    film.intensity = active ? 2950 : resting
+    film.size[0] = active ? .034 : 1.42
+    film.size[1] = active ? .022 : .35
+    film.angle = active ? .0065 : .123
+    film.penumbra = active ? .37 : .39
+    film.intensity = active ? 880 : resting
     if (active) film.color.setRGB(.69,.83,1)
     else film.color.copy(tint)
-    graze.color.copy(film.color).multiplyScalar(active ? 14 : .26)
+    graze.color.copy(film.color).multiplyScalar(active ? 4.2 : .26)
   }
   set(0)
   return { film, set }
@@ -859,6 +826,7 @@ export function roofFixtures(roof: THREE.Group, city: THREE.Group, labels: Label
   const poles = roof.children.filter(o => o.name === 'deck light pole')
   rearRoofAccess(roof,poles[7]!,labels,metal,frame)
   const service = rearDeckPractical(poles[8]!,roof,metal,frame)
+  beadInsert(poles[0]!,frame,'west deck head cutoff',[.682,4.579,0],Math.PI*.5-.12,.26,[.061,.0315],13_400)
   const luminaires = [
     deckLuminaire(roof,metal,frame,service.film.id,[-13,7.58,2],[.04,.84,1.18],17_800),
     deckLuminaire(roof,metal,frame,'wheel deck pole',[8,7.14,11],[.37,1.10,.10],18_600),

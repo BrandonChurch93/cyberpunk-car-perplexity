@@ -14,7 +14,11 @@ export interface Bay {
   grille: THREE.BufferGeometry
   bezel: THREE.BufferGeometry
   duct: THREE.BufferGeometry
+  /** Louvred core inside the airbox well, dimly seen through the grille cells. */
+  core: THREE.BufferGeometry
   ledge: THREE.BufferGeometry
+  /** Painted shelf that closes the bay aft of the grille, between the brace and the ledge. */
+  shelf: THREE.BufferGeometry
   /** Intake hose from the airbox well to the plenum, and its band clamp. */
   hose: THREE.BufferGeometry
   clamp: THREE.BufferGeometry
@@ -29,6 +33,7 @@ export const baySpec = {
   grille: { center: [0.301, 1.008, -1.0389] as V3, slope: -0.1, length: 0.42, width: 0.184, cell: 0.017, gauge: 0.0022, thick: 0.0025, chamfer: 0.0006 },
   bezel: { inset: 0.006, corner: 0.016, wide: 0.022, rise: 0.005, drop: 0.009, round: 0.003 },
   duct: { top: 0.008, bottom: 0.078, wall: 0.003, floor: 0.005 },
+  core: { pitch: 0.009, top: 0.024, bottom: 0.06, lean: 0.012, thick: 0.001, end: 0.018, side: 0.003 },
   brace: { front: -0.76, back: -1.95, width: 0.064, crown: 0.02, under: -0.03, tuck: 0.002 },
   covers: { x: 0.1, width: 0.12, height: 0.07, bank: 0.35, z0: -1.0, z1: -1.7, y0: 0.99, y1: 0.905, ribs: 10, rib: 0.0022, ribHeight: 0.0045 },
   hose: { radius: 0.022, along: -0.09, depth: 0.05, end: [0.028, 0.935, -1.05] as V3, entry: [-0.6, 0, -0.8] as V3 },
@@ -268,9 +273,21 @@ export function engineBay(edge: SurfaceCurve, cell: number): Bay {
   const wellSec = roundSection(-d.wall, 0, -d.bottom + 0.001, -d.top, 0.001, 2)
   merge(duct, solid(wellSec.map(([s0, dd]) => lp.map((p, j) => add(add(p, scale(lo[j], s0)), scale(f.n, dd)))), wellSec.map(() => false), true, true))
 
+  const cs = baySpec.core
+  const core = new MeshBuilder()
+  const ca = ha - bz.inset - cs.end
+  const cb = hb - bz.inset - cs.side
+  const fins = Math.floor((2 * ca) / cs.pitch)
+  for (let i = 0; i <= fins; i++) {
+    const a0 = -ca + ((2 * ca) * i) / fins
+    const sec: [number, number][] = [[0, -cs.top], [cs.thick, -cs.top], [cs.thick + cs.lean, -cs.bottom], [cs.lean, -cs.bottom]]
+    merge(core, solid(sec.map(([da, dd]) => [at(f, a0 + da, -cb, dd), at(f, a0 + da, cb, dd)]), sec.map(() => true), true, false))
+  }
+
+  const aEnd = (zr + 0.006 - f.c[2]) / f.a[2]
   const ledgeRows: V3[][] = [[], [], [], []]
-  for (let i = 0; i <= 24; i++) {
-    const a = -ha - 0.03 + ((2 * ha + 0.06) * i) / 24
+  for (let i = 0; i <= 40; i++) {
+    const a = -ha - 0.03 + ((aEnd + ha + 0.03) * i) / 40
     const inner = at(f, a, hb - bz.inset + bz.wide - 0.006, -0.004)
     const w = widthAt(inner[2])
     const outer: V3 = [w.x + 0.012, w.y - 0.03, inner[2]]
@@ -281,6 +298,14 @@ export function engineBay(edge: SurfaceCurve, cell: number): Bay {
   }
   const ledge = solid(ledgeRows, [true, true, true, true], true, false)
   meterUV(ledge, ledgeRows[0], ledgeRows.map((row) => row[12]))
+
+  const shelfIn = -hb + bz.inset - 0.002
+  const shelfOut = hb - bz.inset + bz.wide - 0.006
+  const shelfStart = ha - bz.inset + bz.wide - 0.006
+  const shelfSec: V2[] = [[shelfIn, -0.004], [shelfOut, -0.004], [shelfOut, -0.008], [shelfIn, -0.008]]
+  const shelfRows = shelfSec.map(([b0, dd]) => Array.from({ length: 25 }, (_, i): V3 => at(f, shelfStart + ((aEnd - shelfStart) * i) / 24, b0, dd)))
+  const shelf = solid(shelfRows, [true, true, true, true], true, false)
+  meterUV(shelf, shelfRows[0], shelfRows.map((row) => row[12]))
 
   const carbon = new MeshBuilder()
   const br = baySpec.brace
@@ -377,7 +402,9 @@ export function engineBay(edge: SurfaceCurve, cell: number): Bay {
     grille: finish(grille),
     bezel: finish(bezel),
     duct: finish(duct),
+    core: finish(core),
     ledge: finish(ledge),
+    shelf: finish(shelf),
     hose: finish(hose),
     clamp: finish(clamp),
     grilleCenter: f.c,

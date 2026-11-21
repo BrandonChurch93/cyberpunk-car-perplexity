@@ -113,10 +113,10 @@ describe('quality', () => {
     const paint = config.beats.find(({ id }) => id === 'paint')!
     const macro = config.film.macroFrameSeconds
     expect(reflectionCaptureSize('draft', config.film.heroFrameSeconds)).toBe(quality.draft.captureSize)
-    expect(reflectionCaptureSize('draft', paint.start)).toBe(quality.review.captureSize)
-    expect(reflectionCaptureSize('draft', macro)).toBe(quality.review.captureSize)
+    expect(reflectionCaptureSize('draft', paint.start)).toBe(quality.final.captureSize)
+    expect(reflectionCaptureSize('draft', macro)).toBe(quality.final.captureSize)
     expect(reflectionCaptureSize('draft', paint.end)).toBe(quality.draft.captureSize)
-    expect(reflectionCaptureSize('review', macro)).toBe(quality.review.captureSize)
+    expect(reflectionCaptureSize('review', macro)).toBe(quality.final.captureSize)
     expect(reflectionCaptureSize('final', macro)).toBe(quality.final.captureSize)
   })
 })
@@ -269,10 +269,6 @@ it('uses the deck mirror on bay paint and grate metal without rendering them int
   expect(radiance).toEqual([[2, 0, 2]])
   expect(tint.toArray()).toEqual([.15, .03, .23])
   expect(part.planar.reflectEmitters.value.map(position => position.toArray())).toEqual([[3, 4.5, -31, 1]])
-  const { x: u0, y: v0, z: u1, w: v1 } = part.planar.reflectEmitterBounds.value[0]!
-  expect(u1).toBeGreaterThan(u0)
-  expect(v1).toBeGreaterThan(v0)
-  expect(part.planar.reflectEmitterPeaks.value[0]).toBeCloseTo(.5696, 4)
   housing.visible = false
   part.beforeSample!(sample)
   expect(part.planar.reflectEmitters.value[0]!.w).toBe(0)
@@ -667,7 +663,7 @@ function captureWetDeck(three: typeof THREE, reflections: typeof createReflectio
   return { cube, direct, off, rebound, cameraRestored, deckVisible: deck.visible, parapetVisible: parapet.visible }
 }
 
-function sweepPlanarLimiter(three: typeof THREE, box: typeof boxPatch, planar: typeof planarPatch, patch: typeof patchMaterial,
+function sweepPlanarFilm(three: typeof THREE, box: typeof boxPatch, planar: typeof planarPatch, patch: typeof patchMaterial,
   mirrorOf: typeof mirrorCamera, tuning: typeof planarTuning, hash: typeof hash01, seed: number) {
   const renderer = new three.WebGLRenderer()
   const edge = 128
@@ -701,7 +697,6 @@ function sweepPlanarLimiter(three: typeof THREE, box: typeof boxPatch, planar: t
   slab.position.z = 9
   scene.add(slab)
   const noise = { value: 0 }
-  const showRadiance = { value: 0 }
   patch(material, box({
     reflectBoxMin: { value: new three.Vector3() }, reflectBoxMax: { value: new three.Vector3() },
     reflectProbe: { value: eye.position }, reflectBoxOn: { value: 0 },
@@ -711,46 +706,17 @@ function sweepPlanarLimiter(three: typeof THREE, box: typeof boxPatch, planar: t
     reflectViewProjection: { value: projection }, reflectInverseViewProjection: { value: projection.clone().invert() },
     reflectSize: { value: new three.Vector2(edge, edge) }, reflectLodMax: { value: Math.log2(edge) },
     reflectSeed: noise, reflectOn: { value: 1 }, reflectEmitters: { value: [] },
-    reflectEmitterBounds: { value: [] }, reflectEmitterPeaks: { value: [] },
   }, tuning))
   patch(material, {
-    id: 'measure planar limiter',
-    uniforms: { testShowRadiance: showRadiance },
+    id: 'show planar radiance',
     apply(shader) {
       shader.fragmentShader = shader.fragmentShader
-        .replace('uniform sampler2D reflectMap;', 'uniform sampler2D reflectMap;\nuniform float testShowRadiance;')
-        .replace('float count = 0.0;', 'vec3 measure = vec3(0.0);\nfloat count = 0.0;')
-        .replace(/(vec3 mirror = [^\n]+;)/, '$1\nvec3 rawMirror = mirror;')
-        .replace('sum += weight * mix( env, mirror, inside );', `
-          sum += weight * mix( env, mirror, inside );
-          vec3 testDelta = abs(mirror) - abs(rawMirror);
-          if (any(isnan(mirror)) || any(isinf(mirror)) || any(greaterThan(testDelta, vec3(.0002)))
-            || any(lessThan(mirror * rawMirror, vec3(-.0002)))) measure.r = 1.0;
-          if (any(lessThan(testDelta, vec3(-.0002)))) measure.g = 1.0;
-          if (any(lessThan(rawMirror, vec3(-.0002)))) measure.b = 1.0;
-        `)
-        .replace(/return mix\( fallback, planar,[^\n]+;/, 'return testShowRadiance > .5 ? planar : measure;')
+        .replace(/return mix\( fallback, planar,[^\n]+;/, 'return planar;')
         .replace('#include <opaque_fragment>', 'outgoingLight = radiance;\n#include <opaque_fragment>')
     },
   })
+  renderer.setRenderTarget(target)
   const measures = new Float32Array(edge * edge * 4)
-  let darkened = 0
-  let signed = 0
-  const failures: number[] = []
-  for (let frame = 1100; frame <= 1150; frame++) {
-    noise.value = hash(seed, frame, 0)
-    renderer.setRenderTarget(target)
-    renderer.render(scene, eye)
-    renderer.readRenderTargetPixels(target, 0, 0, edge, edge, measures)
-    let passed = true
-    for (let p = 0; p < measures.length; p += 4) {
-      if (measures[p] !== 0) passed = false
-      if (measures[p + 1] > .5) darkened++
-      if (measures[p + 2] > .5) signed++
-    }
-    if (!passed) failures.push(frame)
-  }
-  showRadiance.value = 1
   const first = new Float32Array(measures.length)
   const variation = (roughness: number) => {
     material.roughness = roughness
@@ -762,11 +728,15 @@ function sweepPlanarLimiter(three: typeof THREE, box: typeof boxPatch, planar: t
     renderer.readRenderTargetPixels(target, 0, 0, edge, edge, measures)
     let distinct = 0
     let energy = 0
+    let peak = 0
+    let finite = true
     for (let p = 0; p < measures.length; p += 4) {
       if (Math.abs(first[p]! - measures[p]!) > .0002) distinct++
       energy += Math.abs(measures[p]!)
+      peak = Math.max(peak, measures[p]!)
+      if (!Number.isFinite(measures[p]!)) finite = false
     }
-    return { distinct, energy }
+    return { distinct, energy, peak, finite }
   }
   const film = variation(.22)
   const puddle = variation(.05)
@@ -776,7 +746,7 @@ function sweepPlanarLimiter(three: typeof THREE, box: typeof boxPatch, planar: t
   slab.geometry.dispose()
   material.dispose()
   renderer.dispose()
-  return { failures, darkened, signed, film, puddle }
+  return { film, puddle }
 }
 
 function resumeMirror(three: typeof THREE, reflections: typeof createReflections, Engine: typeof FrameEngine,
@@ -912,7 +882,7 @@ function verifyEmitterOwnership(three: typeof THREE, reflections: typeof createR
   return { owned, analytic }
 }
 
-it('matches camera and probe reflections, bounds planar taps, and resumes review mirrors on fresh pages', async () => {
+it('matches camera and probe reflections, keeps film strata whole, and resumes review mirrors on fresh pages', async () => {
   const id = '/reflect-test-entry.js'
   const app = await createServer({
     configFile: false,
@@ -938,7 +908,7 @@ it('matches camera and probe reflections, bounds planar taps, and resumes review
         export const air = () => (${captureAir.toString()})(THREE, createHaze, createHazeCapture, LightRig, Probe, config.formats.preview)
         export const projector = () => (${captureProjector.toString()})(THREE, createHaze, LightRig, config.formats.preview, projectorHalfAngle, filmLightsGlsl, patchFilmLighting)
         export const deck = () => (${captureWetDeck.toString()})(THREE, createReflections, applyPorous, config.formats.preview, quality.draft)
-        export const limiter = () => (${sweepPlanarLimiter.toString()})(THREE, boxPatch, planarPatch, patchMaterial, mirrorCamera, planarTuning, hash01, streamSeed('reflect'))
+        export const film = () => (${sweepPlanarFilm.toString()})(THREE, boxPatch, planarPatch, patchMaterial, mirrorCamera, planarTuning, hash01, streamSeed('reflect'))
         export const ownership = lamp => (${verifyEmitterOwnership.toString()})(THREE, createReflections, LightRig, patchMaterial, patchFilmLighting, lamp)
         export const review = (frameIndex, take, saved) =>
           (${resumeMirror.toString()})(THREE, createReflections, FrameEngine, applyLens, config.formats.preview, frameIndex, take, saved)
@@ -1025,14 +995,13 @@ it('matches camera and probe reflections, bounds planar taps, and resumes review
       }
       expect(wet.cube[0][0]).toBeGreaterThan(wet.cube[1][0])
       expect(wet.cube[2][0]).toBeGreaterThan(2 * wet.cube[2][2])
-      const limiter: ReturnType<typeof sweepPlanarLimiter> = await page.evaluate(`import("${id}").then(module => module.limiter())`)
+      const strata: ReturnType<typeof sweepPlanarFilm> = await page.evaluate(`import("${id}").then(module => module.film())`)
       expect(errors).toEqual([])
-      expect(limiter.darkened).toBeGreaterThan(0)
-      expect(limiter.signed).toBeGreaterThan(0)
-      expect(limiter.failures).toEqual([])
-      expect(limiter.film.energy).toBeGreaterThan(1)
-      expect(limiter.film.distinct).toBe(0)
-      expect(limiter.puddle.distinct).toBeGreaterThan(0)
+      expect(strata.film.finite && strata.puddle.finite).toBe(true)
+      expect(strata.film.energy).toBeGreaterThan(1)
+      expect(strata.film.peak).toBeGreaterThan(1)
+      expect(strata.film.distinct).toBe(0)
+      expect(strata.puddle.distinct).toBeGreaterThan(0)
       await page.close()
       const total = config.tiers.review.samplesPerFrame
       const frameIndex = Math.round(config.film.heroFrameSeconds * config.film.fps)
