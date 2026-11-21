@@ -239,8 +239,10 @@ describe('wheel, tire, brake and arch liner module', () => {
 
       for (const side of [1, -1] as const) {
         const dir = new THREE.Vector3(-side, 0, 0)
+        const thMin = front ? -0.25 : 0.72
+        const thMax = Math.PI + 0.25
         for (let k = 0; k <= 12; k++) {
-          const theta = -0.25 + ((Math.PI + 0.5) * k) / 12
+          const theta = thMin + ((thMax - thMin) * k) / 12
           const y = Math.max(0.16, yc + Math.sin(theta) * rSample)
           const z = zc - Math.cos(theta) * rSample
           ray.set(new THREE.Vector3(side * 2.0, y, z), dir)
@@ -252,6 +254,33 @@ describe('wheel, tire, brake and arch liner module', () => {
       parts.liner.dispose()
     }
     clayFrontSide.dispose()
+  })
+
+  it('keeps Pass 2 wheel and liner triangle count under budget and rear liner clear of intake throat and exposed rear tread', () => {
+    let moduleTris = 0
+    fullRoot.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return
+      const idx = o.geometry.getIndex()!
+      moduleTris += idx.count / 3
+    })
+    expect(moduleTris).toBeLessThanOrEqual(210_000)
+
+    const rearLeftLiner = fullRoot.getObjectByName('liner-rear-left') as THREE.Mesh
+    const pos = rearLeftLiner.geometry.getAttribute('position')
+    let minX = Infinity
+    let maxZ = -Infinity
+    let behindLowCount = 0
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i)
+      const y = pos.getY(i)
+      const z = pos.getZ(i)
+      minX = Math.min(minX, x)
+      maxZ = Math.max(maxZ, z)
+      if (y < 0.56 && x > 0.68 && z < dims.rearHubZ) behindLowCount++
+    }
+    expect(minX).toBeGreaterThan(0.625)
+    expect(maxZ).toBeLessThan(-1.03)
+    expect(behindLowCount).toBe(0)
   })
 
   it('covers left and right wheels in FrontSide clay on the assembled vehicle and keeps the wheel anchor in place', () => {
