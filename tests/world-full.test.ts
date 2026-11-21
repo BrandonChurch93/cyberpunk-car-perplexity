@@ -427,13 +427,26 @@ describe('full roof world', () => {
       }
     })
     expect(openings.length).toBeGreaterThan(85)
-    const ray = new THREE.Raycaster(), direction = new THREE.Vector3()
+    const candidates: { mesh: THREE.Mesh; box: THREE.Box3 }[] = []
+    for (const root of [world.root,vehicle]) root.traverse(object => {
+      if (!(object instanceof THREE.Mesh)) return
+      if (object instanceof THREE.InstancedMesh && !object.boundingBox) object.computeBoundingBox()
+      if (!object.geometry.boundingBox) object.geometry.computeBoundingBox()
+      const bounds = object instanceof THREE.InstancedMesh ? object.boundingBox! : object.geometry.boundingBox!
+      candidates.push({mesh: object, box: bounds.clone().applyMatrix4(object.matrixWorld)})
+    })
+    const ray = new THREE.Raycaster(), direction = new THREE.Vector3(), entry = new THREE.Vector3()
+    const hits: THREE.Mesh[] = []
     const firstHit = (a: THREE.Vector3,b: THREE.Vector3,slack = 0) => {
       direction.subVectors(b,a)
       ray.far = direction.length()+slack
       ray.near = .001
       ray.set(a,direction.normalize())
-      return ray.intersectObjects([world.root,vehicle],true)[0]
+      hits.length = 0
+      for (const { mesh,box } of candidates) {
+        if (box.containsPoint(a) || (ray.ray.intersectBox(box,entry) && entry.distanceToSquared(a)<=ray.far**2)) hits.push(mesh)
+      }
+      return ray.intersectObjects(hits,false)[0]
     }
     const { master } = config.formats
     const lens = new THREE.PerspectiveCamera()
