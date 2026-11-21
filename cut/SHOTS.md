@@ -50,7 +50,7 @@ One shot per beat, in both formats. Beat times come from `beats` in the config a
 | 36.0 | Cut to the approved framing with the vehicle lit |
 | 36.3 to 45.0 | The dolly pulls straight back along the lens axis to the opening position and comes to rest on the last frame |
 | 37.0 | Engine off |
-| 38.0 to 40.0 | Lamps go out in reverse order: main beams, then running lights with a last faint glow |
+| 38.0 to 41.2 | Lamps go out in reverse order: main beams, then running lights with a last faint glow |
 | 45.0 | The opening composition, at rest for the one frame of the seam. Steam and shimmer are gone by 44.0 |
 
 ## Master, `formats.master`

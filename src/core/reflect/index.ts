@@ -7,6 +7,7 @@ import { createHazeCapture } from '../haze'
 import { applyLens } from '../lens'
 import type { StageDeps, StagePart } from '../parts'
 import { hash01, streamSeed } from '../random'
+import { mirrorEmitters } from './emitters'
 import { probeLamps } from './lamps'
 import { mirrorCamera } from './mirror'
 import { Probe } from './probe'
@@ -25,7 +26,7 @@ export interface Quality {
 }
 
 export const quality: Record<TierId, Quality> = {
-  draft: { captureSize: 256, bounce: false, planarScale: 0.25, planarEverySample: false },
+  draft: { captureSize: 256, bounce: false, planarScale: 0.5, planarEverySample: false },
   review: { captureSize: 512, bounce: false, planarScale: 0.5, planarEverySample: false },
   final: { captureSize: 1024, bounce: true, planarScale: 0.5, planarEverySample: true },
 }
@@ -37,6 +38,7 @@ const captureFar = 1500
 const cubePlanarGuard = 1.18
 export const planarTuning = {
   taps: 4, filter: 0.7, roughStart: 0.55, roughEnd: 0.9, far: 4000, tail: 0.2,
+  filmStart: 0.06, filmEnd: 0.13, mipStart: 0.075, mipEnd: 0.20,
   fireflyStart: 0.12, fireflyEnd: 0.18, fireflyRatio: 4, fireflyFloor: 0.35,
 }
 
@@ -111,15 +113,14 @@ function deckDetails(root: THREE.Object3D) {
 
 export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   const { renderer, scene, world, vehicle } = deps
-  const billboardSpot = deps.rig?.group.children.find((object): object is THREE.SpotLight =>
-    object instanceof THREE.SpotLight && object.name === 'magenta violet tower screen')
-  const billboardPosition = new THREE.Vector3()
+  const emitters = mirrorEmitters(world.lights ?? [], deps.rig)
   const seed = streamSeed('reflect')
   let format = config.formats.master
   let tier: TierId = 'final'
   let size = planarSize(format, quality[tier].planarScale)
   let target = planarTarget(size)
   let diagnostic = 'beauty'
+  let captureTime = 0
   let cacheCameraPlanar = false
   const frameEye = new THREE.PerspectiveCamera()
   const mirror = new THREE.PerspectiveCamera()
@@ -134,7 +135,9 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     reflectLodMax: { value: lodMax(size) },
     reflectSeed: { value: 0 },
     reflectOn: { value: 0 },
-    reflectBillboard: { value: new THREE.Vector4() },
+    reflectEmitters: emitters.positions,
+    reflectEmitterBounds: emitters.bounds,
+    reflectEmitterPeaks: emitters.peaks,
   }
   const box: BoxUniforms = {
     reflectBoxMin: { value: world.reflectionBox.min.clone() },
@@ -191,13 +194,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     return () => objects.forEach((o, i) => (o.visible = was[i]))
   }
 
-  const updateBillboard = (): void => {
-    if (!billboardSpot) return
-    billboardSpot.getWorldPosition(billboardPosition)
-    planar.reflectBillboard.value.set(billboardPosition.x, billboardPosition.y, billboardPosition.z, 1)
-  }
-
-  const renderPlanar = (eye: THREE.PerspectiveCamera, destination: THREE.WebGLRenderTarget, guard = 1): void => {
+  const renderPlanar = (eye: THREE.PerspectiveCamera, destination: THREE.WebGLRenderTarget, time: number, guard = 1): void => {
     planar.reflectOn.value = 0
     planar.reflectMap.value = null
     planar.reflectDepth.value = null
@@ -214,13 +211,14 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       renderer.setRenderTarget(destination)
       renderer.setClearColor(0x000000, 1)
       renderer.clear(true, true, false)
-      renderer.render(scene, mirror)
+      emitters.withRadiance(time, () => renderer.render(scene, mirror))
     } finally {
       showDeck()
       renderer.setClearColor(color, alpha)
       renderer.setRenderTarget(previous, face, mip)
     }
     bindPlanar(destination)
+    emitters.update(planar.reflectViewProjection.value, mirror.layers, planar.reflectSize.value)
     planar.reflectOn.value = 1
   }
 
@@ -231,7 +229,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       probe = new Probe(renderer, edge, captureNear, captureFar, hazeCapture, deckMirror
         ? (eye, face) => {
             if (face === 2) planar.reflectOn.value = 0
-            else renderPlanar(eye, deckMirror, cubePlanarGuard)
+            else renderPlanar(eye, deckMirror, captureTime, cubePlanarGuard)
           }
         : undefined)
       probes.set(edge, probe)
@@ -283,7 +281,6 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     cameraPlanarInverseVP.copy(planar.reflectInverseViewProjection.value)
     planar.reflectOn.value = 0
     planar.reflectSeed.value = hash01(seed, frameKey, 0)
-    updateBillboard()
     clearBackground()
     lamps.sync()
     const showVehicle = hide([vehicle.root])
@@ -336,6 +333,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
     },
     beginFrame({ frame, camera }: FrameContext) {
       tier = frame.tier
+      captureTime = frame.timeSeconds
       cacheCameraPlanar = frame.samples > 1 && !quality[tier].planarEverySample
       fitTarget()
       patchAll()
@@ -349,16 +347,17 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       capture(frame.frameKey)
       if (cacheCameraPlanar && (diagnostic === 'beauty' || diagnostic === 'wetness')) {
         applyLens(frameEye, camera, format.width, format.height, { pixel: [0, 0], aperture: [0, 0] }, 1)
-        renderPlanar(frameEye, target)
+        renderPlanar(frameEye, target, frame.timeSeconds)
       }
     },
     beforeSample(sample: SampleContext) {
       planar.reflectOn.value = 0
       if (diagnostic !== 'beauty' && diagnostic !== 'wetness') return
-      updateBillboard()
       planar.reflectSeed.value = hash01(seed, sample.sample.frame.frameKey, sample.sample.sampleIndex)
-      if (cacheCameraPlanar) planar.reflectOn.value = 1
-      else renderPlanar(sample.camera, target)
+      if (cacheCameraPlanar) {
+        emitters.update(planar.reflectViewProjection.value, mirror.layers, planar.reflectSize.value)
+        planar.reflectOn.value = 1
+      } else renderPlanar(sample.camera, target, sample.timeSeconds)
     },
   }
 }
