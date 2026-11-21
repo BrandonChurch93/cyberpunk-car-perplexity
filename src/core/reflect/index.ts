@@ -55,6 +55,7 @@ interface ReflectionDeps extends Pick<StageDeps, 'renderer' | 'scene'> {
   rig?: StageDeps['rig']
   world: Pick<StageDeps['world'], 'root' | 'reflectionBox'> & {
     lights?: StageDeps['world']['lights']
+    optics?: StageDeps['world']['optics']
     deck: Pick<StageDeps['world']['deck'], 'material' | 'meshes'> & Partial<Pick<StageDeps['world']['deck'], 'bounds'>>
   }
   vehicle: Pick<StageDeps['vehicle'], 'root' | 'lamps'>
