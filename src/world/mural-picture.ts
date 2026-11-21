@@ -6,6 +6,7 @@ const pictureSpan = .76
 const driftScale = .42
 const { lerp, smoothstep } = THREE.MathUtils
 const floor = Math.floor
+const ramp = (low: number, high: number, value: number) => smoothstep(value,low,high)
 
 export const pictureLookup = /* glsl */ `
   vec3 muralPicture(sampler2D ink, vec2 uv, vec2 drift, float amount) {
@@ -40,14 +41,14 @@ function paint() {
     const billow = noise(x*4.42+10.65,y*3.49+7.1)
     const grain = .51*noise(11.9*x+y*4.2+6.8,y*5.55+10.6)+.32*noise(x*23.0+21.6,y*17.2+3.9)+.17*noise(x*52.1-6.4,y*38.5+18.0)
     const ledge = y-.73*(x-.37)+.058*Math.sin(x*12.8+2.1)+.086*(billow-.5)
-    const dark = (1-smoothstep(-.024,.103,ledge))*smoothstep(.38,.59,x)
-    const silk = smoothstep(.24,.72,billow*.61+grain*.39)
+    const dark = (1-ramp(-.024,.103,ledge))*ramp(.38,.59,x)
+    const silk = ramp(.24,.72,billow*.61+grain*.39)
     const pinched = Math.sin(fold*31.5+.91*warp+1.37*bend)
-    const troughs = smoothstep(.37,.96,pinched)*smoothstep(.24,.55,fold)*(1-smoothstep(.81,.99,fold))
-    const thread = 1-smoothstep(.006,.042,Math.abs(ledge-.122+.024*Math.sin(18*x)))
-    const fringe = 1-smoothstep(.009,.026,Math.abs(ledge-.278+.065*Math.sin(x*6.8+1.3)))
-    const streak = smoothstep(.52,.77,grain*.59+.41*bend)*(thread*.63+fringe*.31)*smoothstep(.27,.53,x)
-    c.copy(hot).lerp(violet,smoothstep(.20,.75,fold))
+    const troughs = ramp(.37,.96,pinched)*ramp(.24,.55,fold)*(1-ramp(.81,.99,fold))
+    const thread = 1-ramp(.006,.042,Math.abs(ledge-.122+.024*Math.sin(18*x)))
+    const fringe = 1-ramp(.009,.026,Math.abs(ledge-.278+.065*Math.sin(x*6.8+1.3)))
+    const streak = ramp(.52,.77,grain*.59+.41*bend)*(thread*.63+fringe*.31)*ramp(.27,.53,x)
+    c.copy(hot).lerp(violet,ramp(.20,.75,fold))
     c.multiplyScalar((.86+.39*silk)*(1-.44*troughs*(.54+.46*grain)))
     c.lerp(indigo,dark*.94)
     c.r += pale.r*streak

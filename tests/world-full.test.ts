@@ -12,6 +12,7 @@ import { createWorld } from '../src/world'
 import { heroDrain } from '../src/world/deck'
 import { billboardState } from '../src/world/fixtures'
 import { approvedHeroSourceSurvey, heroScreenMount } from '../src/world/hero-layout'
+import { muralLuma, muralMean, muralPainting } from '../src/world/mural-picture'
 import { heroLayoutEye, heroPoint, heroScale } from '../src/world/hero-scale'
 import { heroCityYaw, streetY } from '../src/world/forms'
 import { deckHeight } from '../src/world/roof-look'
@@ -902,6 +903,23 @@ describe('full roof world', () => {
     expect(color.clone().multiplyScalar(raking.level(2)).b).toBeCloseTo(expected.color.b, 10)
     world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
     expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
+  })
+
+  it('paints distinct hot, violet and indigo regions on the media', () => {
+    const { data, width, height } = muralPainting().image
+    const sample = (u: number, v: number) => {
+      const i = (Math.floor(v*height)*width+Math.floor(u*width))*4
+      return new THREE.Color(...Array.from(data.subarray(i,i+3),THREE.DataUtils.fromHalfFloat) as [number,number,number])
+    }
+    const hot = sample(.23,.55)
+    const violet = sample(.71,.61)
+    const indigo = sample(.79,.21)
+    expect(hot.r/hot.b).toBeGreaterThan(2)
+    expect(violet.b/violet.r).toBeGreaterThan(2)
+    expect(muralLuma(indigo)).toBeLessThan(.6*muralLuma(violet))
+    const first = muralMean(1,0,.166,new THREE.Color())
+    const shifted = muralMean(-1,0,.166,new THREE.Color())
+    expect(Math.abs(first.r-shifted.r)).toBeGreaterThan(.25)
   })
 
   it('drives the tower mural periodically while leaving macro emitter slots on their original mounts', () => {
