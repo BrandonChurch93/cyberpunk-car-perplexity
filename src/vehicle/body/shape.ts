@@ -279,6 +279,11 @@ const zDoor = zFront - len0 * uDoor
 /** u over which the front edge rolls onto the fascia. */
 const uRoll = 0.002
 const roll = frontSection.roll
+/** How far the roll runs back onto the paint. On the bonnet it is the quarter round's 4 mm. On the brow over the eye
+ * and down the cheek the fascia meets the paint at a much sharper angle, and a 4 mm turn there swung the normal past
+ * both faces into a pinched line, so the roll leaves the paint over 12 mm: the same edge, the same 4 mm onto the fascia,
+ * the turn spread back onto the paint. */
+const rollIn = (v: number): number => (v <= 0.6 ? 0.012 : roll)
 
 type ZFn = (z: number) => V3
 
@@ -377,7 +382,7 @@ function keyFn(v: number, zC: number, path: ZFn, uMerge: number, zJoin: number, 
   const C = path(zC)
   const d1 = sub(path(zC - 1e-4), path(zC + 1e-4))
   const speedZ = len(d1) / 2e-4
-  const z0 = zC - roll / speedZ
+  const z0 = zC - rollIn(v) / speedZ
   const P0 = path(z0)
   const E = add(C, scale(fasciaDown(v), roll))
   const zOld = (u: number): number => (old ? old.at(u)[2] : zFront - len0 * u)
@@ -385,7 +390,7 @@ function keyFn(v: number, zC: number, path: ZFn, uMerge: number, zJoin: number, 
   const rate = (zOld(uMerge - 1e-4) - zOld(uMerge + 1e-4)) / 2e-4
   const span = uMerge - uRoll
   const m = (rate * span) / (z0 - zM)
-  const q = Math.min(2.5, Math.max(0.3, ((2 * roll) / uRoll) * span / (speedZ * (z0 - zM))))
+  const q = Math.min(2.5, Math.max(0.3, ((2 * rollIn(v)) / uRoll) * span / (speedZ * (z0 - zM))))
   const uJoin = old ? uOf(zJoin) : Infinity
   return (u) => {
     if (u <= uRoll) {
@@ -554,7 +559,7 @@ export const mainDef: LoftDef = {
       sharp: [[0, 1], [uOf(2.12), 1], [uOf(2.0), 0], [1, 0]],
     },
     // The V end of the front edge, smooth inside the bonnet's crown a few centimeters behind the edge.
-    { fn: frontKeys.vee, sharp: [[0, 1], [uOf(2.34), 1], [uOf(2.26), 0], [1, 0]] },
+    { fn: frontKeys.vee, sharp: [[0, 1], [uOf(2.311), 1], [uOf(2.231), 0], [1, 0]] },
     // Level across the center line everywhere, so the bonnet's crown and the screen's run smoothly over it. The
     // screen's crown is level across the center line already, so it takes no blend there: a blend would bunch its
     // curvature into a band down the middle of the glass.
