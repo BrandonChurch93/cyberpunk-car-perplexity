@@ -271,10 +271,10 @@ export function addNorthSkyline(parent: THREE.Object3D, labels: Label) {
   const lampsAt = [-28.6,-25.9,-23.2,-20.5,-17.8,-12.6]
   for (const y of [7.55,12.6]) for (const x of lampsAt) {
     practical.block(terraceFace,'balcony lamp wall bracket',[tx(x),y+.24,.12],[.1,.1,.26],zinc)
-    practical.opal(terraceFace,'sodium balcony lamp lens',[tx(x),y,.26],[.3,.3],[9.4,5.6,2.1],1)
+    practical.opal(terraceFace,'sodium balcony lamp lens',[tx(x),y,.26],[.2,.2],[36,21,7.6],1)
   }
   practical.block(terraceFace,'roof edge bulb catenary',[tx(-20.9),14.82,.32],[17.6,.035,.035],zinc)
-  for (let i=0;i<20;i++) practical.opal(terraceFace,'roof edge festoon bulb',[tx(-29.6+i*.915),14.62,.36],[.17,.17],[10.5,7.4,3.6],1)
+  for (let i=0;i<20;i++) practical.opal(terraceFace,'roof edge festoon bulb',[tx(-29.6+i*.915),14.62,.36],[.11,.11],[30,21,10],1)
   for (const x of [-29.55,-12.25]) practical.opal(terraceFace,'cyan corner riser tube',[tx(x),7.9,.2],[.14,13.4],[.18,6.6,9.8],12)
 
   const north = parent.getObjectByName('four-sided concrete parapet and steel rail')!
