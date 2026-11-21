@@ -1,5 +1,5 @@
 import { scalar, Track3 } from './spline'
-import { add, addScaled, dist, dot, len, norm, rotate, scale, sub, type V3 } from './vec'
+import { add, addScaled, cross, dist, dot, len, norm, rotate, scale, sub, type V3 } from './vec'
 
 type Knots = number | ReadonlyArray<readonly [number, number]>
 
@@ -10,6 +10,11 @@ export interface KeyDef {
   fn?: (u: number) => V3
   /** Distance from the key line over which the section is rounded, meters. 0 keeps a crease. */
   round?: Knots
+  /**
+   * Roll radius across the key line, meters. The section is rounded over the setback that gives this radius at the
+   * local turn, measured across the line, so a crease shows the same edge however sharply it turns. Added to `round`.
+   */
+  roll?: Knots
   /** 0 bends the section through the key line smoothly, 1 keeps the two segment tangents. */
   sharp?: Knots
   monotone?: boolean
@@ -19,6 +24,11 @@ export interface SegDef {
   /** Angle between the chord and the start tangent, radians, positive bulging outward. */
   bulgeA: Knots
   bulgeB?: Knots
+  /**
+   * 1 turns the start tangent to the end tangent mirrored in the chord, so a span leaving a crease onto a crown carries
+   * the crown's curvature right to the crease instead of starting straight; 0 keeps `bulgeA`.
+   */
+  fairA?: Knots
 }
 
 export interface LoftDef {
@@ -43,9 +53,11 @@ interface Section {
 export class Loft {
   private readonly keys: Array<{ at(u: number): V3 }>
   private readonly round: Array<(u: number) => number>
+  private readonly roll: Array<(u: number) => number>
   private readonly sharp: Array<(u: number) => number>
   private readonly bulgeA: Array<(u: number) => number>
   private readonly bulgeB: Array<(u: number) => number>
+  private readonly fairA: Array<(u: number) => number>
   private readonly cache = new Map<number, Section>()
   readonly vAt: number[]
   readonly band: number
@@ -54,9 +66,11 @@ export class Loft {
   constructor(def: LoftDef) {
     this.keys = def.keys.map((k) => (k.fn ? { at: k.fn } : new Track3(k.pts ?? [], k.monotone ?? false)))
     this.round = def.keys.map((k) => scalar(k.round ?? 0))
+    this.roll = def.keys.map((k) => scalar(k.roll ?? 0))
     this.sharp = def.keys.map((k) => scalar(k.sharp ?? 0))
     this.bulgeA = def.segs.map((s) => scalar(s.bulgeA))
     this.bulgeB = def.segs.map((s) => scalar(s.bulgeB ?? s.bulgeA))
+    this.fairA = def.segs.map((s) => scalar(s.fairA ?? 0))
     this.vAt = def.vAt
     this.band = def.band ?? 0.12
     this.mirrorTop = def.mirrorTop ?? false
@@ -96,13 +110,22 @@ export class Loft {
     for (let i = 1; i < n - 1; i++) {
       const s = this.sharp[i](u)
       if (s >= 1) continue
-      const avg = norm(add(tEnd[i - 1], tStart[i]))
+      // Each side weighted by the other side's chord, the tangent of the parabola through the three keys, so a line
+      // of keys on one even crown gives one even curvature across however unevenly they are spaced.
+      const avg = norm(add(scale(tEnd[i - 1], dist(p[i], p[i + 1])), scale(tStart[i], dist(p[i - 1], p[i]))))
       tEnd[i - 1] = norm(add(scale(avg, 1 - s), scale(tEnd[i - 1], s)))
       tStart[i] = norm(add(scale(avg, 1 - s), scale(tStart[i], s)))
     }
     if (this.mirrorTop) {
       const s = this.sharp[n - 1](u)
       tEnd[n - 2] = norm(add(scale([-1, 0, 0], 1 - s), scale(tEnd[n - 2], s)))
+    }
+    for (let k = 0; k < n - 1; k++) {
+      const f = this.fairA[k](u)
+      if (f <= 0) continue
+      const c = chordDir[k]
+      const mirrored = norm(sub(scale(c, 2 * dot(tEnd[k], c)), tEnd[k]))
+      tStart[k] = norm(add(scale(tStart[k], 1 - f), scale(mirrored, f)))
     }
     const segA: V3[][] = []
     const segL: number[] = []
@@ -115,6 +138,20 @@ export class Loft {
     const round: number[] = []
     for (let i = 0; i < n; i++) {
       let r = this.round[i](u)
+      const rho = i > 0 && i < n - 1 ? this.roll[i](u) : 0
+      if (rho > 0) {
+        // The two faces turn by the angle between their normals; each segment crosses the line at its own angle, so
+        // the setback along the section is the setback across the line over the mean sine of the two.
+        const ax = along[i]
+        const na = cross(tEnd[i - 1], ax)
+        const nb = cross(tStart[i], ax)
+        const sa = len(na)
+        const sb = len(nb)
+        if (sa > 1e-3 && sb > 1e-3) {
+          const turn = Math.acos(Math.min(1, Math.max(-1, dot(na, nb) / (sa * sb))))
+          r += (rho * Math.tan(turn / 2)) / ((sa + sb) / 2)
+        }
+      }
       if (i > 0) r = Math.min(r, segL[i - 1] * 0.4)
       if (i < n - 1) r = Math.min(r, segL[i] * 0.4)
       round.push(i === 0 && !this.mirrorTop ? 0 : r)
@@ -134,8 +171,10 @@ export class Loft {
     const f = this.band
     const rA = sec.round[k]
     const rB = sec.round[k + 1]
-    const fA = rA > 0 ? f : 0
-    const fB = rB > 0 ? f : 0
+    // The band shrinks with a rounding under half a millimeter, so the parametrization stays continuous where a roll
+    // fades out with its crease's turn.
+    const fA = f * Math.min(1, rA / 0.0005)
+    const fB = f * Math.min(1, rB / 0.0005)
     const L = sec.segL[k]
     const ta = rA / L
     const tb = 1 - rB / L

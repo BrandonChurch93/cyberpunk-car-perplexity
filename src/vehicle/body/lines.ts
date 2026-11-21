@@ -44,9 +44,9 @@ export type P3 = readonly [number, number, number]
 export const frontSection = {
   brow: [
     { v: 1, p: [0, 0.41, 2.4737] as P3, name: 'tip' },
-    { v: 0.86, p: [0.354, 0.4428, 2.384] as P3, name: 'vee' },
-    { v: 0.72, p: [0.476, 0.515, 2.173] as P3, name: 'corner' },
-    { v: 0.6, p: [0.5, 0.5091, 2.168] as P3, name: 'rail' },
+    { v: 0.86, p: [0.354, 0.4403, 2.384] as P3, name: 'vee' },
+    { v: 0.72, p: [0.476, 0.5117, 2.173] as P3, name: 'corner' },
+    { v: 0.6, p: [0.5, 0.5057, 2.168] as P3, name: 'rail' },
     { v: 0.4, p: [0.8, 0.598, 2.14] as P3, name: 'brow' },
   ],
   side: [
@@ -62,14 +62,15 @@ export const frontSection = {
 /** The fascia's plane breaks, from the splitter up to the V end of the brow. */
 export const fasciaBreak: P3[] = [
   [0.285, 0.15, 2.282],
-  [0.354, 0.4428, 2.384],
+  [0.354, 0.4403, 2.384],
 ]
 
 /**
  * The feature lines of the front, each a path in z through (z, x, y) nodes. Two nodes make a straight span; an
  * interior node without its own slope (dx/dz, dy/dz) is passed through smoothly. Every crease is one line from its
- * start on the front edge to its end, shared by the two fields either side of it. The center facets are one plane
- * through the nose tip, the cowl center and the bonnet corner, so the V end and the cowl lie on it.
+ * start on the front edge to its end, shared by the two fields either side of it. The center facet is one plane, level
+ * across, through the nose tip and the cowl center, so the bonnet corner, the V end and the cowl lie on it and the
+ * center line is no crease at all.
  */
 export interface PathNode {
   z: number
@@ -89,29 +90,29 @@ export const featureLines = {
   /** Bonnet inner crease: straight from the bonnet corner to the windscreen base. The center facet stays level
    * across; outboard of this line the bonnet's outer facet falls 17 degrees more steeply to the wing ridge. */
   inner: [
-    { z: 2.173, x: 0.476, y: 0.515 },
-    { z: 1.513, x: 0.29, y: 0.737 },
+    { z: 2.173, x: 0.476, y: 0.5117 },
+    { z: 1.513, x: 0.29, y: 0.735 },
   ] as PathNode[],
   /** V end: the outer end of the leading V, carried straight back to the cowl inside the flat center facet. */
   vee: [
-    { z: 2.384, x: 0.354, y: 0.4428 },
-    { z: 1.51, x: 0.15, y: 0.737 },
+    { z: 2.384, x: 0.354, y: 0.4403 },
+    { z: 1.51, x: 0.15, y: 0.736 },
   ] as PathNode[],
   /**
    * Wing ridge: the valley where the bonnet's outer facet meets the wing top, straight from the front edge to the
    * cowl. The outer facet is the plane through the bonnet corner turned 17 degrees down about the inner crease, the
    * wing top the plane through this line's front end, the A-pillar base and the brow tip; the line is where they
-   * meet, so the crease turns 31 degrees along its whole length. Behind the cowl the line turns out along the
-   * windscreen's lower corner to the A-pillar base, staying in the wing top's plane: dy = 0.2751 dx - 0.2255 dz.
+   * meet, so the crease turns 32 degrees along its whole length. Behind the cowl the line turns out along the
+   * windscreen's lower corner to the A-pillar base, staying in the wing top's plane: dy = 0.2866 dx - 0.2255 dz.
    */
   rail: [
-    { z: 2.168, x: 0.5, y: 0.5091 },
-    { z: 1.513, x: 0.5312, y: 0.6655 },
+    { z: 2.168, x: 0.5, y: 0.5057 },
+    { z: 1.513, x: 0.5301, y: 0.6621 },
   ] as PathNode[],
   /** The windscreen's lower corner, from the cowl out to the A-pillar base, in the wing top's plane. */
   pillarFoot: [
-    { z: 1.513, x: 0.5312, y: 0.6655, d: [-2.0, -0.7757] },
-    { z: 1.2, x: 0.8, y: 0.81, d: [-0.4, -0.3355] },
+    { z: 1.513, x: 0.5301, y: 0.6621, d: [-2.0, -0.7988] },
+    { z: 1.2, x: 0.8, y: 0.81, d: [-0.4, -0.3402] },
   ] as PathNode[],
   /** A pillar, from its base on the wing ridge to the header. */
   pillar: [
@@ -121,7 +122,7 @@ export const featureLines = {
   /** Cowl: the windscreen base, straight across. */
   cowl: [
     [0, 0.736, 1.51],
-    [0.29, 0.737, 1.513],
+    [0.29, 0.735, 1.513],
   ] as P3[],
   /** Header: the windscreen top, straight and level across. */
   header: [

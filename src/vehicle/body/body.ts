@@ -7,7 +7,7 @@ import { makeCuts, paintTrim, wheelOpenings, type BodyCuts } from './cuts'
 import { gapLips, onGapEdge, withoutGapEdges } from './gaps'
 import { fitFascia, tessellateFascia, type FasciaEdge } from './nose'
 import { rearFace } from './tail'
-import { mainLoft } from './shape'
+import { backingLoft, dims, mainLoft } from './shape'
 
 export interface BodyGeometry {
   paint: THREE.BufferGeometry
@@ -153,6 +153,13 @@ export function buildBody(q: BodyQuality): BodyGeometry {
   // is tighter than the offset, and its own tangents vanish there.
   const backing = (S: Surface, grid: Pick<TessOptions, 'us' | 'vs'>, trim?: TrimFn): TessResult =>
     run(offsetSurface(S, inner), grid, trim, 3, (u, v) => surfaceNormal(S, u, v))
-  const shell = [backing(main, mainGrid, bayTrim), nose.shell, backing(rear, faceGrid, openings(cuts.rear))]
+  // The main backing follows a twin of the main loft whose creases roll over 20 mm, wider than the offset.
+  const back = backingLoft()
+  const mainBack: Surface = (u, v) => back.at(u, v)
+  // Its first 15 mm behind the front edge is left off: there the paint rolls 4 mm onto the fascia, and the 14 mm
+  // offset of that roll folds forward through the fascia skin.
+  const frontBand = 0.015 / dims.length
+  const mainBacking: TrimFn = (u, v, p) => Math.max(bayTrim(u, v, p), (frontBand - u) * dims.length)
+  const shell = [backing(mainBack, mainGrid, mainBacking), nose.shell, backing(rear, faceGrid, openings(cuts.rear))]
   return { paint: toGeometry(paint, true), shell: toGeometry(shell, true), cuts, surfaces: { main, front, rear }, grids: { main: mainGrid } }
 }
