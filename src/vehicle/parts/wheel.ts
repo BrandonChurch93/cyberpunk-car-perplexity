@@ -524,18 +524,21 @@ function tireGeometry(w: WheelSize, full: boolean, hero = w.front): THREE.Buffer
 
 function sidewallReliefGeometry(w: WheelSize, full: boolean, hero = w.front): THREE.BufferGeometry {
   const { place } = tireShell(w)
-  const uSteps = full ? (w.front ? 144 : 108) : hero ? 72 : 28
+  const uSteps = full ? (w.front ? 168 : 120) : hero ? 72 : 28
   const bandKnots: Profile = full
     ? [
-        [0.833, -0.0008], [0.838, 0.0016], [0.846, 0.00065],
-        [0.873, 0.00128],
-        [0.9, 0.00065], [0.908, 0.0016], [0.913, -0.0008],
+        [0.814, -0.0007], [0.819, 0.0021], [0.827, 0.0021], [0.833, 0.00045],
+        [0.846, 0.00045], [0.851, 0.0019], [0.858, 0.0019], [0.864, 0.00045],
+        [0.876, 0.00045], [0.881, 0.0019], [0.888, 0.0019], [0.894, 0.00045],
+        [0.906, 0.00045], [0.912, 0.0021], [0.92, 0.0021], [0.925, -0.0007],
       ]
     : [
-        [0.833, -0.0008], [0.84, 0.0016], [0.847, 0.00065], [0.873, 0.00128],
-        [0.899, 0.00065], [0.906, 0.0016], [0.913, -0.0008],
+        [0.818, -0.0007], [0.826, 0.002], [0.84, 0.0005], [0.856, 0.0018],
+        [0.87, 0.0005], [0.886, 0.0018], [0.9, 0.0005], [0.914, 0.002], [0.922, -0.0007],
       ]
-  const beadKnots: Profile = [[0.948, -0.0008], [0.96, 0.0014], [0.973, 0.0007], [0.981, -0.0008]]
+  const beadKnots: Profile = full
+    ? [[0.946, -0.0008], [0.953, 0.0021], [0.965, 0.0022], [0.974, 0.001], [0.981, -0.0008]]
+    : [[0.948, -0.0008], [0.96, 0.0019], [0.973, 0.0009], [0.981, -0.0008]]
   const buildBand = (knots: Profile) =>
     patch(
       (u, s) => {
@@ -1128,12 +1131,14 @@ function forgedWheelAssembly(
 
   const flange = lathe(
     [
-      [face - 0.002, R + 0.0024],
-      [face + 0.0007, R + 0.0014],
-      [face + 0.0016, R - 0.0006],
-      [face + 0.0008, R - 0.0024],
-      [face - 0.0006, R - 0.0038],
-      [face - 0.0014, R - 0.0042],
+      [face - 0.0022, R + 0.0024],
+      [face + 0.0004, R + 0.0016],
+      [face + 0.0015, R + 0.0005],
+      [face + 0.0018, R - 0.0006],
+      [face + 0.0013, R - 0.0018],
+      [face + 0.0004, R - 0.0029],
+      [face - 0.0007, R - 0.0038],
+      [face - 0.0015, R - 0.0043],
     ],
     barrelCount,
   )
@@ -1425,13 +1430,13 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
   const makeTireRubber = (w: WheelSize, label: string) => {
     const mat = tag(
       new THREE.MeshPhysicalMaterial({
-        color: full ? 0x12151a : 0x20242b,
-        roughness: full ? 0.52 : 0.58,
+        color: full ? 0x111419 : 0x1e2229,
+        roughness: full ? 0.48 : 0.56,
         metalness: 0.02,
-        clearcoat: 0.46,
-        clearcoatRoughness: 0.16,
-        specularIntensity: 0.82,
-        envMapIntensity: 1.58,
+        clearcoat: 0.52,
+        clearcoatRoughness: 0.19,
+        specularIntensity: 0.86,
+        envMapIntensity: 1.62,
       }),
       'sheet',
     )
@@ -1506,27 +1511,27 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
             float wtDeckNear = 1.0 - smoothstep(0.02, 0.26, wtYRel);
             float wtSplash = 1.0 - smoothstep(0.01, 0.14, wtYRel);
             float wtRibTop = wtTread * (1.0 - smoothstep(0.04, 0.36, wtCav));
-            float wtSideOuter = smoothstep(0.745, 0.795, wtV) * (1.0 - smoothstep(0.955, 0.985, wtV));
+            float wtSideOuter = smoothstep(0.735, 0.795, wtV) * (1.0 - smoothstep(0.955, 0.988, wtV));
             float wtShoulder = smoothstep(0.640, 0.735, wtV) * (1.0 - smoothstep(0.955, 0.990, wtV));
-            float wtCrownSheen = 0.54 + 0.30 * clamp(wheelTirePt.y / max(wheelTireRadius, 0.1) * 0.5 + 0.5, 0.0, 1.0);
+            float wtCrownSheen = 0.58 + 0.28 * clamp(wheelTirePt.y / max(wheelTireRadius, 0.1) * 0.5 + 0.5, 0.0, 1.0);
             vec3 wtBeadCell = floor(wtSymPt * 340.0 + wheelTireSeed * 19.0);
             float wtBeadHash = fract(sin(dot(wtBeadCell, vec3(23.1407, 61.9123, 39.4159))) * 43758.5453);
-            float wtBead = wheelTireGrainAmt * wtWeight * wtSideOuter * smoothstep(0.90, 0.99, wtBeadHash)
-              * smoothstep(0.02, 0.14, wtYRel);
-            float wtWetRib = wtRibTop * max(0.48 * wtCrownSheen, 0.82 * wtSplash + 0.34 * wtDeckNear * smoothstep(-0.02, 0.22, wheelTirePt.z));
-            float wtWetSide = max(wtSideOuter, 0.85 * wtShoulder) * max(0.64 * wtCrownSheen, 0.86 * wtSplash + 0.38 * wtDeckNear);
-            float wtWetChannel = smoothstep(0.34, 0.84, wtMainCh) * (0.44 + 0.56 * wtDeckNear)
+            float wtBead = wheelTireGrainAmt * wtWeight * wtSideOuter * smoothstep(0.94, 0.996, wtBeadHash)
+              * smoothstep(0.02, 0.12, wtYRel) * (1.0 - smoothstep(0.20, 0.36, wtYRel));
+            float wtWetRib = wtRibTop * max(0.50 * wtCrownSheen, 0.84 * wtSplash + 0.36 * wtDeckNear * smoothstep(-0.02, 0.22, wheelTirePt.z));
+            float wtWetSide = max(wtSideOuter, 0.86 * wtShoulder) * max(0.68 * wtCrownSheen, 0.88 * wtSplash + 0.40 * wtDeckNear);
+            float wtWetChannel = smoothstep(0.34, 0.84, wtMainCh) * (0.46 + 0.54 * wtDeckNear)
               + (0.54 * smoothstep(0.32, 0.88, wtSipe) + 0.40 * wtShCh) * (0.32 + 0.68 * wtDeckNear);
-            float wtWetWater = clamp(max(wtWetChannel, max(wtWetRib, max(wtWetSide, 0.72 * wtBead))), 0.0, 1.0);
+            float wtWetWater = clamp(max(wtWetChannel, max(wtWetRib, max(wtWetSide, 0.55 * wtBead))), 0.0, 1.0);
             float wtRibEdge = wtRibTop * smoothstep(0.004, 0.022, wtYRel);
             float wtFootZ = exp(-pow(wheelTirePt.z / 0.105, 2.0)) * smoothstep(0.73, 0.82, max(wtV, 1.0 - wtV));
             float wtBulgeUpper = wtFootZ * smoothstep(0.016, 0.032, wtYRel) * (1.0 - smoothstep(0.048, 0.075, wtYRel));
             float wtBulgeTuck = wtFootZ * (1.0 - smoothstep(0.003, 0.018, wtYRel));
-            diffuseColor.rgb *= (1.0 + (wtGrain - 0.5) * 0.08 * wtWeight)
+            diffuseColor.rgb *= (1.0 + (wtGrain - 0.5) * 0.06 * wtWeight)
               * mix(1.0, 0.88, wtTread)
               * mix(1.0, 0.18, wtCav)
               * mix(1.0, 1.12, wtRibEdge * (1.0 - 0.55 * wtSplash))
-              * mix(1.0, 0.62, max(wtWetRib, wtWetSide))
+              * mix(1.0, 0.64, max(wtWetRib, wtWetSide))
               * mix(1.0, 1.14, wtBulgeUpper)
               * mix(1.0, 0.76, wtBulgeTuck);
           `,
@@ -1535,12 +1540,12 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
               '#include <roughnessmap_fragment>',
               `#include <roughnessmap_fragment>
             roughnessFactor = clamp(
-              roughnessFactor + (wtGrain - 0.5) * 0.05 * wtWeight - 0.06 * wtTread - 0.06 * wtRibEdge,
-              0.42,
-              0.78
+              roughnessFactor + (wtGrain - 0.5) * 0.04 * wtWeight - 0.06 * wtTread - 0.06 * wtRibEdge,
+              0.40,
+              0.76
             );
-            roughnessFactor = mix(roughnessFactor, 0.27, max(wtWetRib, wtWetSide));
-            roughnessFactor = mix(roughnessFactor, 0.14, max(wtWetChannel * wtDeckNear, 0.8 * wtSplash));
+            roughnessFactor = mix(roughnessFactor, 0.29, max(wtWetRib, wtWetSide));
+            roughnessFactor = mix(roughnessFactor, 0.12, max(wtWetChannel * wtDeckNear, 0.85 * wtSplash));
           `,
             )
             .replace(
@@ -1567,8 +1572,8 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
               '#include <lights_physical_fragment>',
               `#include <lights_physical_fragment>
             #ifdef USE_CLEARCOAT
-              material.clearcoat = clamp(0.12 + 0.56 * wtWetWater + 0.18 * wtSplash, 0.0, 0.84);
-              material.clearcoatRoughness = mix(0.24, 0.125, wtWetWater) - 0.035 * wtSplash;
+              material.clearcoat = clamp(0.14 + 0.50 * wtWetWater + 0.24 * wtSplash, 0.0, 0.88);
+              material.clearcoatRoughness = clamp(mix(0.25, 0.175, wtWetWater) - 0.095 * wtSplash, 0.075, 0.26);
             #endif
           `,
             )
@@ -1579,13 +1584,13 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
 
   const sidewallBand = tag(
     new THREE.MeshPhysicalMaterial({
-      color: full ? 0x0f1217 : 0x1e2229,
-      roughness: full ? 0.31 : 0.38,
+      color: full ? 0x11151b : 0x1e2229,
+      roughness: full ? 0.23 : 0.34,
       metalness: 0.02,
-      clearcoat: full ? 0.54 : 0.3,
-      clearcoatRoughness: 0.145,
-      specularIntensity: 0.82,
-      envMapIntensity: 1.52,
+      clearcoat: full ? 0.72 : 0.35,
+      clearcoatRoughness: 0.115,
+      specularIntensity: 0.94,
+      envMapIntensity: 1.78,
     }),
     'sheet',
   )
@@ -1694,13 +1699,13 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
 
   const wheelSatinFace = tag(
     new THREE.MeshPhysicalMaterial({
-      color: full ? 0x0b0d12 : 0x161922,
+      color: full ? 0x0a0c11 : 0x161922,
       metalness: 0.22,
-      roughness: full ? 0.22 : 0.28,
-      clearcoat: full ? 0.92 : 0.55,
-      clearcoatRoughness: 0.06,
+      roughness: full ? 0.2 : 0.28,
+      clearcoat: full ? 0.94 : 0.55,
+      clearcoatRoughness: 0.055,
       specularIntensity: 1.0,
-      envMapIntensity: 2.1,
+      envMapIntensity: 2.15,
     }),
     'sheet',
   )
@@ -1718,37 +1723,37 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
   )
   const wheelBarrel = tag(
     new THREE.MeshPhysicalMaterial({
-      color: full ? 0x0b0e14 : 0x141720,
+      color: full ? 0x0a0d13 : 0x141720,
       metalness: full ? 0.26 : 0.22,
-      roughness: full ? 0.22 : 0.32,
-      clearcoat: full ? 0.9 : 0.45,
-      clearcoatRoughness: 0.07,
+      roughness: full ? 0.2 : 0.32,
+      clearcoat: full ? 0.92 : 0.45,
+      clearcoatRoughness: 0.06,
       specularIntensity: 0.98,
-      envMapIntensity: full ? 2.05 : 1.25,
+      envMapIntensity: full ? 2.1 : 1.25,
     }),
     'sheet',
   )
   const wheelChamfer = tag(
     new THREE.MeshPhysicalMaterial({
-      color: full ? 0x151923 : 0x1f2430,
-      metalness: full ? 0.34 : 0.28,
-      roughness: full ? 0.15 : 0.25,
-      clearcoat: full ? 0.96 : 0.55,
-      clearcoatRoughness: 0.05,
+      color: full ? 0x1b212e : 0x222836,
+      metalness: full ? 0.48 : 0.32,
+      roughness: full ? 0.13 : 0.24,
+      clearcoat: full ? 0.96 : 0.58,
+      clearcoatRoughness: 0.044,
       specularIntensity: 1.0,
-      envMapIntensity: full ? 2.35 : 1.45,
+      envMapIntensity: full ? 2.45 : 1.5,
     }),
     'sheet',
   )
   const wheelLipLine = tag(
     new THREE.MeshPhysicalMaterial({
-      color: full ? 0x131720 : 0x1e232e,
-      metalness: full ? 0.32 : 0.26,
-      roughness: 0.16,
-      clearcoat: 0.94,
-      clearcoatRoughness: 0.055,
+      color: full ? 0x283140 : 0x2c3442,
+      metalness: full ? 0.66 : 0.44,
+      roughness: 0.11,
+      clearcoat: 0.98,
+      clearcoatRoughness: 0.036,
       specularIntensity: 1.0,
-      envMapIntensity: 2.2,
+      envMapIntensity: 2.75,
     }),
     'sheet',
   )
@@ -1785,18 +1790,36 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
     }),
     'none',
   )
-  const caliperFinish = tag(
-    new THREE.MeshPhysicalMaterial({
-      color: full ? 0xc42228 : 0xb4242a,
-      metalness: full ? 0.14 : 0.16,
-      roughness: full ? 0.18 : 0.22,
-      clearcoat: full ? 0.92 : 0.72,
-      clearcoatRoughness: full ? 0.07 : 0.12,
-      specularIntensity: 0.98,
-      envMapIntensity: full ? 1.95 : 1.5,
-    }),
-    'none',
-  )
+  const makeCaliperFinish = (axis: number, label: string) => {
+    const mat = tag(
+      new THREE.MeshPhysicalMaterial({
+        color: full ? 0x420a0f : 0x3c0b10,
+        metalness: full ? 0.14 : 0.16,
+        roughness: full ? 0.24 : 0.26,
+        clearcoat: full ? 0.86 : 0.68,
+        clearcoatRoughness: full ? 0.085 : 0.12,
+        specularIntensity: 0.9,
+        envMapIntensity: full ? 0.38 : 0.45,
+      }),
+      'none',
+    )
+    patchMaterial(mat, {
+      id: `wheel caliper cavity shade ${lodTag} ${label}`,
+      uniforms: { wcAxis: { value: axis } },
+      apply(shader) {
+        shader.vertexShader =
+          'varying vec3 wheelCalPt;\n' +
+          shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nwheelCalPt = position;')
+        shader.fragmentShader =
+          'varying vec3 wheelCalPt;\nuniform float wcAxis;\n' +
+          shader.fragmentShader.replace(
+            '#include <color_fragment>',
+            '#include <color_fragment>\ndiffuseColor.rgb *= mix(0.42, 1.0, smoothstep(wcAxis - 0.022, wcAxis + 0.016, abs(wheelCalPt.x)));',
+          )
+      },
+    })
+    return mat
+  }
   const hatFinish = tag(
     new THREE.MeshPhysicalMaterial({
       color: full ? 0x1c1f24 : 0x2c3037,
@@ -1825,6 +1848,7 @@ export function buildWheels(root: THREE.Group, m: WheelMaterials, full: boolean)
     const hubPlane = face - 0.03
     const hubFace = hubPlane + 0.0018
     const rotorFinish = makeRotorFinish(w, axis, axleLabel)
+    const caliperFinish = makeCaliperFinish(axis, axleLabel)
     const pins = joined(
       Array.from({ length: 10 }, (_, i) => {
         const [, y, z] = axisRoll(0, 0.1065, (tau * i) / 10 + 0.134)
