@@ -416,6 +416,9 @@ describe('full roof world', () => {
     const rate = emitter.level(0)
     expect(emitter.object.parent).toBe(wall)
     expect(emitter.intensity).toBe(Math.max(...world.lights.filter(light=>!light.shadow).map(light=>light.intensity)))
+    const travel = face.material.uniforms.travel.value as number
+    firstFrame(.08*config.film.durationSeconds)
+    expect(face.material.uniforms.flow.value.distanceTo(first)*travel).toBeGreaterThan(.12)
     const wake = config.beats.find(beat=>beat.id==='wake')!
     world.beginSample({ timeSeconds: wake.end+.003, sample: { frame: { timeSeconds: wake.end-.001 } } } as SampleContext)
     expect(emitter.object.parent).toBe(wall)
@@ -428,6 +431,25 @@ describe('full roof world', () => {
     expect(face.material.uniforms.flow.value.toArray()).toEqual(first.toArray())
     expect(emitter.level(config.film.durationSeconds)).toBeCloseTo(rate,12)
     firstFrame(0)
+  })
+
+  it('aims the two warm parapet emitters across the deck while retaining the macro fixtures', () => {
+    const set = (timeSeconds: number) => world.beginFrame({ frame: { timeSeconds } } as FrameContext)
+    set(config.film.heroFrameSeconds)
+    const lights = ['left warm parapet strip','right warm parapet strip'].map(id=>world.lights.find(l=>l.id===id)!)
+    for (const light of lights) {
+      const source = light.object.getWorldPosition(new THREE.Vector3())
+      const normal = new THREE.Vector3(0,0,1).applyQuaternion(light.object.getWorldQuaternion(new THREE.Quaternion()))
+      const reach = source.y*Math.hypot(normal.x,normal.z)/-normal.y
+      expect(reach).toBeGreaterThan(.32)
+      expect(reach).toBeLessThan(.65)
+      expect(light.color.r).toBeGreaterThan(light.color.g)
+      expect(light.color.g).toBeGreaterThan(light.color.b)
+    }
+    const anchors = lights.map(l=>l.object)
+    set(config.film.macroFrameSeconds)
+    expect(lights.every((l,i)=>l.object!==anchors[i])).toBe(true)
+    set(0)
   })
 
   it('holds the hero screen, parapet, cyan and amber division in the fitted master', () => {
@@ -457,12 +479,23 @@ describe('full roof world', () => {
       expect(skyRay(x,.92).intersectObject(world.root, true)[0]?.object.name).toBe('city-lit cloud base')
     }
     expect(skyRay(-.16,.75).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
-    for (const [x,y] of [[-.44,.70],[-.32,.75],[-.20,.70]]) {
-      const hit = skyRay(x,y).intersectObject(world.root, true)[0]
-      expect(hit?.distance).toBeGreaterThan(800)
-      expect(hit?.distance).toBeLessThan(1100)
+    const centerTowers = [
+      [.291,.175,'hero middle west distance',650,720],
+      [.327,.200,'far west narrow crown',980,1_025],
+      [.363,.150,'hero far west distance',790,830],
+      [.402,.200,'far inner west glass crown',965,1_015],
+      [.440,.175,'hero far center distance',845,900],
+      [.478,.120,'hero violet tower',630,690],
+    ] as const
+    for (const [x,y,name,near,far] of centerTowers) {
+      const hit = skyRay(x*2-1,1-y*2).intersectObject(world.root, true)[0]
+      expect(hit?.object.name).toBe(name)
+      expect(hit?.distance).toBeGreaterThan(near)
+      expect(hit?.distance).toBeLessThan(far)
       expect(patchesOf((hit?.object as THREE.Mesh).material as THREE.Material)).toContain('hero tower cladding and window rooms')
     }
+    expect(skyRay(.402*2-1,1-.175*2).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
+    expect(skyRay(.421*2-1,1-.175*2).intersectObject(world.root,true)[0]?.object.name).toBe('city-lit cloud base')
     cameraAtTime(vertical, heroFrameSeconds)
     const tallScreen = toScreen(position(billboard))
     expect(Math.abs(tallScreen.x)).toBeLessThan(.7)

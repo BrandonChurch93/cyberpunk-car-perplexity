@@ -47,7 +47,7 @@ export function reflectionPracticalBuilder(labels: Label, metal: THREE.Material,
     return fixture
   }
   const screen = (parent: THREE.Object3D,name: string,at: Tuple,[w,h]: Size,rgb: Tuple,violet: Tuple,phase: number,banded: number) => {
-    const mural = billboardMural(w,h,new THREE.Color(...rgb),new THREE.Color(...violet),phase,banded)
+    const mural = billboardMural(w,h,new THREE.Color(...rgb),{ violet: new THREE.Color(...violet), offset: phase, banded })
     const depth = Math.min(1.30,w*.045)
     const fixture = mount(parent,name,at,[w,h],depth)
     plate(fixture,'animated magenta violet tiles',mural.material,[0,0,.025],w,h)
