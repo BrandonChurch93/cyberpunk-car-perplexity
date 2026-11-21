@@ -17,7 +17,7 @@ export const outletSpec = {
   recess: 0.02,
   floor: 0.03,
   depth: 0.2,
-  pipe: { r: 0.042, dx: 0.064, wall: 0.003, front: 0.012, back: 0.194, soot: 0.12 },
+  pipe: { r: 0.042, dx: 0.064, wall: 0.003, front: 0.012, back: 0.194, soot: 0.12, bead: 0.0035 },
 } as const
 
 const arcSteps = 16
@@ -166,12 +166,22 @@ export function outlets(rm: SurfaceMap, surround: SurfaceCurve): Outlets {
   const pr2 = pr.wall / 2
   for (const dx of [-pr.dx, pr.dx]) {
     const loop = circleLoop(dx, 64)
+    const tube = pr.front + pr.bead
     const prof: Prof = [
       [-pr.wall, pr.back, true],
-      ...roll(-pr2, pr.front + pr2, pr2, Math.PI, Math.PI * 2),
+      ...roll(-pr2, tube + pr2, pr2, Math.PI, Math.PI * 2),
       [0, pr.back, true],
     ]
     merge(pipes, sweepLoop(f, loop, pr.r, prof))
+    const bead: Prof = [
+      [-pr2 - pr.bead, tube + 0.004, true],
+      ...Array.from({ length: 2 * quarter + 1 }, (_, i): [number, number, boolean] => {
+        const a = Math.PI + (Math.PI * i) / (2 * quarter)
+        return [-pr2 + pr.bead * Math.cos(a), tube + pr.bead * Math.sin(a), false]
+      }),
+      [-pr2 + pr.bead, tube + 0.004, true],
+    ]
+    merge(lip, sweepLoop(f, loop, pr.r, bead))
     merge(soot, disk(f, loop, pr.r, -pr.wall - 0.0005, pr.soot, pr.soot + 0.004, dx))
   }
 

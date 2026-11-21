@@ -60,10 +60,17 @@ describe('rear underbody', () => {
     const slope = (centreY(-2.2) - centreY(-2.0)) / 0.2
     expect((Math.atan(slope) * 180) / Math.PI).toBeCloseTo(11, 1)
   })
+  it('spaces the strakes evenly and keeps them below the plate', () => {
+    const gaps = strakes.slice(1).map((s, i) => s.x - strakes[i].x)
+    for (const g of gaps) expect(g).toBeCloseTo(gaps[0], 6)
+    const pos = u.strakes.getAttribute('position')
+    for (let i = 0; i < pos.count; i++) expect(pos.getY(i)).toBeLessThan(centreY(pos.getZ(i)) + sheet + 0.005)
+  })
+
   it('leaves the corner open outboard of the outer strakes behind the rear tyre', () => {
     const pos = u.floor.getAttribute('position')
     for (let i = 0; i < pos.count; i++) {
-      if (pos.getZ(i) < cornerFront) expect(Math.abs(pos.getX(i))).toBeLessThan(strakes[1].x + 0.01)
+      if (pos.getZ(i) < cornerFront) expect(Math.abs(pos.getX(i))).toBeLessThan(strakes[strakes.length - 1].x + 0.01)
     }
   })
 })
@@ -77,7 +84,7 @@ describe('rear module', () => {
   const bay = engineBay(c.bay, 0.02)
   const closed: Array<[string, THREE.BufferGeometry]> = [
     ['outlet lip', ex.lip], ['outlet pipes', ex.pipes], ['outlet back', ex.soot], ['outlet housing', ex.housing],
-    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['valance wall', va.wall],
+    ['lamp guide', tl.guide], ['lamp housing', tl.housing], ['lamp reflector', tl.reflector], ['valance wall', va.wall],
     ['bay covers', bay.covers], ['bay carbon', bay.carbon], ['plenum', bay.center], ['bay mesh', bay.mesh],
     ['airbox grille', bay.grille], ['grille bezel', bay.bezel], ['grille duct', bay.duct], ['grille ledge', bay.ledge],
   ]
@@ -118,6 +125,17 @@ describe('rear module', () => {
       g.computeBoundingBox()
       expect(g.boundingBox!.min.z).toBeGreaterThan(-dims.halfLength - 0.005)
       expect(g.boundingBox!.max.x).toBeLessThan(dims.width / 2)
+    }
+  })
+
+  it('sets the reflector into the slot behind the paint flange', () => {
+    const pos = tl.reflector.getAttribute('position')
+    const rm = body.cuts.maps.rear
+    for (let i = 0; i < pos.count; i += 7) {
+      const x = pos.getX(i)
+      const y = pos.getY(i)
+      const [uu, vv] = rm.invert('-z', x, y)
+      expect(pos.getZ(i)).toBeGreaterThan(rm.S(uu, vv)[2] + 0.012)
     }
   })
 
