@@ -229,7 +229,10 @@ export async function buildVehicle(options: VehicleOptions): Promise<VehicleModu
     const a = 0.0015 * state.vibration
     sprung.position.y = a * (0.7 * Math.sin(2 * Math.PI * f1 * t) + 0.3 * Math.sin(2 * Math.PI * f2 * t + 1.3))
     sprung.rotation.z = a * 0.4 * Math.sin(2 * Math.PI * f2 * t)
-    const run = ramp(lampThresholds.running, state.lampStage)
+    // Running and tail lamps follow the stage continuously, as the square of it like the front running light, so
+    // they come up softly with the ramp and the lamps-off ramp leaves a last faint glow instead of a switch.
+    const stage = Math.min(1, Math.max(0, state.lampStage))
+    const run = stage * stage
     const beam = ramp(lampThresholds.beamStart, state.lampStage) * (0.3 + 0.7 * smoothstep(lampThresholds.beamStart, lampThresholds.beamFull, state.lampStage))
     const rising = engineCurve(t) > engineCurve(t - 0.02) ? 1 : 0
     const e = Math.min(1, Math.max(0, state.engine))

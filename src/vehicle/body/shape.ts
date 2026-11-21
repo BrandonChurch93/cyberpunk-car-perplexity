@@ -529,7 +529,7 @@ export const mainDef: LoftDef = {
     // Crisp along the bonnet, dying out tangent under the windscreen.
     {
       fn: frontKeys.inner,
-      roll: [[0, creaseRoll], [cowlIn, creaseRoll], [uOf(1.3), 0], [1, 0]],
+      roll: creaseRoll,
       sharp: [[0, 1], [cowlIn, 1], [screenIn, 0], [1, 0]],
     },
     // Unseen: it only carries the V end of the front edge back inside the flat center facet.
@@ -543,7 +543,10 @@ export const mainDef: LoftDef = {
     refDef.segs[0],
     refDef.segs[1],
     // The wing side and the upper flank: one surface with one even crown.
-    { bulgeA: [[0, 0.025], [0.3, 0.02], [1, 0.02]] },
+    // Behind the eye the cheek edge leans the field back 46 degrees at the waist crease; leaving the crease 0.2 rad
+    // fuller there and easing to the door spreads that lean over the whole face instead of a tight band above the
+    // crease.
+    { bulgeA: [[0, 0.2], [0.1, 0.1], [0.2, 0.02], [1, 0.02]], bulgeB: [[0, 0.025], [0.3, 0.02], [1, 0.02]] },
     refDef.segs[3],
     // Bonnet outer facet, flat; on the screen the span from the A-pillar ridge carries the screen's crown right out to
     // the ridge.
