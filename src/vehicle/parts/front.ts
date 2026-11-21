@@ -401,7 +401,7 @@ function lensPickup(material: T.Material, flux: T.IUniform<number>): void {
         vec3 opticalAxis = normalize(vProjectorAxis);
         float lensAngle = dot(normal, lensView);
         float incidence = dot(opticalAxis, lensView);
-        float primary = smoothstep(0.971, 0.983, incidence) * (1.0 - smoothstep(0.991, 0.996, incidence));
+        float primary = smoothstep(0.971, 0.983, incidence) * (1.0 - smoothstep(0.9877, 0.98865, incidence));
         float oblique = smoothstep(0.23, 0.38, incidence) * (1.0 - smoothstep(0.48, 0.62, incidence));
         float primaryReturn = dot(normal, normalize(lensView + opticalAxis));
         float obliqueReturn = dot(normal, normalize(lensView + 2.2 * opticalAxis));
