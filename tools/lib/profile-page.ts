@@ -82,7 +82,7 @@ export function installProfiler(): void {
     }
     return object.isMesh && !object.parent ? 'screen' : `other/${child.name || child.type}`
   }
-  const targetName = (t: Any, face = 0): string => (t ? `${t.width}x${t.height}${t.isWebGLCubeRenderTarget ? ` cube${face}` : ''}${t.samples ? ` msaa${t.samples}` : ''}` : 'canvas')
+  const targetName = (t: Any, face = 0): string => (t ? `${t.width}x${t.height}${t.isWebGLCubeRenderTarget ? ` cube${face}` : ''}${t.samples ? ` msaa${t.samples}` : ''}${t.resolveDepthBuffer === false && t.texture?.generateMipmaps ? ' transmission' : ''}` : 'canvas')
 
   const wrapSection = (obj: Any, key: string, label: string): void => {
     if (!obj || typeof obj[key] !== 'function') return
