@@ -68,25 +68,14 @@ function follow(t: number): number {
   return glide(t, wheel.start, wheel.end, 2.2, 1.2)
 }
 
-function grazing(t: number, a: Anchors, azimuth: number, elevation: number, reach: number, from: number, to: number, focalMm: number, side = 0, level = false): Shot {
+const bayLine = v(0.234, 0.511, 0.827).normalize()
+
+function bay(t: number, a: Anchors, focalMm: number, reach: number): Shot {
   const p = glide(t, detail.start, detail.end, 1.5, 1.2)
-  const normal = a.detail.normal
-  const along = v(0, 0, -1).addScaledVector(normal, normal.z).normalize()
-  const across = along.clone().cross(normal)
-  const c = Math.cos(rad(elevation))
-  const offset = along.clone().multiplyScalar(Math.cos(rad(azimuth)) * c)
-    .addScaledVector(across, Math.sin(rad(azimuth)) * c)
-    .addScaledVector(normal, Math.sin(rad(elevation)))
-  const target = a.detail.position.clone().addScaledVector(along, mix(from, to, p)).addScaledVector(across, side)
-  const position = target.clone().addScaledVector(offset, reach)
-  const forward = target.clone().sub(position).normalize()
-  const right = forward.clone().cross(v(0, 1, 0)).normalize()
-  const up = right.clone().cross(forward)
-  const lean = THREE.MathUtils.radToDeg(Math.atan2(across.dot(up), across.dot(right)))
+  const target = a.detail.position.clone().add(v(0, 0, mix(0.05, -0.05, p)))
   return {
-    position,
+    position: target.clone().addScaledVector(bayLine, reach),
     target,
-    roll: level ? lean - Math.round(lean / 180) * 180 : 0,
     focalMm,
     focus: target,
     tStop: 11,
@@ -144,7 +133,7 @@ const master: Record<string, ShotMaker> = {
       near: 0.02,
     }
   },
-  detail: (t, a) => grazing(t, a, 35, 28, 0.85, 0.11, 0.21, portraitMm),
+  detail: (t, a) => bay(t, a, portraitMm, 0.85),
   ignition: (t, a) => {
     const p = glide(t, ignition.start + 0.8, ignition.end - 0.2, 1.5, 1.5)
     return {
@@ -193,7 +182,7 @@ const vertical: Record<string, ShotMaker> = {
       near: 0.02,
     }
   },
-  detail: (t, a) => grazing(t, a, 180, 42, 0.36, -0.065, 0.015, portraitMm, 0, true),
+  detail: (t, a) => bay(t, a, portraitMm, 0.5),
   ignition: (t, a) => {
     const p = glide(t, ignition.start + 0.8, ignition.end - 0.2, 1.5, 1.5)
     return {
