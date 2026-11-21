@@ -15,13 +15,14 @@ interface RibbonField {
   size: THREE.Vector3
   center: THREE.Vector3
   local?: boolean
+  paint?: boolean
   selection?: WorldRibbonSelection
 }
 
 const scatter = /* glsl */ `
 ${filmLightsGlsl}
 
-vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool local, out vec3 flash) {
+vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool local, float paint, out vec3 flash) {
   vec3 light = vec3(0.0);
   flash = vec3(0.0);
   for (int i = 0; i < MAX_FILM_LIGHTS; ++i) {
@@ -67,7 +68,8 @@ vec3 scatterRain(vec3 p, vec3 delta, vec3 toEye, bool mist, float field, bool lo
     float rim = exp2(-(compact ? 26.0 : 55.0) * abs(mu - 0.774));
     float distantPanel = area ? smoothstep(8100.0, 40000.0, distance2) * smoothstep(0.7, 2.6, field) : 0.0;
     float forwardGain = area ? 2.55 : compact ? (splash ? 2.0 : 3.45) : 2.16;
-    vec3 scattered = incident * (0.002 + (forwardGain + 4.85 * distantPanel) * forward + (area ? 0.17 : compact ? 0.16 : 0.095) * rim);
+    float side = paint > 1.5 ? 0.10 + 0.28 * exp2(-12.0 * abs(mu + 0.19)) : paint > 0.5 ? 0.055 + 0.16 * exp2(-14.0 * abs(mu + 0.12)) : 0.0;
+    vec3 scattered = incident * (0.002 + side + (forwardGain + 4.85 * distantPanel) * forward + (area ? 0.17 : compact ? 0.16 : 0.095) * rim);
     if (sharpSpot && field >= 0.0) flash += scattered;
     else light += scattered;
   }
@@ -97,6 +99,7 @@ uniform float uFocus;
 uniform vec2 uAperture;
 uniform vec2 uLensShift;
 uniform float uFilmView;
+uniform float uPaint;
 uniform vec3 uOpticalEye;
 flat out vec2 vHead;
 flat out vec2 vTail;
@@ -198,14 +201,19 @@ void main() {
   float sigmaEnd = sqrt(pow(length(axis * coc) * 0.5, 2.0) + sigma);
   vec3 eye = uFilmView > 0.5 ? uOpticalEye : cameraPosition;
   vec3 flash;
-  vec3 radiance = scatterRain(p, delta, normalize(eye - p), mist, uLayer, uLocalFine > 0.5, flash);
+  float paint = uPaint;
+  if (paint > 1.5 && depth > uFocus * 1.4) paint = 0.0;
+  vec3 radiance = scatterRain(p, delta, normalize(eye - p), mist, uLayer, uLocalFine > 0.5, paint, flash);
   if (all(equal(radiance + flash, vec3(0.0)))) return;
   float gain = uLayer < 0.0 ? (mist ? 1.0 : 0.64) : uGain;
+  float paintDefocus = smoothstep(0.10, 0.34, abs(depth / uFocus - 1.0));
+  if (paint > 0.5 && paint < 1.5) gain *= mix(2.9, 0.21, paintDefocus);
   float coverage = min(1.0, diameter * 0.39894228 / sigmaSide) * min(1.0, max(len, diameter) / (1.35 * sigmaEnd));
   float frameTravel = len / max(uViewport.x, uViewport.y);
   float nearVeil = smoothstep(0.009, 0.028, frameTravel);
   float midVeil = smoothstep(0.013, 0.035, frameTravel);
   float veil = uLayer >= 0.0 ? uFilmView * (uLayer < 0.5 ? nearVeil : midVeil) : 0.0;
+  if (paint > 0.5 && paint < 1.5) veil *= mix(0.14, 1.0, paintDefocus);
   vHead = ap;
   vTail = bp;
   vSigma = vec2(sigmaSide, sigmaEnd);
@@ -213,7 +221,7 @@ void main() {
   flash *= amount * gain * coverage;
   peak += flash / (1.0 + (uLocalFine > 0.5 ? 5.5 : 20.0) * max(flash.r, max(flash.g, flash.b)));
   if (mist) peak /= 1.0 + 76.0 * max(peak.r, max(peak.g, peak.b));
-  if (uLayer < 0.0 && !mist) peak /= 1.0 + 32.0 * max(peak.r, max(peak.g, peak.b));
+  if (uLayer < 0.0 && !mist) peak /= 1.0 + (paint > 1.5 ? 9.0 : 32.0) * max(peak.r, max(peak.g, peak.b));
   vRadiance = veilHighlights(peak, veil);
   vVeil = veil;
   vBead = uLayer < 0.0 ? 0.0 : clamp((aDrop.w - 0.0017) * 450.0, 0.0, 0.28);
@@ -266,6 +274,8 @@ export function makeRibbonGeometry(drops: Float32Array, motion: Float32Array, dy
 
 export class RibbonView {
   private sample: SampleContext | undefined
+  private paint = false
+  private paintField?: { geometry: THREE.InstancedBufferGeometry; count: number }
   readonly nearAnchor = new THREE.Vector3()
   phase = 0
 
@@ -273,10 +283,17 @@ export class RibbonView {
     this.sample = undefined
     this.nearAnchor.copy(camera.position)
     this.phase = frame.frameKey / frameCount
+    this.paint = config.beats.some(beat => beat.id === 'paint' && frame.timeSeconds >= beat.start && frame.timeSeconds < beat.end)
+    if (this.paintField) this.paintField.geometry.instanceCount = this.paint ? this.paintField.count : 0
   }
 
   beginSample(sample: SampleContext): void {
     this.sample = sample
+  }
+
+  registerPaintField(geometry: THREE.InstancedBufferGeometry): void {
+    this.paintField = { geometry, count: geometry.instanceCount }
+    geometry.instanceCount = 0
   }
 
   makeMesh(lights: FilmLightUniforms, geometry: THREE.BufferGeometry, layer: number, field?: RibbonField): THREE.Mesh {
@@ -298,6 +315,7 @@ export class RibbonView {
       uAperture: { value: new THREE.Vector2() },
       uLensShift: { value: new THREE.Vector2() },
       uFilmView: { value: 0 },
+      uPaint: { value: 0 },
       uOpticalEye: { value: new THREE.Vector3() },
     }
     const material = new THREE.ShaderMaterial({
@@ -329,6 +347,7 @@ export class RibbonView {
       uniform.uPhase.value = this.phase
       const s = this.sample
       uniform.uFilmView.value = s && camera === s.camera ? 1 : 0
+      uniform.uPaint.value = this.paint && uniform.uFilmView.value ? field?.paint ? 1 : layer === -1 ? 2 : 0 : 0
       uniform.uAperture.value.set(0, 0)
       uniform.uLensShift.value.set(0, 0)
       if (s && camera === s.camera) {
@@ -352,14 +371,15 @@ export class RibbonView {
 export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLightUniforms, body = new THREE.Vector3()): THREE.Mesh[] {
   const deckCenter = world.deck.bounds.getCenter(new THREE.Vector2())
   const deckSpan = world.deck.bounds.getSize(new THREE.Vector2())
-  const specs: { key: string; layer: number; density: number; fine: number; size: THREE.Vector3; fade: Fade; gain: number; local?: boolean }[] = [
+  const specs: { key: string; layer: number; density: number; fine: number; size: THREE.Vector3; fade: Fade; gain: number; local?: boolean; paint?: boolean }[] = [
     { key: 'near', layer: 0, density: 8.5, fine: 5.2, size: new THREE.Vector3(9.4, 9.4, 9.4), fade: [0.63, 1.51, 3.25, 4.8], gain: 0.88 },
     { key: 'close', layer: 1, density: 8.15, fine: 4.8, size: new THREE.Vector3(21, 7.8, 21), fade: [2.55, 4.8, 8.1, 13.0], gain: 2.45 },
     { key: 'middle', layer: 2, density: 4.45, fine: 5.6, size: new THREE.Vector3(Math.min(deckSpan.x, 41), 11.6, Math.min(deckSpan.y, 40)), fade: [7.2, 11.25, 22, 31], gain: 6.4 },
     { key: 'distance', layer: 3, density: 0.56, fine: 5.1, size: new THREE.Vector3(Math.max(deckSpan.x, 96), 20.5, Math.max(deckSpan.y, 96)), fade: [17.4, 25, 43, 61], gain: 3.0 },
     { key: 'beam', layer: 1, density: 76, fine: 7.0, size: new THREE.Vector3(12, 3.2, 14), fade: [1.05, 2.15, 9, 13], gain: 2.45, local: true },
+    { key: 'paint', layer: 0, density: 930, fine: 7.8, size: new THREE.Vector3(1.75, 2.15, 1.75), fade: [0.28, 0.45, 0.76, 0.92], gain: 0.92, paint: true },
   ]
-  return specs.map(({ key, layer, density, fine, size, fade, gain, local }) => {
+  return specs.map(({ key, layer, density, fine, size, fade, gain, local, paint }) => {
     const rng = stream(`air-streaks-${key}`)
     const volume = size.x * size.y * size.z
     const count = Math.round(Math.min(volume, 90_000) * density)
@@ -373,7 +393,12 @@ export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLig
     }
     const center = layer === 0 ? new THREE.Vector3() : local ? body.clone().add(new THREE.Vector3(0, size.y * 0.48, 0)) : new THREE.Vector3(deckCenter.x, size.y * 0.48, deckCenter.y)
     const selection = layer > 0 ? new WorldRibbonSelection(drops, motion, size, center, [fade[0], fade[3]]) : undefined
-    const mesh = view.makeMesh(lights, selection?.geometry ?? makeRibbonGeometry(drops, motion), layer, { center, size, fade, gain, local, selection })
+    const geometry = selection?.geometry ?? (() => {
+      const ribbons = makeRibbonGeometry(drops, motion)
+      if (paint) view.registerPaintField(ribbons)
+      return ribbons
+    })()
+    const mesh = view.makeMesh(lights, geometry, layer, { center, size, fade, gain, local, paint, selection })
     mesh.name = `rain-${key}`
     return mesh
   })
