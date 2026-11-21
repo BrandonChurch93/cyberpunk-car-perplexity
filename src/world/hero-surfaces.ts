@@ -37,9 +37,9 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
       new THREE.Color(.99,1.14,1.17)
   const stripFloors = /left edge|west garage/.test(id)
   const horizontalFloors = /screen tower|amber tower|right edge|left edge|fluted offices|east narrow stair/.test(id)
-  const windowTail = layer === 'near'
-    ? /left edge|hotel tower|parking tower|west garage/.test(id) ? 56 : /amber tower|right edge/.test(id) ? 16 : 0
-    : 0
+  const windowTail = layer !== 'far' && /left edge|hotel tower|parking tower|west garage/.test(id) ? 94
+    : layer !== 'far' && /amber tower|right edge|east garage/.test(id) ? 53
+    : layer !== 'far' && /screen tower|bar tower|center exchange|center clock|center fluted/.test(id) ? 46 : 0
   const spill = (i: number) => spills[i] ?? { point: new THREE.Vector3(), size: new THREE.Vector2(1,1), color: new THREE.Color(0,0,0) }
   const prefix = 'varying vec2 wallUv, wallUnit; varying vec3 wallPoint, wallNormal, wallTangent; varying float wallSide;'
   const mat = new THREE.MeshStandardMaterial({
@@ -163,7 +163,7 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
           mix(vec3(1.0),vec3(.86,1.21,1.41),1.0-smoothstep(-.61,.21,wallNormal.x))+
           signGlow*(.092+.079*glass));
         totalEmissiveRadiance+=(sill+pilaster*.29+corner*.42)*skyGlass*(.57+.15*floorState)*(.59+.69*curtain+.32*banded);
-        float lampRadiance=.25+2.62*exposure*exposure+15.0*pow(exposure,8.0)+windowTail*pow(exposure,12.0);
+        float lampRadiance=.25+2.62*exposure*exposure+18.0*pow(exposure,8.0)+windowTail*pow(exposure,12.0);
         vec3 litRoom=roomTint*lamp*lampRadiance*roomLight;
         vec3 subpixelRooms=vec3(.21,.146,.096)*mix(.73,1.34,distanceLayer*.5)*(1.0-mechanical);
         totalEmissiveRadiance+=glass*((.32+.68*curtain+.32*banded)*
@@ -253,18 +253,18 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
   }
 }
 
-export function signGlass(glyphs: THREE.Texture, tint: THREE.Color, width: number, height: number, backlit: boolean): THREE.ShaderMaterial {
+export function signGlass(glyphs: THREE.Texture, tint: THREE.Color, width: number, height: number, backlit: boolean, radiance = 1): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     toneMapped: false,
     uniforms: { glyphs: { value: glyphs }, tint: { value: tint }, scatterStep: { value: new THREE.Vector2(.031/width,.028/height) },
-      backing: { value: backlit ? .087 : .010 } },
+      backing: { value: backlit ? .087 : .010 }, radiance: { value: radiance } },
     vertexShader: opalVertex,
     fragmentShader: /* glsl */ `
       varying vec2 face;
       uniform sampler2D glyphs;
       uniform vec3 tint;
       uniform vec2 scatterStep;
-      uniform float backing;
+      uniform float backing, radiance;
       void main(){
         float glyph=texture2D(glyphs,face).a;
         float bleed=0.0;
@@ -272,7 +272,7 @@ export function signGlass(glyphs: THREE.Texture, tint: THREE.Color, width: numbe
           bleed+=texture2D(glyphs,face+vec2(float(x),float(y))*scatterStep).a;
         vec2 vignette=1.0-abs(face-.5)*2.0;
         float rim=smoothstep(.013,.21,min(vignette.x,vignette.y));
-        gl_FragColor=vec4(vec3(.009,.012,.016)+tint*(rim*backing+.155*bleed/9.0+1.13*glyph),1.0);
+        gl_FragColor=vec4(vec3(.009,.012,.016)+tint*(rim*backing+radiance*(.155*bleed/9.0+1.13*glyph)),1.0);
       }`,
   })
 }
