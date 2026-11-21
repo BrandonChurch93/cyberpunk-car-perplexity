@@ -2,7 +2,9 @@ import * as THREE from 'three'
 import { createServer } from 'vite'
 import { describe, expect, it } from 'vitest'
 import { config } from '../src/config'
+import type { FrameEngine, Stage } from '../src/core/engine'
 import { createHaze, createHazeCapture } from '../src/core/haze'
+import type { applyLens } from '../src/core/lens'
 import { LightRig } from '../src/core/lights'
 import { createReflections, quality } from '../src/core/reflect'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
@@ -444,7 +446,55 @@ function captureWetDeck(three: typeof THREE, reflections: typeof createReflectio
   return { cube, direct, off, rebound, cameraRestored, deckVisible: deck.visible, parapetVisible: parapet.visible }
 }
 
-it('captures moving emitters without the car body and matches camera air along 12 rays', async () => {
+function resumeMirror(three: typeof THREE, reflections: typeof createReflections, Engine: typeof FrameEngine,
+  lens: typeof applyLens, fmt: typeof config.formats.preview, frameIndex: number,
+  take: number, saved: { sum: number[]; count: number } | null) {
+  const renderer = new three.WebGLRenderer()
+  const scene = new three.Scene()
+  const world = new three.Group()
+  const deck = new three.Mesh(new three.PlaneGeometry(20, 20), new three.MeshStandardMaterial({ color: 0, roughness: .11 }))
+  deck.rotation.x = -Math.PI / 2
+  const sign = new three.Mesh(new three.PlaneGeometry(4, .6), new three.MeshBasicMaterial({ color: new three.Color(12, .4, 2) }))
+  sign.position.set(0, 2, -6)
+  world.add(deck, sign)
+  scene.add(world)
+  const part = reflections({
+    renderer, scene, vehicle: { root: new three.Group(), lamps: [] },
+    world: { root: world, deck: { material: deck.material, meshes: [deck] }, reflectionBox: new three.Box3() },
+  })
+  const eye = new three.PerspectiveCamera()
+  eye.position.set(0, 1, 4)
+  eye.lookAt(0, 0, 0)
+  const state = { position: eye.position.clone(), quaternion: eye.quaternion.clone(), focalMm: 35, sensorWidthMm: 36, focusDistance: 4, fNumber: 2, near: .05, far: 150 }
+  const format = { ...fmt, width: 48, height: 28 }
+  const stage: Stage = {
+    resize: (next) => part.resize(next),
+    setDiagnostic: () => undefined,
+    setPaint: () => undefined,
+    beginFrame: (frame) => {
+      sign.position.x = 0
+      part.beginFrame!({ frame, format, camera: state })
+    },
+    renderSample: (sample, output) => {
+      sign.position.x = sample.shutter - .5
+      lens(eye, state, format.width, format.height, sample, 1)
+      part.beforeSample!({ sample, state, camera: eye, timeSeconds: sample.timeSeconds })
+      renderer.setRenderTarget(output)
+      renderer.render(scene, eye)
+    },
+    signs: () => [],
+    anchors: () => ({}),
+  }
+  const engine = new Engine(renderer, stage, { resize: () => undefined, setDiagnostic: () => undefined, resolve: () => undefined }, format)
+  engine.beginFrame(frameIndex, 'review')
+  if (saved) engine.accumulator.write(Float32Array.from(saved.sum), saved.count)
+  const count = engine.addSamples(take)
+  const sum = Array.from(engine.accumulator.read())
+  renderer.dispose()
+  return { sum, count }
+}
+
+it('captures emitters, matches camera air and wet deck radiance, and resumes review mirrors on fresh pages', async () => {
   const id = '/reflect-test-entry.js'
   const app = await createServer({
     configFile: false,
@@ -460,9 +510,13 @@ it('captures moving emitters without the car body and matches camera air along 1
         import { Probe } from '/src/core/reflect/probe.ts'
         import { applyPorous } from '/src/weather/surface/porous.ts'
         import { config } from '/src/config.ts'
+        import { FrameEngine } from '/src/core/engine.ts'
+        import { applyLens } from '/src/core/lens.ts'
         export const run = () => (${captureLamp.toString()})(THREE, createReflections, config.formats.preview)
         export const air = () => (${captureAir.toString()})(THREE, createHaze, createHazeCapture, LightRig, Probe, config.formats.preview)
         export const deck = () => (${captureWetDeck.toString()})(THREE, createReflections, applyPorous, config.formats.preview)
+        export const review = (frameIndex, take, saved) =>
+          (${resumeMirror.toString()})(THREE, createReflections, FrameEngine, applyLens, config.formats.preview, frameIndex, take, saved)
       ` : null,
       configureServer(server) {
         server.middlewares.use('/reflect-test', (_req, res) => {
@@ -521,10 +575,35 @@ it('captures moving emitters without the car body and matches camera air along 1
       }
       expect(wet.cube[0][0]).toBeGreaterThan(wet.cube[1][0])
       expect(wet.cube[2][0]).toBeGreaterThan(2 * wet.cube[2][2])
+      await page.close()
+      const total = config.tiers.review.samplesPerFrame
+      const frameIndex = Math.round(config.film.heroFrameSeconds * config.film.fps)
+      const review = async (take: number, saved: ReturnType<typeof resumeMirror> | null) => {
+        const next = await browser.newPage()
+        next.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()) })
+        try {
+          await next.goto(new URL('reflect-test', app.resolvedUrls!.local[0]).href)
+          return await next.evaluate(`import("${id}").then(module => module.review(${frameIndex}, ${take}, ${JSON.stringify(saved)}))`) as ReturnType<typeof resumeMirror>
+        } finally {
+          await next.close()
+        }
+      }
+      const continuous = await review(total, null)
+      const chunk = Math.floor(total / 3)
+      const first = await review(chunk, null)
+      const second = await review(chunk + 1, first)
+      const resumed = await review(total - second.count, second)
+      expect(errors).toEqual([])
+      expect(first.count).toBe(chunk)
+      expect(second.count).toBe(2 * chunk + 1)
+      expect(continuous.count).toBe(total)
+      expect(resumed.count).toBe(total)
+      expect(continuous.sum.some((value, i) => i % 4 !== 3 && value > .05)).toBe(true)
+      expect(resumed.sum.filter((value, i) => value !== continuous.sum[i])).toHaveLength(0)
     } finally {
       await browser.close()
     }
   } finally {
     await app.close()
   }
-}, 30_000)
+}, 45_000)

@@ -4,6 +4,7 @@ import { config } from '../../config'
 import { patchMaterial } from '../../materials/patch'
 import { layers, type FrameContext, type SampleContext } from '../contract'
 import { createHazeCapture } from '../haze'
+import { applyLens } from '../lens'
 import type { StageDeps, StagePart } from '../parts'
 import { hash01, streamSeed } from '../random'
 import { probeLamps } from './lamps'
@@ -19,7 +20,7 @@ export interface Quality {
   bounce: boolean
   /** Fraction of the frame the planar target is drawn at. Sub-render jitter fills in the detail over the samples. */
   planarScale: number
-  /** Redraw the planar reflection for every sub-render, or only for the first of the frame. */
+  /** Redraw for every sample instead of caching a single frame-center mirror. */
   planarEverySample: boolean
 }
 
@@ -119,6 +120,8 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
   let size = planarSize(format, quality[tier].planarScale)
   let target = planarTarget(size)
   let diagnostic = 'beauty'
+  let cacheCameraPlanar = false
+  const frameEye = new THREE.PerspectiveCamera()
   const mirror = new THREE.PerspectiveCamera()
   mirror.layers.set(layers.scene)
 
@@ -331,8 +334,9 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       diagnostic = view
       setZebra(view === 'zebra')
     },
-    beginFrame(frame: FrameContext) {
-      tier = frame.frame.tier
+    beginFrame({ frame, camera }: FrameContext) {
+      tier = frame.tier
+      cacheCameraPlanar = frame.samples > 1 && !quality[tier].planarEverySample
       fitTarget()
       patchAll()
       if (diagnostic === 'normals') return
@@ -342,18 +346,19 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
         scene.environment = stripes
         return
       }
-      capture(frame.frame.frameKey)
+      capture(frame.frameKey)
+      if (cacheCameraPlanar && (diagnostic === 'beauty' || diagnostic === 'wetness')) {
+        applyLens(frameEye, camera, format.width, format.height, { pixel: [0, 0], aperture: [0, 0] }, 1)
+        renderPlanar(frameEye, target)
+      }
     },
     beforeSample(sample: SampleContext) {
       planar.reflectOn.value = 0
       if (diagnostic !== 'beauty' && diagnostic !== 'wetness') return
       updateBillboard()
       planar.reflectSeed.value = hash01(seed, sample.sample.frame.frameKey, sample.sample.sampleIndex)
-      if (sample.sample.sampleIndex > 0 && !quality[tier].planarEverySample) {
-        planar.reflectOn.value = 1
-        return
-      }
-      renderPlanar(sample.camera, target)
+      if (cacheCameraPlanar) planar.reflectOn.value = 1
+      else renderPlanar(sample.camera, target)
     },
   }
 }
