@@ -32,7 +32,8 @@ function flipped(t: TessResult): TessResult {
 }
 
 /** Panes, pane edges and seal rings for every closed glass curve on `S`, built on both sides. */
-export function glazing(S: Surface, curves: SurfaceCurve[], tess: Tess, spec: GlazingSpec = glazingSpec): Glazing {
+export function glazing(S: Surface, curves: SurfaceCurve[], fine: Tess, spec: GlazingSpec = glazingSpec): Glazing {
+  const tess = { ...fine, maxEdge: Math.max(fine.maxEdge ?? 0, 0.16), tolerance: Math.max(fine.tolerance ?? 0, 0.004), edgeLength: Math.max(fine.edgeLength ?? 0, 0.012) }
   const normal = (u: number, v: number) => surfaceNormal(S, u, v)
   const panes: TessResult[] = []
   const edges: TessResult[] = []

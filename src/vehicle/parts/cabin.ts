@@ -10,6 +10,29 @@ export interface Cabin {
   screens: THREE.BufferGeometry
 }
 
+/** Winds every triangle to face the way its vertex normals point. */
+export function orient(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  const P = g.getAttribute('position')
+  const N = g.getAttribute('normal')
+  const ix = g.index
+  if (!ix) return g
+  for (let t = 0; t < ix.count; t += 3) {
+    const a = ix.getX(t)
+    const b = ix.getX(t + 1)
+    const c = ix.getX(t + 2)
+    const e1 = [P.getX(b) - P.getX(a), P.getY(b) - P.getY(a), P.getZ(b) - P.getZ(a)]
+    const e2 = [P.getX(c) - P.getX(a), P.getY(c) - P.getY(a), P.getZ(c) - P.getZ(a)]
+    const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]]
+    let s = 0
+    for (let i = 0; i < 3; i++) s += n[i] * (N.getComponent(a, i) + N.getComponent(b, i) + N.getComponent(c, i))
+    if (s < 0) {
+      ix.setX(t + 1, c)
+      ix.setX(t + 2, b)
+    }
+  }
+  return g
+}
+
 const ccw = (o: V2[]): V2[] => {
   let a = 0
   for (let i = 0; i < o.length; i++) {
@@ -97,5 +120,5 @@ export function cabin(): Cabin {
   seat(leather, trim, 0.37)
   seat(leather, trim, -0.37)
   steering(leather, carbon, [0.37, 0.64, 0.4], norm([0, 0.42, -1]))
-  return { leather: leather.geometry(), trim: trim.geometry(), carbon: carbon.geometry(), screens: screens.geometry() }
+  return { leather: orient(leather.geometry()), trim: orient(trim.geometry()), carbon: orient(carbon.geometry()), screens: orient(screens.geometry()) }
 }
