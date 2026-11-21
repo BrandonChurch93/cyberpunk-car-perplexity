@@ -8,7 +8,7 @@ import { createHaze, createHazeCapture } from '../src/core/haze'
 import type { applyLens } from '../src/core/lens'
 import { LightRig, patchFilmLighting } from '../src/core/lights'
 import { createReflections, planarTuning, quality } from '../src/core/reflect'
-import { probeLamps } from '../src/core/reflect/lamps'
+import { lampSources, probeLamps } from '../src/core/reflect/lamps'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
 import { Probe } from '../src/core/reflect/probe'
 import { boxPatch, planarPatch } from '../src/core/reflect/shaders'
@@ -116,6 +116,13 @@ it('tracks the ported guides, projector dies and tail through real lamp stages a
   const emitters = probe.root.children as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[]
   const active = () => emitters.filter((emitter) => emitter.visible)
   expect(emitters).toHaveLength(8)
+  const beams = vehicle.lamps.filter(({ beam }) => beam)
+  const published = lampSources(vehicle)
+  expect(published).toHaveLength(8)
+  for (const [index, { object }] of beams.entries()) {
+    const source = published.find(({ mesh }) => mesh === probe.mirrorApertures.get(`vehicle-beam-${index}`))
+    expect(source?.origin).toBe(object)
+  }
   expect([...probe.mirrorApertures].map(([id, mesh]) => [id, mesh.name]).sort()).toEqual([
     ['vehicle-beam-0', 'front projector LED dies 0'],
     ['vehicle-beam-1', 'front projector LED dies 0 right'],
@@ -150,7 +157,8 @@ it('tracks the ported guides, projector dies and tail through real lamp stages a
   const guide = probe.mirrorApertures.get('vehicle-glow-front-left')!.material as THREE.MeshStandardMaterial
   const die = probe.mirrorApertures.get('vehicle-beam-0')!.material as THREE.MeshStandardMaterial
   const before = [guide.emissiveIntensity, die.emissiveIntensity]
-  probe.withDeckRadiance(() => {
+  expect(patchesOf(guide)).toContain('deck-guide-arm')
+  probe.withDeckRadiance(new THREE.Vector3(3, -.8, 8), () => {
     expect(guide.emissiveIntensity).toBeGreaterThan(0)
     expect(guide.emissiveIntensity).toBeLessThan(before[0])
     expect(die.emissiveIntensity).toBe(before[1])
@@ -468,7 +476,7 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
   const plate = new three.Mesh(new three.PlaneGeometry(1, 1), new three.MeshBasicMaterial({ color: 0 }))
   scene.add(anchor, rig.group, plate)
   const eye = new three.PerspectiveCamera(40, 1, .05, 60)
-  const receiver = new three.Vector3(0, .4, -.2)
+  const receiver = new three.Vector3(0, .4, .95)
   eye.position.set(1, .76, 5.5)
   eye.lookAt(receiver)
   eye.updateMatrixWorld(true)
@@ -504,12 +512,17 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
   const nose = at(receiver.clone().setZ(.18), 6)
   const closed = at(receiver.clone().lerp(eye.position, .74), 6)
   const macro = at(receiver, .8)
+  const beamReceiver = new three.Vector3(.10, .39, 1.25)
+  eye.position.set(.10, .46, 5.5)
+  eye.lookAt(beamReceiver)
+  eye.updateMatrixWorld(true)
+  const suspended = at(beamReceiver, 6)
+  const suspendedBlocked = at(beamReceiver.clone().lerp(eye.position, .80), 6)
   const lowReceiver = new three.Vector3(.1, .02, 1.8)
   eye.position.set(.1, .19, 5.5)
   eye.lookAt(lowReceiver)
   eye.updateMatrixWorld(true)
   const low = at(lowReceiver, 6)
-  const lowBlocked = at(lowReceiver.clone().lerp(eye.position, .97), 6)
   const point = new three.Vector3()
   const sampler = new three.Mesh(new three.PlaneGeometry(2, 2), new three.ShaderMaterial({
     glslVersion: three.GLSL3,
@@ -548,7 +561,7 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
   output.dispose()
   renderer.dispose()
   return { open: open[1] - open[0], nose: nose[1] - nose[0], closed: closed[1] - closed[0], macro: macro[1] - macro[0],
-    mist: low[1] - low[0], mistBlocked: lowBlocked[1] - lowBlocked[0], footprint }
+    suspended: suspended[1] - suspended[0], suspendedBlocked: suspendedBlocked[1] - suspendedBlocked[0], nearDeck: low[1] - low[0], footprint }
 }
 
 function captureWetDeck(three: typeof THREE, reflections: typeof createReflections, porous: typeof applyPorous,
@@ -971,8 +984,9 @@ it('matches camera and probe reflections, bounds planar taps, and resumes review
       expect(projector.nose).toBeLessThan(projector.open)
       expect(projector.closed).toBeLessThan(projector.open * .1)
       expect(projector.macro).toBe(0)
-      expect(projector.mist).toBeGreaterThan(.002)
-      expect(projector.mistBlocked).toBeLessThan(projector.mist * .1)
+      expect(projector.suspended).toBeGreaterThan(.002)
+      expect(projector.suspendedBlocked).toBeLessThan(projector.suspended * .1)
+      expect(projector.nearDeck).toBeLessThan(projector.suspended * .1)
       expect(projector.footprint[0]).toEqual({ air: 0, deck: 0 })
       for (const { air, deck } of projector.footprint.slice(1)) {
         expect(air).toBeGreaterThan(1)

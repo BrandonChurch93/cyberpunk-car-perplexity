@@ -1,7 +1,6 @@
-import type { Surface, SurfaceCurve } from '../geom/cuts'
-import type { Boundary, TessResult, TrimFn } from '../geom/tessellate'
+import type { SurfaceCurve } from '../geom/cuts'
+import type { Boundary, TessResult } from '../geom/tessellate'
 import { add, cross, norm, scale, sub, type V3 } from '../geom/vec'
-import { surfaceNormal } from './body'
 
 /** Half the shut gap between the panel walls, and the roll radius of the panel edges either side of it. */
 export const gapHalf = 0.002
@@ -90,61 +89,6 @@ export function resample(c: SurfaceCurve, step: number): { p: V3[]; uv: Array<[n
     uv.push(UV[n - 1])
   }
   return { p, uv }
-}
-
-/**
- * The two walls of every shut gap, swept along the line itself so the gap keeps one width through every turn: each paint
- * edge rolls over `gapRoll` into a wall `gapHalf` off the line that runs down to `depth`. `removed` is the paint trim
- * without the gaps (positive where there is no paint); the walls stop where it is.
- */
-export function gapLips(S: Surface, gaps: SurfaceCurve[], removed: TrimFn, depth = 0.013, step = 0.005): TessResult {
-  const out: TessResult = { positions: [], normals: [], uvs: [], indices: [], boundaries: [] }
-  const push = (p: V3, n: V3, uv: [number, number]): number => {
-    out.positions.push(p[0], p[1], p[2])
-    out.normals.push(n[0], n[1], n[2])
-    out.uvs.push(uv[0], uv[1])
-    return out.positions.length / 3 - 1
-  }
-  const steps = 3
-  for (const g of gaps) {
-    const { p: C, uv: UV } = resample(g, step)
-    const n = C.length
-    for (const s of [1, -1]) {
-      const rows: Array<number[] | null> = []
-      for (let i = 0; i < n; i++) {
-        const a = C[g.closed ? (i - 1 + n) % n : Math.max(0, i - 1)]
-        const c = C[g.closed ? (i + 1) % n : Math.min(n - 1, i + 1)]
-        const t = norm(sub(c, a))
-        const nn = surfaceNormal(S, UV[i][0], UV[i][1])
-        const b = scale(norm(cross(nn, t)), s)
-        const edge = add(C[i], scale(b, gapHalf + gapRoll))
-        if (removed(UV[i][0], UV[i][1], edge) > 0) {
-          rows.push(null)
-          continue
-        }
-        const row: number[] = []
-        for (let k = 0; k <= steps; k++) {
-          const th = (k / steps) * (Math.PI / 2)
-          const w = gapHalf + gapRoll * (1 - Math.sin(th))
-          const dn = gapRoll * (1 - Math.cos(th))
-          row.push(push(add(add(C[i], scale(b, w)), scale(nn, -dn)), norm(add(scale(nn, Math.cos(th)), scale(b, -Math.sin(th)))), UV[i]))
-        }
-        row.push(push(add(add(C[i], scale(b, gapHalf)), scale(nn, -depth)), scale(b, -1), UV[i]))
-        rows.push(row)
-      }
-      const m = g.closed ? n : n - 1
-      for (let i = 0; i < m; i++) {
-        const r0 = rows[i]
-        const r1 = rows[(i + 1) % n]
-        if (!r0 || !r1) continue
-        for (let k = 0; k + 1 < r0.length; k++) {
-          if (s < 0) out.indices.push(r0[k], r1[k], r1[k + 1], r0[k], r1[k + 1], r0[k + 1])
-          else out.indices.push(r0[k], r0[k + 1], r1[k + 1], r0[k], r1[k + 1], r1[k])
-        }
-      }
-    }
-  }
-  return out
 }
 
 /**

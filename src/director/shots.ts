@@ -95,21 +95,26 @@ function grazing(t: number, a: Anchors, azimuth: number, elevation: number, reac
   }
 }
 
+const shoulderAim = v(-0.62, 0.976, -1.7)
+const muralMirror = v(0.288, 0.38, 0.878).normalize()
+
+function shoulder(t: number, focalMm: number): Shot {
+  const p = glide(t, paint.start, paint.end, 1.2, 1.2)
+  const target = shoulderAim.clone().add(v(mix(0.011, -0.011, p), 0, mix(0.055, -0.055, p)))
+  return {
+    position: target.clone().addScaledVector(muralMirror, 0.75),
+    target,
+    focalMm,
+    focus: target,
+    tStop: 4,
+    operator: 'macro',
+    near: 0.02,
+  }
+}
+
 const master: Record<string, ShotMaker> = {
   establish: (t, a) => onAxis(heroAxis.master, 1 - push(t), a),
-  paint: (t, a) => {
-    const p = glide(t, paint.start, paint.end, 1.2, 1.2)
-    const target = a.paint.position.clone().add(v(mix(-0.1097, -0.1321, p), 0.02, mix(0.16, 0.28, p)))
-    return {
-      position: target.clone().addScaledVector(v(0.64, 0.44, -0.26), 0.92),
-      target,
-      focalMm: macroMm,
-      focus: target,
-      tStop: 4,
-      operator: 'macro',
-      near: 0.02,
-    }
-  },
+  paint: (t) => shoulder(t, macroMm),
   wheel: (t, a) => {
     const p = follow(t)
     const w = a.wheel.position
@@ -157,19 +162,7 @@ const master: Record<string, ShotMaker> = {
 
 const vertical: Record<string, ShotMaker> = {
   establish: (t, a) => onAxis(heroAxis.vertical, 1 - push(t), a),
-  paint: (t, a) => {
-    const p = glide(t, paint.start, paint.end, 1.2, 1.2)
-    const target = a.paint.position.clone().add(v(mix(-0.1095, -0.1165, p), 0.006, mix(0.095, 0.165, p)))
-    return {
-      position: target.clone().add(v(0.3, 0.56, -0.43)),
-      target,
-      focalMm: portraitMm,
-      focus: target,
-      tStop: 4,
-      operator: 'macro',
-      near: 0.02,
-    }
-  },
+  paint: (t) => shoulder(t, portraitMm),
   wheel: (t, a) => {
     const p = follow(t)
     const w = a.wheel.position

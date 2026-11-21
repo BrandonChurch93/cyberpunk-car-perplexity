@@ -55,6 +55,7 @@ interface ReflectionDeps extends Pick<StageDeps, 'renderer' | 'scene'> {
   rig?: StageDeps['rig']
   world: Pick<StageDeps['world'], 'root' | 'reflectionBox'> & {
     lights?: StageDeps['world']['lights']
+    optics?: StageDeps['world']['optics']
     deck: Pick<StageDeps['world']['deck'], 'material' | 'meshes'> & Partial<Pick<StageDeps['world']['deck'], 'bounds'>>
   }
   vehicle: Pick<StageDeps['vehicle'], 'root' | 'lamps'>
@@ -226,7 +227,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       renderer.setRenderTarget(destination.raw)
       renderer.setClearColor(0x000000, 1)
       renderer.clear(true, true, false)
-      emitters.withRadiance(time, () => lamps.withDeckRadiance(() => renderer.render(scene, mirror)))
+      emitters.withRadiance(time, () => lamps.withDeckRadiance(mirror.position, () => renderer.render(scene, mirror)))
       hazeCapture?.renderFarAir(renderer, destination.raw, destination.color, mirror)
     } finally {
       showDeck()
@@ -355,7 +356,7 @@ export function createReflections(deps: ReflectionDeps): ReflectionsPart {
       fitTarget()
       patchAll()
       if (diagnostic === 'normals' || diagnostic === 'zebra') glints.clear()
-      else glints.update()
+      else glints.update(camera.position)
       if (diagnostic === 'normals') return
       if (diagnostic === 'zebra') {
         box.reflectBoxOn.value = 0

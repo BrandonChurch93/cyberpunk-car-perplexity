@@ -1,5 +1,5 @@
 import type * as THREE from 'three'
-import type { SceneSystem, WetSurface } from '../core/contract'
+import type { FilmLight, SceneSystem, WetSurface } from '../core/contract'
 
 export interface DeckSurface {
   /** The meshes that make up the walking surface. They lie in the plane y = 0 apart from their relief. */
@@ -20,6 +20,8 @@ export interface WorldModule extends SceneSystem {
   surfaces: WetSurface[]
   /** Places where steam or vapor leaves the world: roof plant vents, drains. The object's local +Y is the direction it rises. `strength` is 0 to 1. */
   steamSources?: Array<{ object: THREE.Object3D; strength?: number; kind?: 'vent' | 'drain' }>
+  /** Every spot fixture at rest, including those that share a film light slot with another, so a lit face keeps its cutoff optic when its slot is lent out. */
+  optics?: readonly FilmLight[]
 }
 
 export type WorldDetail = 'blockout' | 'full'

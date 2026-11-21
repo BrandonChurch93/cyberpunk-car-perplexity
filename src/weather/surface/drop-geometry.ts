@@ -3,7 +3,7 @@ import type { CameraState } from '../../core/lens'
 import { patchFilmLighting } from '../../core/lights'
 import { layers } from '../../core/contract'
 import { insertAfter, patchMaterial, replaceOnce } from '../../materials/patch'
-import { type BeadClass, beadLayers, cellDrops, dominantAxis, geometryMinMm, maxDensity } from './beads'
+import { type BeadClass, beadLayers, cellDrops, dominantAxis, geometryMinMm, maxDensity, runSwept } from './beads'
 import { surfHash3 } from './hash'
 
 /** Beyond this distance from the lens a drop is small enough on screen, and soft enough in focus, for the shader field. */
@@ -324,6 +324,7 @@ export class DropGeometry {
                 for (const drop of drops) {
                   if (drop.layer === 0 || drops[0].diameterMm < geometryMinMm) continue
                   const plane = new THREE.Vector3().addScaledVector(pa, w0).addScaledVector(pb, w1).addScaledVector(pc, w2)
+                  if (drop.lobe === 0 && runSwept(plane, n, down, slope, bead.salt, drop.radius, layer)) break
                   center.copy(plane)
                   if (drop.lobe > 0) {
                     const du = drop.u - drops[0].u, dv = drop.v - drops[0].v

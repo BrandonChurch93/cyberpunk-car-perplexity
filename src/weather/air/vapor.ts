@@ -92,7 +92,7 @@ float deckSpray(vec3 p) {
   float e = exp(-max(0.0, p.y - ${slabFloor}) * 20.0) * (1.0 - smoothstep(0.105, ${slabHeight}, p.y));
   float primary = sin(dot(p.xz, vec2(2.04, -2.14)) - TAU * 12.0 * uPhase + uNoise.x);
   float secondary = sin(dot(p.xz, vec2(3.89, 1.13)) - TAU * 15.0 * uPhase + uNoise.y);
-  float pockets = 0.48 + 0.52 * smoothstep(-0.62, 0.78, primary * 0.68 + secondary * 0.32);
+  float pockets = 1.25 * smoothstep(-0.05, 0.74, primary * 0.68 + secondary * 0.32);
   return 0.044 * edge * e * pockets;
 }
 
