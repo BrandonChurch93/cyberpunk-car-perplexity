@@ -89,8 +89,7 @@ export function deckReflectionTrim(frame: THREE.Material, zinc: THREE.Material) 
   const parapet = (parent: THREE.Group) => {
     const run = group(parent,'parapet service lighting')
     const lamps = [
-      [-9.12,.60,.48,.045,.79],[-7.66,.54,.47,.042,.72],[-3.72,.57,.43,.043,.62],
-      [3.82,.56,.43,.044,.65],[7.46,.59,.48,.043,.87],[8.61,.56,.49,.042,.74],
+      [-9.12,.60,.48,.045,.79],[-7.66,.54,.47,.042,.72],[7.46,.59,.48,.043,.87],[8.61,.56,.49,.042,.74],
     ] as const
     batch(run,'parapet warm strip lenses',lamps.map(([x,y,w,h,gain]): Window => ({
       at: [x,y,-9.797], size: [w,h], tint: 'ivory', gain,
