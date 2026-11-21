@@ -1,19 +1,22 @@
 import * as THREE from 'three'
 import { createServer } from 'vite'
 import { describe, expect, it } from 'vitest'
-import { config } from '../src/config'
+import { config, defaultPaint, paintById } from '../src/config'
 import type { FilmLight, SampleContext } from '../src/core/contract'
 import type { FrameEngine, Stage } from '../src/core/engine'
 import { createHaze, createHazeCapture } from '../src/core/haze'
 import type { applyLens } from '../src/core/lens'
 import { LightRig, patchFilmLighting } from '../src/core/lights'
 import { createReflections, planarTuning, quality } from '../src/core/reflect'
+import { probeLamps } from '../src/core/reflect/lamps'
 import { boxProject, mirrorCamera } from '../src/core/reflect/mirror'
 import { Probe } from '../src/core/reflect/probe'
 import { boxPatch, planarPatch } from '../src/core/reflect/shaders'
 import { hash01, streamSeed } from '../src/core/random'
+import { events, stateAt } from '../src/director/timeline'
 import { patchMaterial, patchesOf } from '../src/materials/patch'
 import { applyPorous } from '../src/weather/surface/porous'
+import { createVehicle } from '../src/vehicle'
 import { launchBrowser } from '../tools/lib/browser'
 
 function camera(): THREE.PerspectiveCamera {
@@ -106,6 +109,40 @@ describe('quality', () => {
     for (const q of Object.values(quality)) expect(Math.log2(q.captureSize) % 1).toBe(0)
   })
 })
+
+it('tracks the ported guides, projector dies and tail through real lamp stages and body transforms', async () => {
+  const vehicle = await createVehicle({ paint: paintById(defaultPaint), detail: 'blockout' })
+  const probe = probeLamps(vehicle)
+  const emitters = probe.root.children as THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>[]
+  const active = () => emitters.filter((emitter) => emitter.visible)
+  expect(emitters).toHaveLength(8)
+  expect(probe.root.visible).toBe(false)
+  probe.sync()
+  expect(active()).toHaveLength(0)
+
+  vehicle.update(stateAt((events.lampStageOne + events.lampStageTwo) * .5))
+  probe.sync()
+  expect(active().map((emitter) => emitter.name).sort()).toEqual([
+    'front Y running guide', 'front Y running guide right', 'tail-guide-left', 'tail-guide-right',
+  ])
+
+  vehicle.root.position.set(-1, .02, 3)
+  vehicle.root.rotation.y = .25
+  vehicle.update(stateAt(events.lampStageThree))
+  probe.sync()
+  expect(active()).toHaveLength(emitters.length)
+  for (const emitter of emitters) {
+    const source = vehicle.root.getObjectByName(emitter.name) as typeof emitter
+    expect(emitter.geometry).toBe(source.geometry)
+    expect(emitter.matrixWorld.equals(source.matrixWorld)).toBe(true)
+    expect(emitter.material.emissive.equals(source.material.emissive)).toBe(true)
+    expect(emitter.material.emissiveIntensity).toBe(source.material.emissiveIntensity)
+    expect(emitter.material.side).toBe(THREE.DoubleSide)
+  }
+  vehicle.update(stateAt(events.lampsOffEnd))
+  probe.sync()
+  expect(active()).toHaveLength(0)
+}, 120_000)
 
 it('uses the deck mirror on bay paint and grate metal without rendering them into their own mirror', () => {
   const scene = new THREE.Scene()
