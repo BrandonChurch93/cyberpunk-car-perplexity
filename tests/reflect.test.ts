@@ -538,7 +538,12 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
     fragmentShader: lightAt + `
       uniform vec3 point;
       out vec4 color;
-      void main() { vec3 unused; color = vec4(filmLightAt(0, point, unused), 1.0); }
+      void main() {
+        vec3 unused;
+        float air = filmLightAt(0, point, unused).g;
+        float surface = filmSurfaceLightAt(0, point, unused).g;
+        color = vec4(air, surface, 0.0, 1.0);
+      }
     `,
   }))
   sampler.frustumCulled = false
@@ -550,19 +555,19 @@ function captureProjector(three: typeof THREE, createCameraHaze: typeof createHa
   scene.add(deck)
   const deckEye = new three.OrthographicCamera(-.1, .1, .1, -.1, .05, 10)
   deckEye.up.set(0, 0, 1)
-  const footprint = [1, 2, 3.5, 5].map((z) => {
-    point.set(0, 0, z)
+  const footprint = [[0, 1], [0, 1.5], [0, 2], [.46, 2], [0, 3.5], [0, 4.2], [0, 5], [0, 6]].map(([x, z]) => {
+    point.set(x, 0, z)
     renderer.setRenderTarget(output)
     renderer.render(sampler, sampleEye)
     renderer.readRenderTargetPixels(output, 0, 0, 1, 1, rgb)
-    const air = rgb[1]
+    const [air, surface] = rgb
     deck.position.copy(point)
     deckEye.position.copy(point).setY(1)
     deckEye.lookAt(point)
     renderer.render(scene, deckEye)
     renderer.readRenderTargetPixels(output, 0, 0, 1, 1, rgb)
     const cosine = anchor.position.y / anchor.position.distanceTo(point)
-    return { air, deck: rgb[1] * Math.PI / cosine }
+    return { x, z, air, surface, deck: rgb[1] * Math.PI / cosine }
   })
   input.dispose()
   output.dispose()
@@ -968,11 +973,17 @@ it('matches camera and probe reflections, keeps film strata whole, and resumes r
       expect(projector.suspended).toBeGreaterThan(.002)
       expect(projector.suspendedBlocked).toBeLessThan(projector.suspended * .1)
       expect(projector.nearDeck).toBeLessThan(projector.suspended * .1)
-      expect(projector.footprint[0]).toEqual({ air: 0, deck: 0 })
-      for (const { air, deck } of projector.footprint.slice(1)) {
+      const [nose, front, axis, flank, middle, farEdge, five, six] = projector.footprint
+      expect(nose).toMatchObject({ air: 0, surface: 0, deck: 0 })
+      for (const { air, surface, deck } of projector.footprint.slice(1)) {
         expect(air).toBeGreaterThan(1)
-        expect(deck / air).toBeCloseTo(1, 2)
+        expect(deck / surface).toBeCloseTo(1, 2)
       }
+      expect(front.surface - front.air).toBeGreaterThan(2)
+      expect(axis.surface - axis.air).toBeGreaterThan(10)
+      expect(middle.surface - middle.air).toBeGreaterThan(2)
+      expect(farEdge.surface).toBeGreaterThan(farEdge.air)
+      for (const { air, surface } of [flank, five, six]) expect(surface).toBe(air)
       const wet: ReturnType<typeof captureWetDeck> = await page.evaluate(`import("${id}").then(module => module.deck())`)
       expect(errors).toEqual([])
       expect(wet.rebound && wet.cameraRestored && wet.deckVisible && wet.parapetVisible).toBe(true)
