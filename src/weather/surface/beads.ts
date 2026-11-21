@@ -31,7 +31,8 @@ export interface BeadLayer {
 export const beadLayers: BeadLayer[] = [
   { cellMm: 1.1, minMm: 0.12, maxMm: 0.45, flat: 0.55, steep: 0.35, lobes: 1, sparse: 0.6, dense: 1.3, hang: 0 },
   { cellMm: 3.4, minMm: 0.5, maxMm: 1.6, flat: 0.72, steep: 0.45, lobes: 1, sparse: 0.3, dense: 1.25, hang: 0 },
-  { cellMm: 6.4, minMm: 1.5, maxMm: 3.1, flat: 0.85, steep: 0.3, lobes: 1, sparse: 0.55, dense: 1.9, hang: 0.4 },
+  { cellMm: 6.4, minMm: 1.5, maxMm: 3.1, flat: 0.6, steep: 0.3, lobes: 1, sparse: 0.2, dense: 1.8, hang: 0.4 },
+  { cellMm: 16, minMm: 3.2, maxMm: 7.6, flat: 0.4, steep: 0.1, lobes: 1, sparse: 0, dense: 1.5, hang: 0.3 },
   { cellMm: 36, minMm: 5, maxMm: 16, flat: 1.0, steep: 0.06, lobes: 2, sparse: 0.1, dense: 2.4, hang: 1.2 },
 ]
 
@@ -258,13 +259,10 @@ float surfValueNoise(vec2 p, int z, uint salt) {
   return a + (b - a) * u.x + (d - a + (a - b - d + e) * u.x) * u.y;
 }
 
-/** Drifts are a near-field look: from a distance the eye averages them, so the field relaxes toward its mean as the footprint grows. */
-float surfCoverFlat = 0.0;
-
 float surfCoverage(vec2 uv, int axis, uint salt) {
   int z = axis + ${coverageSalt};
   float n = 0.72 * surfValueNoise(uv / ${(coverageCm[0] / 100).toFixed(4)}, z, salt) + 0.28 * surfValueNoise(uv / ${(coverageCm[1] / 100).toFixed(4)}, z + 4, salt);
-  return mix(smoothstep(0.28, 0.72, n), 0.5, surfCoverFlat);
+  return smoothstep(0.28, 0.72, n);
 }
 
 float surfCapHeight(float radius) {
@@ -466,7 +464,6 @@ float surfGlint = 0.0;
   vec3 p = surfObjPos;
   vec2 uv = axis == 0 ? p.yz : (axis == 1 ? p.zx : p.xy);
   float pix = max(length(fwidth(p)), 1e-6);
-  surfCoverFlat = 0.7 * smoothstep(0.0012, 0.004, pix);
   // At a glancing view the footprint is long and thin; a drop is judged against the pixel's area, not its longest side.
   float pixA = min(pix, 1.4142 * sqrt(max(length(cross(dFdx(p), dFdy(p))), 1e-12)));
   surfPixA = pixA;
