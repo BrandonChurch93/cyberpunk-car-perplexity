@@ -4,7 +4,7 @@ import { add, clamp, cross, norm, scale, sub, type V2, type V3 } from '../geom/v
 import { dims, mainLoft } from '../body/shape'
 import { bumper } from '../body/tail'
 import type { SurfaceCurve, SurfaceMap } from '../geom/cuts'
-import { flat, merge } from './solid'
+import { finish, flat, merge } from './solid'
 import { honeycomb } from './enginebay'
 
 /** Plate and strake thickness. Every free edge is a full round of half this. */
@@ -326,7 +326,7 @@ export function underbody(): Underbody {
   plate(fb, centreFace, centrePlan, fixed + tailRows, cols, true)
   const sb = new MeshBuilder()
   for (const s of strakes) strake(sb, s)
-  return { floor: fb.geometry(), strakes: sb.geometry() }
+  return { floor: finish(fb), strakes: finish(sb) }
 }
 
 /** Front of the mesh across the back of the open lower tail, well inside the paint. */
@@ -427,5 +427,5 @@ export function valance(lower: SurfaceCurve, rm: SurfaceMap): { wall: THREE.Buff
   const va = (cavityFront - meshZ) / 2
   const vb = (yt - ventLow) / 2
   merge(panel, honeycomb({ c: [innerX + meshT / 2, ventLow + vb, meshZ + va], a: [0, 0, 1], b: [0, 1, 0], n: [1, 0, 0] }, va, vb, cell, gauge, meshT, 0.0006, 0.006))
-  return { wall: wall.geometry(), panel: panel.geometry() }
+  return { wall: finish(wall), panel: finish(panel) }
 }
