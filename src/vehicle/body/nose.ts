@@ -9,7 +9,7 @@ export function frontFace(loft: Loft): (a: number, b: number) => V3 {
   const base = loft.at(0, 0)
   const cheek = loft.at(0, split)
   const tip = loft.at(0, 1)
-  const setback = .042
+  const setback = .109
   const centerZ = tip[2] - setback
   const rise = setback / (tip[1] - base[1])
   const hub = lines.drlLower[0]
@@ -74,10 +74,10 @@ export function frontFace(loft: Loft): (a: number, b: number) => V3 {
 const junction: [number, number] = [192, 445]
 
 export const lines = {
-  eye: map(elev, [[193, 374], [254, 386], [318, 397], [328, 406], [320, 415], [254, 417], [205, 419], [189, 400]]),
+  eye: map(elev, [[193, 378], [254, 394], [318, 410], [328, 416], [320, 429], [254, 425], [205, 423], [189, 404]]),
   outerIntake: map(elev, [[218, 490], [318, 490], [424, 480], [481, 469], [461, 522], [416, 615], [329, 620], [235, 620], [208, 557]]),
   centerIntake: map(elev, [[575, 520], [745, 520], [745, 612], [600, 612], [570, 570]]),
-  drlUpper: map(elev, [[172, 382], junction]),
+  drlUpper: map(elev, [[175, 394], junction]),
   drlLower: map(elev, [junction, [158, 608]]),
   drlStem: map(elev, [junction, [387, 461]]),
 }
