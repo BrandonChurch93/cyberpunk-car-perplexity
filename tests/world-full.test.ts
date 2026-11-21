@@ -12,6 +12,7 @@ import { createWorld } from '../src/world'
 import { heroDrain } from '../src/world/deck'
 import { billboardState } from '../src/world/fixtures'
 import { approvedHeroSourceSurvey, heroScreenMount } from '../src/world/hero-layout'
+import { muralLuma, muralMean, muralPainting } from '../src/world/mural-picture'
 import { heroLayoutEye, heroPoint, heroScale } from '../src/world/hero-scale'
 import { heroCityYaw, streetY } from '../src/world/forms'
 import { deckHeight } from '../src/world/roof-look'
@@ -263,6 +264,12 @@ describe('full roof world', () => {
       if (object instanceof THREE.Mesh && object.material.isShaderMaterial) faces.push(object)
     })
     const bounds = clear.map(object => new THREE.Box3().setFromObject(object))
+    const stair = required('southeast stair and lift reflection frontage')
+    const stairCore = required('stair and lift core')
+    const stairBounds = new THREE.Box3().setFromObject(stair)
+    bounds.push(stairBounds)
+    expect(stair.parent).toBe(stairCore)
+    expect(Math.hypot(stairBounds.min.x,stairBounds.max.z)).toBeGreaterThan(9)
     const emitters = faces.map(object => [object,new THREE.Box3().setFromObject(object)] as const)
     const near = required('northeast roof access')
     bounds.push(new THREE.Box3().setFromObject(near))
@@ -272,6 +279,22 @@ describe('full roof world', () => {
     const matrix = new THREE.Matrix4()
     const wakeEnd = config.beats.find(b=>b.id==='wake')!.end
     const returnStart = config.beats.find(b=>b.id==='return')!.start
+    const localCorner = new THREE.Vector3()
+    const reachesCrop = (object: THREE.Mesh) => {
+      object.geometry.computeBoundingBox()
+      const { min,max } = object.geometry.boundingBox!
+      let above = true, below = true, left = true, right = true
+      for (const x of [min.x,max.x]) for (const y of [min.y,max.y]) for (const z of [min.z,max.z]) {
+        object.localToWorld(localCorner.set(x,y,z)).applyMatrix4(camera.matrixWorldInverse)
+        if (localCorner.z >= -camera.near) return true
+        localCorner.applyMatrix4(camera.projectionMatrix)
+        above &&= localCorner.y>1
+        below &&= localCorner.y<-1
+        left &&= localCorner.x<-1
+        right &&= localCorner.x>1
+      }
+      return !(above || below || left || right)
+    }
     let min = Infinity
     for (const format of [config.formats.master,config.formats.vertical]) {
       for (let i=0;i<=frameCount;i++) {
@@ -285,39 +308,140 @@ describe('full roof world', () => {
         camera.updateMatrixWorld(true)
         frustum.setFromProjectionMatrix(matrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse))
         for (const [object,box] of emitters) {
-          expect(frustum.intersectsBox(box),`${format.id} ${i} ${object.parent?.name}`).toBe(false)
+          expect(frustum.intersectsBox(box) && reachesCrop(object),`${format.id} ${i} ${object.parent?.name}`).toBe(false)
         }
       }
     }
     expect(min).toBeGreaterThan(.10)
+    const installed: [THREE.Mesh,THREE.Box3][] = []
+    for (const part of [required('screen tower occupied media gallery'),required('bridge violet media fascia'),required('west media transfer gallery'),stair]) {
+      part.traverse(o => {
+        if (o instanceof THREE.Mesh) installed.push([o,new THREE.Box3().setFromObject(o)])
+      })
+    }
+    for (const format of [config.formats.master,config.formats.vertical]) for (const frame of new Set([0,60,150,...judgedFrames().map(j=>j.frame)])) {
+      const time = frame/config.film.fps
+      applyLens(camera,cameraAt(time,format,anchors,time),format.width,format.height,{pixel:[0,0],aperture:[0,0]},1)
+      frustum.setFromProjectionMatrix(matrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse))
+      expect(installed.some(([mesh,box])=>frustum.intersectsBox(box) && reachesCrop(mesh)),`${format.id} ${frame}`).toBe(false)
+    }
+    const mural = required('animated magenta violet mural') as THREE.Mesh<THREE.PlaneGeometry>
+    const { width,height } = mural.geometry.parameters
+    for (const x of [-.8,0,.8]) for (const z of [-.9,0,.9]) {
+      const roof = new THREE.Vector3(x,1.28,z)
+      for (const u of [-.4,0,.4]) for (const v of [-.4,0,.4]) {
+        const led = mural.localToWorld(new THREE.Vector3(u*width,v*height,0))
+        const segment = new THREE.Box3().setFromPoints([roof,led])
+        const ray = new THREE.Ray(roof,led.clone().sub(roof).normalize())
+        expect(installed.some(([,box])=>box.intersectsBox(segment) && ray.intersectsBox(box))).toBe(false)
+      }
+    }
     const probe = new THREE.Vector3(0,.6,0)
+    const casters: [THREE.Mesh,THREE.Box3][] = []
+    world.root.traverseVisible(o => {
+      if (o instanceof THREE.Mesh) casters.push([o,new THREE.Box3().setFromObject(o)])
+    })
+    const firstHit = (caster: THREE.Raycaster) => caster.intersectObjects(
+      casters.filter(([,box])=>caster.ray.intersectsBox(box)).map(([object])=>object),false,
+    )[0]
     const visible = (fixture: THREE.Object3D, aperture: string) => {
       const face = fixture.getObjectByName(aperture)!
       const ray = face.getWorldPosition(new THREE.Vector3()).sub(probe)
       const caster = new THREE.Raycaster(probe,ray.clone().normalize(),0,ray.length()+.02)
-      expect(caster.intersectObject(world.root,true)[0]?.object,fixture.name).toBe(face)
+      expect(firstHit(caster)?.object,fixture.name).toBe(face)
       return ray.normalize()
     }
-    const media = required('upper reflection accents')
-    const apertures = media.children.filter(o=>o instanceof THREE.Group)
-    expect(apertures).toHaveLength(9)
-    let mediaArea = 0
-    for (const fixture of apertures) {
-      const aperture = fixture.name.includes('blade') ? 'diffusing cabinet face' : 'sealed opal aperture'
-      const ray = visible(fixture,aperture)
+    const media = required('screen tower occupied media gallery')
+    const westMedia = required('west media transfer gallery')
+    const skybridgeShell = new THREE.Box3().setFromObject(required('skybridge structural shell'))
+    expect(media.parent).toBe(riser)
+    const carrier = new THREE.Box3().setFromObject(required('gallery bearing and transfer beam'))
+    const gallery = new THREE.Box3().setFromObject(required('occupied upper gallery shell'))
+    expect(carrier.intersectsBox(gallery)).toBe(true)
+    expect(carrier.intersectsBox(skybridgeShell)).toBe(true)
+    const westGirder = new THREE.Box3().setFromObject(required('west transfer box girder'))
+    expect(westGirder.intersectsBox(skybridgeShell)).toBe(true)
+    expect(westGirder.intersectsBox(new THREE.Box3().setFromObject(required('west upper gallery shell')))).toBe(true)
+    for (const name of ['bridge violet media fascia','lower violet media bank','upper magenta media bank']) {
+      const fixture = required(name)
+      expect(fixture.parent).toBe(name.startsWith('bridge') ? required('screen tower upper service skybridge') : media)
+      const ray = visible(fixture,'animated magenta violet tiles')
       const azimuth = THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))
-      expect(azimuth).toBeGreaterThan(-159)
-      expect(azimuth).toBeLessThan(-149)
-      expect(ray.y).toBeGreaterThan(.57)
-      expect(ray.y).toBeLessThan(.76)
-      const face = fixture.getObjectByName(aperture) as THREE.Mesh<THREE.PlaneGeometry>
+      const elevation = THREE.MathUtils.radToDeg(Math.asin(ray.y))
+      expect(azimuth).toBeGreaterThan(-163)
+      expect(azimuth).toBeLessThan(-141)
+      expect(elevation).toBeGreaterThan(30)
+      expect(elevation).toBeLessThan(46)
+      const face = fixture.getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry>
       const { width,height } = face.geometry.parameters
-      const area = width*height
-      expect(area).toBeLessThan(65)
-      mediaArea += area
+      expect(width).toBeGreaterThan(85)
+      expect(height).toBeGreaterThan(name.startsWith('bridge') ? 8 : 40)
     }
-    expect(mediaArea).toBeLessThan(350)
-    expect(riser.getObjectByName('animated magenta violet tiles')).toBeUndefined()
+    expect(riser.getObjectsByProperty('name','gallery cyan strip')).toHaveLength(3)
+    expect(media.getObjectsByProperty('name','occupied gallery window').length).toBeGreaterThan(30)
+    for (const [name,lo,hi] of [['bonnet media bank',32,37],['bonnet media inset',32,37],
+      ['windscreen media bank',41,46],['windscreen media inset',41,46]] as const) {
+      const fixture = required(name)
+      expect(fixture.parent).toBe(westMedia)
+      const ray = visible(fixture,'animated magenta violet tiles')
+      expect(THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))).toBeGreaterThan(-150)
+      expect(THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))).toBeLessThan(-140)
+      expect(THREE.MathUtils.radToDeg(Math.asin(ray.y))).toBeGreaterThan(lo)
+      expect(THREE.MathUtils.radToDeg(Math.asin(ray.y))).toBeLessThan(hi)
+      const face = fixture.getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+      expect(face.geometry.parameters.width*face.geometry.parameters.height).toBeLessThan(780)
+      expect(face.material.uniforms.artwork.value).toBeInstanceOf(THREE.DataTexture)
+      expect(face.material.uniforms.artworkGain.value).toBeLessThan(1)
+    }
+    let bonnetRays = 0
+    let darkWestRays = 0
+    for (const az of [-148,-146,-144,-142]) for (const el of [33.5,34.5,35.5,36.5]) {
+      const a = THREE.MathUtils.degToRad(az), e = THREE.MathUtils.degToRad(el)
+      const ray = new THREE.Raycaster(probe,new THREE.Vector3(Math.sin(a)*Math.cos(e),Math.sin(e),Math.cos(a)*Math.cos(e)))
+      const object = firstHit(ray)?.object
+      if (object?.name === 'animated magenta violet tiles' && object.parent?.name.startsWith('bonnet media ')) bonnetRays++
+      if (object?.name === 'lower media folded spandrel' || object?.name === 'folded media divider') darkWestRays++
+    }
+    expect(bonnetRays).toBeGreaterThanOrEqual(2)
+    expect(bonnetRays).toBeLessThanOrEqual(8)
+    expect(darkWestRays).toBeGreaterThan(2)
+    const hits = new Set<string>()
+    let mediaRays = 0
+    for (const az of [-161,-158,-155,-152,-149]) for (const el of [35,37,38,39,42,44,45]) {
+      const a = THREE.MathUtils.degToRad(az), e = THREE.MathUtils.degToRad(el)
+      const ray = new THREE.Raycaster(probe,new THREE.Vector3(Math.sin(a)*Math.cos(e),Math.sin(e),Math.cos(a)*Math.cos(e)))
+      const hit = firstHit(ray)
+      if (hit?.object.name === 'animated magenta violet tiles') {
+        hits.add(hit.object.parent?.name ?? '')
+        mediaRays++
+      }
+    }
+    expect(hits).toEqual(new Set(['bridge violet media fascia','lower violet media bank','upper magenta media bank']))
+    expect(mediaRays).toBeGreaterThanOrEqual(17)
+    for (const [fixtureName,railName] of [
+      ['amber stair entrance sign','amber sign folded wall rail'],
+      ['violet stair dado lens','violet lens recessed wall rail'],
+      ['violet stair entrance jamb lens','violet stair entrance jamb rail'],
+      ['amber stair entrance jamb lens','amber stair entrance jamb rail'],
+      ['cyan service fascia strip','cyan service fascia wall rail'],
+      ['cyan stair return tracer','tall cyan lens support jamb'],
+    ] as const) {
+      const wall = new THREE.Box3().setFromObject(required(railName))
+      const fixtures = stair.getObjectsByProperty('name',fixtureName)
+      expect(fixtures.length).toBeGreaterThan(0)
+      for (const fixture of fixtures) {
+        for (const cleat of fixture.getObjectsByProperty('name','fixture mounting cleat')) {
+          expect(wall.intersectsBox(new THREE.Box3().setFromObject(cleat)),fixture.name).toBe(true)
+        }
+        const ray = visible(fixture,fixtureName==='amber stair entrance sign' ? 'diffusing cabinet face' : 'sealed opal aperture')
+        const azimuth = THREE.MathUtils.radToDeg(Math.atan2(ray.x,ray.z))
+        const elevation = THREE.MathUtils.radToDeg(Math.asin(ray.y))
+        expect(azimuth).toBeGreaterThan(140)
+        expect(azimuth).toBeLessThan(168)
+        expect(elevation).toBeGreaterThan(0)
+        expect(elevation).toBeLessThan(24)
+      }
+    }
     const bridge = required('screen tower upper service skybridge')
     const bridgeEmitters = bridge.children.filter(o => o.name === 'high bridge window bay' || o.name === 'high bridge service sign')
     expect(bridgeEmitters).toHaveLength(7)
@@ -343,13 +467,19 @@ describe('full roof world', () => {
     const macro = visible(required('northwest animated LED wall'),'animated magenta violet tiles')
     expect(THREE.MathUtils.radToDeg(Math.atan2(macro.x,macro.z))).toBeCloseTo(-49,0)
     expect(visible(required('recessed amber service sign'),'diffusing cabinet face').z).toBeLessThan(0)
-    const tiles = required('northwest animated LED wall').getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
     const getFlow = (timeSeconds: number) => {
       world.beginFrame({ frame: { timeSeconds } } as FrameContext)
-      return (tiles.material.uniforms.flow.value as THREE.Vector2).clone()
+      return ['northwest animated LED wall','bridge violet media fascia','lower violet media bank','upper magenta media bank','bonnet media bank','windscreen media bank'].map(name => {
+        const tiles = required(name).getObjectByName('animated magenta violet tiles') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
+        return (tiles.material.uniforms.flow.value as THREE.Vector2).clone()
+      })
     }
-    expect(getFlow(0).distanceTo(getFlow(config.film.durationSeconds))).toBeLessThan(1e-12)
-    expect(getFlow(0).distanceTo(getFlow(config.film.durationSeconds*.5))).toBeGreaterThan(1.5)
+    const start = getFlow(0), middle = getFlow(config.film.durationSeconds*.5), end = getFlow(config.film.durationSeconds)
+    for (const [i,flow] of start.entries()) {
+      expect(flow.distanceTo(end[i])).toBeLessThan(1e-12)
+      expect(flow.distanceTo(middle[i])).toBeGreaterThan(1.5)
+    }
+    world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
     expect(world.lights).toHaveLength(8)
   })
 
@@ -773,6 +903,25 @@ describe('full roof world', () => {
     expect(color.clone().multiplyScalar(raking.level(2)).b).toBeCloseTo(expected.color.b, 10)
     world.beginFrame({ frame: { timeSeconds: 0 } } as FrameContext)
     expect(face.material.uniforms.centerX.value).toBeCloseTo(start.position, 12)
+  })
+
+  it('paints distinct hot, violet and indigo regions on the media', () => {
+    const { data, width, height } = muralPainting().image
+    if (!(data instanceof Uint16Array)) throw new Error('Missing half float mural raster')
+    const sample = (u: number, v: number) => {
+      const i = (Math.floor(v*height)*width+Math.floor(u*width))*4
+      const f = THREE.DataUtils.fromHalfFloat
+      return new THREE.Color(f(data[i]),f(data[i+1]),f(data[i+2]))
+    }
+    const hot = sample(.23,.55)
+    const violet = sample(.71,.61)
+    const indigo = sample(.79,.21)
+    expect(hot.r/hot.b).toBeGreaterThan(2)
+    expect(violet.b/violet.r).toBeGreaterThan(2)
+    expect(muralLuma(indigo)).toBeLessThan(.6*muralLuma(violet))
+    const first = muralMean(1,0,.166,new THREE.Color())
+    const shifted = muralMean(-1,0,.166,new THREE.Color())
+    expect(Math.abs(first.r-shifted.r)).toBeGreaterThan(.25)
   })
 
   it('drives the tower mural periodically while leaving macro emitter slots on their original mounts', () => {
