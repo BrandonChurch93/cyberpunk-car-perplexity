@@ -488,6 +488,12 @@ export interface Materials extends Palette {
   rim: T.MeshPhysicalMaterial
   disc: T.MeshStandardMaterial
   hat: T.MeshPhysicalMaterial
+  seal: T.MeshPhysicalMaterial
+  glassEdge: T.MeshPhysicalMaterial
+  leather: T.MeshStandardMaterial
+  cabinTrim: T.MeshStandardMaterial
+  cabinCarbon: T.MeshPhysicalMaterial
+  screen: T.MeshStandardMaterial
   setLevels(running: number, beam: number, tail: number): void
 }
 
@@ -500,6 +506,7 @@ export async function makeMaterials(detail: VehicleDetail, paint: PaintSpec): Pr
   const p = palette(paint, full)
   await p.load()
   for (const x of [p.dark, p.matte, p.hot, p.bayCover, p.carbon, p.diffuser, p.tire, p.forged, p.brake, p.brushed, p.caliper]) x.side = T.DoubleSide
+  if (!p.surfaces.some((x) => x.material === p.cabin)) p.tag(p.cabin, 'none')
   const std = (color: number, roughness: number): T.MeshStandardMaterial =>
     p.tag(new T.MeshStandardMaterial({ color, roughness, metalness: 0, side: T.DoubleSide }), 'none') as T.MeshStandardMaterial
   const emitter = (color: number, roughness: number, emissive: T.Color): T.MeshPhysicalMaterial =>
@@ -522,6 +529,12 @@ export async function makeMaterials(detail: VehicleDetail, paint: PaintSpec): Pr
     rim: p.forged,
     disc: p.brake,
     hat: p.brushed,
+    seal: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x0d0e10 : 0x202226, roughness: .34, clearcoat: .6, clearcoatRoughness: .12, side: T.DoubleSide }), 'sheet') as T.MeshPhysicalMaterial,
+    glassEdge: p.tag(new T.MeshPhysicalMaterial({ color: full ? 0x1d2a2c : 0x273038, roughness: .1, ior: 1.51 }), 'none') as T.MeshPhysicalMaterial,
+    leather: p.cabin,
+    cabinTrim: std(0x121315, .78),
+    cabinCarbon: p.carbon,
+    screen: std(0x060708, .22),
     setLevels(running, beam, rear) {
       drl.emissiveIntensity = drlLuminance * running
       tail.emissiveIntensity = tailLuminance * rear
