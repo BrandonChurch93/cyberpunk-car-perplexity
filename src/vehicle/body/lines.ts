@@ -29,7 +29,11 @@ export const planLines = {
   ]),
   rearGlass: map(plan, [[1652, 600], [1652, 760], [1640, 880], [1770, 905], [1780, 600]]),
   bay: map(plan, [[1790, 600], [1790, 900], [2000, 902], [2200, 885], [2350, 850], [2465, 800], [2468, 600]]),
-  bonnet: map(plan, [[455, 600], [455, 760], [470, 850], [520, 950], [600, 1030], [520, 1040], [400, 1030], [260, 990], [140, 940], [70, 880]]),
+  /** The bonnet's shut line, from the outer end of the cowl round the windscreen's lower corner and forward along the
+   * wing ridge to the front edge. Across the middle the bonnet's rear edge is the cowl opening's front edge. */
+  bonnet: map(plan, [[530, 925], [520, 950], [600, 1030], [520, 1040], [400, 1030], [260, 990], [140, 940], [70, 880]]),
+  /** The cowl opening: front edge the bonnet's rear edge, rear edge 27 mm up under the windscreen's base. */
+  cowl: map(plan, [[455, 600], [455, 760], [470, 850], [520, 950], [545, 945], [563, 900], [545, 800], [549, 700], [550, 600]]),
   wing: map(plan, [[2560, 600], [2545, 800], [2520, 950], [2495, 1080], [2470, 1150]]),
 }
 
