@@ -57,6 +57,7 @@ const creepNeck = 0.15
 export const laidLength = 0.18
 /** Half width and height of the laid channel in meters, from its pinches to its swells. */
 const laidChannel = { width: [0.0012, 0.0024], height: [0.0006, 0.001] }
+const swellAt = (i: number) => 0.5 + 0.5 * Math.sin(i * 0.11 + 0.7) * Math.sin(i * 0.037 + 2.1)
 
 interface Tri {
   a: THREE.Vector3
@@ -155,11 +156,27 @@ export class Runners {
     const length = Math.max(0, this.path.length - 1) * pathStep
     const stations: number[] = []
     for (let at = this.laid + this.neck * 0.5; at < length && stations.length < 220; at += random.range(0.0026, 0.0048)) stations.push(at)
-    this.trailBeads = new THREE.InstancedMesh(capTemplate(100, 5, 12), this.material, Math.max(1, stations.length))
+    // Water the channel left behind stays pinned along both its banks as small beads.
+    const edgeRandom = stream('surface laid channel edge beads')
+    const edges: Array<{ at: number; side: number; r: number }> = []
+    for (let at = 0.004; at < this.laid - 0.002; at += edgeRandom.range(0.003, 0.008)) {
+      edges.push({ at, side: edgeRandom.range(0, 1) < 0.5 ? -1 : 1, r: 0.0004 + 0.0008 * edgeRandom.range(0, 1) ** 2 })
+    }
+    this.trailBeads = new THREE.InstancedMesh(capTemplate(100, 5, 12), this.material, Math.max(1, edges.length + stations.length))
     this.trailBeads.layers.set(layers.cameraOnly)
     this.trailBeads.frustumCulled = false
     this.trailBeads.count = 0
     const m = new THREE.Matrix4()
+    for (const e of this.path.length > 1 ? edges : []) {
+      const side = this.sideAt(e.at)
+      const n = this.normalAt(e.at)
+      const half = THREE.MathUtils.lerp(laidChannel.width[0], laidChannel.width[1], swellAt(Math.round(e.at / pathStep)))
+      const p = this.pointAt(e.at).addScaledVector(side, e.side * (half + 0.9 * e.r))
+      const down = new THREE.Vector3().crossVectors(n, side)
+      m.makeBasis(down.multiplyScalar(e.r), n.clone().multiplyScalar(capHeight(e.r, 100)), side.clone().multiplyScalar(e.r)).setPosition(p)
+      this.trailBeads.setMatrixAt(this.trailBeadAt.length, m)
+      this.trailBeadAt.push(-1)
+    }
     for (let i = 0; i < stations.length && this.path.length > 1; i++) {
       const s = stations[i]
       const at = this.pointAt(s)
@@ -170,7 +187,7 @@ export class Runners {
       const p = at.clone().addScaledVector(side, offset)
       const down = new THREE.Vector3().crossVectors(n, side)
       m.makeBasis(down.multiplyScalar(r), n.clone().multiplyScalar(capHeight(r, 100)), side.clone().multiplyScalar(r)).setPosition(p)
-      this.trailBeads.setMatrixAt(i, m)
+      this.trailBeads.setMatrixAt(this.trailBeadAt.length, m)
       this.trailBeadAt.push(s)
     }
     this.group.add(this.runner, this.trail, this.trailBeads)
@@ -304,7 +321,7 @@ export class Runners {
     for (let i = from; i <= to && i < this.path.length; i++) {
       const behind = THREE.MathUtils.clamp((s - i * pathStep) / this.neck, 0, 1)
       // The laid channel swells and pinches along its length; between it and the neck the hero has left only a line of drops.
-      const swell = 0.5 + 0.5 * Math.sin(i * 0.11 + 0.7) * Math.sin(i * 0.037 + 2.1)
+      const swell = swellAt(i)
       const laid = i * pathStep <= this.laid ? 1 : 0
       const width = THREE.MathUtils.lerp(laid * THREE.MathUtils.lerp(laidChannel.width[0], laidChannel.width[1], swell), headRadius * 0.62, 1 - behind * behind)
       const height = THREE.MathUtils.lerp(laid * THREE.MathUtils.lerp(laidChannel.height[0], laidChannel.height[1], swell), headRadius * 0.34, 1 - behind)

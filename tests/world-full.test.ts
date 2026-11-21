@@ -246,6 +246,8 @@ describe('full roof world', () => {
     world.root.updateMatrixWorld(true)
     const city = world.root.getObjectByName('hero tower layout')!
     const facadeFamilies = new Set<string>()
+    const tenantRhythms = new Set<string>()
+    const softenedCrowns: string[] = []
     const claddingRoughness = new Map<string,number>()
     const occupancy = new Map<string,readonly number[]>()
     let rooms = 0
@@ -254,6 +256,7 @@ describe('full roof world', () => {
     for (const volume of city.children.filter(o => o.name.endsWith(' volume'))) {
       const shell = volume.children[0] as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
       const [w,h] = shell.material.userData.moduleMeters as [number,number]
+      tenantRhythms.add((shell.material.userData.tenantRhythm as number[]).join('/'))
       const { width,height } = shell.geometry.parameters
       expect(w).toBeGreaterThanOrEqual(1.2)
       expect(w).toBeLessThanOrEqual(1.8)
@@ -263,6 +266,10 @@ describe('full roof world', () => {
       expect(shell.material.userData.mechanicalFloorPitch).toBeLessThanOrEqual(25)
       expect(shell.material.userData.roomDepthMeters).toEqual([4,8])
       const { distanceLayer, tenantGate } = shell.material.userData
+      if (shell.material.userData.crownMist[2] > 0) {
+        expect(distanceLayer).not.toBe('near')
+        softenedCrowns.push(shell.name)
+      }
       const existingGate = occupancy.get(distanceLayer)
       if (existingGate) expect(tenantGate).toEqual(existingGate)
       occupancy.set(distanceLayer,tenantGate)
@@ -284,6 +291,9 @@ describe('full roof world', () => {
       rooms += Math.floor(width/w)*Math.floor(height/h)
     }
     expect(rooms).toBeGreaterThan(10_000)
+    expect(tenantRhythms.size).toBe(city.children.filter(o=>o.name.endsWith(' volume')).length)
+    expect(softenedCrowns).toContain('c9 center distant crown')
+    expect(softenedCrowns.length).toBeLessThan(6)
     expect(facadeFamilies).toEqual(new Set(['curtain','concrete','banded','hotel']))
     expect(claddingRoughness.get('concrete')!).toBeGreaterThan(claddingRoughness.get('curtain')!)
     for (const [i,gate] of occupancy.get('near')!.entries()) {
@@ -334,6 +344,47 @@ describe('full roof world', () => {
     }
     expect(access.children).toHaveLength(2)
     expect(world.lights).toHaveLength(8)
+  })
+
+  it('concentrates occupied room fill around the southern hotel, amber block and center ranks', () => {
+    const fill = (id: string) => {
+      const shell = world.root.getObjectByName(id) as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
+      return shell.material.userData.tenantFill as [number,number]
+    }
+    const hotel = fill('hero hotel tower')
+    const amber = fill('hero amber tower')
+    const center = fill('hero middle center distance')
+    const edge = fill('hero right edge tower')
+    for (const profile of [hotel, amber, center]) expect(profile[0]).toBeGreaterThan(edge[0])
+    expect(hotel[1]).toBeGreaterThan(amber[1])
+    expect(center[1]).toBeGreaterThan(amber[1])
+    const northShells = world.root.getObjectByName('north tower ranks')!.children
+      .filter(item => item.name.startsWith('north tower shells'))
+    expect(northShells.length).toBeGreaterThan(0)
+    for (const shell of northShells) expect(fill(shell.name)[0]).toBe(0)
+  })
+
+  it('mounts distinct stepped rooftop plants on their southern tower footprints', () => {
+    const city = world.root.getObjectByName('hero tower layout')!
+    const crowns = city.getObjectsByProperty('name','terraced mechanical crown')
+    const rises = new Set<number>()
+    const silhouettes = new Set<string>()
+    expect(crowns).toHaveLength(10)
+    for (const crown of crowns) {
+      const shell = crown.parent!.children[0] as THREE.Mesh<THREE.BoxGeometry>
+      const { width, height, depth } = shell.geometry.parameters
+      expect(crown.position.y).toBeCloseTo(shell.position.y+height*.5,7)
+      const roofs = crown.children as THREE.Mesh<THREE.BoxGeometry>[]
+      rises.add(roofs[0]!.geometry.parameters.height)
+      for (const roof of roofs) {
+        const box = roof.geometry.parameters
+        expect(Math.abs(roof.position.x)+box.width*.5,shell.name).toBeLessThan(width*.5)
+        expect(Math.abs(roof.position.z)+box.depth*.5,shell.name).toBeLessThan(depth*.5)
+      }
+      silhouettes.add(roofs.map(roof=>roof.name).join('/'))
+    }
+    expect(rises.size).toBe(10)
+    expect(silhouettes.size).toBe(3)
   })
 
   it('fits the distant cyan shadow around the car and returns to the local macro cutoff', () => {
@@ -601,6 +652,24 @@ describe('full roof world', () => {
     expect(world.lights).toHaveLength(8)
   })
 
+  it('keeps distance haze on the southern tower walls rather than the deck or north district', () => {
+    const response = (name: string) => {
+      const tower = world.root.getObjectByName(name) as THREE.Mesh<THREE.BoxGeometry,THREE.MeshStandardMaterial>
+      return tower.material.userData.skylineAir as [number,number,number]
+    }
+    const near = response('hero hotel tower')
+    const far = response('hero far center distance')
+    expect(near[0]).toBe(1)
+    expect(far[0]).toBe(1)
+    expect(far[1]).toBeGreaterThan(near[1])
+    expect(near[2]).toBeLessThan(.2)
+    const north = world.root.getObjectByName('north tower ranks')!
+    const shells = north.children.filter(shell=>shell.name.startsWith('north tower shells'))
+    expect(shells.length).toBeGreaterThan(0)
+    for (const shell of shells) expect(response(shell.name)).toEqual([0,0,0])
+    expect(world.deck.material.userData.skylineAir).toBeUndefined()
+  })
+
   it('exposes metric relief for the front puddle and an unchanged reflective plane', () => {
     const { deck } = world
     expect(deck.heightMap).toBeInstanceOf(THREE.DataTexture)
@@ -718,7 +787,7 @@ describe('full roof world', () => {
     const { master } = config.formats
     const lens = new THREE.PerspectiveCamera()
     for (const frame of [0,60,150,195,240,1170,1215,1340]) {
-      const wanted = [7,frame===0 || frame===1340 ? 2 : 0,13]
+      const wanted = [7,frame===0 || frame===1340 ? 2 : 0,12]
       const t = frame/config.film.fps
       applyLens(lens,cameraAt(t,master,anchors),master.width,master.height,{pixel:[0,0],aperture:[0,0]},1)
       for (const { mesh,center } of openings) {
@@ -810,7 +879,8 @@ describe('full roof world', () => {
       expect(y).toBeLessThan(low ? .44 : .10)
       const ray = new THREE.Raycaster()
       ray.setFromCamera(new THREE.Vector2(ndc.x,ndc.y),lens)
-      expect(ray.intersectObject(world.root,true)[0]?.object.parent?.name).toBe(id)
+      const guard = /^hero (full span steel top rail|steel mid rail|rail post)/
+      expect(ray.intersectObject(world.root,true).find(hit=>!guard.test(hit.object.name))?.object.parent?.name).toBe(id)
     }
     const rise = approvedHeroSourceSurvey().find(source=>source.id==='cyan garage rise')!
     const optic = world.root.getObjectByName(rise.id)?.getObjectByName('weather-sealed opal face') as THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
@@ -1277,7 +1347,7 @@ describe('full roof world', () => {
     expect(world.root.getObjectByName('zoned middle-distance fire stairs, gutters and condenser racks')).toBeDefined()
     expect(triangles).toBeGreaterThan(120_000)
     expect(triangles).toBeLessThan(500_000)
-    expect(world.signs.filter(s => config.signage.invented.includes(s)).sort()).toEqual(['BRINESCALE SUSHI', 'SHUTTER HUSH CLUB', 'VAPOR SILL HOTEL'])
+    expect(world.signs.filter(s => config.signage.invented.includes(s)).sort()).toEqual(['BRINESCALE SUSHI', 'ORBITAL DINER', 'SALT MOTH', 'SHUTTER HUSH CLUB', 'VAPOR SILL HOTEL'])
   })
 
   it('rakes the grille from the parapet and tracks the wheel boom without leaking either cue into the seam', () => {

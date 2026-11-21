@@ -10,6 +10,7 @@ import { clipBounds, rainFloor, ribbonCorners, worldRainMotion, WorldRibbonSelec
 import { RainSkyDepth } from './sky-depth'
 
 type Fade = readonly [number, number, number, number]
+export const deckGlintLayer = -3
 interface RibbonField {
   fade: Fade
   gain: number
@@ -146,6 +147,7 @@ flat out float vMist;
 flat out vec3 vBeamTrace;
 flat out vec2 vGlint;
 flat out float vSkyKeep;
+flat out vec4 vDropFlashes;
 
 ${scatter}
 
@@ -234,7 +236,7 @@ void main() {
   float diameter = aDrop.w * abs(pixelFocal.y) / depth;
   vec2 coc = uAperture * abs(1.0 - depth / uFocus) * pixelFocal / depth;
   float physical = diameter * 0.5;
-  bool mist = uLayer < -1.5;
+  bool mist = uLayer == -2.0;
   float sigma = physical * physical * (mist ? 0.5 : 0.25) + (uHero > 1.5 ? 1.0 / 12.0 : 0.17);
   float sigmaSide = sqrt(pow(length(normal * coc) * 0.5, 2.0) + sigma);
   float sigmaEnd = sqrt(pow(length(axis * coc) * 0.5, 2.0) + sigma);
@@ -242,16 +244,33 @@ void main() {
   vec3 flash;
   float paint = uPaint;
   if (paint > 1.5 && depth > uFocus * 1.4) paint = 0.0;
+  bool strata = uFilmView > 0.5 && uLayer >= 0.0 && uLocalFine < 0.5 && uHero < 2.5;
+  float depthGain = strata && paint < 0.5 ? 1.0 - smoothstep(13.5, 27.0, depth) : 1.0;
+  if (depthGain <= 0.0) return;
   vec3 trace;
   vec3 radiance = scatterRain(p, delta, normalize(eye - p), mist, uLayer, uLocalFine > 0.5, paint, uHero, uSkyDepthEnabled, flash, trace, vSkyKeep);
   if (all(equal(radiance + flash, vec3(0.0)))) return;
-  float gain = uLayer < 0.0 ? (mist ? 1.0 : 0.64) : uGain;
+  float gain = uLayer < 0.0 ? (mist ? 1.0 : 0.64) : uGain * depthGain;
   float paintDefocus = smoothstep(0.10, 0.34, abs(depth / uFocus - 1.0));
   if (paint > 0.5 && paint < 1.5) gain *= mix(2.9, 0.21, paintDefocus);
   float coverage = min(1.0, diameter * 0.39894228 / sigmaSide) * min(1.0, max(len, diameter) / (1.35 * sigmaEnd));
   float longSide = max(uViewport.x, uViewport.y);
   float frameTravel = len / longSide;
   vGlint = vec2(-1.0, 1.0);
+  vDropFlashes = vec4(0.0);
+  if (strata) {
+    vec2 focusCoc = uFocusAperture * abs(1.0 - depth / uFocus) * pixelFocal / depth;
+    float opticalWidth = length(normal * focusCoc) / longSide;
+    float diffuse = smoothstep(0.00085, 0.0026, opticalWidth);
+    float rare = smoothstep(0.91, 0.995, aMotion.w);
+    if (uLayer < 0.5 && paint < 0.5) gain *= mix(1.0, 0.30 + 1.85 * rare, diffuse);
+    float resolution = smoothstep(3.2, 6.5, len) * (1.0 - diffuse);
+    float phase = 6.28318530718 * (uPhase * floor(43.0 * uDuration * pow(0.001 / aDrop.w, 1.5) + 0.5) + aMotion.w);
+    float first = 0.22 + 0.14 * sin(phase);
+    float second = 0.70 + 0.17 * sin(phase + 2.5 + aMotion.w * 2.2);
+    float span = sqrt(sigmaEnd * sigmaEnd + (0.075 + 0.045 * aMotion.w) * (0.075 + 0.045 * aMotion.w) * len * len);
+    vDropFlashes = vec4(resolution, first * len, second * len, span);
+  }
   if (uHero > 0.5 && uLayer >= 0.0) {
     vec2 focusCoc = uFocusAperture * abs(1.0 - depth / uFocus) * pixelFocal / depth;
     float opticalWidth = length(vec2(length(normal * focusCoc), physical)) * 0.5 / longSide;
@@ -282,7 +301,10 @@ void main() {
   flash *= amount * gain * coverage;
   peak += flash / (1.0 + (uLocalFine > 0.5 ? 5.5 : 20.0) * max(flash.r, max(flash.g, flash.b)));
   if (mist) peak /= 1.0 + 76.0 * max(peak.r, max(peak.g, peak.b));
-  if (uLayer < 0.0 && !mist) peak /= 1.0 + (paint > 1.5 ? 9.0 : 32.0) * max(peak.r, max(peak.g, peak.b));
+  if (uLayer < 0.0 && !mist) {
+    float knee = uLayer == ${deckGlintLayer.toFixed(1)} ? 17.0 : paint > 1.5 ? 9.0 : 32.0;
+    peak /= 1.0 + knee * max(peak.r, max(peak.g, peak.b));
+  }
   vRadiance = veilHighlights(peak, veil);
   vVeil = veil;
   vBead = uLayer < 0.0 ? 0.0 : clamp((aDrop.w - 0.0017) * 450.0, 0.0, 0.28);
@@ -308,6 +330,7 @@ flat in float vMist;
 flat in vec3 vBeamTrace;
 flat in vec2 vGlint;
 flat in float vSkyKeep;
+flat in vec4 vDropFlashes;
 out vec4 outColor;
 
 void main() {
@@ -331,6 +354,11 @@ void main() {
   if (vGlint.x >= 0.0) {
     float glint = (x - vGlint.x) / vGlint.y;
     beamTrace *= mix(0.095, 1.0, exp(-0.5 * glint * glint));
+  }
+  if (vDropFlashes.x > 0.0) {
+    vec2 glints = (x - vDropFlashes.yz) / vDropFlashes.w;
+    vec2 highlights = exp(-0.5 * glints * glints);
+    beamTrace *= mix(1.0, 0.40 + dot(highlights, vec2(1.18, 1.42)), vDropFlashes.x);
   }
   if (uSkyDepthEnabled && texelFetch(uSkyDepth, ivec2(gl_FragCoord.xy), 0).r >= 1.0) {
     beamTrace *= mix(0.04, 1.0, vSkyKeep);
@@ -431,7 +459,7 @@ export class RibbonView {
     })
     const mesh = new THREE.Mesh(geometry, material)
     mesh.frustumCulled = false
-    mesh.layers.set(layer === 0 || field?.hero ? layers.cameraOnly : layers.scene)
+    mesh.layers.set(layer === 0 || layer === deckGlintLayer || field?.hero ? layers.cameraOnly : layers.scene)
     const viewport = new THREE.Vector4()
     const offset = new THREE.Vector3()
     const inverse = new THREE.Quaternion()
@@ -477,7 +505,7 @@ export function rainMeshes(view: RibbonView, world: WorldModule, lights: FilmLig
     { key: 'distance', layer: 3, density: 0.56, fine: 5.1, size: new THREE.Vector3(Math.max(deckSpan.x, 96), 20.5, Math.max(deckSpan.y, 96)), fade: [17.4, 25, 43, 61], gain: 3.0 },
     { key: 'beam', layer: 1, density: 76, fine: 7.0, size: new THREE.Vector3(12, 3.2, 14), fade: [1.05, 2.15, 9, 13], gain: 2.45, local: true },
     { key: 'paint', layer: 0, density: 930, fine: 7.8, size: new THREE.Vector3(1.75, 2.15, 1.75), fade: [0.28, 0.45, 0.76, 0.92], gain: 0.92, paint: true },
-    { key: 'beam-grain', layer: 1, density: 510, fine: 11, size: new THREE.Vector3(7.6, 1.65, 7.9), fade: [3.25, 4.55, 11.2, 15.8], gain: 1.08, local: true, hero: 'beam' },
+    { key: 'beam-grain', layer: 1, density: 660, fine: 11, size: new THREE.Vector3(7.6, 1.65, 7.9), fade: [3.25, 4.55, 11.2, 15.8], gain: 1.08, local: true, hero: 'beam' },
     { key: 'media-grain', layer: 2, density: 81, fine: 11, size: new THREE.Vector3(12, 4.8, 7.6), fade: [6.1, 7.2, 10.4, 13.4], gain: 1.0, hero: 'media' },
   ]
   return specs.map(({ key, layer, density, fine, size, fade, gain, local, paint, hero }) => {
