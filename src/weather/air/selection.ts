@@ -4,7 +4,7 @@ import { prevailingWind, terminalSpeed } from './motion'
 
 export const clipBounds = { x: 1.4, y: 1.7, near: 0.035 }
 export const worldRainMotion = { slant: 0.19, variation: 0.075, gust: 0.09, gustCycles: 14, flutter: 0.018, flutterCycles: 91 }
-export const rainExtents = { floor: 0.018, middle: [1.9, 25], far: [15, 36] } as const
+export const rainFloor = 0.018
 export const ribbonCorners = [-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0] as const
 const ribbonIndices = [0, 1, 2, 0, 2, 3] as const
 const phaseSlack = 0.00002
@@ -92,7 +92,7 @@ export class WorldRibbonSelection {
     let written = 0
     drops: for (let i = 0, vertex = 0; i < centers.length; i += 3, vertex += 4) {
       const x = centers[i], y = centers[i + 1], z = centers[i + 2]
-      if (y < rainExtents.floor - positionSlack) continue
+      if (y < rainFloor - positionSlack) continue
       const d2 = (eye.x - x) ** 2 + (eye.y - y) ** 2 + (eye.z - z) ** 2
       if (d2 < near2 || d2 > far2) continue
       for (let p = 0; p < planes.length; p += 4) {

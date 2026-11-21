@@ -8,6 +8,7 @@ import { detailFacades } from './facades'
 import { loadLabels, roofFixtures } from './fixtures'
 import { Forms, group } from './forms'
 import { addApprovedHeroLayout } from './hero-layout'
+import { addReflectionFrontages } from './reflection-practicals'
 import { finishRoof } from './roof-look'
 
 const wake = config.beats.find(beat => beat.id === 'wake')!
@@ -40,8 +41,10 @@ export async function createFullWorld(): Promise<WorldModule> {
   const updateCity = cityPracticals(city, labels, fixtures.signs)
   detailFacades(city)
   const hero = addApprovedHeroLayout(root, labels, materials)
+  const reflections = addReflectionFrontages(root,labels)
+  const wideLights = new Map([...hero.lights,...fixtures.wideLights.map(light=>[light.id,light] as const)])
   const slots = fixtures.lights.map(original => {
-    const wide = hero.lights.get(original.id)
+    const wide = wideLights.get(original.id)
     return { original, wide, output: wide ? { ...wide } : original }
   })
   const set = (timeSeconds: number, cutTime = timeSeconds) => {
@@ -49,6 +52,7 @@ export async function createFullWorld(): Promise<WorldModule> {
     fixtures.set(timeSeconds, cutTime, wide)
     updateCity(timeSeconds)
     hero.set(timeSeconds)
+    reflections.update(timeSeconds)
     for (const slot of slots) {
       if (!slot.wide) continue
       const source = wide ? slot.wide : slot.original
@@ -60,7 +64,7 @@ export async function createFullWorld(): Promise<WorldModule> {
   return {
     root,
     lights: slots.map(slot => slot.output),
-    signs: [...new Set([...fixtures.signs, ...hero.signs])],
+    signs: [...new Set([...fixtures.signs, ...hero.signs, ...reflections.signs])],
     deck,
     reflectionBox: new THREE.Box3(new THREE.Vector3(min.x, 0, min.y), new THREE.Vector3(max.x, 81, max.y)),
     surfaces,

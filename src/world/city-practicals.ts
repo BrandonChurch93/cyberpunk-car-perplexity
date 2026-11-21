@@ -29,6 +29,23 @@ patchMaterial(washedSign, {
     `)
   },
 })
+const concourseStone = gray(.068,.084,.101)
+patchMaterial(concourseStone, {
+  id: 'rain trails on tenant concrete',
+  uniforms: { tenantMottle: { value: streamSeed('world/city/north-concourse-stone') / 4294967296 } },
+  apply(shader) {
+    shader.vertexShader = insertAfter(shader.vertexShader, '#include <common>', 'varying vec3 tenantWorld;')
+    shader.vertexShader = insertAfter(shader.vertexShader, '#include <project_vertex>', 'tenantWorld=(modelMatrix*vec4(position,1.0)).xyz;')
+    shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <common>', 'varying vec3 tenantWorld; uniform float tenantMottle;')
+    shader.fragmentShader = insertAfter(shader.fragmentShader, '#include <color_fragment>', /* glsl */ `
+      float grain = tenantWorld.x*6.8 + tenantMottle*13.0;
+      float key = fract(sin(floor(grain)*15.71)*43758.54);
+      float streak = (1.0-smoothstep(.04,.46,abs(fract(grain)-.5)))*smoothstep(.32,.90,key);
+      float joint = 1.0-smoothstep(.009,.026+fwidth(grain)*.1,abs(fract(tenantWorld.x/1.29+.31)-.5));
+      diffuseColor.rgb *= (.66+.34*smoothstep(-.65,.30,sin(tenantWorld.y*1.6+key*.33)))*(1.0-.40*streak-.25*joint);
+    `)
+  },
+})
 const cheap = (parent: THREE.Object3D, name: string, material: THREE.Material, at: Tuple, size: Tuple): THREE.Mesh => {
   const o = block(parent, name, material, at, size)
   o.castShadow = false
@@ -85,7 +102,7 @@ function mountedText(city: THREE.Group, labels: Label, signs: string[]): void {
     { text: 'SHUTTER HUSH CLUB', lines: ['SHUTTER','HUSH CLUB'], tower: 'southwest exchange', x: -18.0, y: 9.8, rot: 0, w: 4.65, h: 1.78, type: 'led', col: [1.32,1.84,2.7] },
     { text: 'BRINESCALE SUSHI', lines: ['BRINESCALE','SUSHI'], tower: 'north sign terrace', x: -27.04, y: 9.89, rot: Math.PI, w: 3.48, h: 1.9, type: 'lightbox', col: [2.55,1.55,.89], standoff: .46 },
     { text: 'PHARMACY', tower: 'northwest tower', x: -47.0, y: 17.1, rot: Math.PI, w: 4.78, h: 1.08, type: 'led', col: [.73,1.85,2.01] },
-    { text: 'KARAOKE', tower: 'north central tower', x: .70, y: 15.5, rot: Math.PI, w: 2.75, h: 1.13, type: 'paint', col: [.35,.49,.57] },
+    { text: 'KARAOKE', tower: 'north central tower', x: .70, y: 15.5, rot: Math.PI, w: 2.75, h: 1.13, type: 'paint', col: [.58,.70,.66], standoff: .43 },
     { text: 'PARKING', tower: 'billboard terrace', x: 3.2, y: billboardTerraceRoof+.72, rot: 0, w: 4.26, h: .91, type: 'led', col: [.84,1.69,2.25] },
     { text: 'EXIT', tower: 'southwest signal tower', x: -35, y: 41.7, rot: 0, w: 2.8, h: .90, type: 'led', col: [.71,1.14,1.72] },
     { text: 'HOTEL', tower: 'west corner slab', x: -35.8, y: 15.85, rot: 0, w: 3.35, h: .82, type: 'led', col: [.60,1.56,1.93], standoff: .46 },
@@ -108,6 +125,14 @@ function mountedText(city: THREE.Group, labels: Label, signs: string[]): void {
       cheap(fixture, 'steel sign frame brace', steel, [x, atRoof ? -.84 : 0, -.77-standoff*.5], [.07, .085, .82+standoff])
     }
     add(fixture, spec.text, spec.type, spec.w, spec.h, new THREE.Color(...spec.col), 'lines' in spec ? spec.lines : undefined, standoff)
+    if (spec.text === 'KARAOKE') {
+      for (const y of [-spec.h*.5,spec.h*.5]) cheap(fixture,'folded sign box edge',concourseStone,[0,y,.028],[spec.w+.13,.073,.371])
+      for (const x of [-spec.w*.52,spec.w*.52]) cheap(fixture,'sign box end cap',trim,[x,0,.028],[.081,spec.h+.036,.371])
+      for (const x of [-spec.w*.39,spec.w*.39]) {
+        const brace = cheap(fixture,'inclined box bracket',steel,[x,-.51,-.54],[.102,1.06,.11])
+        brace.rotation.x = .97
+      }
+    }
   }
 
   const red = city.getObjectByName('red sign')!
@@ -130,6 +155,186 @@ function mountedText(city: THREE.Group, labels: Label, signs: string[]): void {
     cheap(red, 'neon electrode boot', black, [xx-.235,-.33,.2], [.099,.074,.067])
     cheap(red, 'neon standoff', steel, [xx+.18,.14,.164], [.03,.025,.11])
   })
+}
+
+function northConcourse(facade: THREE.Group, run: number): void {
+  const bays = 7, pitch = run/bays
+  const r = stream('world/city/concourse/karaoke-rooms')
+  const gasket = gray(.013,.023,.030)
+  const frame = gray(.052,.077,.099)
+  const sill = gray(.076,.105,.127)
+  const curtain = gray(.051,.059,.067)
+  const deep = gray(.008,.013,.022)
+  const glass = new THREE.MeshBasicMaterial({ color: new THREE.Color(.16,.27,.38), transparent: true, opacity: .09, depthWrite: false, toneMapped: false })
+  const diffuse = [new THREE.Color(.94,.62,.35),new THREE.Color(.29,.70,.89),new THREE.Color(.88,.82,.62)]
+  for (const x of [-run*.42,0,run*.42]) {
+    cheap(facade,'concourse shear bracket',steel,[x,.01,-.42],[.16,.37,1.64])
+    cheap(facade,'upper floor mounting lug',trim,[x,2.73,-.48],[.15,.16,1.58])
+  }
+  for (const [j,y] of [.83,3.02].entries()) {
+    cheap(facade,'rain stained tenant spandrel',concourseStone,[0,y-1.05,.34],[run+.23,.44,.66])
+    cheap(facade,'folded rain drip edge',sill,[0,y-.82,.64],[run+.28,.035,.16])
+    cheap(facade,'sealed curtain wall head',frame,[0,y+.85,.36],[run+.13,.13,.61])
+    for (let i=0;i<bays;i++) {
+      const x = (i-(bays-1)/2)*pitch
+      const color = diffuse[(2*i+j)%diffuse.length]!
+      const bright = j===0 ? i===3 || i===5 : i===1 || i===4 || i===5
+      const gain = bright ? r.range(.13,.29) : r.range(.013,.032)
+      const room = group(facade,'tenant room',[x,y,0])
+      cheap(room,'recessed tenant wall',gray(color.r*gain,color.g*gain,color.b*gain),[0,0,-.17],[pitch-.12,1.58,.08])
+      for (const side of [-1,1]) cheap(room,'deep window jamb',gasket,[side*(pitch*.5-.067),0,.23],[.134,1.6,.82])
+      cheap(room,'room ceiling reveal',bright ? gray(color.r*.14,color.g*.14,color.b*.14) : trim,[0,.74,.16],[pitch-.20,.13,.69])
+      cheap(room,'tenant window sill',sill,[0,-.75,.36],[pitch-.16,.13,.65])
+      cheap(room,'extruded external mullion',frame,[r.range(-.31,.26),0,.57],[.072,1.48,.17])
+      cheap(room,'window transom and gasket',frame,[0,r.range(.24,.49),.55],[pitch-.23,.068,.15])
+      plate(room,'ceiling reflected through tenant glass',glass,[0,0,.53],pitch-.23,1.44)
+      const shadeH = r.range(.17,.90)
+      const shadeX = i%2===0 ? -.29 : .28
+      cheap(room,'partly lowered roller blind',curtain,[shadeX,.72-shadeH*.5,.36],[pitch*.54,shadeH,.024])
+      cheap(room,'roller blind hem',sill,[shadeX,.72-shadeH,.378],[pitch*.54,.031,.019])
+      if (!bright) continue
+      const lampX = -Math.sign(shadeX)*r.range(.24,.45)
+      cheap(room,'task light suspension',frame,[lampX,.525,.11],[.024,.39,.024])
+      cheap(room,'interior suspended task light',gray(color.r*1.56,color.g*1.56,color.b*1.56),[lampX,.33,.11],[.36,.068,.20])
+      cheap(room,'tenant booth seat',gray(color.r*.13,color.g*.13,color.b*.13),[.42,-.50,.13],[.67,.39,.32])
+      cheap(room,'tenant tabletop',deep,[-.17,-.25,.22],[.68,.071,.40])
+      cheap(room,'tenant table pedestal',frame,[-.15,-.48,.22],[.086,.42,.11])
+      cheap(room,'interior shelving',steel,[-.54,.04,-.07],[.21,1.12,.16])
+    }
+  }
+  const plant = group(facade,'tenant balcony and plant level',[run*.29,4.07,.28])
+  cheap(plant,'balcony cantilever slab',concourseStone,[0,0,.49],[3.28,.18,1.19])
+  cheap(plant,'balcony anchoring beam',frame,[0,-.15,-.435],[2.71,.16,2.33])
+  cheap(plant,'balcony handrail',sill,[0,.98,1.06],[3.11,.059,.077])
+  cheap(plant,'balcony lower rail',frame,[0,.27,1.06],[3.11,.043,.043])
+  for (const x of [-1.53,-.77,0,.77,1.53]) cheap(plant,'balcony metal picket',frame,[x,.53,1.06],[.055,.904,.053])
+  for (const x of [-.99,.86]) {
+    cheap(plant,'balcony planter trough',concourseStone,[x,.22,.74],[.88,.33,.57])
+    const leaves = gray(.036,.074,.053)
+    for (let i=0;i<9;i++) {
+      const sprig = cheap(plant,'balcony planter foliage',leaves,[x+r.range(-.37,.35),r.range(.37,.62),r.range(.51,.96)],[.068,r.range(.23,.52),.074])
+      sprig.rotation.z = r.range(-.77,.77)
+    }
+  }
+}
+
+function tenantSurround(facade: THREE.Group, run: number, accent: THREE.Color, towerName: string): void {
+  const tones = Array.from({ length: 5 }, (_, i) => gray(accent.r*(.16+.17*i),accent.g*(.16+.17*i),accent.b*(.16+.17*i)))
+  const floorStone = gray(.029,.059,.088)
+  const r = stream(`world/city/concourse/${towerName}`)
+  const bays = 7
+  const pitch = run/bays
+  for (const x of [-run*.42,0,run*.42]) {
+    cheap(facade,'concourse shear bracket',steel,[x,.01,-.56],[.13,.32,1.36])
+    cheap(facade,'upper floor mounting lug',trim,[x,2.73,-.56],[.113,.12,1.36])
+  }
+  for (const [y, phase] of [[.83,0],[3.02,1]]) {
+    cheap(facade,'cast floor edge',floorStone,[0,y-1.00,.25],[run+.15,.32,.41])
+    cheap(facade,'sealed curtain wall head',steel,[0,y+.96,.259],[run+.11,.14,.37])
+    cheap(facade,'window recess',black,[0,y,.16],[run,1.84,.22])
+    const vacancies = new Set([phase,r.int(bays)])
+    for (let i=0; i<bays; i++) {
+      const x = (i-(bays-1)/2)*pitch
+      const occupied = !vacancies.has(i) && r.next() > (phase === 0 ? .21 : .44)
+      const light = occupied ? tones[r.int(tones.length)]! : trim
+      const spec = occupied ? tones[tones.length-1]! : black
+      plate(facade,'ceiling reflected through tenant glass',light,[x,y+.22,.282],pitch-.14,1.28)
+      plate(facade,'room light bounce',spec,[x,y+.72,.285],pitch-.16,.13)
+      plate(facade,'frosted stair glazing return',occupied ? tones[0]! : trim,[x,y-.58,.287],pitch-.16,.33)
+      cheap(facade,'extruded external mullion',steel,[x-pitch*.5+.034,y,.32],[.069,1.82,.13])
+      if (i===bays-1) cheap(facade,'closing jamb',steel,[x+pitch*.5-.034,y,.32],[.069,1.82,.13])
+      if (occupied && r.next()>.35) {
+        cheap(facade,'half drawn roller shade',trim,[x+pitch*.26,y+.24,.293],[pitch*.31,1.08,.032])
+      }
+    }
+  }
+}
+
+function cityConcourseWindows(city: THREE.Group, labels: Label, signs: string[]): void {
+  for (const [towerName, face, base, u, allowed, chroma] of [
+    ['north central tower','south',5.15,-1.20,'ARCADE',[.70,.86,1.0]],
+    ['northeast terrace','south',12.2,.12,'NOODLES',[1.0,.67,.37]],
+    ['east residential tower','west',6.25,1.65,'24H',[.64,.83,1.0]],
+  ] as const) {
+    const tower = city.getObjectByName(towerName)!
+    const east = face === 'west'
+    const width = east ? 'z' : 'x'
+    const normal = east ? 'x' : 'z'
+    const wall = tower.children.filter(o => o.name === 'building mass' && o.scale[width] > 7 &&
+      Math.abs(o.position.y-base-1.2) + 2.6 < o.scale.y*.5).sort((a,b) => b.scale[width]-a.scale[width])[0]!
+    const run = Math.min(wall.scale[width]-.8, 12.4)
+    const reveal = wall.scale[normal]*.5+1.18
+    const facade = group(tower,'lit concourse and tenant bays',[
+      wall.position.x+(east ? -reveal : u),
+      base,
+      wall.position.z+(east ? u : -reveal),
+    ])
+    facade.rotation.y = east ? -Math.PI/2 : Math.PI
+    const accent = new THREE.Color(...chroma)
+    if (towerName === 'north central tower') northConcourse(facade,run)
+    else tenantSurround(facade,run,accent,towerName)
+    const text = config.signage.generic.find(s=>s===allowed)!
+    const cabinet = group(facade,'concourse entrance fascia',[run*.19,1.925,.26])
+    cheap(cabinet,'cabinet back',black,[0,0,0],[3.32,.69,.32])
+    cheap(cabinet,'folded cabinet subframe',trim,[0,-.30,.19],[3.31,.052,.088])
+    plate(cabinet,'frosted fascia face',washedSign,[0,0,.163],3.12,.57)
+    labelFace(cabinet,text,[0,0,.172],[3.0,.49],labels,accent.clone().multiplyScalar(2.05))
+    signs.push(text)
+  }
+}
+
+function northernSignals(city: THREE.Group): void {
+  const anodized = gray(.028,.061,.085)
+  const coldWash = gray(.035,.243,.331)
+  const cove = gray(.048,.87,1.2)
+  const shade = gray(.014,.035,.049)
+  const mount = (name: string, y: number, offset: number) => {
+    const tower = city.getObjectByName(name)!
+    const wall = tower.children.find(o => o.name==='building mass' && o.scale.y>12 &&
+      o.position.y-o.scale.y*.5<y-3 && o.position.y+o.scale.y*.5>y+3)!
+    const p = wall.position, d = wall.scale
+    const front = group(tower,'mounted cyan service lightwell',[p.x+offset,y,p.z-d.z*.5-.05])
+    front.rotation.y = Math.PI
+    return front
+  }
+  const landing = mount('north relay tower',39,-.4)
+  cheap(landing,'lightwell backing fixed into core',anodized,[0,.56,.01],[4.42,10.24,.38])
+  for (const x of [-2.24,2.24]) cheap(landing,'slotted balcony wall return',shade,[x,.56,.44],[.29,10.24,1.11])
+  for (const [level,width] of [[-3.58,3.99],[-.84,4.24],[2.33,3.36],[5.31,4.42]]) {
+    cheap(landing,'cyan spill on service spandrel',coldWash,[0,level-.29,.225],[width,.51,.076])
+    cheap(landing,'cantilevered service landing',anodized,[0,level,.49],[width+.22,.19,1.04])
+    cheap(landing,'recessed cyan landing cove',cove,[0,level-.099,.61],[width-.21,.081,.48])
+    cheap(landing,'dark landing nosing',shade,[0,level-.083,.94],[width+.26,.12,.14])
+  }
+  const stair = mount('northern court tower',32,-7.2)
+  cheap(stair,'lightwell backing fixed into core',anodized,[0,1,.06],[1.42,24,.5])
+  for (const x of [-.64,.64]) cheap(stair,'service shaft edge',shade,[x,1,.31],[.26,24,.65])
+  for (let i=0;i<6;i++) {
+    const y = (i-2.5)*3.79
+    cheap(stair,'cyan service bay back',coldWash,[0,y,.36],[.73,2.1,.35])
+    cheap(stair,'service landing lip',anodized,[0,y+1.04,.52],[1.38,.13,.66])
+    cheap(stair,'recessed cyan riser',cove,[.20,y-.04,.52],[.21,1.54,.21])
+  }
+}
+
+function supportCoolSigns(city: THREE.Group): void {
+  for (const [id,towerId,width,anchors] of [
+    ['wide cool panel','north sign terrace',4.4,[-1.38,1.4]],
+    ['vertical cool panel','north sign terrace',1.05,[-.29,.31]],
+    ['small cool panel','northwest tower',2.6,[.21,1.02]],
+    ['corner cool panel','northwest tower',1.5,[-.49,.49]],
+  ] as const) {
+    const fixture = city.getObjectByName(id)!
+    const tower = city.getObjectByName(towerId)!
+    tower.add(fixture)
+    cheap(fixture,'folded cool sign mounting rail',trim,[0,-.17,-.12],[width+.07,.13,.23])
+    const depth = id==='small cool panel' ? .45 : .38
+    const drops = id==='vertical cool panel' || id==='corner cool panel' ? [-.67,.63] : [-.20,.20]
+    for (const x of anchors) for (const y of drops) {
+      cheap(fixture,'cool cabinet steel outrigger',steel,[x,y,-.24],[.102,.118,depth+.24])
+    }
+    if (id==='small cool panel') cheap(fixture,'cantilever plate spreader',steel,[.64,-.04,-.37],[1.08,.80,.22])
+  }
 }
 
 function roofDetails(city: THREE.Group): ((t: number) => void)[] {
@@ -258,6 +463,9 @@ function aircraft(city: THREE.Group): (t: number) => void {
 
 export function cityPracticals(city: THREE.Group, labels: Label, signs: string[]): (t: number) => void {
   mountedText(city, labels, signs)
+  cityConcourseWindows(city, labels, signs)
+  supportCoolSigns(city)
+  northernSignals(city)
   const updates=[...roofDetails(city),railway(city),aircraft(city)]
   const update=(t: number)=>{ for (const fn of updates) fn(t) }
   update(0)

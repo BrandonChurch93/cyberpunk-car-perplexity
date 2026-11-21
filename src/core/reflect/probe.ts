@@ -1,8 +1,14 @@
 import * as THREE from 'three'
 import { layers } from '../contract'
+import type { HazeCapture } from '../haze'
 import { Prefilter } from './prefilter'
 
-function cubeTarget(size: number): THREE.WebGLCubeRenderTarget {
+type PrepareFace = (camera: THREE.PerspectiveCamera, face: number) => void
+const faceOrder = [0, 1, 2, 3, 4, 5]
+// The sky face bakes the frame's shadows before any mirror hides the deck.
+const mirrorFaceOrder = [2, 0, 1, 3, 4, 5]
+
+function cubeTarget(size: number, depthBuffer = true): THREE.WebGLCubeRenderTarget {
   return new THREE.WebGLCubeRenderTarget(size, {
     type: THREE.HalfFloatType,
     format: THREE.RGBAFormat,
@@ -10,7 +16,7 @@ function cubeTarget(size: number): THREE.WebGLCubeRenderTarget {
     generateMipmaps: true,
     minFilter: THREE.LinearMipmapLinearFilter,
     magFilter: THREE.LinearFilter,
-    depthBuffer: true,
+    depthBuffer,
   })
 }
 
@@ -19,10 +25,20 @@ export class Probe {
   readonly cube: THREE.CubeCamera
   private readonly target: THREE.WebGLCubeRenderTarget
   private readonly prefilter: Prefilter
+  private readonly source: THREE.WebGLRenderTarget | null
+  private fullTarget: THREE.WebGLCubeRenderTarget | null = null
   private withEmitters: Prefilter | null = null
 
-  constructor(private readonly renderer: THREE.WebGLRenderer, size: number, near: number, far: number) {
-    this.target = cubeTarget(size)
+  constructor(private readonly renderer: THREE.WebGLRenderer, size: number, near: number, far: number,
+    private readonly haze?: HazeCapture, private readonly prepareFace?: PrepareFace) {
+    this.target = cubeTarget(size, !haze)
+    this.source = haze ? new THREE.WebGLRenderTarget(size, size, {
+      type: THREE.HalfFloatType,
+      format: THREE.RGBAFormat,
+      colorSpace: THREE.NoColorSpace,
+      depthTexture: new THREE.DepthTexture(size, size, THREE.UnsignedIntType),
+      generateMipmaps: false,
+    }) : null
     this.cube = new THREE.CubeCamera(near, far, this.target)
     this.cube.coordinateSystem = renderer.coordinateSystem
     this.cube.updateCoordinateSystem()
@@ -38,16 +54,19 @@ export class Probe {
     this.cube.updateMatrixWorld(true)
     const shadows = renderer.shadowMap.autoUpdate
     const target = renderer.getRenderTarget()
+    const activeFace = renderer.getActiveCubeFace()
+    const activeMip = renderer.getActiveMipmapLevel()
     const color = renderer.getClearColor(new THREE.Color())
     const alpha = renderer.getClearAlpha()
     const autoClear = renderer.autoClear
     renderer.setClearColor(0x000000, 1)
     try {
-      this.cube.children.forEach((camera, face) => {
+      if (this.haze && this.source) return this.captureScattered(scene, this.haze, this.source, emitters)
+      this.drawFaces((camera, face) => {
         this.target.texture.generateMipmaps = face === 5
         renderer.setRenderTarget(this.target, face)
         renderer.clear(true, true, false)
-        renderer.render(scene, camera as THREE.PerspectiveCamera)
+        renderer.render(scene, camera)
         renderer.shadowMap.autoUpdate = false
         renderer.shadowMap.needsUpdate = false
       })
@@ -71,9 +90,49 @@ export class Probe {
       return { background, full: this.withEmitters.run(this.target.texture) }
     } finally {
       renderer.shadowMap.autoUpdate = shadows
+      renderer.autoClear = autoClear
       renderer.setClearColor(color, alpha)
-      renderer.setRenderTarget(target)
+      renderer.setRenderTarget(target, activeFace, activeMip)
     }
   }
 
+  private drawFaces(draw: PrepareFace): void {
+    for (const face of this.prepareFace ? mirrorFaceOrder : faceOrder) {
+      const camera = this.cube.children[face] as THREE.PerspectiveCamera
+      this.prepareFace?.(camera, face)
+      draw(camera, face)
+    }
+  }
+
+  private captureScattered(scene: THREE.Scene, haze: HazeCapture, source: THREE.WebGLRenderTarget, emitters?: THREE.Object3D) {
+    const renderer = this.renderer
+    const full = emitters ? (this.fullTarget ??= cubeTarget(source.width, false)) : null
+    const visible = emitters?.visible
+    renderer.autoClear = false
+    try {
+      this.drawFaces((camera, face) => {
+        renderer.setRenderTarget(source)
+        renderer.clear(true, true, false)
+        renderer.render(scene, camera)
+        renderer.shadowMap.autoUpdate = false
+        renderer.shadowMap.needsUpdate = false
+        this.target.texture.generateMipmaps = face === 5
+        haze.render(renderer, source, this.target, face, camera, !emitters)
+        if (emitters && full) {
+          renderer.setRenderTarget(source)
+          emitters.visible = true
+          renderer.render(emitters, camera)
+          emitters.visible = false
+          full.texture.generateMipmaps = face === 5
+          haze.render(renderer, source, full, face, camera, true)
+        }
+      })
+    } finally {
+      if (emitters && visible !== undefined) emitters.visible = visible
+    }
+    const background = this.prefilter.run(this.target.texture)
+    if (!full) return background
+    this.withEmitters ??= new Prefilter(renderer, source.width)
+    return { background, full: this.withEmitters.run(full.texture) }
+  }
 }

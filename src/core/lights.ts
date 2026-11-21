@@ -323,6 +323,7 @@ export class LightRig {
       if (light instanceof THREE.SpotLight) {
         light.target.position.copy(world).add(axis)
         light.shadow.camera.up.copy(lift)
+        light.angle = film.kind === 'area' ? areaAngle : film.angle ?? Math.PI / 6
         if (film.kind !== 'area') {
           const penumbra = film.penumbra ?? 0.3
           inner = Math.cos(light.angle * (1 - penumbra))

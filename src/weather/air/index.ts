@@ -11,7 +11,7 @@ export async function createAir(deps: WeatherDeps): Promise<SceneSystem> {
   const view = new RibbonView()
   const splashes = new Splashes(deps, view)
   const volume = new AirVolume(deps)
-  root.add(...rainMeshes(view, deps.world, deps.lights), splashes.mesh)
+  root.add(...rainMeshes(view, deps.world, deps.lights, deps.vehicle.root.getWorldPosition(new THREE.Vector3())), splashes.mesh, splashes.spray)
   return {
     root,
     lights: [],
@@ -22,7 +22,6 @@ export async function createAir(deps: WeatherDeps): Promise<SceneSystem> {
     },
     beginSample: (sample) => {
       view.beginSample(sample)
-      splashes.beginSample(sample)
     },
     setDiagnostic: (diagnostic) => {
       root.visible = diagnostic === 'beauty'
