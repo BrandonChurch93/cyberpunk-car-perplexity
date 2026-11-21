@@ -188,24 +188,24 @@ export function towerSurface(id: string, level: number, facade: Facade, screen: 
   return mat
 }
 
-type MuralProfile = { violet?: THREE.Color; offset?: number; banded?: number; travel?: number; laps?: number; relief?: number }
+type MuralProfile = { violet?: THREE.Color; offset?: number; banded?: number; travel?: number; laps?: number; relief?: number; picture?: boolean }
 
 export function billboardMural(width: number, height: number, magenta: THREE.Color, profile: MuralProfile = {}) {
-  const { violet = new THREE.Color(.165,.061,2.39), offset = 0, banded = 0, travel = .071, laps = 1, relief = 0 } = profile
+  const { violet = new THREE.Color(.165,.061,2.39), offset = 0, banded = 0, travel = .071, laps = 1, relief = 0, picture = false } = profile
   const shade = new THREE.Color()
   const uniforms = {
     flow: { value: new THREE.Vector2(1,0) }, pixelCount: { value: new THREE.Vector2(width / .041, height / .041) },
     cabinetCount: { value: new THREE.Vector2(Math.round(width/3.12), Math.round(height/3.02)) },
     cabinetSalt: { value: stream('world/hero/mural modules').range(0,61) },
     magenta: { value: magenta }, violet: { value: violet }, banded: { value: banded },
-    travel: { value: travel }, relief: { value: relief },
+    travel: { value: travel }, relief: { value: relief }, picture: { value: Number(picture) },
   }
   const material = new THREE.ShaderMaterial({
     uniforms, toneMapped: false, vertexShader: opalVertex,
     fragmentShader: /* glsl */ `
       varying vec2 face;
       uniform vec2 flow, pixelCount, cabinetCount;
-      uniform float cabinetSalt, banded, travel, relief;
+      uniform float cabinetSalt, banded, travel, relief, picture;
       uniform vec3 magenta, violet;
       ${noise}
       void main() {
@@ -238,7 +238,28 @@ export function billboardMural(width: number, height: number, magenta: THREE.Col
         float cap=smoothstep(.0,.13,face.y)*(1.0-smoothstep(.91,.996,face.y));
         led=mix(led,led*.81+vec3(.83,.44,1.27),banded*lightwell*.66);
         level*=mix(1.0,.065+.935*lightwell*cap,banded);
-        if (relief>0.0) {
+        if (picture>0.0) {
+          vec2 cloud=(face-.5)*vec2(1.0,.84)+flow*travel*.31;
+          vec2 warp=vec2(field(cloud*3.47+vec2(3.3,.8)),field(cloud*3.29+vec2(-.6,4.4)))-.5;
+          vec2 q=cloud+warp*.36;
+          float broad=field(q*3.17+vec2(.51,2.43));
+          float vapor=.54*broad+.29*field(q*7.6+broad)+.17*field(q*16.0-warp);
+          float plume=q.x-.53*q.y+.31*(broad-.5)+.036*sin(q.y*13.0+warp.x*2.0);
+          float pink=1.0-smoothstep(-.18,.30,plume);
+          vec2 hotspot=(q-vec2(-.216,.093))*vec2(3.65,2.11);
+          float core=exp(-dot(hotspot,hotspot))*(.41+.59*smoothstep(.23,.71,vapor));
+          float cloudFoot=plume+.14-.12*field(q*5.8+vec2(1.9,.2));
+          float billowing=1.0-smoothstep(.05,.23,abs(cloudFoot));
+          float cloudTop=smoothstep(.34,.68,vapor)*billowing;
+          float folds=field(vec2(cloudFoot*13.0,q.y*4.9)+warp*2.6);
+          float filaments=smoothstep(.38,.78,folds)*billowing*smoothstep(.29,.63,vapor);
+          float riftAxis=(plume-.17+.09*folds)*4.2;
+          float rift=exp(-riftAxis*riftAxis);
+          led=mix(violet*.96,magenta*.96,pink)*(.84+.25*broad-.29*rift);
+          led+=vec3(1.24,.245,.46)*core+vec3(1.08,.73,.67)*cloudTop*(.55+.45*core);
+          led+=vec3(.24,.35,1.26)*filaments+vec3(.07,.050,.098);
+          level=1.23*tile*mix(1.0,.68+.32*diode,pixelAA);
+        } else if (relief>0.0) {
           float silk=field(vec2(curve*2.87,p.y*1.86)+vec2(.78,2.08)+flow*.12);
           float sheen=ribbon*(.26+.74*smoothstep(.25,.76,silk));
           led+=vec3(.82,.26,.73)*sheen*relief;

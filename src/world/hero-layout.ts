@@ -21,6 +21,8 @@ const palette = {
 type Tint = keyof typeof palette
 type Source = { id: string; at: Tuple; size: readonly [number, number]; tint: Tint; text?: string; onWall?: boolean; yaw?: number; scale?: number }
 type RoofMaterials = ReturnType<typeof finishRoof>['materials']
+const screenTowerFront = -30.01
+export const heroScreenMount = { at: [2.94,5.09,-29.80], yaw: -.32, scale: scale.screen*.972 } as const
 const signRadiance: Readonly<Record<string,number>> = { HOTEL: 4.1, PARKING: 3.0, BAR: 4.2, '24H': 3.4, OPEN: 4.1, EXIT: 2.7 }
 const opalRadiance: Readonly<Record<string,number>> = {
   'left cyan facade sail': 2.3, 'left cyan secondary strip': 2.25,
@@ -40,7 +42,7 @@ export const approvedHeroSources = [
   { id: 'cyan hotel facade strip', at: [-8.43, 3.13, -25.23], size: [.07, 4.52], tint: 'cyan', scale: scale.westFrontage },
   { id: 'far cyan bar cabinet', at: [-6.10, 4.01, -43.40], size: [2.57, 1.45], tint: 'cyan', text: 'BAR', scale: scale.bar },
   { id: 'violet mid distance blade', at: [-1.48, 5.38, -31.64], size: [.44, 2.58], tint: 'violet', scale: scale.screen },
-  { id: 'magenta violet tower screen', at: [2.94, 5.61, -29.80], size: [4.99, 6.28], tint: 'magenta', yaw: .066, scale: scale.screen },
+  { id: 'magenta violet tower screen', ...heroScreenMount, size: [5.08,5.18], tint: 'magenta' },
   { id: 'magenta upper service ribbon', at: [2.62, 15.79, -30.02], size: [3.22, .37], tint: 'magenta', scale: scale.screen },
   { id: 'cool glass service ribbon', at: [1.20, 16.91, -30.10], size: [1.58, .26], tint: 'cyan', scale: scale.screen },
   { id: 'amber upper tower cabinet', at: [7.44, 3.79, -30.12], size: [1.11, .72], tint: 'amber', text: '24H', scale: scale.amber },
@@ -151,7 +153,7 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     ['hero near west garage bay', -7.83, -25.40, 2.78, 4.15, 5.07, .079, scale.westFrontage],
     ['hero bar tower', -6.01, -43.56, 2.80, 5.37, 4.92, .103, scale.bar],
     ['hero violet tower', -1.69, -47.28, 2.08, 4.84, 8.74, .097, 11.7],
-    ['hero screen tower', 2.92, -30.01, 6.76, 5.96, 12.59, .106, scale.screen],
+    ['hero screen tower', 2.92, screenTowerFront, 6.76, 5.96, 12.59, .106, scale.screen],
     ['hero tower setback glass wing', -1.29, -31.79, 1.34, 3.67, 6.16, .087, scale.screen],
     ['hero amber tower', 7.77, -30.40, 2.74, 5.95, 10.68, .141, scale.amber],
     ['hero right edge tower', 32.82, -73.5, 11.64, 11.8, 91.8, .069, scale.rightEdge],
@@ -456,14 +458,23 @@ export function addApprovedHeroLayout(parent: THREE.Object3D, labels: Label, mat
     box(housing, 'folded weatherproof cabinet', [0, 0, -.081-setback], [width + 2*lip, height + 2*lip, .16+setback], frame)
     const color = new THREE.Color(...palette[source.tint])
     if (source.id === 'magenta violet tower screen') {
-      const mural = billboardMural(width*k, height*k, color, { travel: .166, laps: 2, relief: .62 })
+      const mural = billboardMural(width*k, height*k, color, { travel: .166, laps: 2, picture: true })
       plate(housing, 'animated magenta violet mural', offset(mural.material,-4), [0,0,.002], width,height)
+      const wallZ = heroPoint([0,0,screenTowerFront],scale.screen)[2]
+      const yaw = housing.rotation.y
+      const wallAt = (x: number) => ((wallZ-housing.position.z)/k + Math.sin(yaw)*x)/Math.cos(yaw)
       for (const side of [-1,1]) {
-        box(housing, 'LED wall sealed stile', [side*(width*.5+.082),0,-.017], [.164,height+.32,.15], frame)
-        box(housing, 'LED wall cast perimeter beam', [0,side*(height*.5+.069),-.021], [width+.328,.138,.17], frame)
+        const jamb = side*(width*.5+.095)
+        const back = Math.min(-.2,wallAt(jamb)-.055)
+        box(housing, 'LED wall sealed stile', [jamb,0,-.024], [.19,height+.40,.20], charcoalConcrete)
+        box(housing, 'LED wall weather return', [jamb,0,back*.5], [.14,height+.28,-back], oxidizedAluminum)
+        box(housing, 'LED wall cast perimeter beam', [0,side*(height*.5+.096),-.028], [width+.38,.192,.22], charcoalConcrete)
       }
-      for (const dx of [-.38,.38]) for (const dy of [-.36,0,.36]) {
-        box(housing, 'billboard facade tie bracket', [dx*width,dy*height,-.26], [.12,.19,.46], zinc)
+      for (const dx of [-.39,-.13,.13,.39]) for (const dy of [-.36,0,.36]) {
+        const x = dx*width
+        const back = Math.min(-.25,wallAt(x)-.085)
+        box(housing, 'billboard facade tie bracket', [x,dy*height,back*.5-.04], [.16,.22,-back], oxidizedAluminum)
+        box(housing, 'billboard facade tie plate', [x,dy*height,back], [.27,.36,.126], charcoalConcrete)
       }
       box(housing, 'LED wall lower truss', [0,-height*.5-.182,-.176], [width+.13,.17,.39], frame)
       for (const dx of [-.32,.32]) box(housing, 'LED wall lower seat', [dx*width,-height*.5-.31,-.231], [.165,.34,.51], zinc)

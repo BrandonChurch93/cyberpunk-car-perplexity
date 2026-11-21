@@ -11,7 +11,7 @@ import { createVehicle } from '../src/vehicle'
 import { createWorld } from '../src/world'
 import { heroDrain } from '../src/world/deck'
 import { billboardState } from '../src/world/fixtures'
-import { approvedHeroSourceSurvey } from '../src/world/hero-layout'
+import { approvedHeroSourceSurvey, heroScreenMount } from '../src/world/hero-layout'
 import { heroLayoutEye, heroPoint, heroScale } from '../src/world/hero-scale'
 import { heroCityYaw, streetY } from '../src/world/forms'
 import { deckHeight } from '../src/world/roof-look'
@@ -76,11 +76,11 @@ describe('full roof world', () => {
   it('grounds non-overlapping real-scale towers and preserves the design rays and emitter falloff', () => {
     const axis = new THREE.Vector3(0,1,0)
     const eye = new THREE.Vector3(...heroLayoutEye)
-    const at = new THREE.Vector3(2.94,5.61,-29.80).applyAxisAngle(axis,heroCityYaw)
+    const at = new THREE.Vector3(...heroScreenMount.at).applyAxisAngle(axis,heroCityYaw)
     const id = 'magenta violet tower screen'
     const emitter = world.lights.find(l => l.id === id)!
-    const k = heroScale.screen
-    const screen = new THREE.Vector3(...heroPoint([2.94,5.61,-29.80],k)).applyAxisAngle(axis,heroCityYaw)
+    const k = heroScreenMount.scale
+    const screen = new THREE.Vector3(...heroPoint(heroScreenMount.at,k)).applyAxisAngle(axis,heroCityYaw)
     const survey = approvedHeroSourceSurvey().find(s => s.id === id)!
     expect(new THREE.Vector3(...survey.at).distanceTo(screen)).toBeLessThan(1e-10)
     expect(screen.sub(eye).distanceTo(at.sub(eye).multiplyScalar(k))).toBeLessThan(1e-10)
@@ -580,6 +580,12 @@ describe('full roof world', () => {
     const wall = world.root.getObjectByName(id)
     const rate = emitter.level(0)
     expect(emitter.object.parent).toBe(wall)
+    expect(face.material.uniforms.picture.value).toBe(1)
+    const tower = world.root.getObjectByName('hero screen tower volume')!.children[0]
+    const supportPlane = new THREE.Box3().setFromObject(tower)
+    const ties = wall!.children.filter(node => node.name === 'billboard facade tie plate')
+    expect(ties).toHaveLength(12)
+    for (const tie of ties) expect(supportPlane.intersectsBox(new THREE.Box3().setFromObject(tie))).toBe(true)
     expect(emitter.intensity).toBe(Math.max(...world.lights.filter(light=>!light.shadow).map(light=>light.intensity)))
     const travel = face.material.uniforms.travel.value as number
     firstFrame(.08*config.film.durationSeconds)
@@ -638,6 +644,13 @@ describe('full roof world', () => {
       expect(toScreen(position('hero full span steel top rail')).y).toBeLessThan(.20)
     }
     cameraAtTime(master, heroFrameSeconds)
+    const wall = world.root.getObjectByName(billboard)!
+    const face = wall.getObjectByName('animated magenta violet mural') as THREE.Mesh<THREE.PlaneGeometry>
+    const { width,height } = face.geometry.parameters
+    const left = toScreen(face.localToWorld(new THREE.Vector3(-width*.5,height*.5,0)))
+    const right = toScreen(face.localToWorld(new THREE.Vector3(width*.5,height*.5,0)))
+    expect(left.y).toBeLessThan(1)
+    expect(right.y-left.y).toBeGreaterThan(.02)
     const skyRay = (x: number, y: number) => new THREE.Raycaster(camera.position,
       new THREE.Vector3(x, y, .5).unproject(camera).sub(camera.position).normalize(), 0, camera.far+150)
     for (const x of [-.50, -.40, -.32, -.24, -.16]) {
