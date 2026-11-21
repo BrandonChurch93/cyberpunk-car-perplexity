@@ -7,7 +7,7 @@ import { finish, merge, pocket, solid } from './solid'
 
 /** Hex outlet from the patent rear view and photos: aperture, lip, pipes, depths into the body. */
 export const outletSpec = {
-  width: 0.29,
+  width: 0.275,
   height: 0.112,
   chamfer: 0.034,
   corner: 0.012,
@@ -17,7 +17,7 @@ export const outletSpec = {
   recess: 0.02,
   floor: 0.03,
   depth: 0.2,
-  pipe: { r: 0.042, dx: 0.064, wall: 0.003, front: 0.012, back: 0.194, soot: 0.12, bead: 0.0035 },
+  pipe: { r: 0.042, dx: 0.064, wall: 0.005, front: 0.012, bead: 0.0035, neck: 0.085, cone: 0.03, inner: 0.03, innerWall: 0.003, end: 0.3, soot: 0.27, collar: 0.01 },
 } as const
 
 const arcSteps = 16
@@ -164,25 +164,43 @@ export function outlets(rm: SurfaceMap, surround: SurfaceCurve): Outlets {
   const pipes = new MeshBuilder()
   const pr = sp.pipe
   const pr2 = pr.wall / 2
+  const plateFront = sp.depth - 0.008
+  const step = pr.inner - pr.r
+  const outerStep = step + pr.innerWall
   for (const dx of [-pr.dx, pr.dx]) {
     const loop = circleLoop(dx, 64)
     const tube = pr.front + pr.bead
     const prof: Prof = [
-      [-pr.wall, pr.back, true],
-      ...roll(-pr2, tube + pr2, pr2, Math.PI, Math.PI * 2),
-      [0, pr.back, true],
+      ...roll(pr2, tube + pr2, pr2, Math.PI, Math.PI * 2),
+      [pr.wall, pr.neck + pr.cone, true],
+      [outerStep, pr.neck + pr.cone + 0.02, true],
+      [outerStep, pr.end, true],
+      [step, pr.end, true],
+      [step, pr.neck + pr.cone, true],
+      [0, pr.neck, true],
     ]
     merge(pipes, sweepLoop(f, loop, pr.r, prof))
     const bead: Prof = [
-      [-pr2 - pr.bead, tube + 0.004, true],
+      [pr2 - pr.bead, tube + 0.004, true],
       ...Array.from({ length: 2 * quarter + 1 }, (_, i): [number, number, boolean] => {
         const a = Math.PI + (Math.PI * i) / (2 * quarter)
-        return [-pr2 + pr.bead * Math.cos(a), tube + pr.bead * Math.sin(a), false]
+        return [pr2 + pr.bead * Math.cos(a), tube + pr.bead * Math.sin(a), false]
       }),
-      [-pr2 + pr.bead, tube + 0.004, true],
+      [pr2 + pr.bead, tube + 0.004, true],
     ]
     merge(lip, sweepLoop(f, loop, pr.r, bead))
-    merge(soot, disk(f, loop, pr.r, -pr.wall - 0.0005, pr.soot, pr.soot + 0.004, dx))
+    const fr = pr.collar
+    const collar: Prof = [
+      [outerStep - 0.001, plateFront + 0.004, true],
+      [outerStep - 0.001, plateFront - fr, true],
+      ...Array.from({ length: 2 * quarter + 1 }, (_, i): [number, number, boolean] => {
+        const a = Math.PI - (Math.PI / 2) * (i / (2 * quarter))
+        return [outerStep + fr + fr * Math.cos(a), plateFront - fr + fr * Math.sin(a), i === 0]
+      }),
+      [outerStep + fr, plateFront + 0.004, true],
+    ]
+    merge(soot, sweepLoop(f, loop, pr.r, collar))
+    merge(soot, disk(f, loop, pr.r, step - 0.0005, pr.soot, pr.soot + 0.004, dx))
   }
 
   const mouth = hex.map((e): V2 => [e.c[0] + e.n[0] * (rc + sp.wall + 0.001), e.c[1] + e.n[1] * (rc + sp.wall + 0.001)])
