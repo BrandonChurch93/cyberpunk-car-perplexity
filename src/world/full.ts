@@ -46,7 +46,7 @@ export async function createFullWorld(): Promise<WorldModule> {
     const { at: [x,,z] } = survey.find(source=>source.id===id)!
     return new THREE.Vector2(x,z)
   }
-  addSky(root,[district('magenta violet tower screen'),district('left cyan facade sail')])
+  addSky(root,[district('magenta violet tower screen'),district('left cyan facade sail')],hero.muralCloud)
   const reflections = addReflectionFrontages(root,labels)
   const optics = [...fixtures.lights, ...fixtures.wideLights].filter(light => light.kind === 'spot').map(light => ({ ...light }))
   const wideLights = new Map([...hero.lights,...fixtures.wideLights.map(light=>[light.id,light] as const)])

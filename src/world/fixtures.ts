@@ -71,12 +71,13 @@ export function labelFace(parent: THREE.Object3D, name: string, at: Tuple, size:
   plate(parent, `lettering ${name}`, new THREE.MeshBasicMaterial({ color, map: tx, toneMapped: false, alphaTest: .22 }), at, ...size).rotation.z = rotation
 }
 
-export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector2,THREE.Vector2]): void {
+export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector2,THREE.Vector2], muralCloud: THREE.Color): void {
   const sky = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, toneMapped: false,
     uniforms: {
       cloudSeed: { value: streamSeed('world/city/cloud-base') / 4294967296 * 37 },
       cloudDistricts: { value: cloudDistricts },
+      muralCloud: { value: muralCloud },
     },
     vertexShader: /* glsl */ `
       varying vec3 skyDirection;
@@ -90,6 +91,7 @@ export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector
       varying vec3 skyDirection;
       uniform float cloudSeed;
       uniform vec2 cloudDistricts[2];
+      uniform vec3 muralCloud;
       float cloudHash(vec2 p) {
         vec3 q = fract(vec3(p.xyx+cloudSeed)*.1031);
         q += dot(q,q.yzx+33.33);
@@ -174,7 +176,7 @@ export function addSky(root: THREE.Group, cloudDistricts: readonly [THREE.Vector
           float slots = smoothstep(.34,.61,cloudNoise(fold*1.65+vec2(-4.8,8.6)));
           float rim = smoothstep(.018,.26,cloudNoise(fold*2.35+vec2(3.55,lobe*.91-.29))-billows);
           float radiance = (.043+.41*canopyBelly)*(.31+.69*slots)+.88*pow(rim,1.6)*(.32+.68*slots);
-          vec3 magentaCloud = mix(vec3(1.43,.36,.72),vec3(.68,.34,1.40),smoothstep(.23,.73,curl.y));
+          vec3 magentaCloud = muralCloud*mix(vec3(1.38,1.02,.69),vec3(.66,.97,1.33),smoothstep(.23,.73,curl.y));
           c += highBand*radiance*(mainUpglow*magentaCloud+cyanUpglow*vec3(.013,.046,.105));
         }
         gl_FragColor = vec4(c, 1.0);
